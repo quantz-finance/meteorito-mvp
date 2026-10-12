@@ -6,7 +6,7 @@ import { fetchBalances, type Balances } from '@/lib/horizon';
 import { CRC_USDC_RATE, displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Section, Sheet, Skeleton, SkeletonCard, TestnetPill, type IconName } from '@/components/ds';
-import { Glow, LivelyMascot, Reveal } from '@/components/space';
+import { LivelyMascot, Reveal } from '@/components/space';
 import { HelpSheet } from '@/components/HelpSheet';
 import { OrderCard } from '@/components/OrderRow';
 import { ui } from '@/components/ui';
@@ -49,7 +49,6 @@ export default function Inicio() {
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.lilac} />}>
       {/* Tarjeta de saldo */}
       <Reveal i={0}><View style={[s.balance, shadow]}>
-        <Glow style={s.balanceGlow} />
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[T.caption, { color: C.lilac }]}>{TESTNET ? 'Saldo de prueba' : 'Saldo disponible'}</Text>
           <TestnetPill />
@@ -58,7 +57,7 @@ export default function Inicio() {
           : <Text style={[T.money, { marginTop: S.sm }]} adjustsFontSizeToFit numberOfLines={1}>{formatCRC(crc)}</Text>}
         {err ? <Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Deslizá hacia abajo para reintentar.</Text>
           : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros protegidos llegan acá.</Text>}
-        <LivelyMascot size={96} style={s.mascot} parallax={-0.15} />
+        <LivelyMascot size={104} style={s.mascot} parallax={-0.15} />
       </View></Reveal>
       {/* 2 acciones grandes */}
       <Reveal i={1}><View style={s.grid}>
@@ -110,8 +109,7 @@ export default function Inicio() {
 
 const s = StyleSheet.create({
   balance: { backgroundColor: C.purple, borderWidth: 1, borderColor: 'rgba(255,138,61,0.35)', borderRadius: R.lg, padding: S.lg, overflow: 'hidden', minHeight: 148, gap: S.xs },
-  balanceGlow: { position: 'absolute', right: -60, top: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,138,61,0.35)' },
-  mascot: { position: 'absolute', right: -8, bottom: -12, width: 96, height: 96, opacity: 0.95 },
+  mascot: { position: 'absolute', right: -4, bottom: -6 },
   grid: { flexDirection: 'row', gap: S.sm },
   action: { flex: 1, backgroundColor: C.surface, borderRadius: R.lg, padding: S.md, gap: S.md, minHeight: 112, justifyContent: 'space-between', borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   actionPrimary: { borderColor: C.orange },
