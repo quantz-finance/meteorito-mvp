@@ -25,6 +25,7 @@ const config: ExpoConfig = {
     'expo-router',
     ['expo-splash-screen', { image: './assets/images/splash-icon.png', resizeMode: 'contain', imageWidth: 220, backgroundColor: '#1A0B3D' }],
     'expo-font',
+    ['expo-image-picker', { photosPermission: 'Meteorito usa tus fotos para mostrar el artículo que vendés.', cameraPermission: false, microphonePermission: false }],
     // Associated Domains (passkeys) requiere cuenta Apple Developer paga: apagado para el Apple ID gratis.
     ['@cavos/kit', { rpId, scheme: 'meteorito', enableAssociatedDomains: process.env.CAVOS_ASSOCIATED_DOMAINS === '1' }],
   ],

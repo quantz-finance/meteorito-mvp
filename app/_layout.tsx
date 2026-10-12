@@ -1,5 +1,5 @@
 import { Nunito_400Regular, Nunito_700Bold, Nunito_900Black, useFonts } from '@expo-google-fonts/nunito';
-import { DarkTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -36,10 +36,14 @@ export default function RootLayout() {
 
 function Gate() {
   const auth = useAuth();
-  if (!auth.isAuthenticated || !auth.address) return <Welcome />;
+  const segments = useSegments();
+  const isPublic = segments[0] === 'p'; // link de venta: visible sin login
+  if (!isPublic && (!auth.isAuthenticated || !auth.address)) return <Welcome />;
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="p/[slug]" />
+      <Stack.Screen name="compartir/[slug]" options={{ presentation: 'modal' }} />
     </Stack>
   );
 }
