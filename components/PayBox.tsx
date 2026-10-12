@@ -1,6 +1,7 @@
 // Comprador: Pagar seguro -> SINPE simulado -> "Ya pagué" -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
 import { useState } from 'react';
+import { DisputeSheet } from '@/components/DisputeSheet';
 import { Text, View } from 'react-native';
 import { Card, ErrorText, Icon, PrimaryButton, Sheet, SuccessCheck } from '@/components/ds';
 import { Fonts } from '@/constants/Colors';
@@ -15,11 +16,12 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [err, setErr] = useState<string | null>(null);
   const [sinpe, setSinpe] = useState<{ amountUsdc: number; priceCrc: number; reference: string } | null>(null);
   const [pin, setPin] = useState<string | null>(null);
-  const [sheet, setSheet] = useState<'sinpe' | 'pin' | 'released' | null>(null);
+  const [sheet, setSheet] = useState<'sinpe' | 'pin' | 'released' | 'dispute' | null>(null);
 
   const run = async (f: () => Promise<void>) => { setBusy(true); setErr(null); try { await f(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); } };
 
   const sheets = <>
+    <DisputeSheet visible={sheet === 'dispute'} onClose={() => setSheet(null)} slug={order.slug} onOpened={onChange} />
     <Sheet visible={sheet === 'sinpe' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Pagá por SINPE Móvil"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
@@ -85,10 +87,15 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <Icon name="checkmark-circle" size={22} color={C.success} /><Text style={[T.headline, { color: C.success }]}>{order.status === 'entregado' ? 'Entregado' : 'Pago liberado'}</Text>
     </View>;
   } else if (order.status === 'en_disputa') {
-    footer = <Text style={[T.callout, { textAlign: 'center', color: C.orange }]}>Estamos revisando este pedido. El pago está en pausa.</Text>;
+    footer = <Text style={[T.callout, { textAlign: 'center', color: C.orange }]}>En disputa: lo estamos revisando, respondemos en 24-48 h. El pago está en pausa.</Text>;
   }
 
-  return <>{footer ? <View style={{ gap: S.sm }}>{footer}</View> : null}{sheets}</>;
+  // Solo el comprador puede abrir disputa (la API lo verifica) y solo antes de liberar.
+  const canDispute = auth.isAuthenticated && ['fondeado', 'enviado', 'entregado'].includes(order.status) && !order.released_tx;
+  const problem = canDispute
+    ? <PrimaryButton title="Tengo un problema" icon="alert-circle-outline" variant="ghost" onPress={() => { setErr(null); setSheet('dispute'); }} />
+    : null;
+  return <>{footer || problem ? <View style={{ gap: S.sm }}>{footer}{problem}</View> : null}{sheets}</>;
 }
 
 function Row({ icon, text }: { icon: React.ComponentProps<typeof Icon>['name']; text: string }) {

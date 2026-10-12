@@ -209,8 +209,10 @@ export function statusTone(status: string): 'lilac' | 'success' | 'warn' | 'mute
 export function MoneyTimeline({ status, compact }: { status: string; compact?: boolean }) {
   const done = moneyProgress(status);
   const dispute = status === 'en_disputa';
+  const note = dispute ? <View style={st.disputeNote}><Icon name="alert-circle" size={18} color={C.orange} /><Text style={[T.footnote, { color: C.orange, flex: 1 }]}>Lo estamos revisando, respondemos en 24-48h.</Text></View> : null;
   const dot = compact ? 24 : 32;
   return (
+    <View style={{ gap: S.sm }}>
     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }} accessibilityLabel={`Estado del pago: ${done} de 4 pasos`}>
       {MONEY_STEPS.map((s, i) => {
         const isDone = i < done;
@@ -228,10 +230,12 @@ export function MoneyTimeline({ status, compact }: { status: string; compact?: b
               <View style={[st.tlLine, { backgroundColor: i === 3 ? 'transparent' : i < done ? C.success : C.surface2 }]} />
             </View>
             <Text style={[st.tlLabel, { color: isDone ? C.text : isNext || isProblem ? (isProblem ? C.orange : C.lilac) : C.textDim }]}
-              numberOfLines={1}>{isProblem ? 'Revisión' : s.label}</Text>
+              numberOfLines={1}>{isProblem ? 'En disputa' : s.label}</Text>
           </View>
         );
       })}
+    </View>
+    {note}
     </View>
   );
 }
@@ -265,6 +269,7 @@ export const st = StyleSheet.create({
   btnGhost: { backgroundColor: 'transparent', minHeight: TOUCH },
   btnText: { fontFamily: Fonts.bold, fontSize: 17 },
   iconBtn: { width: TOUCH, height: TOUCH, borderRadius: TOUCH / 2, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
+  disputeNote: { flexDirection: 'row', gap: S.sm, alignItems: 'center', backgroundColor: C.warnBg, borderRadius: R.sm, padding: S.sm },
   chip: { flexDirection: 'row', alignItems: 'center', gap: S.xs, borderRadius: R.pill, paddingHorizontal: S.sm + 2, paddingVertical: S.xs, alignSelf: 'flex-start' },
   chipText: { fontFamily: Fonts.bold, fontSize: 12 },
   sheetWrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: C.backdrop },
