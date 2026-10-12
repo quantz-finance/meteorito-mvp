@@ -1,30 +1,25 @@
-import { Pressable, StyleSheet, Text, type PressableProps } from 'react-native';
-import { Brand, Fonts } from '@/constants/Colors';
+// Compat: estilos y Button heredados, ahora sobre el design system (constants/theme + components/ds).
+import { StyleSheet, type PressableProps } from 'react-native';
+import { Fonts } from '@/constants/Colors';
+import { C, R, S, TOUCH } from '@/constants/theme';
+import { PrimaryButton } from './ds';
 
-export function Button({ title, variant = 'primary', disabled, ...p }: PressableProps & { title: string; variant?: 'primary' | 'outline' }) {
-  return (
-    <Pressable {...p} disabled={disabled}
-      style={({ pressed }) => [ui.btn, variant === 'outline' && ui.outline, (pressed || disabled) && { opacity: disabled ? 0.45 : 0.8 }]}>
-      <Text style={[ui.btnText, variant === 'outline' && { color: Brand.lilac }]}>{title}</Text>
-    </Pressable>
-  );
+export function Button({ title, variant = 'primary', ...p }: Omit<PressableProps, 'children'> & { title: string; variant?: 'primary' | 'outline' }) {
+  return <PrimaryButton {...p} title={title} variant={variant === 'outline' ? 'secondary' : 'primary'} />;
 }
 
 export const ui = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Brand.purpleDark },
-  content: { padding: 20, gap: 14, paddingBottom: 48 },
-  h1: { fontFamily: Fonts.black, fontSize: 26, color: Brand.white },
-  label: { fontFamily: Fonts.bold, fontSize: 13, color: Brand.muted, textTransform: 'uppercase' },
-  text: { fontFamily: Fonts.regular, fontSize: 16, color: Brand.white },
-  muted: { fontFamily: Fonts.regular, fontSize: 14, color: Brand.muted },
-  error: { fontFamily: Fonts.bold, fontSize: 14, color: Brand.orange },
-  card: { backgroundColor: Brand.purpleMid, borderRadius: 18, padding: 16, gap: 8 },
-  input: { backgroundColor: Brand.purpleMid, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: Brand.white, fontFamily: Fonts.regular, fontSize: 16 },
-  chip: { borderRadius: 999, borderWidth: 1, borderColor: Brand.lilac, paddingHorizontal: 14, paddingVertical: 8 },
-  chipOn: { backgroundColor: Brand.lilac },
-  chipText: { fontFamily: Fonts.bold, color: Brand.lilac },
-  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  btn: { backgroundColor: Brand.white, borderRadius: 16, paddingVertical: 15, alignItems: 'center' },
-  outline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: Brand.lilac },
-  btnText: { fontFamily: Fonts.bold, fontSize: 17, color: Brand.purple },
+  screen: { flex: 1, backgroundColor: C.bg },
+  content: { padding: S.md, gap: S.md, paddingBottom: S.xxxl },
+  h1: { fontFamily: Fonts.black, fontSize: 28, color: C.text },
+  label: { fontFamily: Fonts.bold, fontSize: 12, color: C.textDim, textTransform: 'uppercase', letterSpacing: 0.6 },
+  text: { fontFamily: Fonts.regular, fontSize: 16, lineHeight: 24, color: C.text },
+  muted: { fontFamily: Fonts.regular, fontSize: 14, lineHeight: 20, color: C.textDim },
+  error: { fontFamily: Fonts.bold, fontSize: 14, color: C.orange },
+  card: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.md, gap: S.sm },
+  input: { backgroundColor: C.surface, borderRadius: R.md, paddingHorizontal: S.md, minHeight: TOUCH + 8, color: C.text, fontFamily: Fonts.regular, fontSize: 17, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
+  chip: { borderRadius: R.pill, borderWidth: 1, borderColor: C.lilac, paddingHorizontal: S.md, minHeight: TOUCH, justifyContent: 'center' },
+  chipOn: { backgroundColor: C.lilac },
+  chipText: { fontFamily: Fonts.bold, color: C.lilac },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
 });
