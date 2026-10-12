@@ -14,7 +14,7 @@ cp .env.example .env
 `.env` nunca se sube al repo (está en `.gitignore`).
 
 ### Dashboard de Cavos
-- **Allowed web origins / Callback URLs**: el dominio de Vercel (ej. `https://meteorito-mvp.vercel.app`) y `http://localhost:8081` para desarrollo.
+- **Allowed web origins / Callback URLs**: el dominio de la app (`https://pago.meteorito.app`; mantener `https://meteorito-mvp.vercel.app` unos días por la redirección) y `http://localhost:8081` para desarrollo.
 - **Callback URL nativa**: `meteorito://cavos-auth`.
 - Red: testnet, cadena Stellar.
 
