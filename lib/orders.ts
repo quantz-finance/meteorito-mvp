@@ -54,6 +54,10 @@ export interface PublicOrder {
   description: string | null; photos: string[]; status: string; identifier_masked: string | null;
   amount_usdc?: number | null; contract_id?: string | null; funded_tx?: string | null; released_tx?: string | null; auto_release_at?: string | null;
   checks_summary: CheckResult[]; created_at: string;
+  /** Opcionales: solo se muestran si el backend los expone (todavía no en public_orders). */
+  seller_name?: string | null; seller_phone_verified?: boolean | null;
+  /** true solo si Meteorito verificó el IMEI (no la declaración del vendedor). */
+  imei_verified?: boolean | null; imei_last4?: string | null;
 }
 export async function getPublicOrder(slug: string): Promise<PublicOrder | null> {
   const { data, error } = await supabase().from('public_orders').select('*').eq('slug', slug).maybeSingle();
@@ -66,4 +70,20 @@ export async function getSellerOrders(addr: string): Promise<SellerOrder[]> {
   const { data, error } = await supabase().rpc('seller_orders', { p_seller_address: addr });
   if (error) throw new Error(error.message);
   return (data ?? []) as SellerOrder[];
+}
+
+/** "rolando.arguello" -> "Rolando". */
+export function displayName(email: string | null | undefined): string | null {
+  const raw = email?.split('@')[0]?.split(/[._+-]/)[0]?.trim();
+  if (!raw) return null;
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+/** Acepta un link completo (…/p/slug) o el slug solo. */
+export function parseSlug(input: string): string | null {
+  const t = input.trim();
+  if (!t) return null;
+  const m = t.match(/\/p\/([A-Za-z0-9_-]+)/);
+  const slug = m ? m[1] : t.replace(/^\/+|\/+$/g, '');
+  return /^[A-Za-z0-9_-]{3,64}$/.test(slug) ? slug : null;
 }
