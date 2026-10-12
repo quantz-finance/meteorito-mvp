@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "module": "commonjs", "target": "es2022", "moduleResolution": "node", "ignoreDeprecations": "6.0",
+    "esModuleInterop": true, "skipLibCheck": true, "strict": false, "noEmitOnError": false,
+    "outDir": "../../.ci-cjs", "rootDir": "../..", "lib": ["es2022", "dom"], "types": [], "noCheck": true
+  },
+  "include": ["../../api/**/*.ts"]
+}
