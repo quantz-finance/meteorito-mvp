@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/cavos';
 import { createOrder, formatCRC } from '@/lib/orders';
 import { MAX_PHOTOS, newDraftId, uploadPhoto } from '@/lib/photos';
 import { supabaseConfigured } from '@/lib/supabase';
+import { priceBucket, track, trackError } from '@/lib/analytics';
 
 interface Photo { uri: string; mime: string; width?: number; height?: number }
 const STEPS = ['Categoría', 'Fotos', 'Detalles', 'Precio', 'Revisar'] as const;
@@ -58,16 +59,18 @@ export default function Vender() {
     try {
       const draftId = newDraftId();
       const urls: string[] = [];
-      for (const [i, p] of photos.entries()) urls.push(await uploadPhoto(auth, p, draftId, i));
+      for (const [i, p] of photos.entries()) urls.push(await uploadPhoto(auth, p, draftId, i).catch((e) => { track('photo_upload_failed', { context: 'listing', index: i }); throw e; }));
       const slug = await createOrder(auth, {
         category: cat.id, brand: brand.trim(), model: model.trim(),
         condition, price_crc: priceNum, description: description.trim(), identifier: identifier.trim(),
         photos: urls, checks: checksSummary(cat, checks),
       });
       setBrand(''); setModel(''); setPrice(''); setDescription(''); setIdentifier(''); setChecks({}); setPhotos([]); setStep(0);
+      track('link_created', { category: cat.id, photos: urls.length, price_bucket: priceBucket(priceNum) });
       router.push({ pathname: '/compartir/[slug]', params: { slug } });
     } catch (e) {
       haptic.error();
+      trackError('create_listing', e);
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -88,7 +91,7 @@ export default function Vender() {
     const e = stepError();
     if (e) { haptic.error(); return setError(e); }
     setError(null);
-    if (step < STEPS.length - 1) setStep(step + 1); else submit();
+    if (step < STEPS.length - 1) { track('sell_step_completed', { step, step_name: STEPS[step] as any }); setStep(step + 1); } else { track('sell_submit_tapped', { step }); submit(); }
   }
 
   const footer = (
