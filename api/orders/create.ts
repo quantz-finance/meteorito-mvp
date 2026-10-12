@@ -3,6 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { db, json, fail } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError } from '../_lib/auth';
+import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 const slug = () => { const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; let s = ''; while (s.length < 6) { const b = randomBytes(1)[0]; if (b < 252) s += a[b % 36]; } return s; };
@@ -20,7 +21,11 @@ export default async function handler(req: any, res: any) {
     if (!CATS.includes(b.category)) throw new HttpError(400, 'categoría inválida');
     const price = Number(b.price_crc);
     if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw new HttpError(400, 'precio inválido');
-    const photos = Array.isArray(b.photos) ? b.photos.filter((u: unknown) => typeof u === 'string' && u.startsWith(process.env.SUPABASE_URL ?? 'https://')).slice(0, 4) : [];
+    // Fotos obligatorias (1-4) y solo de la carpeta del vendedor (subidas por /api/photos/upload-url).
+    const prefix = publicPrefix(user.sub);
+    const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
+    if (photos.length < 1) throw new HttpError(400, 'agregá al menos una foto');
+    if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(prefix))) throw new HttpError(400, 'fotos inválidas');
     const row = {
       seller_address: seller, seller_user_id: user.sub, seller_email: user.email ?? null,
       category: b.category, brand: str(b.brand, 60), model: str(b.model, 80), condition: str(b.condition, 40),
