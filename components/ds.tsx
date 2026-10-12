@@ -9,6 +9,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, R, S, T, TOUCH, BUTTON_H, shadow } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
+import Reanimated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { MeteorBurst, ScrollCtx, SpaceBackground, type SpaceMode } from '@/components/space';
 
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];
 export const Icon = ({ name, size = 22, color = C.text }: { name: IconName; size?: number; color?: string }) =>
@@ -23,11 +25,13 @@ export const haptic = {
 
 /* ---------- Layout ---------- */
 /** Pantalla con título grande iOS, safe area superior y footer fijo opcional (zona del pulgar). */
-export function Screen({ title, subtitle, right, children, footer, scroll = true, refreshControl, contentStyle }: {
-  title?: string; subtitle?: string; right?: ReactNode; children: ReactNode; footer?: ReactNode; scroll?: boolean;
+export function Screen({ title, subtitle, right, children, footer, scroll = true, refreshControl, contentStyle, space = 'full' }: {
+  title?: string; subtitle?: string; right?: ReactNode; children: ReactNode; footer?: ReactNode; scroll?: boolean; space?: SpaceMode;
   refreshControl?: React.ComponentProps<typeof ScrollView>['refreshControl']; contentStyle?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
   const header = title ? (
     <View style={st.header}>
       <View style={{ flex: 1 }}>
@@ -38,16 +42,20 @@ export function Screen({ title, subtitle, right, children, footer, scroll = true
     </View>
   ) : null;
   const body = scroll ? (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
-      keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}>
+    <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
+      keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}
+      onScroll={onScroll} scrollEventThrottle={16}>
       {header}{children}
-    </ScrollView>
+    </Reanimated.ScrollView>
   ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md }, contentStyle]}>{header}{children}</View>;
   return (
-    <View style={st.screen}>
-      {body}
-      {footer ? <StickyFooter>{footer}</StickyFooter> : null}
-    </View>
+    <ScrollCtx.Provider value={scrollY}>
+      <View style={st.screen}>
+        <SpaceBackground mode={space} scrollY={scrollY} />
+        {body}
+        {footer ? <StickyFooter>{footer}</StickyFooter> : null}
+      </View>
+    </ScrollCtx.Provider>
   );
 }
 
@@ -157,18 +165,21 @@ export function Sheet({ visible, onClose, title, children, footer }: { visible: 
 }
 
 /* ---------- Éxito animado ---------- */
-export function SuccessCheck({ size = 88 }: { size?: number }) {
+/** celebrate: meteorito de una pasada. Usar SOLO tras respuesta exitosa de una operación on-chain. */
+export function SuccessCheck({ size = 88, celebrate = false }: { size?: number; celebrate?: boolean }) {
   const sc = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     haptic.success();
     Animated.spring(sc, { toValue: 1, friction: 5, tension: 120, useNativeDriver: Platform.OS !== 'web' }).start();
   }, [sc]);
-  return (
+  const check = (
     <Animated.View style={{ alignSelf: 'center', width: size, height: size, borderRadius: size / 2, backgroundColor: C.success,
       alignItems: 'center', justifyContent: 'center', transform: [{ scale: sc }] }}>
       <Icon name="checkmark" size={size * 0.55} color={C.purpleDark} />
     </Animated.View>
   );
+  if (!celebrate) return check;
+  return <View style={{ alignSelf: 'stretch', alignItems: 'center' }}><MeteorBurst height={size * 1.6} />{check}</View>;
 }
 
 /* ---------- Estado del dinero: 4 pasos ---------- */
