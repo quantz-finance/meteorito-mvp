@@ -1,6 +1,6 @@
 // Textos legales BORRADOR (pendientes de revisión legal). Español neutro.
 export const QUANTZ_URL = 'https://quantz.finance';
-export const CONTACT_EMAIL = 'hola@meteorito.app';
+export const CONTACT_EMAIL = 'team@meteorito.app';
 export const LEGAL_UPDATED = '12 de octubre de 2026';
 
 type Doc = { title: string; sections: { h: string; p: string[] }[] };
