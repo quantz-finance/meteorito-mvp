@@ -7,7 +7,12 @@ import { Keypair, Horizon } from '@stellar/stellar-sdk';
 import { env } from './env';
 
 const JWKS: Record<string, ReturnType<typeof createRemoteJWKSet>> = {};
-function jwksFor(iss: string) {
+type KeyGetter = Parameters<typeof jwtVerify>[1];
+let testKeys: KeyGetter | null = null;
+/** Solo tests (CI): verificar contra un JWKS local en vez de Cavos/Google/Apple. Nunca se llama en runtime. */
+export const __setJwksForTests = (k: KeyGetter | null) => { testKeys = k; };
+function jwksFor(iss: string): any {
+  if (testKeys) return testKeys;
   const url = iss === 'https://accounts.google.com' ? 'https://www.googleapis.com/oauth2/v3/certs'
     : iss === 'https://appleid.apple.com' ? 'https://appleid.apple.com/auth/keys'
     : env.cavosJwks();
@@ -49,6 +54,8 @@ export async function requireCavosUser(req: any): Promise<CavosUser> {
     const match = audiences.length > 0 && aud.some((a) => audiences.includes(String(a)));
     console.warn('[auth] aud NO verificado (' + (logOnly ? 'LOG_ONLY' : 'sin CAVOS_JWT_AUDIENCE, no-prod') + ')', JSON.stringify({ iss, aud: payload.aud, expected: audiences, match }));
   }
+  // Solo NOMBRES de claims (nunca valores ni token), 1 vez por request: para descubrir si hay claim de app/org.
+  console.log('[auth] claims', JSON.stringify(Object.keys(payload).sort()));
   const sub = String(payload.sub ?? (payload as any).user_id ?? '');
   if (!sub) throw new HttpError(401, 'token sin sub');
   return { sub, email: (payload as any).email, iss };
