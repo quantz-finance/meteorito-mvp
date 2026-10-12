@@ -94,5 +94,5 @@ const s = StyleSheet.create({
   dot: { position: 'absolute', bottom: 3, width: 4, height: 4, borderRadius: 2, backgroundColor: GREEN, shadowColor: GREEN, shadowOpacity: 1, shadowRadius: 6, shadowOffset: { width: 0, height: 0 } },
   tab: { flex: 1, minHeight: Math.max(TOUCH, BAR_H - PAD * 2), alignItems: 'center', justifyContent: 'center', gap: 2 },
   label: { fontFamily: Fonts.bold, fontSize: 11, letterSpacing: 0.2 },
-  iconGlow: { shadowColor: C.lilac, shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  iconGlow: Platform.OS === 'web' ? ({ filter: 'drop-shadow(0 0 6px rgba(196,181,253,0.9))' } as any) : { shadowColor: C.lilac, shadowOpacity: 0.9, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
 });
