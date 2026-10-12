@@ -1,50 +1,76 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { FlatList, Pressable, RefreshControl, Text, View } from 'react-native';
-import { ui } from '@/components/ui';
+import { RefreshControl, Text, View } from 'react-native';
+import { Card, Chip, ErrorText, Icon, MoneyTimeline, PrimaryButton, Screen, Sheet, SkeletonCard, statusTone } from '@/components/ds';
+import { OrderCard } from '@/components/OrderRow';
 import { SellerActions } from '@/components/SellerActions';
-import { Brand } from '@/constants/Colors';
+import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
-import { formatCRC, getSellerOrders, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
+import { formatCRC, getSellerOrders, orderLink, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
+
+const NEXT_HINT: Record<string, string> = {
+  creado: 'Compartí el link. Cuando el comprador pague, te avisamos acá.',
+  escrow_creado: 'El comprador está pagando.',
+  fondeado: 'El dinero está apartado. Coordiná la entrega y marcala como enviada.',
+  enviado: 'Al entregar, pedile el PIN al comprador para cobrar.',
+  entregado: 'Entregado. El pago se está liberando.',
+  liberado: 'Cobrado. ¡Buena venta!',
+  en_disputa: 'Estamos revisando un problema reportado. El pago está en pausa.',
+};
 
 export default function Pedidos() {
   const { address } = useAuth();
-  const [orders, setOrders] = useState<SellerOrder[]>([]);
+  const [orders, setOrders] = useState<SellerOrder[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openSlug, setOpenSlug] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!address || !supabaseConfigured) return;
+    if (!address || !supabaseConfigured) { setOrders([]); return; }
     setLoading(true); setError(null);
-    try { setOrders(await getSellerOrders(address)); } catch (e) { setError((e as Error).message); }
+    try { setOrders(await getSellerOrders(address)); } catch (e) { setError((e as Error).message); setOrders((o) => o ?? []); }
     finally { setLoading(false); }
   }, [address]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const open = orders?.find((o) => o.slug === openSlug) ?? null;
+
   return (
-    <FlatList
-      style={ui.screen}
-      contentContainerStyle={ui.content}
-      data={orders}
-      keyExtractor={(o) => o.slug}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={Brand.lilac} />}
-      ListHeaderComponent={<>
-        <Text style={ui.h1}>Mis ventas</Text>
-        {!supabaseConfigured && <Text style={ui.error}>Falta configurar Supabase (.env)</Text>}
-        {error && <Text style={ui.error}>{error}</Text>}
-      </>}
-      ListEmptyComponent={!loading ? <Text style={ui.muted}>Todavía no creaste links. Andá a Vender.</Text> : null}
-      renderItem={({ item }) => (
-        <Pressable style={ui.card} onPress={() => router.push({ pathname: '/compartir/[slug]', params: { slug: item.slug } })}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={[ui.text, { fontWeight: '700', flex: 1 }]}>{item.brand} {item.model}</Text>
-            <Text style={[ui.chipText]}>{STATUS_LABEL[item.status] ?? item.status}</Text>
+    <Screen title="Mis pedidos" subtitle="El estado de tu dinero, siempre a la vista."
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.lilac} />}>
+      {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
+      {error && <ErrorText>{error}</ErrorText>}
+      {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
+        : orders.length === 0 ? (
+          <Card style={{ alignItems: 'center', paddingVertical: S.xl, gap: S.md }}>
+            <Icon name="cube-outline" size={40} color={C.lilac} />
+            <Text style={T.headline}>Sin pedidos todavía</Text>
+            <Text style={[T.callout, { textAlign: 'center' }]}>Creá un link de venta y compartilo por WhatsApp o Messenger.</Text>
+            <PrimaryButton title="Crear link de venta" icon="add" onPress={() => router.push('/vender')} />
+          </Card>
+        ) : orders.map((o) => <OrderCard key={o.slug} order={o} onPress={() => setOpenSlug(o.slug)} />)}
+
+      <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? `${open.brand} ${open.model}` : ''}
+        footer={open ? <PrimaryButton title="Compartir link" icon="share-outline" variant="secondary"
+          onPress={() => { const slug = open.slug; setOpenSlug(null); router.push({ pathname: '/compartir/[slug]', params: { slug } }); }} /> : null}>
+        {open && <>
+          <View style={{ gap: S.sm }}>
+            <Text style={T.money}>{formatCRC(open.price_crc)}</Text>
+            <Chip label={STATUS_LABEL[open.status] ?? open.status} tone={statusTone(open.status)} />
           </View>
-          <Text style={ui.muted}>{formatCRC(item.price_crc)} · /p/{item.slug}</Text>
-          <SellerActions slug={item.slug} status={item.status} onChange={load} />
-        </Pressable>
-      )}
-    />
+          <Card style={{ gap: S.md }}>
+            <MoneyTimeline status={open.status} />
+            <Text style={T.callout}>{NEXT_HINT[open.status] ?? ''}</Text>
+          </Card>
+          <SellerActions slug={open.slug} status={open.status} onChange={load} />
+          <View style={{ gap: S.xs }}>
+            <Text style={T.caption}>Detalles</Text>
+            <Text style={T.footnote} selectable>{orderLink(open.slug)}</Text>
+            {open.identifier_masked ? <Text style={T.footnote}>Identificador: {open.identifier_masked}</Text> : null}
+          </View>
+        </>}
+      </Sheet>
+    </Screen>
   );
 }
