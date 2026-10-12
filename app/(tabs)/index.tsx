@@ -1,3 +1,4 @@
+import { ensureSellerWalletOnLoad } from '@/lib/wallet';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -16,7 +17,8 @@ import { C, R, S, T, TOUCH, shadow } from '@/constants/theme';
 const TESTNET = true; // MVP corre solo en testnet
 
 export default function Inicio() {
-  const { email, address, logout } = useAuth();
+  const auth = useAuth();
+  const { email, address, logout } = auth;
   const [bal, setBal] = useState<Balances | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +35,7 @@ export default function Inicio() {
     setLoading(true); setErr(null);
     try { setBal(await fetchBalances(address)); } catch (e) { setErr(String((e as Error).message ?? e)); }
     finally { setLoading(false); }
-    if (supabaseConfigured) getSellerOrders(address).then(setOrders).catch(() => setOrders([]));
+    if (supabaseConfigured) getSellerOrders(address).then((os) => { setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setErr(m)); }).catch(() => setOrders([]));
     else setOrders([]);
   }, [address]);
   useFocusEffect(useCallback(() => { load(); }, [load]));

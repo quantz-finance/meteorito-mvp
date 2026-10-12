@@ -1,3 +1,4 @@
+import { ensureWalletReady } from '@/lib/wallet';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -57,6 +58,8 @@ export default function Vender() {
     if (!supabaseConfigured) return setError('Falta configurar Supabase (.env)');
     setBusy(true);
     try {
+      // Primer link: activar la wallet para recibir USDC. Si falla, no se publica.
+      await ensureWalletReady(auth);
       const draftId = newDraftId();
       const urls: string[] = [];
       for (const [i, p] of photos.entries()) urls.push(await uploadPhoto(auth, p, draftId, i).catch((e) => { track('photo_upload_failed', { context: 'listing', index: i }); throw e; }));
