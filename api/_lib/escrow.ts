@@ -1,4 +1,5 @@
-import { Keypair } from '@stellar/stellar-sdk';
+import { Keypair, Networks, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
+import { feeBumpAndSend, validateEscrowTx } from './feebump';
 import { createHash, randomInt } from 'node:crypto';
 import { env } from './env';
 import { db, advance, logEvent } from './db';
@@ -75,21 +76,103 @@ export type ApproveReason = 'buyer_confirm' | 'pin' | 'timeout';
 /** Backend approver aprueba + release signer libera, verificando on-chain antes (Snowden). */
 export async function approveAndRelease(order: any, reason: ApproveReason) {
   if (order.status !== 'enviado' && order.status !== 'entregado') throw new HttpError(409, `status ${order.status}`);
+  if (order.dispute_tx || order.disputed_at) throw new HttpError(409, 'pedido en disputa');
+  // Verificación ON-CHAIN (contrato directo, no indexador de TW) antes de aprobar y antes de liberar.
+  const assertOpen = async () => {
+    const g = await tw.releaseGuard(order.contract_id);
+    if (g.disputed || g.released || g.resolved) {
+      await logEvent(order.id, 'release_refused', { reason, onchain: { disputed: g.disputed, released: g.released, resolved: g.resolved } });
+      throw new HttpError(409, 'escrow en disputa o cerrado (on-chain)');
+    }
+    return g;
+  };
   if (order.status === 'enviado') {
-    const pre = await tw.getEscrow(order.contract_id);
-    if (pre?.flags?.disputed || pre?.flags?.released || pre?.flags?.resolved) throw new HttpError(409, 'escrow en disputa o cerrado');
+    await assertOpen();
     const ap = await tw.approveMilestone(order.contract_id, env.approverSecret());
     await advance(order.id, 'enviado', { approved_tx: ap.hash, approval_reason: reason, delivered_at: new Date().toISOString(), status: 'entregado' });
     await logEvent(order.id, 'approved', { hash: ap.hash, reason });
   }
-  const esc = await tw.getEscrow(order.contract_id);
-  const f = esc?.flags ?? {};
-  if (f.disputed || f.released || f.resolved) throw new HttpError(409, 'escrow en disputa o cerrado');
-  if (!esc?.milestones?.[0]?.approved) throw new HttpError(409, 'hito no aprobado on-chain');
+  const g = await assertOpen();
+  if (!g.approved) throw new HttpError(409, 'hito no aprobado on-chain');
   const bal = await tw.getBalance(order.contract_id);
   if (bal + 1e-7 < Number(order.amount_usdc)) throw new HttpError(409, `sin fondos on-chain (${bal})`);
   const rel = await tw.releaseFunds(order.contract_id, env.releaseSignerSecret());
   await advance(order.id, 'entregado', { released_tx: rel.hash, released_at: new Date().toISOString(), status: 'liberado' });
   await logEvent(order.id, 'released', { hash: rel.hash, reason });
   return { releasedTx: rel.hash };
+}
+
+/* ---------- Disputas ---------- */
+export const DISPUTE_REASONS = ['no_llego', 'no_funciona', 'no_es_lo_descrito', 'otro'] as const;
+export type DisputeReason = (typeof DISPUTE_REASONS)[number];
+const DISPUTABLE = ['fondeado', 'enviado', 'entregado'];
+
+/**
+ * Solo el comprador, solo antes de liberar. Idempotente: una disputa por pedido (PK en disputes);
+ * si ya está abierta devuelve la existente. On-chain: dispute-escrow firmado por el approver
+ * (rol del lado comprador) y enviado con fee-bump de la wallet platform.
+ */
+export async function openDispute(order: any, buyerSub: string, input: { reason: DisputeReason; description: string | null; evidence: string[] }) {
+  if (order.buyer_user_id !== buyerSub) throw new HttpError(403, 'solo el comprador puede abrir una disputa');
+  const { data: existing } = await db().from('disputes').select('*').eq('order_id', order.id).maybeSingle();
+  if (order.status === 'en_disputa' || existing?.state === 'open') return { disputeTx: order.dispute_tx ?? existing?.dispute_tx, already: true };
+  if (!DISPUTABLE.includes(order.status) || order.released_tx) throw new HttpError(409, `no se puede disputar en status ${order.status}`);
+  if (!existing) {
+    const { error } = await db().from('disputes').insert({ order_id: order.id, reason: input.reason, description: input.description, evidence: input.evidence, opened_by: buyerSub });
+    if (error && error.code !== '23505') throw error;
+  }
+  // Lock de release: que el cron no libere mientras abrimos la disputa.
+  await db().from('orders').update({ release_lock_until: new Date(Date.now() + 120_000).toISOString() }).eq('id', order.id);
+  try {
+    let g = await tw.releaseGuard(order.contract_id);
+    if (g.released || g.resolved) throw new HttpError(409, 'el pago ya fue liberado');
+    let hash: string | null = null;
+    if (!g.disputed) hash = await disputeOnChain(order.contract_id);
+    const now = new Date().toISOString();
+    await advance(order.id, order.status, { dispute_tx: hash ?? 'onchain-preexisting', disputed_at: now, status: 'en_disputa' });
+    await db().from('disputes').update({ state: 'open', dispute_tx: hash }).eq('order_id', order.id);
+    await logEvent(order.id, 'dispute_opened', { hash, reason: input.reason, feeBump: true });
+    return { disputeTx: hash, already: false };
+  } catch (e) {
+    await db().from('disputes').update({ state: 'failed' }).eq('order_id', order.id).neq('state', 'open');
+    throw e;
+  } finally {
+    await db().from('orders').update({ release_lock_until: null }).eq('id', order.id);
+  }
+}
+/** dispute-escrow firmado por el approver, validado (1 invocación a NUESTRO contrato) y enviado con fee-bump. Verifica on-chain. */
+export async function disputeOnChain(contractId: string): Promise<string> {
+  const x = await tw.disputeEscrowXdr(contractId, Keypair.fromSecret(env.approverSecret()).publicKey());
+  const inner = signWith(TransactionBuilder.fromXDR(x.unsignedTransaction, Networks.TESTNET) as Transaction, env.approverSecret());
+  validateEscrowTx(inner.toXDR(), { contractId, fns: ['dispute_escrow'], source: Keypair.fromSecret(env.approverSecret()).publicKey() });
+  const { hash } = await feeBumpAndSend(inner);
+  const g = await tw.releaseGuard(contractId);
+  if (!g.disputed) throw new Error('la disputa no quedó registrada on-chain');
+  return hash;
+}
+function signWith(tx: Transaction, secret: string) { tx.sign(Keypair.fromSecret(secret)); return tx; }
+
+/**
+ * Resolución (solo script/admin, nunca desde el cliente). buyerPct 0..100 del saldo on-chain.
+ * Firma el dispute resolver (secreto fuera de Vercel).
+ */
+export async function resolveOrderDispute(order: any, resolverSecret: string, buyerPct: number) {
+  if (!(buyerPct >= 0 && buyerPct <= 100)) throw new HttpError(400, 'buyerPct 0..100');
+  if (order.status !== 'en_disputa') throw new HttpError(409, `status ${order.status}`);
+  const g = await tw.releaseGuard(order.contract_id);
+  if (!g.disputed) throw new HttpError(409, 'el escrow no está en disputa on-chain');
+  const bal = await tw.getBalance(order.contract_id);
+  const toBuyer = Math.round(bal * buyerPct / 100 * 1e7) / 1e7;
+  const toSeller = Math.round((bal - toBuyer) * 1e7) / 1e7;
+  const distributions = [
+    ...(toBuyer > 0 ? [{ address: order.buyer_address, amount: toBuyer }] : []),
+    ...(toSeller > 0 ? [{ address: order.seller_address, amount: toSeller }] : []),
+  ];
+  const r = await tw.resolveDispute(order.contract_id, resolverSecret, distributions);
+  const resolution = { buyerPct, toBuyer, toSeller, balance: bal };
+  const now = new Date().toISOString();
+  await advance(order.id, 'en_disputa', { resolved_tx: r.hash, resolved_at: now, resolution, status: 'resuelto' });
+  await db().from('disputes').update({ state: 'resolved', resolution, resolved_tx: r.hash, resolved_at: now }).eq('order_id', order.id);
+  await logEvent(order.id, 'dispute_resolved', { hash: r.hash, ...resolution });
+  return { resolvedTx: r.hash, ...resolution };
 }

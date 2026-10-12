@@ -1,4 +1,4 @@
-import { Keypair, TransactionBuilder, Networks } from '@stellar/stellar-sdk';
+import { Account, Contract, Keypair, Networks, rpc, scValToNative, TransactionBuilder } from '@stellar/stellar-sdk';
 import { env } from './env';
 
 async function tw<T = any>(path: string, body?: unknown, method = 'POST'): Promise<T> {
@@ -93,4 +93,37 @@ export async function getBalance(contractId: string): Promise<number> {
   const q = new URLSearchParams(); q.append('addresses[]', contractId);
   const r = await tw<any[]>(`/helper/get-multiple-escrow-balance?${q}`, undefined, 'GET');
   return Number(r?.[0]?.balance ?? 0);
+}
+
+/** Abre disputa (single-release). Firma el approver (rol del comprador en el escrow). Devuelve XDR sin firmar. */
+export async function disputeEscrowXdr(contractId: string, signer: string) {
+  return tw<{ unsignedTransaction: string }>('/escrow/single-release/dispute-escrow', { contractId, signer });
+}
+
+/** Resuelve disputa con reparto. distributions debe sumar el saldo restante (post-fees). Firma el dispute resolver. */
+export async function resolveDispute(contractId: string, resolverSecret: string, distributions: { address: string; amount: number }[]) {
+  const disputeResolver = Keypair.fromSecret(resolverSecret).publicKey();
+  const res = await tw<{ unsignedTransaction: string }>('/escrow/single-release/resolve-dispute', { contractId, disputeResolver, distributions });
+  return signAndSend(res.unsignedTransaction, resolverSecret);
+}
+
+/**
+ * Lee el escrow DIRECTO del contrato (simulación Soroban de get_escrow), sin pasar por el indexador de TW.
+ * Necesario: TW no indexa las tx que enviamos con fee-bump (probado: tras dispute fee-bump, TW flags.disputed=false).
+ */
+export async function onChainEscrow(contractId: string): Promise<any> {
+  env.network();
+  const server = new rpc.Server(env.sorobanRpc());
+  const tx = new TransactionBuilder(new Account(Keypair.random().publicKey(), '0'), { fee: '100', networkPassphrase: Networks.TESTNET })
+    .addOperation(new Contract(contractId).call('get_escrow')).setTimeout(30).build();
+  const r: any = await server.simulateTransaction(tx);
+  if (r.error || !r.result?.retval) throw new Error(`get_escrow on-chain falló: ${String(r.error ?? 'sin retval').slice(0, 200)}`);
+  return scValToNative(r.result.retval);
+}
+
+/** Estado on-chain para liberar. Nunca liberar si hay disputa abierta o ya cerrado. Falla cerrado si no se puede leer. */
+export async function releaseGuard(contractId: string) {
+  const esc = await onChainEscrow(contractId);
+  const f = esc?.flags ?? {};
+  return { esc, disputed: !!f.disputed, released: !!f.released, resolved: !!f.resolved, approved: !!esc?.milestones?.[0]?.approved };
 }

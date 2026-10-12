@@ -9,6 +9,7 @@ export type SpMode = 'seller' | 'backend';
 export const env = {
   network: () => { const n = process.env.STELLAR_NETWORK ?? 'testnet'; if (n !== 'testnet') throw new Error('solo testnet'); return n; },
   horizon: () => 'https://horizon-testnet.stellar.org',
+  sorobanRpc: () => process.env.SOROBAN_RPC_URL ?? 'https://soroban-testnet.stellar.org',
   twBase: () => process.env.TW_API_BASE ?? 'https://dev.api.trustlesswork.com',
   twKey: () => req('TW_API_KEY'),
   twFee: () => Number(process.env.TW_PROTOCOL_FEE ?? '0.003'),   // TW cobra 0.3% aun con platformFee 0 (smoke test)

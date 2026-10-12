@@ -3,6 +3,8 @@ import { env } from './env';
 import { HttpError } from './auth';
 let c: any = null;
 export const db = (): any => (c ??= createClient(env.supabaseUrl(), env.supabaseService(), { auth: { persistSession: false } }));
+/** Solo tests: inyecta un cliente falso. */
+export const __setDbForTests = (fake: any) => { c = fake; };
 export function json(res: any, status: number, body: unknown) { res.status(status).setHeader('Content-Type', 'application/json'); res.send(JSON.stringify(body)); }
 export function fail(res: any, e: any) { return json(res, e instanceof HttpError ? e.status : 500, { error: e.message }); }
 export async function orderBySlug(slug: unknown): Promise<any> {
@@ -18,6 +20,8 @@ export async function advance(id: string, from: string, patch: Record<string, un
   if (error) throw error;
   if (!data?.length) throw new HttpError(409, `el pedido ya no está en ${from}`);
 }
+/** Bitácora best-effort: nunca debe tapar el resultado real (p. ej. un release rechazado). */
 export async function logEvent(order_id: string, kind: string, detail: Record<string, unknown> = {}) {
-  await db().from('order_events').insert({ order_id, kind, detail });
+  try { await db().from('order_events').insert({ order_id, kind, detail }); }
+  catch (e: any) { console.warn('[logEvent] falló', kind, e?.message); }
 }
