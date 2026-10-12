@@ -1,7 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView as RNScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { LivelyMascot, Reveal, ScrollCtx, SpaceBackground } from '@/components/space';
 import { PayBox } from '@/components/PayBox';
 import { Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, TestnetPill, type IconName } from '@/components/ds';
 import { categoryIcon } from '@/components/categoryIcons';
@@ -24,6 +26,8 @@ export default function LinkDeVenta() {
   const { width } = useWindowDimensions();
   const [order, setOrder] = useState<PublicOrder | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const scrollY = useSharedValue(0);
+  const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
 
   const load = () => { if (slug) getPublicOrder(String(slug)).then(setOrder).catch((e) => setError((e as Error).message)); };
   // Respaldo del pg_cron: si el plazo de 24h ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
@@ -40,11 +44,15 @@ export default function LinkDeVenta() {
 
   const cat = order ? getCategory(order.category) : undefined;
   return (
+    <ScrollCtx.Provider value={order?.status === 'creado' ? scrollY : null}>
     <View style={st.screen}>
-      <ScrollView contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }]} showsVerticalScrollIndicator={false}>
+      {/* Pantalla de pago: fondo tranquilo, sin efectos detrás del monto y el botón. */}
+      <SpaceBackground mode="calm" />
+      <Animated.ScrollView contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }]} showsVerticalScrollIndicator={false}
+        onScroll={onScroll} scrollEventThrottle={16}>
         <View style={st.rowBetween}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-            <Image source={require('../../assets/images/mascot.png')} style={{ width: 32, height: 32 }} />
+            <LivelyMascot size={36} parallax={0.3} />
             <Text style={T.headline}>Meteorito</Text>
           </View>
           <TestnetPill />
@@ -56,11 +64,11 @@ export default function LinkDeVenta() {
           </View>
         ) : <>
           {/* Tarjeta de producto */}
-          <Card style={{ padding: 0, overflow: 'hidden', gap: 0 }}>
+          <Reveal i={0}><Card style={{ padding: 0, overflow: 'hidden', gap: 0 }}>
             {order.photos.length > 0 ? (
-              <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
+              <RNScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
                 {order.photos.map((u) => <Image key={u} source={{ uri: u }} style={{ width: contentW, height: contentW }} resizeMode="cover" />)}
-              </ScrollView>
+              </RNScrollView>
             ) : (
               <View style={[s.noPhoto, { height: contentW * 0.6 }]}><Icon name={categoryIcon(order.category)} size={64} color={C.lilac} /></View>
             )}
@@ -75,7 +83,7 @@ export default function LinkDeVenta() {
               <Text style={T.money}>{formatCRC(order.price_crc)}</Text>
               {order.description ? <Text style={T.callout}>{order.description}</Text> : null}
             </View>
-          </Card>
+          </Card></Reveal>
 
           {moneyProgress(order.status) > 0 || order.status === 'en_disputa' ? (
             <Card style={{ gap: S.md }}>
@@ -122,9 +130,10 @@ export default function LinkDeVenta() {
           )}
           {isAuthenticated && <Text style={[T.footnote, { textAlign: 'center' }]}>Sesión iniciada como {email}</Text>}
         </>}
-      </ScrollView>
+      </Animated.ScrollView>
       {order ? <StickyFooter><PayBox order={order} onChange={load} /></StickyFooter> : null}
     </View>
+    </ScrollCtx.Provider>
   );
 }
 
