@@ -2,7 +2,8 @@ import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Share, Text, View } from 'react-native';
-import { Button, ui } from '@/components/ui';
+import { Card, haptic, PrimaryButton, Screen, SuccessCheck } from '@/components/ds';
+import { C, S, T } from '@/constants/theme';
 import { orderLink } from '@/lib/orders';
 
 export default function Compartir() {
@@ -21,18 +22,28 @@ export default function Compartir() {
   }
   async function copy() {
     await Clipboard.setStringAsync(link);
+    haptic.success();
     setCopied(true);
   }
 
   return (
-    <View style={[ui.screen, ui.content, { justifyContent: 'center' }]}>
-      <Text style={ui.h1}>¡Tu link está listo!</Text>
-      <Text style={ui.muted}>Mandalo por Messenger o WhatsApp. El comprador paga protegido y vos cobrás al entregar.</Text>
-      <View style={ui.card}><Text style={ui.text} selectable>{link}</Text></View>
-      <Button title="Compartir" onPress={share} />
-      <Button title={copied ? '¡Copiado!' : 'Copiar link'} variant="outline" onPress={copy} />
-      <Button title="Ver como comprador" variant="outline" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug } })} />
-      <Button title="Listo" variant="outline" onPress={() => router.replace('/pedidos')} />
-    </View>
+    <Screen contentStyle={{ flexGrow: 1, justifyContent: 'center' }}
+      footer={<>
+        <PrimaryButton title="Compartir link" icon="share-outline" onPress={share} />
+        <View style={{ flexDirection: 'row', gap: S.sm }}>
+          <View style={{ flex: 1 }}><PrimaryButton title="Ver como comprador" variant="secondary" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug } })} /></View>
+          <View style={{ flex: 1 }}><PrimaryButton title="Listo" variant="secondary" onPress={() => router.replace('/pedidos')} /></View>
+        </View>
+      </>}>
+      <SuccessCheck />
+      <View style={{ gap: S.sm }}>
+        <Text style={[T.largeTitle, { textAlign: 'center' }]}>¡Tu link está listo!</Text>
+        <Text style={[T.callout, { textAlign: 'center' }]}>Mandalo por WhatsApp o Messenger. El comprador paga protegido y vos cobrás al entregar.</Text>
+      </View>
+      <Card onPress={copy} accessibilityLabel="Copiar link" style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+        <Text style={[T.body, { flex: 1 }]} numberOfLines={1}>{link.replace('https://', '')}</Text>
+        <Text style={[T.headline, { color: copied ? C.success : C.lilac }]}>{copied ? 'Copiado' : 'Copiar'}</Text>
+      </Card>
+    </Screen>
   );
 }
