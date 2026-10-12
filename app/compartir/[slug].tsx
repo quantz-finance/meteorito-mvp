@@ -5,6 +5,7 @@ import { Platform, Share, Text, View } from 'react-native';
 import { Card, haptic, PrimaryButton, Screen, SuccessCheck } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 import { orderLink } from '@/lib/orders';
+import { track } from '@/lib/analytics';
 
 export default function Compartir() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -13,6 +14,7 @@ export default function Compartir() {
   const message = `Pagá seguro con Meteorito: ${link}`;
 
   async function share() {
+    track('share_clicked', { method: Platform.OS === 'web' && (globalThis.navigator as any)?.share ? 'web_share' : Platform.OS === 'web' ? 'copy' : 'native_share' });
     if (Platform.OS === 'web') {
       const nav = globalThis.navigator as Navigator | undefined;
       if (nav?.share) return nav.share({ title: 'Meteorito', text: message, url: link }).catch(() => {});
@@ -21,6 +23,7 @@ export default function Compartir() {
     await Share.share({ message, url: link });
   }
   async function copy() {
+    track('link_copied');
     await Clipboard.setStringAsync(link);
     haptic.success();
     setCopied(true);
