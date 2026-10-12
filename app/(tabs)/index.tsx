@@ -1,11 +1,12 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Image, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '@/lib/cavos';
 import { fetchBalances, type Balances } from '@/lib/horizon';
 import { CRC_USDC_RATE, displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Section, Sheet, Skeleton, SkeletonCard, TestnetPill, type IconName } from '@/components/ds';
+import { Glow, LivelyMascot, Reveal } from '@/components/space';
 import { HelpSheet } from '@/components/HelpSheet';
 import { OrderCard } from '@/components/OrderRow';
 import { ui } from '@/components/ui';
@@ -47,8 +48,8 @@ export default function Inicio() {
     <Screen title={name ? `Hola, ${name}` : 'Hola'} right={<IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />}
       refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.lilac} />}>
       {/* Tarjeta de saldo */}
-      <View style={[s.balance, shadow]}>
-        <View style={s.balanceGlow} />
+      <Reveal i={0}><View style={[s.balance, shadow]}>
+        <Glow style={s.balanceGlow} />
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[T.caption, { color: C.lilac }]}>{TESTNET ? 'Saldo de prueba' : 'Saldo disponible'}</Text>
           <TestnetPill />
@@ -57,10 +58,10 @@ export default function Inicio() {
           : <Text style={[T.money, { marginTop: S.sm }]} adjustsFontSizeToFit numberOfLines={1}>{formatCRC(crc)}</Text>}
         {err ? <Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Deslizá hacia abajo para reintentar.</Text>
           : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros protegidos llegan acá.</Text>}
-        <Image source={require('../../assets/images/mascot.png')} style={s.mascot} resizeMode="contain" />
-      </View>
+        <LivelyMascot size={96} style={s.mascot} parallax={-0.15} />
+      </View></Reveal>
       {/* 2 acciones grandes */}
-      <View style={s.grid}>
+      <Reveal i={1}><View style={s.grid}>
         {actions.map((a, i) => (
           <Pressable key={a.label} accessibilityRole="button" accessibilityLabel={a.label}
             onPress={() => { haptic.tap(); a.onPress(); }}
@@ -72,9 +73,9 @@ export default function Inicio() {
             </View>
           </Pressable>
         ))}
-      </View>
+      </View></Reveal>
 
-      <Section title="Pedidos recientes" action={orders && orders.length > 0
+      <Reveal i={2}><Section title="Pedidos recientes" action={orders && orders.length > 0
         ? <Pressable onPress={() => router.push('/pedidos')} hitSlop={12} style={{ minHeight: TOUCH, justifyContent: 'center' }}><Text style={[T.headline, { color: C.lilac, fontSize: 15 }]}>Ver todos</Text></Pressable> : undefined}>
         {orders === null ? <><SkeletonCard /><SkeletonCard /></>
           : orders.length === 0 ? (
@@ -83,8 +84,8 @@ export default function Inicio() {
               <Text style={[T.callout, { textAlign: 'center' }]}>Todavía no tenés pedidos. Creá tu primer link de venta en un minuto.</Text>
               <PrimaryButton title="Vender algo" icon="add" onPress={() => router.push('/vender')} />
             </Card>
-          ) : orders.slice(0, 3).map((o) => <OrderCard key={o.slug} order={o} timeline={false} onPress={() => router.push('/pedidos')} />)}
-      </Section>
+          ) : orders.slice(0, 3).map((o, i) => <Reveal key={o.slug} i={3 + i}><OrderCard order={o} timeline={false} onPress={() => router.push('/pedidos')} /></Reveal>)}
+      </Section></Reveal>
 
       <Sheet visible={payOpen} onClose={() => setPayOpen(false)} title="Pagar un link"
         footer={<PrimaryButton title="Ver producto" icon="arrow-forward" disabled={!linkSlug} onPress={goPay} />}>
@@ -108,7 +109,7 @@ export default function Inicio() {
 }
 
 const s = StyleSheet.create({
-  balance: { backgroundColor: C.purple, borderRadius: R.lg, padding: S.lg, overflow: 'hidden', minHeight: 148, gap: S.xs },
+  balance: { backgroundColor: C.purple, borderWidth: 1, borderColor: 'rgba(255,138,61,0.35)', borderRadius: R.lg, padding: S.lg, overflow: 'hidden', minHeight: 148, gap: S.xs },
   balanceGlow: { position: 'absolute', right: -60, top: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,138,61,0.35)' },
   mascot: { position: 'absolute', right: -8, bottom: -12, width: 96, height: 96, opacity: 0.95 },
   grid: { flexDirection: 'row', gap: S.sm },
