@@ -1,3 +1,7 @@
+import { Buffer } from 'buffer';
+// web: el SDK Cavos/Stellar usa Buffer en signMessage (evita "Buffer is not defined").
+(globalThis as any).Buffer = Buffer;
+
 import { Nunito_400Regular, Nunito_700Bold, Nunito_900Black, useFonts } from '@expo-google-fonts/nunito';
 import { DarkTheme, Stack, ThemeProvider, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
