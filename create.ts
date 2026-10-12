@@ -1,0 +1,38 @@
+// POST /api/orders/create  (Bearer JWT Cavos + proof{action:'create', ref:'new'})
+// Reemplaza el insert directo desde el cliente. anon ya no inserta (migración 003).
+import { randomBytes } from 'node:crypto';
+import { db, json, fail } from '../_lib/db';
+import { requireCavosUser, requireAddressProof, HttpError } from '../_lib/auth';
+
+const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
+const slug = () => { const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; let s = ''; while (s.length < 6) { const b = randomBytes(1)[0]; if (b < 252) s += a[b % 36]; } return s; };
+const str = (v: unknown, max: number, req = true) => {
+  if (v == null || v === '') { if (req) throw new HttpError(400, 'faltan campos'); return null; }
+  if (typeof v !== 'string' || v.length > max) throw new HttpError(400, 'campo inválido'); return v.trim();
+};
+
+export default async function handler(req: any, res: any) {
+  if (req.method !== 'POST') return json(res, 405, { error: 'method' });
+  try {
+    const user = await requireCavosUser(req);
+    const b = req.body ?? {};
+    const seller = await requireAddressProof(b.proof, 'create', 'new');
+    if (!CATS.includes(b.category)) throw new HttpError(400, 'categoría inválida');
+    const price = Number(b.price_crc);
+    if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw new HttpError(400, 'precio inválido');
+    const photos = Array.isArray(b.photos) ? b.photos.filter((u: unknown) => typeof u === 'string' && u.startsWith(process.env.SUPABASE_URL ?? 'https://')).slice(0, 4) : [];
+    const row = {
+      seller_address: seller, seller_user_id: user.sub, seller_email: user.email ?? null,
+      category: b.category, brand: str(b.brand, 60), model: str(b.model, 80), condition: str(b.condition, 40),
+      price_crc: price, description: str(b.description, 2000, false), identifier: str(b.identifier, 40, false),
+      photos, checks: Array.isArray(b.checks) ? b.checks.slice(0, 20) : [], status: 'creado',
+    };
+    for (let i = 0; i < 5; i++) {
+      const s = slug();
+      const { error } = await db().from('orders').insert({ ...row, slug: s });
+      if (!error) return json(res, 200, { slug: s });
+      if (error.code !== '23505') throw error;
+    }
+    throw new Error('no se pudo generar slug');
+  } catch (e) { return fail(res, e); }
+}

@@ -1,0 +1,69 @@
+import type { MeteoritoAuth } from './types';
+import { supabase } from './supabase';
+import type { CheckResult } from './categories';
+
+export const PUBLIC_BASE_URL = 'https://meteorito-mvp.vercel.app';
+export const orderLink = (slug: string) => `${PUBLIC_BASE_URL}/p/${slug}`;
+export const CRC_USDC_RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510); // debe igualar CRC_USDC_RATE del server
+export const TW_FEE = 0.003; // Trustless Work cobra 0.3%
+
+export const formatCRC = (n: number) => '₡' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+export const formatUSD = (crc: number) => `≈ ${(crc / CRC_USDC_RATE).toFixed(2)} USDC (testnet)`;
+export const formatUSDC = (n: number) => `${n.toFixed(2)} USDC`;
+
+export const STATUS_LABEL: Record<string, string> = {
+  creado: 'Disponible', escrow_creado: 'Esperando pago', fondeado: 'Pagado · fondos apartados', enviado: 'Enviado', entregado: 'Recibido', liberado: 'Pago liberado', en_disputa: 'En disputa', resuelto: 'Resuelto', cancelado: 'Cancelado',
+};
+
+const ALPHA = 'abcdefghijklmnopqrstuvwxyz0123456789';
+export function randomSlug(len = 6): string {
+  let out = '';
+  while (out.length < len) {
+    const bytes = new Uint8Array(len * 2);
+    crypto.getRandomValues(bytes);
+    for (const b of bytes) if (b < 252 && out.length < len) out += ALPHA[b % 36]; // 252 = 7*36, sin sesgo
+  }
+  return out;
+}
+
+export interface NewOrder {
+  seller_address: string; seller_email: string | null; category: string; brand: string; model: string;
+  condition: string; price_crc: number; description: string; identifier: string; photos: string[]; checks: CheckResult[];
+}
+
+export async function createOrder(auth: MeteoritoAuth, o: Omit<NewOrder, 'seller_address' | 'seller_email'>): Promise<string> {
+  const { api, proof } = await import('./api');
+  const r = await api<{ slug: string }>(auth, '/api/orders/create', { ...o, proof: await proof(auth, 'create', 'new') });
+  return r.slug;
+}
+
+export async function uploadPhoto(uri: string, sellerAddress: string, mime = 'image/jpeg'): Promise<string> {
+  const raw = await (await fetch(uri)).blob();
+  // Storage rechaza application/octet-stream: forzar el MIME (en nativo/algunos navegadores el blob viene sin type).
+  const type = raw.type && raw.type.startsWith('image/') ? raw.type : mime;
+  const blob = raw.type === type ? raw : new Blob([await raw.arrayBuffer()], { type });
+  const ext = (type.split('/')[1] ?? 'jpg').replace('jpeg', 'jpg');
+  const path = `${sellerAddress}/${Date.now()}-${randomSlug(8)}.${ext}`;
+  const { error } = await supabase().storage.from('listings').upload(path, blob, { contentType: type, upsert: false });
+  if (error) throw new Error(error.message);
+  return supabase().storage.from('listings').getPublicUrl(path).data.publicUrl;
+}
+
+export interface PublicOrder {
+  slug: string; category: string; brand: string; model: string; condition: string; price_crc: number;
+  description: string | null; photos: string[]; status: string; identifier_masked: string | null;
+  amount_usdc?: number | null; contract_id?: string | null; funded_tx?: string | null; released_tx?: string | null; auto_release_at?: string | null;
+  checks_summary: CheckResult[]; created_at: string;
+}
+export async function getPublicOrder(slug: string): Promise<PublicOrder | null> {
+  const { data, error } = await supabase().from('public_orders').select('*').eq('slug', slug).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as PublicOrder | null;
+}
+
+export interface SellerOrder { slug: string; category: string; brand: string; model: string; price_crc: number; status: string; identifier_masked: string | null; created_at: string }
+export async function getSellerOrders(addr: string): Promise<SellerOrder[]> {
+  const { data, error } = await supabase().rpc('seller_orders', { p_seller_address: addr });
+  if (error) throw new Error(error.message);
+  return (data ?? []) as SellerOrder[];
+}

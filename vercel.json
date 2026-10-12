@@ -4,7 +4,19 @@
   "installCommand": "npm install",
   "framework": null,
   "rewrites": [
-    { "source": "/p/:slug", "destination": "/p/[slug].html" },
-    { "source": "/((?!.*\\.).*)", "destination": "/index.html" }
+    {
+      "source": "/p/:slug",
+      "destination": "/p/[slug].html"
+    },
+    {
+      "source": "/((?!api/)(?!.*\\.).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/escrow/cron",
+      "schedule": "0 12 * * *"
+    }
   ]
 }
