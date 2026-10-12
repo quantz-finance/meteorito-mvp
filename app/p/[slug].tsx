@@ -2,6 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, Text, View } from 'react-native';
 import { Button, ui } from '@/components/ui';
+import { PayBox } from '@/components/PayBox';
 import { Brand } from '@/constants/Colors';
 import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
@@ -9,14 +10,17 @@ import { formatCRC, formatUSD, getPublicOrder, STATUS_LABEL, type PublicOrder } 
 
 export default function LinkDeVenta() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const { isAuthenticated, email, openLogin } = useAuth();
+  const { isAuthenticated, email } = useAuth();
   const [order, setOrder] = useState<PublicOrder | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
+  const load = () => { if (slug) getPublicOrder(String(slug)).then(setOrder).catch((e) => setError((e as Error).message)); };
+  // Respaldo del pg_cron: si el plazo de 24h ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
   useEffect(() => {
-    if (!slug) return;
-    getPublicOrder(String(slug)).then(setOrder).catch((e) => setError((e as Error).message));
-  }, [slug]);
+    if (order?.status === 'enviado' && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
+      fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
+  }, [order?.status, order?.auto_release_at]);
+  useEffect(load, [slug]);
 
   if (error) return <Center><Text style={ui.error}>No se pudo cargar: {error}</Text></Center>;
   if (order === undefined) return <Center><ActivityIndicator color={Brand.lilac} /></Center>;
@@ -39,15 +43,13 @@ export default function LinkDeVenta() {
         <Text style={ui.label}>Lo que declara el vendedor</Text>
         {order.identifier_masked && <Text style={ui.text}>Identificador: {order.identifier_masked}</Text>}
         {(order.checks_summary ?? []).map((c) => (
-          <Text key={c.id} style={[ui.text, !c.ok && { color: Brand.orange }]}>{c.ok ? '✓' : '✗'} {c.label}</Text>
+          <Text key={c.id} style={ui.text}>{c.ok ? '✓' : '✗'} {c.label}</Text>
         ))}
         <Text style={ui.muted}>Meteorito verifica esto antes de liberar el pago.</Text>
       </View>
 
-      <Button title="Pagar seguro · Próximamente: escrow" disabled />
-      {isAuthenticated
-        ? <Text style={ui.muted}>Sesión iniciada como {email}</Text>
-        : <Button title="Entrar para comprar" variant="outline" onPress={openLogin} />}
+      <PayBox order={order} onChange={load} />
+      {isAuthenticated && <Text style={ui.muted}>Sesión iniciada como {email}</Text>}
     </ScrollView>
   );
 }
