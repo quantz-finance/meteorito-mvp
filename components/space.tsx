@@ -13,7 +13,6 @@ const IMG = {
   near: require('../assets/images/space/stars-near.webp'),
   nebula: require('../assets/images/space/nebula.webp'),
   comet: require('../assets/images/space/comet.webp'),
-  mascot: require('../assets/images/mascot.png'),
 };
 
 /** Scroll de la pantalla actual, para parallax. */
@@ -80,25 +79,110 @@ export function Reveal({ i = 0, children, style }: { i?: number; children: React
   return <Animated.View entering={entering} style={style}>{children}</Animated.View>;
 }
 
-/** Mascota viva: flota y responde al scroll. */
-export function LivelyMascot({ size = 96, style, parallax = 0.35 }: { size?: number; style?: StyleProp<ImageStyle>; parallax?: number }) {
+/* ---------- Mascota con estela (port exacto de .meteor en meteorito.app) ----------
+ * Mismas capas que el landing: 3 llamas (f1-f3), 3 líneas de velocidad (l1-l3) y 10 brasas (e1-e10)
+ * sobre un eje en (62%, 60%) rotado 216°. Los gradientes CSS van horneados en PNG.
+ * Un solo reloj de 4 s maneja todo (todas las duraciones del landing dividen 4 s). Solo transform/opacity. */
+const TRAIL = {
+  f1: require('../assets/images/space/trail-f1.png'), f2: require('../assets/images/space/trail-f2.png'), f3: require('../assets/images/space/trail-f3.png'),
+  line: require('../assets/images/space/trail-line.png'), ember: require('../assets/images/space/trail-ember.png'), emberP: require('../assets/images/space/trail-ember-purple.png'),
+  mascot: require('../assets/images/space/mascot.webp'),
+};
+const MASCOT_AR = 604 / 640;
+// [dur s, delay s, scaleX, scaleY, translateY cqw] (keyframe 50%)
+const FLAMES = [
+  { img: 'f1', w: 85, h: 40, mt: -20, dur: 0.8, delay: 0, sx: 1.08, sy: 0.9, ty: 1.5 },
+  { img: 'f2', w: 68, h: 26, mt: -20, dur: 1, delay: 0, sx: 1.15, sy: 1.1, ty: -2 },
+  { img: 'f3', w: 72, h: 24, mt: -2, dur: 0.8, delay: -0.4, sx: 0.9, sy: 1.12, ty: 2 },
+] as const;
+const LINES = [{ top: -16, w: 40, delay: 0 }, { top: 12, w: 40, delay: -0.33 }, { top: -2, w: 45, delay: -0.66 }];
+const EMBERS = [
+  { y: -10, y2: -24, d: 1, dl: 0, s: 3 }, { y: 6, y2: 18, d: 0.8, dl: -0.2, s: 3 }, { y: -2, y2: -8, d: 1, dl: -0.5, s: 3 },
+  { y: 10, y2: 26, d: 0.8, dl: -0.7, s: 2 }, { y: -14, y2: -30, d: 1, dl: -0.35, s: 2.2 }, { y: 2, y2: 10, d: 2, dl: -0.85, s: 3 },
+  { y: -6, y2: -20, d: 2, dl: -1.3, s: 2 }, { y: 8, y2: 14, d: 0.8, dl: -0.1, s: 1.6 }, { y: -18, y2: -12, d: 1, dl: -0.6, s: 2.4, p: true },
+  { y: 14, y2: 30, d: 2, dl: -1.6, s: 3, p: true },
+];
+function phase(t: number, dur: number, delay: number) {
+  'worklet';
+  const x = (t * 4 - delay) / dur;
+  return x - Math.floor(x);
+}
+function pingEase(ph: number) {
+  'worklet';
+  const k = ph < 0.5 ? ph * 2 : (1 - ph) * 2; // 0 -> 1 (50%) -> 0
+  return 0.5 - 0.5 * Math.cos(Math.PI * k); // ease-in-out por tramo
+}
+
+function Flame({ f, t, cq, live }: { f: (typeof FLAMES)[number]; t: SharedValue<number>; cq: number; live: boolean }) {
+  const a = useAnimatedStyle(() => {
+    const e = live ? pingEase(phase(t.value, f.dur, f.delay)) : 0;
+    return { transform: [{ scaleX: 1 + (f.sx - 1) * e }, { scaleY: 1 + (f.sy - 1) * e }, { translateY: f.ty * cq * e }] };
+  });
+  return <Animated.Image source={TRAIL[f.img]} resizeMode="stretch"
+    style={[{ position: 'absolute', left: 20 * cq, top: f.mt * cq, width: f.w * cq, height: f.h * cq, transformOrigin: 'left center' }, a]} />;
+}
+function Line({ l, t, cq }: { l: (typeof LINES)[number]; t: SharedValue<number>; cq: number }) {
+  const a = useAnimatedStyle(() => {
+    const ph = phase(t.value, 1, l.delay);
+    return { opacity: ph < 0.25 ? (ph / 0.25) * 0.8 : 0.8 * (1 - (ph - 0.25) / 0.75), transform: [{ translateX: (-10 + 70 * ph) * cq }] };
+  });
+  return <Animated.Image source={TRAIL.line} resizeMode="stretch"
+    style={[{ position: 'absolute', left: 40 * cq, top: l.top * cq, width: l.w * cq, height: Math.max(1, 0.7 * cq), borderRadius: 2 * cq }, a]} />;
+}
+function Ember({ m, t, cq }: { m: (typeof EMBERS)[number]; t: SharedValue<number>; cq: number }) {
+  const a = useAnimatedStyle(() => {
+    const ph = phase(t.value, m.d, m.dl);
+    return {
+      opacity: ph < 0.15 ? ph / 0.15 : 1 - (ph - 0.15) / 0.85,
+      transform: [{ translateX: 62 * cq * ph }, { translateY: (m.y + (m.y2 - m.y) * ph) * cq }, { scale: 1 - 0.7 * ph }],
+    };
+  });
+  const sz = m.s * cq;
+  return <Animated.Image source={m.p ? TRAIL.emberP : TRAIL.ember}
+    style={[{ position: 'absolute', left: 30 * cq, top: -sz / 2, width: sz, height: sz }, a]} />;
+}
+
+/**
+ * Mascota viva con la estela del landing. variant "mini" = como el logo del landing:
+ * estela quieta al 55%, sin brasas (usar en pantallas de pago).
+ * size = ancho. Reducir movimiento: sin animación, sin líneas ni brasas.
+ */
+export function LivelyMascot({ size = 96, style, parallax = 0.35, variant = 'big' }: {
+  size?: number; style?: StyleProp<ViewStyle>; parallax?: number; variant?: 'big' | 'mini';
+}) {
   const reduce = useReducedMotion();
   const scrollY = useScreenScroll();
+  const live = !reduce && variant === 'big';
   const t = useSharedValue(0);
   useEffect(() => {
-    if (reduce) return;
-    t.value = withRepeat(withTiming(1, { duration: 3600, easing: Easing.inOut(Easing.sin) }), -1, true);
+    if (!live) return;
+    t.value = 0;
+    t.value = withRepeat(withTiming(1, { duration: 4000, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(t);
-  }, [reduce]);
-  const a = useAnimatedStyle(() => {
+  }, [live]);
+  const w = size, h = size * MASCOT_AR, cq = w / 100;
+  const outer = useAnimatedStyle(() => {
     const sy = !reduce && scrollY ? scrollY.value : 0;
-    return { transform: [
-      { translateY: interpolate(t.value, [0, 1], [0, -10]) + sy * parallax },
-      { rotate: `${interpolate(t.value, [0, 1], [-4, 3])}deg` },
-      { scale: interpolate(sy, [-120, 0, 200], [1.12, 1, 0.85], 'clamp') },
-    ] };
+    return { transform: [{ translateY: sy * parallax }, { scale: interpolate(sy, [-120, 0, 200], [1.12, 1, 0.85], 'clamp') }] };
   });
-  return <Animated.Image source={IMG.mascot} resizeMode="contain" style={[{ width: size, height: size }, style, a]} />;
+  const dive = useAnimatedStyle(() => {
+    const e = live ? pingEase(t.value) : 0; // mtDive 4s ease-in-out
+    return { transform: [{ translateX: 0.025 * w * e }, { translateY: 0.03 * h * e }, { rotate: `${3 * e}deg` }] };
+  });
+  return (
+    <Animated.View pointerEvents="none" style={[{ width: w, height: h }, style, outer]}>
+      <Animated.View style={[{ width: w, height: h }, dive]}>
+        <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: variant === 'mini' ? 0.55 : reduce ? 0.8 : 1 }}>
+          <View style={{ position: 'absolute', left: 0.62 * w, top: 0.6 * h, width: 0, height: 0, transform: [{ rotate: '216deg' }] }}>
+            {FLAMES.map((f) => <Flame key={f.img} f={f} t={t} cq={cq} live={live} />)}
+            {live && LINES.map((l, i) => <Line key={i} l={l} t={t} cq={cq} />)}
+            {live && EMBERS.map((m, i) => <Ember key={i} m={m} t={t} cq={cq} />)}
+          </View>
+        </View>
+        <Image source={TRAIL.mascot} resizeMode="contain" style={{ width: w, height: h }} />
+      </Animated.View>
+    </Animated.View>
+  );
 }
 
 /** Halo suave que respira (solo opacidad/escala, sin blur en loop). */
