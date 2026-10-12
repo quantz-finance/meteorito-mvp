@@ -52,7 +52,7 @@ export default function LinkDeVenta() {
         onScroll={onScroll} scrollEventThrottle={16}>
         <View style={st.rowBetween}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-            <LivelyMascot size={36} parallax={0.3} />
+            <LivelyMascot size={40} parallax={0.3} variant="mini" />
             <Text style={T.headline}>Meteorito</Text>
           </View>
           <TestnetPill />
