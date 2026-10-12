@@ -2,7 +2,7 @@ import type { MeteoritoAuth } from './types';
 import { supabase } from './supabase';
 import type { CheckResult } from './categories';
 
-export const PUBLIC_BASE_URL = 'https://meteorito-mvp.vercel.app';
+export const PUBLIC_BASE_URL = 'https://pago.meteorito.app';
 export const orderLink = (slug: string) => `${PUBLIC_BASE_URL}/p/${slug}`;
 export const CRC_USDC_RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510); // debe igualar CRC_USDC_RATE del server
 export const TW_FEE = 0.003; // Trustless Work cobra 0.3%

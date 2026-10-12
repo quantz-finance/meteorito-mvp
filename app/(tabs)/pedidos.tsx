@@ -1,3 +1,4 @@
+import { ensureSellerWalletOnLoad } from '@/lib/wallet';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { RefreshControl, Text, View } from 'react-native';
@@ -21,7 +22,8 @@ const NEXT_HINT: Record<string, string> = {
 };
 
 export default function Pedidos() {
-  const { address } = useAuth();
+  const auth = useAuth();
+  const { address } = auth;
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,7 @@ export default function Pedidos() {
   const load = useCallback(async () => {
     if (!address || !supabaseConfigured) { setOrders([]); return; }
     setLoading(true); setError(null);
-    try { setOrders(await getSellerOrders(address)); } catch (e) { setError((e as Error).message); setOrders((o) => o ?? []); }
+    try { const os = await getSellerOrders(address); setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError((e as Error).message); setOrders((o) => o ?? []); }
     finally { setLoading(false); }
   }, [address]);
   useFocusEffect(useCallback(() => { load(); }, [load]));

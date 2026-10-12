@@ -9,6 +9,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '4', name: 'PIN bloqueado tras 3 intentos', file: './t04-pin.test.ts', onchain: false },
   { id: '6a', name: 'Disputa: solo comprador, antes de liberar', file: './t06-dispute-auth.test.ts', onchain: false },
   { id: '8', name: 'Ownership por sub en todas las escrituras', file: './t08-ownership.test.ts', onchain: false },
+  { id: '9', name: 'Vendedor nuevo sin trustline: error claro, activación validada', file: './t09-seller-wallet.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },

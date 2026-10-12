@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { trackServer } from '../_lib/analytics';
 import { db, json, fail } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError } from '../_lib/auth';
+import { walletState } from '../_lib/wallet';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
@@ -27,6 +28,8 @@ export default async function handler(req: any, res: any) {
     const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
     if (photos.length < 1) throw new HttpError(400, 'agregá al menos una foto');
     if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(prefix))) throw new HttpError(400, 'fotos inválidas');
+    // El link no se publica si la wallet del vendedor no puede recibir USDC (activar con /api/wallet/activate).
+    if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Activala y volvé a publicar.'), { code: 'wallet_not_ready' });
     const row = {
       seller_address: seller, seller_user_id: user.sub, seller_email: user.email ?? null,
       category: b.category, brand: str(b.brand, 60), model: str(b.model, 80), condition: str(b.condition, 40),
