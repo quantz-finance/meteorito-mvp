@@ -47,7 +47,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <Text style={[T.callout, { textAlign: 'center' }]}>Dáselo al vendedor solo cuando tengas el producto en la mano y lo hayas revisado.</Text>
     </Sheet>
     <Sheet visible={sheet === 'released'} onClose={() => setSheet(null)} footer={<PrimaryButton title="Cerrar" onPress={() => setSheet(null)} />}>
-      <SuccessCheck />
+      <SuccessCheck celebrate />
       <Text style={[T.title, { textAlign: 'center' }]}>¡Listo! Pago liberado</Text>
       <Text style={[T.callout, { textAlign: 'center' }]}>Gracias por comprar seguro con Meteorito.</Text>
     </Sheet>
