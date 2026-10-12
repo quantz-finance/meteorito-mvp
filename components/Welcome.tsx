@@ -48,7 +48,7 @@ const s = StyleSheet.create({
   root: { flex: 1, paddingHorizontal: S.lg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', width: '100%', maxWidth: 480, alignSelf: 'center' },
   glow: { position: 'absolute', top: '12%', width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(108,43,217,0.45)' },
-  mascot: { width: 168, height: 168, marginBottom: S.md },
+  mascot: { marginBottom: S.md },
   title: { fontFamily: Fonts.black, fontSize: 40, color: C.white },
   subtitle: { fontFamily: Fonts.regular, fontSize: 17, lineHeight: 24, color: C.lilac, textAlign: 'center', marginTop: S.sm, maxWidth: 320 },
   perk: { flexDirection: 'row', alignItems: 'center', gap: S.md, backgroundColor: 'rgba(43,18,102,0.86)', borderWidth: StyleSheet.hairlineWidth, borderColor: C.line, borderRadius: 16, paddingHorizontal: S.md, minHeight: 52 },
