@@ -18,6 +18,7 @@ const HOW: { icon: IconName; title: string; text: string }[] = [
   { icon: 'cube', title: 'Recibís y revisás', text: 'Cuando lo tengas en la mano y funcione, le das tu PIN al vendedor.' },
   { icon: 'cash', title: 'El vendedor cobra', text: 'Recién ahí se libera el pago. Si hay un problema, lo revisamos.' },
 ];
+import { track } from '@/lib/analytics';
 
 export default function LinkDeVenta() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -36,6 +37,7 @@ export default function LinkDeVenta() {
       fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
   }, [order?.status, order?.auto_release_at]);
   useEffect(load, [slug]);
+  useEffect(() => { if (order) track('payment_link_opened', { status: order.status, logged_in: isAuthenticated, category: (order as any).category ?? null }); else if (order === null) track('payment_link_not_found'); }, [order === undefined ? 0 : order === null ? 1 : order.slug]);
 
   const contentW = Math.min(width, 560) - S.md * 2;
 
