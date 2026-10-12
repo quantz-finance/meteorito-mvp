@@ -4,6 +4,7 @@ function req(name: string): string {
   if (!v) throw new Error(`missing env ${name}`);
   return v;
 }
+const list = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
 export type SpMode = 'seller' | 'backend';
 export const env = {
   network: () => { const n = process.env.STELLAR_NETWORK ?? 'testnet'; if (n !== 'testnet') throw new Error('solo testnet'); return n; },
@@ -29,6 +30,10 @@ export const env = {
   cronSecret: () => req('CRON_SECRET'),
   pinPepper: () => req('PIN_PEPPER'),
   cavosJwks: () => process.env.CAVOS_JWKS_URL ?? 'https://cavos.xyz/.well-known/jwks.json',
-  cavosIssuers: () => (process.env.CAVOS_JWT_ISSUERS ?? 'https://cavos.app/firebase,https://accounts.google.com,https://appleid.apple.com').split(','),
-  cavosAudience: () => process.env.CAVOS_JWT_AUDIENCE || undefined, // TODO fijar cuando sepamos el aud real
+  cavosIssuers: () => list(process.env.CAVOS_JWT_ISSUERS ?? 'https://cavos.app/firebase,https://accounts.google.com,https://appleid.apple.com'),
+  /** aud aceptados (coma-separados; el token debe traer al menos uno). Vacío = sin configurar. */
+  cavosAudiences: () => list(process.env.CAVOS_JWT_AUDIENCE ?? ''),
+  /** Solo para descubrir el aud real: verifica firma/iss/exp, registra el aud y NO rechaza por aud. */
+  cavosAudienceLogOnly: () => process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY === '1',
+  isProduction: () => process.env.VERCEL_ENV === 'production' || (!process.env.VERCEL_ENV && process.env.NODE_ENV === 'production'),
 };
