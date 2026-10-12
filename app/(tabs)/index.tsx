@@ -1,56 +1,119 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Image, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '@/lib/cavos';
 import { fetchBalances, type Balances } from '@/lib/horizon';
-import { Brand, Fonts } from '@/constants/Colors';
+import { CRC_USDC_RATE, displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
+import { supabaseConfigured } from '@/lib/supabase';
+import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Section, Sheet, Skeleton, SkeletonCard, TestnetPill, type IconName } from '@/components/ds';
+import { HelpSheet } from '@/components/HelpSheet';
+import { OrderCard } from '@/components/OrderRow';
+import { ui } from '@/components/ui';
+import { C, R, S, T, TOUCH, shadow } from '@/constants/theme';
+
+const TESTNET = true; // MVP corre solo en testnet
 
 export default function Inicio() {
   const { email, address, logout } = useAuth();
   const [bal, setBal] = useState<Balances | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [orders, setOrders] = useState<SellerOrder[] | null>(null);
+  const [help, setHelp] = useState(false);
+  const [account, setAccount] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
+  const [link, setLink] = useState('');
+  const linkSlug = parseSlug(link);
+  const goPay = () => { if (!linkSlug) return; setPayOpen(false); setLink(''); router.push(`/p/${linkSlug}`); };
 
   const load = useCallback(async () => {
     if (!address) return;
     setLoading(true); setErr(null);
     try { setBal(await fetchBalances(address)); } catch (e) { setErr(String((e as Error).message ?? e)); }
     finally { setLoading(false); }
+    if (supabaseConfigured) getSellerOrders(address).then(setOrders).catch(() => setOrders([]));
+    else setOrders([]);
   }, [address]);
-  useEffect(() => { load(); }, [load]);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const crc = bal ? Number(bal.usdc ?? 0) * CRC_USDC_RATE : 0;
+  const name = displayName(email);
+  const actions: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
+    { icon: 'pricetag', label: 'Vender', hint: 'Creá un link de pago seguro', onPress: () => router.push('/vender') },
+    { icon: 'link', label: 'Pagar un link', hint: 'Pegá el link del vendedor', onPress: () => setPayOpen(true) },
+  ];
 
   return (
-    <ScrollView style={s.root} contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={Brand.lilac} />}>
-      <Text style={s.hello}>Hola {email ?? 'de nuevo'} 👋</Text>
-      <View style={s.card}>
-        <Text style={s.label}>Tu cuenta Stellar (testnet)</Text>
-        <Text style={s.address} selectable>{address}</Text>
+    <Screen title={name ? `Hola, ${name}` : 'Hola'} right={<IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.lilac} />}>
+      {/* Tarjeta de saldo */}
+      <View style={[s.balance, shadow]}>
+        <View style={s.balanceGlow} />
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={[T.caption, { color: C.lilac }]}>{TESTNET ? 'Saldo de prueba' : 'Saldo disponible'}</Text>
+          <TestnetPill />
+        </View>
+        {!bal && !err ? <Skeleton w="70%" h={48} style={{ marginTop: S.sm }} />
+          : <Text style={[T.money, { marginTop: S.sm }]} adjustsFontSizeToFit numberOfLines={1}>{formatCRC(crc)}</Text>}
+        {err ? <Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Deslizá hacia abajo para reintentar.</Text>
+          : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros protegidos llegan acá.</Text>}
+        <Image source={require('../../assets/images/mascot.png')} style={s.mascot} resizeMode="contain" />
       </View>
-      <View style={s.card}>
-        <Text style={s.label}>Saldo</Text>
-        {loading && !bal ? <ActivityIndicator color={Brand.lilac} /> : err ? <Text style={s.warn}>No se pudo leer el saldo: {err}</Text> : bal && (
-          <>
-            <Text style={s.balance}>{Number(bal.xlm).toFixed(2)} XLM</Text>
-            <Text style={s.balance}>{bal.usdc != null ? Number(bal.usdc).toFixed(2) : '0.00'} USDC</Text>
-            {!bal.funded && <Text style={s.warn}>La cuenta todavía no existe en la red. Se activa con su primer movimiento.</Text>}
-          </>
-        )}
-        <Pressable onPress={load}><Text style={s.link}>Actualizar</Text></Pressable>
+      {/* 2 acciones grandes */}
+      <View style={s.grid}>
+        {actions.map((a, i) => (
+          <Pressable key={a.label} accessibilityRole="button" accessibilityLabel={a.label}
+            onPress={() => { haptic.tap(); a.onPress(); }}
+            style={({ pressed }) => [s.action, i === 0 && s.actionPrimary, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+            <View style={[s.actionIcon, i === 0 && { backgroundColor: C.orange }]}><Icon name={a.icon} size={26} color={i === 0 ? '#fff' : C.purpleDark} /></View>
+            <View style={{ gap: 2 }}>
+              <Text style={s.actionLabel} numberOfLines={1}>{a.label}</Text>
+              <Text style={T.footnote} numberOfLines={2}>{a.hint}</Text>
+            </View>
+          </Pressable>
+        ))}
       </View>
-      <Pressable style={s.logout} onPress={() => logout()}><Text style={s.logoutText}>Cerrar sesión</Text></Pressable>
-    </ScrollView>
+
+      <Section title="Pedidos recientes" action={orders && orders.length > 0
+        ? <Pressable onPress={() => router.push('/pedidos')} hitSlop={12} style={{ minHeight: TOUCH, justifyContent: 'center' }}><Text style={[T.headline, { color: C.lilac, fontSize: 15 }]}>Ver todos</Text></Pressable> : undefined}>
+        {orders === null ? <><SkeletonCard /><SkeletonCard /></>
+          : orders.length === 0 ? (
+            <Card style={{ alignItems: 'center', paddingVertical: S.lg, gap: S.md }}>
+              <Icon name="sparkles" size={28} color={C.lilac} />
+              <Text style={[T.callout, { textAlign: 'center' }]}>Todavía no tenés pedidos. Creá tu primer link de venta en un minuto.</Text>
+              <PrimaryButton title="Vender algo" icon="add" onPress={() => router.push('/vender')} />
+            </Card>
+          ) : orders.slice(0, 3).map((o) => <OrderCard key={o.slug} order={o} timeline={false} onPress={() => router.push('/pedidos')} />)}
+      </Section>
+
+      <Sheet visible={payOpen} onClose={() => setPayOpen(false)} title="Pagar un link"
+        footer={<PrimaryButton title="Ver producto" icon="arrow-forward" disabled={!linkSlug} onPress={goPay} />}>
+        <Text style={T.callout}>Pegá el link que te mandó el vendedor (o solo el código).</Text>
+        <TextInput style={ui.input} placeholder="meteorito.app/p/…" placeholderTextColor={C.textDim} value={link} onChangeText={setLink}
+          autoCapitalize="none" autoCorrect={false} keyboardType="url" returnKeyType="go" onSubmitEditing={goPay} autoFocus />
+        {link.trim() && !linkSlug ? <ErrorText>Ese link no parece de Meteorito.</ErrorText> : null}
+      </Sheet>
+      <HelpSheet visible={help} onClose={() => setHelp(false)} />
+      <Sheet visible={account} onClose={() => setAccount(false)} title="Mi cuenta"
+        footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={() => { setAccount(false); logout(); }} />}>
+        <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{email ?? '—'}</Text></Card>
+        <Card>
+          <Text style={T.caption}>Detalles</Text>
+          <Text style={T.footnote}>ID de cuenta (red de pruebas)</Text>
+          <Text style={[T.footnote, { color: C.text }]} selectable>{address}</Text>
+        </Card>
+      </Sheet>
+    </Screen>
   );
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Brand.purpleDark },
-  content: { padding: 20, gap: 16, paddingTop: 48 },
-  hello: { fontFamily: Fonts.black, fontSize: 26, color: Brand.white },
-  card: { backgroundColor: Brand.purpleMid, borderRadius: 18, padding: 18, gap: 8 },
-  label: { fontFamily: Fonts.bold, fontSize: 13, color: Brand.muted, textTransform: 'uppercase' },
-  address: { fontFamily: Fonts.bold, fontSize: 15, color: Brand.white },
-  balance: { fontFamily: Fonts.black, fontSize: 24, color: Brand.white },
-  warn: { fontFamily: Fonts.regular, fontSize: 14, color: Brand.orange },
-  link: { fontFamily: Fonts.bold, color: Brand.lilac, marginTop: 4 },
-  logout: { borderColor: Brand.lilac, borderWidth: 1, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  logoutText: { fontFamily: Fonts.bold, fontSize: 16, color: Brand.lilac },
+  balance: { backgroundColor: C.purple, borderRadius: R.lg, padding: S.lg, overflow: 'hidden', minHeight: 148, gap: S.xs },
+  balanceGlow: { position: 'absolute', right: -60, top: -60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(255,138,61,0.35)' },
+  mascot: { position: 'absolute', right: -8, bottom: -12, width: 96, height: 96, opacity: 0.95 },
+  grid: { flexDirection: 'row', gap: S.sm },
+  action: { flex: 1, backgroundColor: C.surface, borderRadius: R.lg, padding: S.md, gap: S.md, minHeight: 112, justifyContent: 'space-between', borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
+  actionPrimary: { borderColor: C.orange },
+  actionIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' },
+  actionLabel: { ...T.headline },
 });
