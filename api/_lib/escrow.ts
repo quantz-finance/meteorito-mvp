@@ -98,7 +98,7 @@ export async function approveAndRelease(order: any, reason: ApproveReason) {
   if (bal + 1e-7 < Number(order.amount_usdc)) throw new HttpError(409, `sin fondos on-chain (${bal})`);
   const rel = await tw.releaseFunds(order.contract_id, env.releaseSignerSecret());
   await advance(order.id, 'entregado', { released_tx: rel.hash, released_at: new Date().toISOString(), status: 'liberado' });
-  await logEvent(order.id, 'released', { hash: rel.hash, reason });
+  await logEvent(order.id, 'released', { hash: rel.hash, reason, hours_to_release: order.funded_at ? Math.round((Date.now() - Date.parse(order.funded_at)) / 36e5 * 10) / 10 : undefined });
   return { releasedTx: rel.hash };
 }
 
