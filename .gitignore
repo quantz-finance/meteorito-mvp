@@ -44,3 +44,5 @@ yarn-error.*
 .env
 .env.*
 !.env.example
+.ci-cjs/
+.ci-secrets.env
