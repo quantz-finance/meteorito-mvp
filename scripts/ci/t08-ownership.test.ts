@@ -7,6 +7,8 @@ import { __setDbForTests } from '../../api/_lib/db';
 import { proofMessage } from '../../api/_lib/auth';
 import { publicPrefix } from '../../api/_lib/photos';
 import { fakeDb } from './fakedb';
+import { __setHorizonForTests } from '../../api/_lib/wallet';
+import { env } from '../../api/_lib/env';
 import create from '../../api/orders/create';
 import pay from '../../api/escrow/pay';
 import ship from '../../api/escrow/ship';
@@ -23,6 +25,8 @@ const proof = (action: string, ref: string) => {
 };
 
 export async function run(t: T) {
+  // Wallets del vendedor ya activadas (cuenta + trustline USDC): este test es de ownership, no de activación (ver t09).
+  __setHorizonForTests(() => ({ loadAccount: async (a: string) => ({ id: a, balances: [{ asset_code: 'USDC', asset_issuer: env.usdcIssuer() }] }) }));
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
   const order = { id: '33333333-3333-4333-8333-333333333333', slug: 'own001', contract_id: 'CNOTUSED', seller_user_id: 'seller', buyer_user_id: 'buyer',
     seller_address: 'GSELLER', buyer_address: 'GBUYER', amount_usdc: 1, price_crc: 5000, sp_mode: 'seller', pin_attempts: 0, delivery_pin_hash: 'x' };
