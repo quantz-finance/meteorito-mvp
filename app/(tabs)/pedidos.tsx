@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { RefreshControl, Text, View } from 'react-native';
 import { Card, Chip, ErrorText, Icon, MoneyTimeline, PrimaryButton, Screen, Sheet, SkeletonCard, statusTone } from '@/components/ds';
 import { OrderCard } from '@/components/OrderRow';
+import { Reveal } from '@/components/space';
 import { SellerActions } from '@/components/SellerActions';
 import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
@@ -49,7 +50,7 @@ export default function Pedidos() {
             <Text style={[T.callout, { textAlign: 'center' }]}>Creá un link de venta y compartilo por WhatsApp o Messenger.</Text>
             <PrimaryButton title="Crear link de venta" icon="add" onPress={() => router.push('/vender')} />
           </Card>
-        ) : orders.map((o) => <OrderCard key={o.slug} order={o} onPress={() => setOpenSlug(o.slug)} />)}
+        ) : orders.map((o, i) => <Reveal key={o.slug} i={i}><OrderCard order={o} onPress={() => setOpenSlug(o.slug)} /></Reveal>)}
 
       <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? `${open.brand} ${open.model}` : ''}
         footer={open ? <PrimaryButton title="Compartir link" icon="share-outline" variant="secondary"
