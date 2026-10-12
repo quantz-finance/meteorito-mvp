@@ -21,12 +21,34 @@ export async function requireCavosUser(req: any): Promise<CavosUser> {
   const h: string = req.headers?.authorization ?? '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : '';
   if (!token) throw new HttpError(401, 'falta token de Cavos');
-  let iss: string;
-  try { iss = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()).iss; } catch { throw new HttpError(401, 'token malformado'); }
-  if (!env.cavosIssuers().includes(iss)) throw new HttpError(401, `issuer no permitido: ${iss}`);
+  let claims: { iss?: unknown; aud?: unknown };
+  try { claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()); } catch { throw new HttpError(401, 'token malformado'); }
+  const iss = typeof claims.iss === 'string' ? claims.iss : '';
+  // Issuer: allowlist exacta + jwtVerify vuelve a exigirlo sobre el payload firmado.
+  if (!env.cavosIssuers().includes(iss)) {
+    console.warn('[auth] issuer rechazado', JSON.stringify({ iss, aud: claims.aud }));
+    throw new HttpError(401, 'issuer no permitido');
+  }
+  const audiences = env.cavosAudiences();
+  const logOnly = env.cavosAudienceLogOnly();
+  if (!audiences.length && !logOnly && env.isProduction()) {
+    // Fail closed: en producción no aceptamos tokens sin audiencia configurada.
+    console.error('[auth] CAVOS_JWT_AUDIENCE no configurado en producción; rechazando', JSON.stringify({ iss, aud: claims.aud }));
+    throw new HttpError(503, 'autenticación no configurada');
+  }
+  const enforce = audiences.length > 0 && !logOnly;
   let payload: JWTPayload;
-  try { ({ payload } = await jwtVerify(token, jwksFor(iss), { issuer: iss, audience: env.cavosAudience() })); }
-  catch (e: any) { throw new HttpError(401, `token inválido: ${e.code ?? e.message}`); }
+  try { ({ payload } = await jwtVerify(token, jwksFor(iss), { issuer: iss, audience: enforce ? audiences : undefined })); }
+  catch (e: any) {
+    // Nunca se loguea el token; solo iss/aud para confirmar el valor real.
+    console.warn('[auth] token rechazado', JSON.stringify({ code: e.code ?? e.message, iss, aud: claims.aud, expected: audiences }));
+    throw new HttpError(401, `token inválido: ${e.code ?? e.message}`);
+  }
+  if (!enforce) {
+    const aud = ([] as unknown[]).concat(payload.aud ?? []);
+    const match = audiences.length > 0 && aud.some((a) => audiences.includes(String(a)));
+    console.warn('[auth] aud NO verificado (' + (logOnly ? 'LOG_ONLY' : 'sin CAVOS_JWT_AUDIENCE, no-prod') + ')', JSON.stringify({ iss, aud: payload.aud, expected: audiences, match }));
+  }
   const sub = String(payload.sub ?? (payload as any).user_id ?? '');
   if (!sub) throw new HttpError(401, 'token sin sub');
   return { sub, email: (payload as any).email, iss };
