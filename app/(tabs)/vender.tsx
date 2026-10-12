@@ -9,10 +9,11 @@ import { Fonts } from '@/constants/Colors';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { CATEGORIES, CONDITIONS, checksSummary, getCategory, validateIdentifier } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
-import { createOrder, formatCRC, uploadPhoto } from '@/lib/orders';
+import { createOrder, formatCRC } from '@/lib/orders';
+import { MAX_PHOTOS, newDraftId, uploadPhoto } from '@/lib/photos';
 import { supabaseConfigured } from '@/lib/supabase';
 
-interface Photo { uri: string; mime: string }
+interface Photo { uri: string; mime: string; width?: number; height?: number }
 const STEPS = ['Categoría', 'Fotos', 'Detalles', 'Precio', 'Revisar'] as const;
 
 export default function Vender() {
@@ -37,11 +38,11 @@ export default function Vender() {
 
   async function pickPhotos() {
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 4 - photos.length, quality: 0.7,
+      mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS - photos.length, quality: 1,
     });
     if (res.canceled) return;
-    const added = res.assets.map((a) => ({ uri: a.uri, mime: a.mimeType ?? 'image/jpeg' }));
-    setPhotos((p) => [...p, ...added].slice(0, 4));
+    const added = res.assets.map((a) => ({ uri: a.uri, mime: a.mimeType ?? 'image/jpeg', width: a.width, height: a.height }));
+    setPhotos((p) => [...p, ...added].slice(0, MAX_PHOTOS));
   }
 
   async function submit() {
@@ -49,13 +50,15 @@ export default function Vender() {
     if (!address) return setError('Iniciá sesión de nuevo');
     if (!brand.trim() || !model.trim()) return setError('Completá marca y modelo');
     if (!priceNum || priceNum < 1000) return setError('Poné un precio válido en colones');
+    if (photos.length < 1) return setError('Agregá al menos una foto');
     const idErr = validateIdentifier(cat, identifier);
     if (idErr) return setError(idErr);
     if (!supabaseConfigured) return setError('Falta configurar Supabase (.env)');
     setBusy(true);
     try {
+      const draftId = newDraftId();
       const urls: string[] = [];
-      for (const p of photos) urls.push(await uploadPhoto(p.uri, address, p.mime));
+      for (const [i, p] of photos.entries()) urls.push(await uploadPhoto(auth, p, draftId, i));
       const slug = await createOrder(auth, {
         category: cat.id, brand: brand.trim(), model: model.trim(),
         condition, price_crc: priceNum, description: description.trim(), identifier: identifier.trim(),
@@ -73,6 +76,7 @@ export default function Vender() {
 
   /** Validación por paso (solo UX; submit() sigue validando todo). */
   function stepError(): string | null {
+    if (step === 1 && photos.length < 1) return 'Agregá al menos una foto';
     if (step === 2) {
       if (!brand.trim() || !model.trim()) return 'Completá marca y modelo';
       const e = validateIdentifier(cat, identifier); if (e) return e;
@@ -120,7 +124,7 @@ export default function Vender() {
 
       {step === 1 && <>
         <Text style={T.title}>Agregá fotos</Text>
-        <Text style={T.callout}>Hasta 4 fotos claras, con buena luz. Tocá una para quitarla.</Text>
+        <Text style={T.callout}>De 1 a 4 fotos claras, con buena luz. Tocá una para quitarla.</Text>
         <View style={s.grid}>
           {photos.map((p, i) => (
             <Pressable key={p.uri} style={s.photo} accessibilityLabel="Quitar foto" onPress={() => { haptic.tap(); setPhotos((ps) => ps.filter((_, j) => j !== i)); }}>
