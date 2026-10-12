@@ -10,6 +10,7 @@ import { LivelyMascot, Reveal } from '@/components/space';
 import { HelpSheet } from '@/components/HelpSheet';
 import { OrderCard } from '@/components/OrderRow';
 import { ui } from '@/components/ui';
+import { AnalyticsToggle, LegalLinks } from '@/components/LegalLinks';
 import { C, R, S, T, TOUCH, shadow } from '@/constants/theme';
 
 const TESTNET = true; // MVP corre solo en testnet
@@ -102,6 +103,8 @@ export default function Inicio() {
           <Text style={T.footnote}>ID de cuenta (red de pruebas)</Text>
           <Text style={[T.footnote, { color: C.text }]} selectable>{address}</Text>
         </Card>
+        <Card><AnalyticsToggle /></Card>
+        <LegalLinks onNavigate={() => setAccount(false)} />
       </Sheet>
     </Screen>
   );

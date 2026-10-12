@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from './env';
 import { HttpError } from './auth';
+import { trackServer } from './analytics';
 let c: any = null;
 export const db = (): any => (c ??= createClient(env.supabaseUrl(), env.supabaseService(), { auth: { persistSession: false } }));
 /** Solo tests: inyecta un cliente falso. */
@@ -24,4 +25,5 @@ export async function advance(id: string, from: string, patch: Record<string, un
 export async function logEvent(order_id: string, kind: string, detail: Record<string, unknown> = {}) {
   try { await db().from('order_events').insert({ order_id, kind, detail }); }
   catch (e: any) { console.warn('[logEvent] falló', kind, e?.message); }
+  await trackServer(order_id, kind, detail);
 }
