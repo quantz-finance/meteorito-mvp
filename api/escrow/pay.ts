@@ -12,6 +12,8 @@ export default async function handler(req: any, res: any) {
     const { slug, step, proof } = req.body ?? {};
     let order = await orderBySlug(slug);
     if (step === 'start') {
+      // Pedido ya tomado: solo su comprador puede re-consultarlo (no exponer datos de pago a otro sub).
+      if (order.contract_id && order.buyer_user_id !== user.sub) throw new HttpError(403, 'este pedido ya tiene comprador');
       const buyer = await requireAddressProof(proof, 'pay', order.slug);
       await deployFor(order, buyer, user.sub);
       order = await orderBySlug(slug);
