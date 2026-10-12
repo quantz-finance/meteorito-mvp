@@ -37,18 +37,6 @@ export async function createOrder(auth: MeteoritoAuth, o: Omit<NewOrder, 'seller
   return r.slug;
 }
 
-export async function uploadPhoto(uri: string, sellerAddress: string, mime = 'image/jpeg'): Promise<string> {
-  const raw = await (await fetch(uri)).blob();
-  // Storage rechaza application/octet-stream: forzar el MIME (en nativo/algunos navegadores el blob viene sin type).
-  const type = raw.type && raw.type.startsWith('image/') ? raw.type : mime;
-  const blob = raw.type === type ? raw : new Blob([await raw.arrayBuffer()], { type });
-  const ext = (type.split('/')[1] ?? 'jpg').replace('jpeg', 'jpg');
-  const path = `${sellerAddress}/${Date.now()}-${randomSlug(8)}.${ext}`;
-  const { error } = await supabase().storage.from('listings').upload(path, blob, { contentType: type, upsert: false });
-  if (error) throw new Error(error.message);
-  return supabase().storage.from('listings').getPublicUrl(path).data.publicUrl;
-}
-
 export interface PublicOrder {
   slug: string; category: string; brand: string; model: string; condition: string; price_crc: number;
   description: string | null; photos: string[]; status: string; identifier_masked: string | null;

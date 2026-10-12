@@ -1,4 +1,5 @@
 // iOS / Android: SDK nativo de Cavos (requiere development build, no Expo Go).
+import './polyfills'; // antes de @cavos/kit
 import 'react-native-get-random-values';
 import { CavosProvider, useCavos } from '@cavos/kit/react-native';
 import type { ReactNode } from 'react';

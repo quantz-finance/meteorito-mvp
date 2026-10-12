@@ -1,4 +1,5 @@
 // Web (Safari / PWA): SDK web de Cavos. Las llaves viven en el vault de Cavos (iframe).
+import './polyfills'; // antes de @cavos/kit
 import { CavosProvider, useCavos } from '@cavos/kit/react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { APP_SALT, CAVOS_APP_ID } from './config';
