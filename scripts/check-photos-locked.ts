@@ -1,10 +1,10 @@
 // Chequeo post-deploy: el bucket 'listings' NO acepta subidas anónimas y /api/photos/upload-url exige token.
 // Uso: EXPO_PUBLIC_SUPABASE_URL=... EXPO_PUBLIC_SUPABASE_ANON_KEY=... npx tsx scripts/check-photos-locked.ts [baseUrl]
-//   baseUrl por defecto: https://meteorito-mvp.vercel.app . Solo usa la anon key pública (la misma del cliente).
+//   baseUrl por defecto: https://pago.meteorito.app . Solo usa la anon key pública (la misma del cliente).
 // Si una subida anónima llegara a pasar, intenta borrarla y falla con código 1.
 import { createClient } from '@supabase/supabase-js';
 
-const BASE = (process.argv[2] ?? 'https://meteorito-mvp.vercel.app').replace(/\/$/, '');
+const BASE = (process.argv[2] ?? 'https://pago.meteorito.app').replace(/\/$/, '');
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anon = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 if (!url || !anon) { console.error('Falta EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY'); process.exit(2); }
