@@ -9,7 +9,7 @@
       "destination": "/p/[slug].html"
     },
     {
-      "source": "/((?!api/)(?!.*\.).*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
