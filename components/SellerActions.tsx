@@ -19,7 +19,7 @@ export function SellerActions({ slug, status, onChange }: { slug: string; status
   const run = async (f: () => Promise<void>, ok: string) => { setBusy(true); setErr(null); try { await f(); setDone(ok); onChange(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); } };
 
   if (done) return <View style={{ gap: S.md, alignItems: 'center', paddingVertical: S.md }}>
-    <SuccessCheck />
+    <SuccessCheck celebrate={done.startsWith('¡Cobrado')} />
     <Text style={[T.headline, { textAlign: 'center' }]}>{done}</Text>
   </View>;
 
