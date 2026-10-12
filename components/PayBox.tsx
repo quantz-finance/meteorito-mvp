@@ -1,3 +1,4 @@
+import { friendlyPayError } from '@/lib/wallet';
 // Comprador: Pagar seguro -> SINPE simulado -> "Ya pagué" -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
 import { useState } from 'react';
@@ -9,6 +10,7 @@ import { C, S, T } from '@/constants/theme';
 import { api, proof } from '@/lib/api';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, type PublicOrder } from '@/lib/orders';
+import { track, trackError } from '@/lib/analytics';
 
 export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () => void }) {
   const auth = useAuth();
@@ -18,7 +20,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [pin, setPin] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'sinpe' | 'pin' | 'released' | 'dispute' | null>(null);
 
-  const run = async (f: () => Promise<void>) => { setBusy(true); setErr(null); try { await f(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); } };
+  const run = async (f: () => Promise<void>) => { setBusy(true); setErr(null); try { await f(); } catch (e) { trackError('paybox', e); setErr(friendlyPayError((e as Error).message)); } finally { setBusy(false); } };
 
   const sheets = <>
     <DisputeSheet visible={sheet === 'dispute'} onClose={() => setSheet(null)} slug={order.slug} onOpened={onChange} />
@@ -26,7 +28,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
         <PrimaryButton title="Ya pagué" icon="checkmark" loading={busy}
-          onPress={() => run(async () => { const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'confirm_sinpe' }); setPin(r.pin); setSheet('pin'); onChange(); })} />
+          onPress={() => run(async () => { track('pay_confirm_tapped'); const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'confirm_sinpe' }); track('payment_funded_client'); setPin(r.pin); setSheet('pin'); onChange(); })} />
       </>}>
       {sinpe && <>
         <Card style={{ alignItems: 'center', paddingVertical: S.lg }}>
