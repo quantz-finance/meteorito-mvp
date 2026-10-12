@@ -1,6 +1,7 @@
 // POST /api/orders/create  (Bearer JWT Cavos + proof{action:'create', ref:'new'})
 // Reemplaza el insert directo desde el cliente. anon ya no inserta (migración 003).
 import { randomBytes } from 'node:crypto';
+import { trackServer } from '../_lib/analytics';
 import { db, json, fail } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError } from '../_lib/auth';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
@@ -35,7 +36,7 @@ export default async function handler(req: any, res: any) {
     for (let i = 0; i < 5; i++) {
       const s = slug();
       const { error } = await db().from('orders').insert({ ...row, slug: s });
-      if (!error) return json(res, 200, { slug: s });
+      if (!error) { await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price }); return json(res, 200, { slug: s }); }
       if (error.code !== '23505') throw error;
     }
     throw new Error('no se pudo generar slug');
