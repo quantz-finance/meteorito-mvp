@@ -1,0 +1,47 @@
+name: CI
+on:
+  push:
+  pull_request:
+
+# Un solo run on-chain a la vez (comparten wallets de testnet).
+concurrency:
+  group: ci-testnet
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      STELLAR_NETWORK: testnet   # SOLO testnet; el backend rechaza cualquier otra red
+      # PRs desde forks no reciben secretos: se corren solo los tests unitarios.
+      TESTNET: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'skip' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck (app + api)
+        run: npm run typecheck
+      - name: Expo web export
+        run: npx expo export -p web
+      - name: API carga como CommonJS sin require(esm) (evita ERR_REQUIRE_ESM)
+        run: npm run check:cjs
+      - name: Tests (unit + testnet)
+        run: npm run test:ci
+        env:
+          TW_API_KEY: ${{ secrets.TW_API_KEY }}
+          TESTNET_DEPLOYER_SECRET: ${{ secrets.TESTNET_DEPLOYER_SECRET }}
+          TESTNET_TREASURY_SECRET: ${{ secrets.TESTNET_TREASURY_SECRET }}
+          TESTNET_APPROVER_SECRET: ${{ secrets.TESTNET_APPROVER_SECRET }}
+          TESTNET_RELEASE_SIGNER_SECRET: ${{ secrets.TESTNET_RELEASE_SIGNER_SECRET }}
+          TESTNET_PLATFORM_SECRET: ${{ secrets.TESTNET_PLATFORM_SECRET }}
+          TESTNET_DISPUTE_RESOLVER_SECRET: ${{ secrets.TESTNET_DISPUTE_RESOLVER_SECRET }}
+          TESTNET_SELLER_SECRET: ${{ secrets.TESTNET_SELLER_SECRET }}
+          TESTNET_BUYER_SECRET: ${{ secrets.TESTNET_BUYER_SECRET }}
