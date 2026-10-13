@@ -13,6 +13,7 @@ import * as escrow from './_lib/escrow';
 import * as feebump from './_lib/feebump';
 import * as photos from './_lib/photos';
 import * as tw from './_lib/tw';
+import { activationConfig } from './_lib/wallet';
 
 function version(pkg: string): string {
   try { return require(`${pkg}/package.json`).version; } catch {}
@@ -44,7 +45,7 @@ export default function handler(req: any, res: any) {
   res.setHeader('Cache-Control', 'no-store');
   res.send(JSON.stringify({
     ok, loaded, node: process.version,
-    config: { autoReleaseMinutes: env.env.autoReleaseMinutes() },
+    config: { autoReleaseMinutes: env.env.autoReleaseMinutes(), walletActivation: activationConfig() },
     versions: { jose: version('jose'), '@stellar/stellar-sdk': version('@stellar/stellar-sdk'), '@stellar/stellar-base': version('@stellar/stellar-base'), '@supabase/supabase-js': version('@supabase/supabase-js') },
   }));
 }
