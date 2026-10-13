@@ -3,12 +3,13 @@
 // prepare: devuelve XDR sin firmar (o ready). submit: valida forma exacta + firma del vendedor, firma la platform y envía.
 import { json, fail } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError } from '../_lib/auth';
-import { walletState, buildActivationTx, validateActivationTx, signAndSubmitActivation } from '../_lib/wallet';
+import { walletState, buildActivationTx, assertActivationConfig, validateActivationTx, signAndSubmitActivation } from '../_lib/wallet';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
     await requireCavosUser(req);
+    assertActivationConfig(); // error claro (con nombres de env) antes de tocar Horizon
     const { step, proof, signedXdr } = req.body ?? {};
     const address = await requireAddressProof(proof, 'wallet', 'activate');
     const state = await walletState(address);
