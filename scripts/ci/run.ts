@@ -12,6 +12,8 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '9', name: 'Vendedor nuevo sin trustline: error claro, activación validada', file: './t09-seller-wallet.test.ts', onchain: false },
   { id: '10', name: 'Liberación automática configurable (AUTO_RELEASE_MINUTES)', file: './t10-autorelease.test.ts', onchain: false },
   { id: '11', name: 'Activación wallet: errores con código + activación real testnet', file: './t11-activate.test.ts', onchain: false },
+  { id: '12', name: 'Cavos: dispositivo sin llave (tras logout) y logout protegido', file: './t12-cavos-signer.test.ts', onchain: false },
+  { id: '13', name: 'Sesión vencida: renovación con prueba de wallet + comprador nuevo', file: './t13-session.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },

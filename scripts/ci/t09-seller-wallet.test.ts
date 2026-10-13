@@ -20,9 +20,10 @@ const signProof = (kp: Keypair, action: string, ref: string) => {
 
 export async function run(t: T) {
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
-  const platform = Keypair.random(); const savedPub = process.env.PLATFORM_PUBLIC; process.env.PLATFORM_PUBLIC = platform.publicKey();
   const seller = Keypair.random(); const buyer = Keypair.random();
-  const accounts: Record<string, any> = { [platform.publicKey()]: { balances: [] } };
+  const platform = Keypair.random(); const savedPub = process.env.PLATFORM_PUBLIC; process.env.PLATFORM_PUBLIC = platform.publicKey();
+  const usdcBal = [{ asset_code: 'USDC', asset_issuer: process.env.USDC_ISSUER ?? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5', balance: '0' }];
+  const accounts: Record<string, any> = { [platform.publicKey()]: { balances: [] }, [buyer.publicKey()]: { balances: usdcBal } };
   __setHorizonForTests(() => ({ loadAccount: async (a: string) => {
     if (!accounts[a]) throw Object.assign(new Error('not found'), { name: 'NotFoundError', response: { status: 404 } });
     return Object.assign(new Account(a, '100'), accounts[a]);
