@@ -27,7 +27,13 @@ export const env = {
   usdcIssuer: () => process.env.USDC_ISSUER ?? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
   crcUsdcRate: () => Number(process.env.CRC_USDC_RATE ?? '510'),
   spMode: (): SpMode => (process.env.SERVICE_PROVIDER_MODE === 'backend' ? 'backend' : 'seller'),
-  autoReleaseHours: () => Number(process.env.AUTO_RELEASE_HOURS ?? '24'),
+  /** Ventana de liberación automática tras el envío, en minutos. AUTO_RELEASE_MINUTES (default 1440 = 24 h).
+   *  Compat: AUTO_RELEASE_HOURS si no hay MINUTES. Valor inválido -> default. Rango 1..43200 (30 días). */
+  autoReleaseMinutes: (): number => {
+    const m = process.env.AUTO_RELEASE_MINUTES, h = process.env.AUTO_RELEASE_HOURS;
+    const v = m != null && m !== '' ? Number(m) : h != null && h !== '' ? Number(h) * 60 : 1440;
+    return Number.isFinite(v) && v >= 1 && v <= 43200 ? Math.round(v) : 1440;
+  },
   cronSecret: () => req('CRON_SECRET'),
   pinPepper: () => req('PIN_PEPPER'),
   cavosJwks: () => process.env.CAVOS_JWKS_URL ?? 'https://cavos.xyz/.well-known/jwks.json',
@@ -38,3 +44,6 @@ export const env = {
   cavosAudienceLogOnly: () => process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY === '1',
   isProduction: () => process.env.VERCEL_ENV === 'production' || (!process.env.VERCEL_ENV && process.env.NODE_ENV === 'production'),
 };
+
+/** Fecha de liberación automática a partir de ahora (ISO). Única fuente del cálculo. */
+export const autoReleaseAt = (from = Date.now()) => new Date(from + env.autoReleaseMinutes() * 60_000).toISOString();
