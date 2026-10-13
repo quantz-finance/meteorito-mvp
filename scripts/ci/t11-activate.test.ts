@@ -24,7 +24,12 @@ export async function run(t: T, N: Testnet | null) {
     process.env.PLATFORM_SECRET = Keypair.random().secret();
     r = await call({ step: 'prepare', proof: pf(kp) });
     t.check('PLATFORM_SECRET de otra cuenta -> 503 platform_mismatch', r.code === 503 && r.body.code === 'platform_mismatch' && !JSON.stringify(r.body).includes(process.env.PLATFORM_SECRET!), JSON.stringify(r.body));
-    t.check('UI: aviso en español con código', /código: platform_mismatch/.test(walletErrorNotice({ code: 'platform_mismatch' })));
+    const n = walletErrorNotice({ code: 'platform_mismatch', message: 'PLATFORM_SECRET no corresponde' });
+    t.check('UI: aviso genérico, sin código ni detalle técnico', !/código|platform|PLATFORM|secret/i.test(n) && /activar tu cuenta/.test(n), n);
+    process.env.STELLAR_NETWORK = 'public';
+    r = await call({ step: 'prepare', proof: pf(kp) });
+    t.check('STELLAR_NETWORK != testnet -> rechazado', r.code === 500 && /solo testnet/.test(r.body.error), JSON.stringify(r.body));
+    process.env.STELLAR_NETWORK = 'testnet';
     if (!N) { t.check('activación real testnet: SKIP (sin secretos)', true); return; }
     // Activación real: Horizon real, platform CI.
     process.env.PLATFORM_SECRET = N.S.TESTNET_PLATFORM_SECRET; process.env.PLATFORM_PUBLIC = N.pub('TESTNET_PLATFORM_SECRET');

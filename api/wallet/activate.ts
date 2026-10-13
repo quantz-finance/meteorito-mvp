@@ -2,16 +2,21 @@
 // Deja la wallet Cavos del vendedor lista para recibir USDC (cuenta + trustline) con reservas patrocinadas por la platform.
 // prepare: devuelve XDR sin firmar (o ready). submit: valida forma exacta + firma del vendedor, firma la platform y envía.
 import { json, fail } from '../_lib/db';
-import { requireCavosUser, requireAddressProof, HttpError } from '../_lib/auth';
+import { env } from '../_lib/env';
+import { requireCavosUser, requireAddressProof, HttpError, issueSessionNonce, bindWalletIfFresh } from '../_lib/auth';
 import { walletState, buildActivationTx, assertActivationConfig, validateActivationTx, signAndSubmitActivation } from '../_lib/wallet';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
-    await requireCavosUser(req);
+    // step 'nonce': nonce de un uso para renovar un token Cavos vencido (aquí para no sumar otra función en Vercel).
+    if (req.body?.step === 'nonce') return json(res, 200, { nonce: await issueSessionNonce(req) });
+    const user = await requireCavosUser(req);
+    env.network(); // STELLAR_NETWORK != testnet -> error (solo testnet)
     assertActivationConfig(); // error claro (con nombres de env) antes de tocar Horizon
     const { step, proof, signedXdr } = req.body ?? {};
     const address = await requireAddressProof(proof, 'wallet', 'activate');
+    await bindWalletIfFresh(user, address); // liga sub -> wallet solo con token fresco
     const state = await walletState(address);
     if (state === 'ready') return json(res, 200, { ready: true });
     if (step === 'status') return json(res, 200, { ready: false, state });
@@ -22,5 +27,5 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { ready: (await walletState(address)) === 'ready', hash });
     }
     throw new HttpError(400, 'step inválido');
-  } catch (e) { return fail(res, e); }
+  } catch (e: any) { console.error('[wallet/activate]', e?.code ?? 'error', e?.message); return fail(res, e); }
 }

@@ -3,7 +3,20 @@
 import type { MeteoritoAuth } from './types';
 import { api, proof } from './api';
 
+const coded = (code: string, msg: string) => Object.assign(new Error(msg), { code });
+
+/** Antes de pedir firmas a Cavos: la llave debe estar en este dispositivo. */
+export async function assertDeviceCanSign(auth: MeteoritoAuth): Promise<void> {
+  const w = auth.wallet;
+  if (!w || w.state === 'ready' || w.state === 'undeployed') return;
+  if (w.state === 'loading') throw coded('wallet_loading', 'wallet Cavos cargando');
+  // needs-approval: la llave de esta wallet no está aquí (logout borra la llave del vault Cavos).
+  if (w.hasPasskey) { await w.approveDevice(); throw coded('device_approved_retry', 'dispositivo aprobado con passkey; reintentar'); }
+  throw coded('device_not_authorized', 'kit/stellar: este dispositivo no es firmante de la wallet y no hay passkey/recuperación');
+}
+
 export async function ensureWalletReady(auth: MeteoritoAuth): Promise<void> {
+  await assertDeviceCanSign(auth);
   const p = await api<{ ready: boolean; unsignedXdr?: string }>(auth, '/api/wallet/activate', { step: 'prepare', proof: await proof(auth, 'wallet', 'activate') });
   if (p.ready) return;
   if (!p.unsignedXdr) throw new Error('No pudimos activar tu cuenta para recibir pagos. Intentá de nuevo.');
@@ -26,6 +39,7 @@ export function friendlyPayError(msg: string): string {
 const tried = new Set<string>();
 export async function ensureSellerWalletOnLoad(auth: MeteoritoAuth, hasOrders: boolean): Promise<string | null> {
   if (!hasOrders || !auth.address || tried.has(auth.address)) return null;
+  if (auth.wallet?.state === 'loading') return null; // reintenta cuando Cavos termine de cargar
   tried.add(auth.address);
   try { await ensureWalletReady(auth); return null; }
   catch (e: any) {
@@ -35,11 +49,27 @@ export async function ensureSellerWalletOnLoad(auth: MeteoritoAuth, hasOrders: b
   }
 }
 
-/** Aviso en español neutro con el código real (para soporte/QA). */
+/** Aviso genérico para el usuario (sin detalles técnicos). El código real va solo a console/logs. */
 export function walletErrorNotice(e: any): string {
-  const code = e?.code ?? 'desconocido';
-  const base = code === 'sign_failed' ? 'No se pudo firmar la activación de tu cuenta.'
-    : code === 'config_missing' || code === 'platform_mismatch' || code === 'platform_account_missing' ? 'La activación de cuentas no está disponible en este momento.'
-    : 'Tu cuenta todavía no está activada para recibir pagos.';
-  return `${base} Vuelve a abrir esta pantalla para reintentar. (código: ${code})`;
+  console.error('[wallet] error', e?.code ?? 'desconocido', e?.message, e);
+  if (e?.code === 'device_not_authorized') return 'No pudimos acceder a tu billetera en este dispositivo. Escríbenos a team@meteorito.app para ayudarte.';
+  return 'No pudimos activar tu cuenta para recibir pagos. Vuelve a abrir esta pantalla para reintentar.';
+}
+
+/** Mensaje (español neutro) cuando no se puede cerrar sesión porque la billetera no tiene respaldo. */
+export const LOGOUT_BLOCKED = 'Todavía no puedes cerrar sesión: tu billetera no tiene respaldo. Al cerrar sesión se borra la llave de este dispositivo y perderías el acceso a tu dinero. Crea una passkey de respaldo (o espera a que se active la recuperación de cuenta) y vuelve a intentar.';
+
+/** Cerrar sesión con Cavos (logout) BORRA la llave del vault (vault.forget). Sin respaldo (social/passkey) eso es
+ *  perder la billetera: NUNCA llamamos auth.logout() en ese caso. Intentamos registrar una passkey; si no se puede,
+ *  bloqueamos y explicamos. Devuelve null si cerró sesión, o el mensaje a mostrar. */
+export async function logoutSafely(auth: MeteoritoAuth): Promise<string | null> {
+  const w = auth.wallet;
+  if (w && w.state === 'loading') return 'Espera un momento a que cargue tu billetera y vuelve a intentar.';
+  const backedUp = !w || w.recoveryProtected || w.state === 'needs-approval'; // needs-approval: la llave ya no está aquí
+  if (!backedUp) {
+    try { await w!.enrollPasskey(); }
+    catch (e) { console.error('[wallet] logout bloqueado: sin respaldo', e); return LOGOUT_BLOCKED; }
+  }
+  await auth.logout();
+  return null;
 }

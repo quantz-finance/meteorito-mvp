@@ -1,5 +1,5 @@
 // Supabase en memoria para tests (subset de la API de PostgREST que usa api/_lib). PK por tabla → 23505.
-const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id' };
+const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id', user_wallets: 'sub', session_nonces: 'nonce' };
 export function fakeDb() {
   const tables: Record<string, any[]> = { orders: [], ramp_mock_payments: [], disputes: [], order_events: [] };
   let seq = 1;
@@ -32,6 +32,7 @@ export function fakeDb() {
       neq: (c: string, v: any) => { filters.push((r) => r[c] !== v); return q; },
       is: (c: string, v: any) => { filters.push((r) => (r[c] ?? null) === v); return q; },
       lte: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] <= v); return q; },
+      gt: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] > v); return q; },
       or: () => q, order: () => q, limit: () => q,
       single: async () => { const r = exec(); const d = r.data?.[0] ?? null; return { data: d, error: d ? null : { message: 'no rows' } }; },
       maybeSingle: async () => { const r = exec(); return { data: r.data?.[0] ?? null, error: r.error }; },

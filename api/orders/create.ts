@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { trackServer } from '../_lib/analytics';
 import { db, json, fail } from '../_lib/db';
-import { requireCavosUser, requireAddressProof, HttpError } from '../_lib/auth';
+import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
 import { walletState } from '../_lib/wallet';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 
@@ -20,6 +20,7 @@ export default async function handler(req: any, res: any) {
     const user = await requireCavosUser(req);
     const b = req.body ?? {};
     const seller = await requireAddressProof(b.proof, 'create', 'new');
+    await bindWalletIfFresh(user, seller);
     if (!CATS.includes(b.category)) throw new HttpError(400, 'categoría inválida');
     const price = Number(b.price_crc);
     if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw new HttpError(400, 'precio inválido');

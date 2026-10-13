@@ -34,7 +34,7 @@ export default function Pedidos() {
     setLoading(true); setError(null);
     try { const os = await getSellerOrders(address); setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError((e as Error).message); setOrders((o) => o ?? []); }
     finally { setLoading(false); }
-  }, [address]);
+  }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const open = orders?.find((o) => o.slug === openSlug) ?? null;

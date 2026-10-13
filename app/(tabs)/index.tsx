@@ -1,4 +1,4 @@
-import { ensureSellerWalletOnLoad } from '@/lib/wallet';
+import { ensureSellerWalletOnLoad, logoutSafely } from '@/lib/wallet';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -18,13 +18,14 @@ const TESTNET = true; // MVP corre solo en testnet
 
 export default function Inicio() {
   const auth = useAuth();
-  const { email, address, logout } = auth;
+  const { email, address } = auth;
   const [bal, setBal] = useState<Balances | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
   const [help, setHelp] = useState(false);
   const [account, setAccount] = useState(false);
+  const [logoutMsg, setLogoutMsg] = useState<string | null>(null);
   const [payOpen, setPayOpen] = useState(false);
   const [link, setLink] = useState('');
   const linkSlug = parseSlug(link);
@@ -37,7 +38,7 @@ export default function Inicio() {
     finally { setLoading(false); }
     if (supabaseConfigured) getSellerOrders(address).then((os) => { setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setErr(m)); }).catch(() => setOrders([]));
     else setOrders([]);
-  }, [address]);
+  }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const crc = bal ? Number(bal.usdc ?? 0) * CRC_USDC_RATE : 0;
@@ -98,7 +99,8 @@ export default function Inicio() {
       </Sheet>
       <HelpSheet visible={help} onClose={() => setHelp(false)} />
       <Sheet visible={account} onClose={() => setAccount(false)} title="Mi cuenta"
-        footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={() => { setAccount(false); logout(); }} />}>
+        footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={async () => { const m = await logoutSafely(auth); if (m) { setLogoutMsg(m); return; } setLogoutMsg(null); setAccount(false); }} />}>
+        {logoutMsg ? <ErrorText>{logoutMsg}</ErrorText> : null}
         <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{email ?? '—'}</Text></Card>
         <Card>
           <Text style={T.caption}>Detalles</Text>

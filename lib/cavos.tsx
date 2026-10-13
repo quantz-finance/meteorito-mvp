@@ -4,7 +4,7 @@ import 'react-native-get-random-values';
 import { CavosProvider, useCavos } from '@cavos/kit/react-native';
 import type { ReactNode } from 'react';
 import { APP_SALT, CAVOS_APP_ID, CAVOS_RP_ID, NATIVE_REDIRECT_URI } from './config';
-import type { MeteoritoAuth } from './types';
+import { walletInfo, type MeteoritoAuth } from './types';
 import { Brand } from '@/constants/Colors';
 
 export function CavosRoot({ children }: { children: ReactNode }) {
@@ -18,7 +18,7 @@ export function CavosRoot({ children }: { children: ReactNode }) {
         redirectUri: NATIVE_REDIRECT_URI,
         rpId: CAVOS_RP_ID,
       }}
-      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], emailMode: 'otp', primaryColor: Brand.purple }}>
+      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], emailMode: 'otp', primaryColor: Brand.purple, secureStep: 'required' /* kit RN 0.3.0 no expone socialRecovery: passkey es el único respaldo */ }}>
       {children}
     </CavosProvider>
   );
@@ -46,5 +46,6 @@ export function useAuth(): MeteoritoAuth {
     getAuthToken: () => null /* TODO nativo: el kit RN guarda el token en memoria; exponerlo */,
     signMessage: async (m) => { const r = await stellarWallet(c).signMessage(m); return { publicKey: r.publicKey, signature: b64(r.signature) }; },
     signXdr: (x) => stellarWallet(c).signXdr(x),
+    wallet: walletInfo(c),
   };
 }
