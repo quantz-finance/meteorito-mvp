@@ -1,7 +1,10 @@
 // Activa la wallet Cavos del vendedor para recibir USDC (cuenta + trustline). La platform patrocina reservas y fee;
 // el vendedor solo firma con Cavos (no necesita XLM). Idempotente: si ya está lista no pide firma.
 import type { MeteoritoAuth } from './types';
-import { api, proof } from './api';
+import { fetchBalances } from './horizon';
+import { api, proof, sessionRef, tokenExpiresSoon } from './api';
+export const relinkMessage = (sub: string, nonce: string) => `meteorito:relink:${sessionRef(sub)}:${nonce}`;
+export const bindMessage = (sub: string, nonce: string) => `meteorito:bind:${sessionRef(sub)}:${nonce}`;
 
 const coded = (code: string, msg: string) => Object.assign(new Error(msg), { code });
 
@@ -16,6 +19,8 @@ export async function assertDeviceCanSign(auth: MeteoritoAuth): Promise<void> {
 }
 
 export async function ensureWalletReady(auth: MeteoritoAuth): Promise<void> {
+  // Ya lista on-chain (cuenta + trustline USDC): nada que hacer, sin llamar al API ni pedir firmas.
+  if (auth.address) { const b = await fetchBalances(auth.address).catch(() => null); if (b?.funded && b.usdc !== null) return; }
   await assertDeviceCanSign(auth);
   const p = await api<{ ready: boolean; unsignedXdr?: string }>(auth, '/api/wallet/activate', { step: 'prepare', proof: await proof(auth, 'wallet', 'activate') });
   if (p.ready) return;
@@ -52,6 +57,7 @@ export async function ensureSellerWalletOnLoad(auth: MeteoritoAuth, hasOrders: b
 /** Aviso genérico para el usuario (sin detalles técnicos). El código real va solo a console/logs. */
 export function walletErrorNotice(e: any): string {
   console.error('[wallet] error', e?.code ?? 'desconocido', e?.message, e);
+  if (e?.code === 'session_wallet_mismatch' || e?.code === 'session_expired') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión para continuar.';
   if (e?.code === 'device_not_authorized') return 'No pudimos acceder a tu billetera en este dispositivo. Escríbenos a team@meteorito.app para ayudarte.';
   return 'No pudimos activar tu cuenta para recibir pagos. Vuelve a abrir esta pantalla para reintentar.';
 }
@@ -73,3 +79,29 @@ export async function logoutSafely(auth: MeteoritoAuth): Promise<string | null> 
   await auth.logout();
   return null;
 }
+
+/** Al abrir la app con sesión y token FRESCO: liga sub -> wallet en el servidor (idempotente, sin on-chain).
+ *  Token vencido o wallet sin llave en este dispositivo: se omite en silencio. Una vez por apertura. */
+let boundThisOpen = false;
+export async function bindWalletOnLogin(auth: MeteoritoAuth): Promise<boolean> {
+  if (boundThisOpen || !auth.isAuthenticated || !auth.address) return false;
+  if (auth.wallet && auth.wallet.state !== 'ready' && auth.wallet.state !== 'undeployed') return false;
+  const token = auth.getAuthToken();
+  if (!token || tokenExpiresSoon(token)) return false;
+  boundThisOpen = true;
+  try {
+    const { nonce } = await api<{ nonce: string }>(auth, '/api/wallet/activate', { step: 'nonce' });
+    const c = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (token.split('.')[1].length % 4)) % 4)));
+    const { publicKey, signature } = await auth.signMessage(bindMessage(String(c.sub ?? c.user_id ?? ''), nonce));
+    const b = await api<{ relinkRequired?: boolean }>(auth, '/api/wallet/activate', { step: 'bind', proof: { address: auth.address, publicKey, signature, nonce } });
+    if (b.relinkRequired) {
+      // Cuenta ligada a otra billetera: re-link explícito (el servidor exige 404 on-chain de la anterior y sin pedidos activos).
+      const { nonce: n2 } = await api<{ nonce: string }>(auth, '/api/wallet/activate', { step: 'nonce' });
+      const sg = await auth.signMessage(relinkMessage(String(c.sub ?? c.user_id ?? ''), n2));
+      await api(auth, '/api/wallet/activate', { step: 'relink', proof: { address: auth.address, publicKey: sg.publicKey, signature: sg.signature, nonce: n2 } });
+    }
+    return true;
+  }
+  catch (e: any) { console.error('[wallet] bind al iniciar', e?.code, e?.message); return false; }
+}
+export const __resetBindForTests = () => { boundThisOpen = false; };
