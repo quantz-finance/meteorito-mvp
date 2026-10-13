@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { env } from './env';
-import { HttpError } from './auth';
+import { randomBytes } from 'node:crypto';
+import { HttpError, __setSessionStore } from './auth';
 import { trackServer } from './analytics';
 let c: any = null;
 export const db = (): any => (c ??= createClient(env.supabaseUrl(), env.supabaseService(), { auth: { persistSession: false } }));
@@ -33,3 +34,28 @@ export async function logEvent(order_id: string, kind: string, detail: Record<st
   catch (e: any) { console.warn('[logEvent] falló', kind, e?.message); }
   await trackServer(order_id, kind, detail);
 }
+
+// Sesión: sub -> wallet (migración 007) y nonces de un uso para renovar tokens Cavos vencidos.
+__setSessionStore({
+  async boundWallet(sub) {
+    const { data, error } = await db().from('user_wallets').select('wallet_address').eq('sub', sub).maybeSingle();
+    if (error) throw new HttpError(503, 'No pudimos verificar tu sesión. Intenta de nuevo.');
+    return data?.wallet_address ?? null;
+  },
+  async bind(sub, address) {
+    const { error } = await db().from('user_wallets').insert({ sub, wallet_address: address });
+    if (error && error.code !== '23505') console.error('[auth] bind falló', error.code);
+  },
+  async issueNonce(sub) {
+    const nonce = randomBytes(24).toString('hex');
+    const { error } = await db().from('session_nonces').insert({ nonce, sub, expires_at: new Date(Date.now() + 300_000).toISOString() });
+    if (error) throw new HttpError(503, 'No pudimos verificar tu sesión. Intenta de nuevo.');
+    return nonce;
+  },
+  async consumeNonce(sub, nonce) {
+    const { data, error } = await db().from('session_nonces').update({ used_at: new Date().toISOString() })
+      .eq('nonce', nonce).eq('sub', sub).is('used_at', null).gt('expires_at', new Date().toISOString()).select('nonce');
+    if (error) throw new HttpError(503, 'No pudimos verificar tu sesión. Intenta de nuevo.');
+    return (data ?? []).length === 1;
+  },
+});

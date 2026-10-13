@@ -21,44 +21,110 @@ function jwksFor(iss: string): any {
 
 export class HttpError extends Error { constructor(public status: number, msg: string) { super(msg); } }
 
-export interface CavosUser { sub: string; email?: string; iss: string }
-export async function requireCavosUser(req: any): Promise<CavosUser> {
-  const h: string = req.headers?.authorization ?? '';
-  const token = h.startsWith('Bearer ') ? h.slice(7) : '';
-  if (!token) throw new HttpError(401, 'falta token de Cavos');
-  let claims: { iss?: unknown; aud?: unknown };
-  try { claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()); } catch { throw new HttpError(401, 'token malformado'); }
+export interface CavosUser { sub: string; email?: string; iss: string; renewed?: boolean }
+export const SESSION_EXPIRED = 'Tu sesión venció. Vuelve a cargar la página para continuar.';
+export const AUTH_INVALID = 'No pudimos verificar tu sesión. Vuelve a cargar la página.';
+const coded = (status: number, code: string, msg: string) => Object.assign(new HttpError(status, msg), { code });
+/** ref de la prueba de sesión (sin ':' para no romper el formato del mensaje). Igual en cliente (lib/api.ts). */
+export const sessionRef = (sub: string) => sub.replace(/[^A-Za-z0-9_-]/g, '_');
+const graceS = () => { const d = Number(process.env.SESSION_GRACE_DAYS ?? '7'); return (Number.isFinite(d) && d >= 0 && d <= 30 ? d : 7) * 86400; };
+/** Mensaje firmado para renovar sesión: no reutilizable (nonce de un uso) y atado a método + ruta. */
+export const sessionMessage = (sub: string, nonce: string, method: string, path: string) => `meteorito:session:${sessionRef(sub)}:${nonce}:${method.toUpperCase()}:${path}`;
+
+/** Persistencia de sesión (la instala db.ts; tests la reemplazan). */
+export interface SessionStore {
+  boundWallet(sub: string): Promise<string | null>;
+  bind(sub: string, address: string): Promise<void>;
+  issueNonce(sub: string): Promise<string>;
+  /** true si existía, era de este sub, no usado y no vencido; lo marca usado (atómico). */
+  consumeNonce(sub: string, nonce: string): Promise<boolean>;
+}
+let store: SessionStore | null = null;
+export const __setSessionStore = (s: SessionStore) => { store = s; };
+const sessionStore = () => { if (!store) throw new Error('session store no instalado'); return store; };
+
+/** Liga sub -> wallet SOLO con token fresco (no renovado). Primera vez gana; no se sobrescribe. */
+export async function bindWalletIfFresh(user: CavosUser, address: string) {
+  if (user.renewed) return;
+  await sessionStore().bind(user.sub, address);
+}
+
+/** Verifica firma/iss/aud. Si solo está vencido (≤ SESSION_GRACE_DAYS) devuelve expired:true. */
+async function verifyToken(token: string): Promise<{ payload: JWTPayload; iss: string; expired: boolean; exp: number }> {
+  let claims: { iss?: unknown; aud?: unknown; exp?: unknown };
+  try { claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()); } catch { throw coded(401, 'auth_invalid', AUTH_INVALID); }
   const iss = typeof claims.iss === 'string' ? claims.iss : '';
-  // Issuer: allowlist exacta + jwtVerify vuelve a exigirlo sobre el payload firmado.
   if (!env.cavosIssuers().includes(iss)) {
     console.warn('[auth] issuer rechazado', JSON.stringify({ iss, aud: claims.aud }));
-    throw new HttpError(401, 'issuer no permitido');
+    throw coded(401, 'auth_invalid', AUTH_INVALID);
   }
   const audiences = env.cavosAudiences();
   const logOnly = env.cavosAudienceLogOnly();
   if (!audiences.length && !logOnly && env.isProduction()) {
-    // Fail closed: en producción no aceptamos tokens sin audiencia configurada.
     console.error('[auth] CAVOS_JWT_AUDIENCE no configurado en producción; rechazando', JSON.stringify({ iss, aud: claims.aud }));
     throw new HttpError(503, 'autenticación no configurada');
   }
   const enforce = audiences.length > 0 && !logOnly;
-  let payload: JWTPayload;
-  try { ({ payload } = await jwtVerify(token, jwksFor(iss), { issuer: iss, audience: enforce ? audiences : undefined })); }
+  const opts = { issuer: iss, audience: enforce ? audiences : undefined };
+  const exp = Number(claims.exp);
+  let payload: JWTPayload; let expired = false;
+  try { ({ payload } = await jwtVerify(token, jwksFor(iss), opts)); }
   catch (e: any) {
-    // Nunca se loguea el token; solo iss/aud para confirmar el valor real.
     console.warn('[auth] token rechazado', JSON.stringify({ code: e.code ?? e.message, iss, aud: claims.aud, expected: audiences }));
-    throw new HttpError(401, `token inválido: ${e.code ?? e.message}`);
+    if (e.code !== 'ERR_JWT_EXPIRED') throw coded(401, 'auth_invalid', AUTH_INVALID);
+    if (!exp || Date.now() / 1000 - exp > graceS()) throw coded(401, 'session_expired', SESSION_EXPIRED);
+    try { ({ payload } = await jwtVerify(token, jwksFor(iss), { ...opts, currentDate: new Date((exp - 5) * 1000) })); }
+    catch { throw coded(401, 'auth_invalid', AUTH_INVALID); }
+    expired = true;
   }
   if (!enforce) {
     const aud = ([] as unknown[]).concat(payload.aud ?? []);
     const match = audiences.length > 0 && aud.some((a) => audiences.includes(String(a)));
     console.warn('[auth] aud NO verificado (' + (logOnly ? 'LOG_ONLY' : 'sin CAVOS_JWT_AUDIENCE, no-prod') + ')', JSON.stringify({ iss, aud: payload.aud, expected: audiences, match }));
   }
-  // Solo NOMBRES de claims (nunca valores ni token), 1 vez por request: para descubrir si hay claim de app/org.
-  console.log('[auth] claims', JSON.stringify(Object.keys(payload).sort()));
-  const sub = String(payload.sub ?? (payload as any).user_id ?? '');
-  if (!sub) throw new HttpError(401, 'token sin sub');
-  return { sub, email: (payload as any).email, iss };
+  return { payload, iss, expired, exp };
+}
+const bearer = (req: any) => { const h: string = req.headers?.authorization ?? ''; return h.startsWith('Bearer ') ? h.slice(7) : ''; };
+const subOf = (p: JWTPayload) => String(p.sub ?? (p as any).user_id ?? '');
+
+/** Nonce de un uso (5 min) para renovar sesión. Acepta token vencido dentro de la ventana (aún no hay prueba). */
+export async function issueSessionNonce(req: any): Promise<string> {
+  const token = bearer(req);
+  if (!token) throw coded(401, 'auth_missing', 'Inicia sesión para continuar.');
+  const v = await verifyToken(token);
+  const sub = subOf(v.payload);
+  if (!sub) throw coded(401, 'auth_invalid', AUTH_INVALID);
+  return sessionStore().issueNonce(sub);
+}
+
+/** Header X-Meteorito-Proof: base64(JSON {address, publicKey, signature, nonce}). Firma sobre sessionMessage(sub, nonce, METHOD, path). */
+async function renewExpired(req: any, sub: string, exp: number): Promise<void> {
+  const fail = (why: string) => { console.warn('[auth] renovación rechazada', why); return coded(401, 'session_expired', SESSION_EXPIRED); };
+  const raw: string = req.headers?.['x-meteorito-proof'] ?? '';
+  if (!raw) throw fail('sin prueba');
+  let p: { address?: string; publicKey?: string; signature?: string; nonce?: string };
+  try { p = JSON.parse(Buffer.from(raw, 'base64').toString()); } catch { throw fail('prueba malformada'); }
+  if (!p.address || !p.publicKey || !p.signature || !p.nonce || !/^[a-f0-9]{32,128}$/.test(p.nonce)) throw fail('prueba incompleta');
+  const bound = await sessionStore().boundWallet(sub);
+  if (!bound) throw fail('sin wallet ligada: requiere token fresco');
+  if (p.address !== bound) throw fail('wallet distinta a la ligada');
+  const path = String(req.url ?? '').split('?')[0];
+  const msg = sessionMessage(sub, p.nonce, String(req.method ?? ''), path);
+  try { await verifySignedBy(p.address, p.publicKey, msg, p.signature); } catch { throw fail('firma inválida o método/ruta distintos'); }
+  if (!(await sessionStore().consumeNonce(sub, p.nonce))) throw fail('nonce inválido, vencido o ya usado');
+  console.log('[auth] sesión renovada con prueba de wallet', JSON.stringify({ expiredFor: Math.round(Date.now() / 1000 - exp) }));
+}
+export async function requireCavosUser(req: any): Promise<CavosUser> {
+  const token = bearer(req);
+  if (!token) throw coded(401, 'auth_missing', 'Inicia sesión para continuar.');
+  const v = await verifyToken(token);
+  // Solo NOMBRES de claims (nunca valores ni token), 1 vez por request.
+  console.log('[auth] claims', JSON.stringify(Object.keys(v.payload).sort()));
+  const sub = subOf(v.payload);
+  if (!sub) throw coded(401, 'auth_invalid', AUTH_INVALID);
+  // El kit Cavos 0.3.0 NO renueva el id_token (~1 h) y su modal no permite re-login sin logout (que borra la llave).
+  if (v.expired) await renewExpired(req, sub, v.exp);
+  return { sub, email: (v.payload as any).email, iss: v.iss, renewed: v.expired };
 }
 
 export interface AddressProof { address: string; publicKey: string; signature: string /* base64 */; message: string }
@@ -76,14 +142,20 @@ export async function requireAddressProof(p: AddressProof | undefined, action: s
   const ts = Number(parts[4]);
   if (p.message !== proofMessage(action, ref, p.address, ts)) throw new HttpError(401, 'mensaje de prueba no coincide');
   if (!ts || Math.abs(Date.now() / 1000 - ts) > 300) throw new HttpError(401, 'prueba vencida');
-  const sig = Buffer.from(p.signature, 'base64');
-  const kp = Keypair.fromPublicKey(p.publicKey);
+  await verifySignedBy(p.address, p.publicKey, p.message, p.signature);
+  return p.address;
+}
+
+/** Firma ed25519 (prefijo Cavos) de `publicKey`, y `publicKey` = address o signer con peso med de la cuenta. */
+async function verifySignedBy(address: string, publicKey: string, message: string, signature: string) {
+  const sig = Buffer.from(signature, 'base64');
+  let kp: Keypair;
+  try { kp = Keypair.fromPublicKey(publicKey); } catch { throw new HttpError(401, 'firma inválida'); }
   // El SDK firma los bytes del mensaje con prefijo Cavos; aceptamos también sin prefijo por si cambia.
-  if (!kp.verify(prefixed(p.message), sig) && !kp.verify(Buffer.from(p.message), sig)) throw new HttpError(401, 'firma inválida');
-  if (p.publicKey !== p.address) {
-    const acct = await new Horizon.Server(env.horizon()).loadAccount(p.address).catch(() => null);
-    const s = acct?.signers.find((x) => x.key === p.publicKey);
+  if (!kp.verify(prefixed(message), sig) && !kp.verify(Buffer.from(message), sig)) throw new HttpError(401, 'firma inválida');
+  if (publicKey !== address) {
+    const acct = await new Horizon.Server(env.horizon()).loadAccount(address).catch(() => null);
+    const s = acct?.signers.find((x) => x.key === publicKey);
     if (!acct || !s || s.weight < acct.thresholds.med_threshold) throw new HttpError(401, 'el control key no es signer de la cuenta');
   }
-  return p.address;
 }
