@@ -45,6 +45,7 @@ export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unkn
   if (!pre && r.status === 401 && j.code === 'session_expired') ({ r, j } = await send(true)); // reintento único
   if (!r.ok) {
     if (r.status === 401) console.error('[api] auth', path, j.code, j.error);
+    if (j.code === 'session_wallet_mismatch') console.error('[api] la sesión (token) es de otra cuenta/billetera que la conectada: requiere volver a iniciar sesión');
     throw Object.assign(new Error(j.error ?? `Error ${r.status}`), { status: r.status, code: j.code ?? `http_${r.status}`, missing: j.missing });
   }
   return j as T;

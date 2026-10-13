@@ -17,6 +17,8 @@ export default async function handler(req: any, res: any) {
       if (order.contract_id && order.buyer_user_id !== user.sub) throw new HttpError(403, 'este pedido ya tiene comprador');
       const buyer = await requireAddressProof(proof, 'pay', order.slug);
       await bindWalletIfFresh(user, buyer);
+      if (order.seller_user_id === user.sub || order.seller_address === buyer)
+        throw Object.assign(new HttpError(409, 'No puedes comprar tu propio artículo.'), { code: 'self_purchase' });
       // Fondeo testnet: lo hace el ramp simulado desde la treasury (confirm_sinpe); el comprador NO necesita saldo.
       // Su wallet sí debe poder recibir USDC (reembolso si hay disputa): misma activación patrocinada que el vendedor.
       if (!order.contract_id && (await walletState(buyer)) !== 'ready')

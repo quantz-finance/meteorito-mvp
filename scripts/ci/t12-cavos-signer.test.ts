@@ -15,7 +15,7 @@ const mk = (w: Partial<WalletInfo>, calls: string[]): MeteoritoAuth => ({
 
 export async function run(t: T) {
   const realFetch = globalThis.fetch; let fetched = 0;
-  globalThis.fetch = (async () => { fetched++; throw new Error('no debe llamar a la API'); }) as any;
+  globalThis.fetch = (async (u: any) => { if (String(u).startsWith('/api')) fetched++; throw new Error('no debe llamar a la API'); }) as any; // Horizon (lectura) permitido
   const err = console.error; console.error = () => {};
   try {
     let calls: string[] = [];

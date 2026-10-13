@@ -1,17 +1,26 @@
-// POST /api/wallet/activate { step: 'status'|'prepare'|'submit', proof, signedXdr? }  (Bearer JWT Cavos)
+// POST /api/wallet/activate { step: 'nonce'|'bind'|'status'|'prepare'|'submit', proof, signedXdr? }  (Bearer JWT Cavos)
 // Deja la wallet Cavos del vendedor lista para recibir USDC (cuenta + trustline) con reservas patrocinadas por la platform.
 // prepare: devuelve XDR sin firmar (o ready). submit: valida forma exacta + firma del vendedor, firma la platform y envía.
 import { json, fail } from '../_lib/db';
 import { env } from '../_lib/env';
-import { requireCavosUser, requireAddressProof, HttpError, issueSessionNonce, bindWalletIfFresh } from '../_lib/auth';
+import { requireCavosUser, requireAddressProof, HttpError, issueSessionNonce, bindWalletIfFresh, requireBindProof } from '../_lib/auth';
+import { relinkWallet, cancelUnfundedListing } from '../_lib/relink';
 import { walletState, buildActivationTx, assertActivationConfig, validateActivationTx, signAndSubmitActivation } from '../_lib/wallet';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
-    // step 'nonce': nonce de un uso para renovar un token Cavos vencido (aquí para no sumar otra función en Vercel).
+    // step 'nonce': nonce de un uso (5 min, del sub) para renovar un token vencido o para 'bind'; token fresco o vencido ≤ ventana (aquí para no sumar otra función en Vercel).
     if (req.body?.step === 'nonce') return json(res, 200, { nonce: await issueSessionNonce(req) });
     const user = await requireCavosUser(req);
+    // step 'bind': solo con token FRESCO liga sub -> wallet si no hay binding (idempotente). Sin acción on-chain.
+    if (req.body?.step === 'bind') {
+      if (user.renewed) throw Object.assign(new HttpError(401, 'Tu sesión venció. Vuelve a cargar la página para continuar.'), { code: 'session_expired' });
+      const r = await bindWalletIfFresh(user, await requireBindProof(user, req.body?.proof));
+      return json(res, 200, { bound: r !== 'other_wallet', relinkRequired: r === 'other_wallet' });
+    }
+    if (req.body?.step === 'relink') return json(res, 200, await relinkWallet(user, req.body?.proof));
+    if (req.body?.step === 'cancel_listing') return json(res, 200, await cancelUnfundedListing(user, req.body?.slug));
     env.network(); // STELLAR_NETWORK != testnet -> error (solo testnet)
     assertActivationConfig(); // error claro (con nombres de env) antes de tocar Horizon
     const { step, proof, signedXdr } = req.body ?? {};

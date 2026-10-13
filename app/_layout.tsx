@@ -10,6 +10,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { CavosRoot, useAuth } from '@/lib/cavos';
+import { bindWalletOnLogin } from '@/lib/wallet';
 import Welcome from '@/components/Welcome';
 import { Brand } from '@/constants/Colors';
 
@@ -52,6 +53,8 @@ function Gate() {
     if (authed) identify(auth.getAuthToken()).then(() => track('signed_in'));
     else resetAnalytics();
   }, [authed]);
+  // Liga sub -> wallet mientras el token Cavos está fresco (una vez por apertura; vencido = se omite).
+  useEffect(() => { if (authed) bindWalletOnLogin(auth); }, [authed, auth.wallet.state]);
   if (!isPublic && (!auth.isAuthenticated || !auth.address)) return <Welcome />;
   return (
     <Stack screenOptions={{ headerShown: false }}>

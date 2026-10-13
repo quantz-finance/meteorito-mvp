@@ -3,6 +3,8 @@
 import { Address, FeeBumpTransaction, Horizon, Keypair, Networks, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
 import { env } from './env';
 import { HttpError } from './auth';
+import { withRetry } from './retry';
+import { hasShortWindow } from './timebounds';
 
 export interface Expect { contractId: string; fns: string[]; source: string }
 
@@ -48,7 +50,16 @@ export async function feeBumpAndSend(inner: Transaction) {
   const fb = TransactionBuilder.buildFeeBumpTransaction(platform, baseFee, inner, Networks.TESTNET);
   fb.sign(platform);
   try {
-    const r = await new Horizon.Server(env.horizon()).submitTransaction(fb);
+    const h = new Horizon.Server(env.horizon());
+    const fbHash = Buffer.from(fb.hash()).toString('hex');
+    // Inner firmado por el usuario: no podemos cambiar sus timebounds. Sin ventana corta -> sin reintentos (1 intento).
+    if (!hasShortWindow(inner)) {
+      console.warn('[fee-bump] inner sin maxTime corto: envío sin reintentos');
+      const r: any = await h.submitTransaction(fb);
+      return { hash: r.hash, innerHash: Buffer.from(inner.hash()).toString('hex') };
+    }
+    const r = await withRetry('Horizon submit fee-bump', () => h.submitTransaction(fb),
+      { landed: () => h.transactions().transaction(fbHash).call().then((t: any) => (t?.successful ? ({ hash: t.hash } as any) : null)) });
     return { hash: r.hash, innerHash: Buffer.from(inner.hash()).toString('hex') };
   } catch (e: any) {
     throw new HttpError(502, `envío falló: ${JSON.stringify(e?.response?.data?.extras?.result_codes ?? e.message)}`);

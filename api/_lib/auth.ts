@@ -23,6 +23,7 @@ export class HttpError extends Error { constructor(public status: number, msg: s
 
 export interface CavosUser { sub: string; email?: string; iss: string; renewed?: boolean }
 export const SESSION_EXPIRED = 'Tu sesión venció. Vuelve a cargar la página para continuar.';
+export const SESSION_OTHER_WALLET = 'Tu sesión pertenece a otra cuenta o billetera. Vuelve a iniciar sesión para continuar.';
 export const AUTH_INVALID = 'No pudimos verificar tu sesión. Vuelve a cargar la página.';
 const coded = (status: number, code: string, msg: string) => Object.assign(new HttpError(status, msg), { code });
 /** ref de la prueba de sesión (sin ':' para no romper el formato del mensaje). Igual en cliente (lib/api.ts). */
@@ -35,6 +36,8 @@ export const sessionMessage = (sub: string, nonce: string, method: string, path:
 export interface SessionStore {
   boundWallet(sub: string): Promise<string | null>;
   bind(sub: string, address: string): Promise<void>;
+  /** Reemplaza el binding (solo usado por bindWalletIfFresh cuando la wallet anterior nunca existió on-chain). */
+  rebind(sub: string, address: string): Promise<void>;
   issueNonce(sub: string): Promise<string>;
   /** true si existía, era de este sub, no usado y no vencido; lo marca usado (atómico). */
   consumeNonce(sub: string, nonce: string): Promise<boolean>;
@@ -43,10 +46,32 @@ let store: SessionStore | null = null;
 export const __setSessionStore = (s: SessionStore) => { store = s; };
 const sessionStore = () => { if (!store) throw new Error('session store no instalado'); return store; };
 
+export const bindMessage = (sub: string, nonce: string) => `meteorito:bind:${sessionRef(sub)}:${nonce}`;
+
+/** Prueba de bind: {address, publicKey, signature, nonce} firmada sobre bindMessage(sub, nonce); consume el nonce (1 uso, 5 min, del sub). */
+export async function requireBindProof(user: CavosUser, p: any): Promise<string> {
+  return consumeSignedNonce(user, p, bindMessage(user.sub, String(p?.nonce ?? '')), 'bind');
+}
+/** Prueba {address, publicKey, signature, nonce} sobre `message`; consume el nonce (1 uso, 5 min, del sub). */
+export async function consumeSignedNonce(user: CavosUser, p: any, message: string, kind: string): Promise<string> {
+  const bad = (why: string) => { console.warn(`[auth] ${kind} rechazado`, why); return Object.assign(new HttpError(401, AUTH_INVALID), { code: `${kind}_invalid` }); };
+  if (!p?.address || !p.publicKey || !p.signature || typeof p.nonce !== 'string' || !/^[a-f0-9]{32,128}$/.test(p.nonce)) throw bad('prueba incompleta');
+  try { await verifySignedBy(p.address, p.publicKey, message, p.signature); } catch { throw bad('firma inválida'); }
+  if (!(await sessionStore().consumeNonce(user.sub, p.nonce))) throw bad('nonce inválido, vencido, ajeno o ya usado');
+  return p.address;
+}
+export const boundWalletOf = (sub: string) => sessionStore().boundWallet(sub);
+export const rebindWallet = (sub: string, address: string) => sessionStore().rebind(sub, address);
+
 /** Liga sub -> wallet SOLO con token fresco (no renovado). Primera vez gana; no se sobrescribe. */
-export async function bindWalletIfFresh(user: CavosUser, address: string) {
-  if (user.renewed) return;
-  await sessionStore().bind(user.sub, address);
+export async function bindWalletIfFresh(user: CavosUser, address: string): Promise<'bound' | 'same' | 'other_wallet' | 'skipped'> {
+  if (user.renewed) return 'skipped';
+  const bound = await sessionStore().boundWallet(user.sub);
+  if (!bound) { await sessionStore().bind(user.sub, address); return 'bound'; }
+  if (bound === address) return 'same';
+  // Nunca se reemplaza aquí: solo con step 'relink' explícito (api/_lib/relink.ts).
+  console.warn('[auth] bind: sub ya ligado a otra wallet; requiere relink', JSON.stringify({ bound: bound.slice(0, 6), got: address.slice(0, 6) }));
+  return 'other_wallet';
 }
 
 /** Verifica firma/iss/aud. Si solo está vencido (≤ SESSION_GRACE_DAYS) devuelve expired:true. */
@@ -106,8 +131,10 @@ async function renewExpired(req: any, sub: string, exp: number): Promise<void> {
   try { p = JSON.parse(Buffer.from(raw, 'base64').toString()); } catch { throw fail('prueba malformada'); }
   if (!p.address || !p.publicKey || !p.signature || !p.nonce || !/^[a-f0-9]{32,128}$/.test(p.nonce)) throw fail('prueba incompleta');
   const bound = await sessionStore().boundWallet(sub);
-  if (!bound) throw fail('sin wallet ligada: requiere token fresco');
-  if (p.address !== bound) throw fail('wallet distinta a la ligada');
+  // Sin binding o wallet distinta: renovar NUNCA va a funcionar con esta prueba -> código propio (el cliente no reintenta).
+  const relogin = (why: string) => { console.warn('[auth] renovación rechazada', why); return coded(401, 'session_wallet_mismatch', SESSION_OTHER_WALLET); };
+  if (!bound) throw relogin('sin wallet ligada: requiere token fresco');
+  if (p.address !== bound) throw relogin(`wallet distinta a la ligada (${p.address.slice(0, 6)} vs ${bound.slice(0, 6)})`);
   const path = String(req.url ?? '').split('?')[0];
   const msg = sessionMessage(sub, p.nonce, String(req.method ?? ''), path);
   try { await verifySignedBy(p.address, p.publicKey, msg, p.signature); } catch { throw fail('firma inválida o método/ruta distintos'); }

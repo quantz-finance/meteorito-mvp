@@ -14,9 +14,16 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '11', name: 'Activación wallet: errores con código + activación real testnet', file: './t11-activate.test.ts', onchain: false },
   { id: '12', name: 'Cavos: dispositivo sin llave (tras logout) y logout protegido', file: './t12-cavos-signer.test.ts', onchain: false },
   { id: '13', name: 'Sesión vencida: renovación con prueba de wallet + comprador nuevo', file: './t13-session.test.ts', onchain: false },
+  { id: '14', name: 'Bind sub->wallet al iniciar sesión (solo token fresco)', file: './t14-bind-on-login.test.ts', onchain: false },
+  { id: '15', name: 'Reintentos de red en CI (backoff, sin reenviar tx ya incluida)', file: './t15-ci-retry.test.ts', onchain: false },
+  { id: '16', name: 'Timebounds cortos y reconstrucción solo tras expirar (sin dos tx vivas)', file: './t16-timebounds.test.ts', onchain: false },
+  { id: '17', name: 'Montos: parcial no cuenta como pagado; vendedor solo recibe el monto', file: './t17-amounts.test.ts', onchain: false },
+  { id: '19', name: 'Repro prod ybbtsr: token vencido de otra cuenta/billetera -> sin bucle, re-login, re-bind seguro', file: './t19-prod-relogin.test.ts', onchain: false },
+  { id: '20', name: 'Re-link: solo 404 explícito, sin items activos, token fresco + nonce, auditoría', file: './t20-relink.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },
+  { id: '18', name: 'Excedente on-chain: vendedor recibe solo el monto del pedido', file: './t18-excess-onchain.test.ts', onchain: true },
 ];
 
 (async () => {

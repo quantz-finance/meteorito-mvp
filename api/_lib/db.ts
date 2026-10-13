@@ -46,6 +46,10 @@ __setSessionStore({
     const { error } = await db().from('user_wallets').insert({ sub, wallet_address: address });
     if (error && error.code !== '23505') console.error('[auth] bind falló', error.code);
   },
+  async rebind(sub, address) {
+    const { error } = await db().from('user_wallets').update({ wallet_address: address, source: 'rebind_fresh_token' }).eq('sub', sub);
+    if (error) console.error('[auth] rebind falló', error.code);
+  },
   async issueNonce(sub) {
     const nonce = randomBytes(24).toString('hex');
     const { error } = await db().from('session_nonces').insert({ nonce, sub, expires_at: new Date(Date.now() + 300_000).toISOString() });
