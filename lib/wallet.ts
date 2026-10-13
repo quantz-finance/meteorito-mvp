@@ -8,7 +8,8 @@ export async function ensureWalletReady(auth: MeteoritoAuth): Promise<void> {
   if (p.ready) return;
   if (!p.unsignedXdr) throw new Error('No pudimos activar tu cuenta para recibir pagos. Intentá de nuevo.');
   let signedXdr: string;
-  try { signedXdr = await auth.signXdr(p.unsignedXdr); } catch { throw new Error('No se pudo firmar la activación de tu cuenta. Intentá de nuevo.'); }
+  try { signedXdr = await auth.signXdr(p.unsignedXdr); }
+  catch (e) { console.error('[wallet] signXdr', e); throw Object.assign(new Error('No se pudo firmar la activación de tu cuenta.'), { code: 'sign_failed', cause: e }); }
   const s = await api<{ ready: boolean }>(auth, '/api/wallet/activate', { step: 'submit', signedXdr, proof: await proof(auth, 'wallet', 'activate') });
   if (!s.ready) throw new Error('Tu cuenta todavía no quedó activada. Intentá de nuevo en un minuto.');
 }
@@ -27,5 +28,18 @@ export async function ensureSellerWalletOnLoad(auth: MeteoritoAuth, hasOrders: b
   if (!hasOrders || !auth.address || tried.has(auth.address)) return null;
   tried.add(auth.address);
   try { await ensureWalletReady(auth); return null; }
-  catch { tried.delete(auth.address); return 'Tu cuenta todavía no está activada para recibir pagos. Volvé a abrir esta pantalla para activarla.'; }
+  catch (e: any) {
+    tried.delete(auth.address);
+    console.error('[wallet] activación falló', e?.code, e?.message, e);
+    return walletErrorNotice(e);
+  }
+}
+
+/** Aviso en español neutro con el código real (para soporte/QA). */
+export function walletErrorNotice(e: any): string {
+  const code = e?.code ?? 'desconocido';
+  const base = code === 'sign_failed' ? 'No se pudo firmar la activación de tu cuenta.'
+    : code === 'config_missing' || code === 'platform_mismatch' || code === 'platform_account_missing' ? 'La activación de cuentas no está disponible en este momento.'
+    : 'Tu cuenta todavía no está activada para recibir pagos.';
+  return `${base} Vuelve a abrir esta pantalla para reintentar. (código: ${code})`;
 }

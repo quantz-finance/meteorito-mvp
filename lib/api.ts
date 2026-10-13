@@ -14,6 +14,6 @@ export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unkn
   if (!token) throw new Error('Sesión vencida: volvé a entrar');
   const r = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error ?? `Error ${r.status}`);
+  if (!r.ok) throw Object.assign(new Error(j.error ?? `Error ${r.status}`), { status: r.status, code: j.code ?? `http_${r.status}`, missing: j.missing });
   return j as T;
 }
