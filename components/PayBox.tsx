@@ -1,5 +1,5 @@
 import { timeLeft, useAutoReleaseWindow } from '@/lib/autorelease';
-import { friendlyPayError } from '@/lib/wallet';
+import { ensureWalletReady, friendlyPayError, walletErrorNotice } from '@/lib/wallet';
 // Comprador: Pagar seguro -> SINPE simulado -> "Ya pagué" -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
 import { useState } from 'react';
@@ -67,6 +67,8 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       {err && !sheet && <ErrorText>{err}</ErrorText>}
       <PrimaryButton title={busy ? 'Preparando…' : `Pagar seguro ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
         onPress={() => run(async () => {
+          // Comprador nuevo: activar su wallet (cuenta + trustline USDC patrocinadas) para poder recibir reembolsos.
+          if (!order.contract_id) await ensureWalletReady(auth).catch((e) => { throw new Error(walletErrorNotice(e)); });
           const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'start', proof: await proof(auth, 'pay', order.slug) });
           setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference });
           setSheet('sinpe');
