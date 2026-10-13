@@ -5,6 +5,7 @@ import { Asset, Horizon, Keypair, Networks, Operation, Transaction, TransactionB
 import { env } from './env';
 import { HttpError } from './auth';
 import { feeBumpAndSend } from './feebump';
+import { withRetry } from './retry';
 
 const coded = (status: number, code: string, msg: string, extra: Record<string, unknown> = {}) => Object.assign(new HttpError(status, msg), { code, ...extra });
 
@@ -30,9 +31,15 @@ export const SELLER_NOT_READY = 'El vendedor todavía no activó su cuenta para 
 let horizonFor: () => { loadAccount(a: string): Promise<any> } = () => new Horizon.Server(env.horizon());
 export const __setHorizonForTests = (h: typeof horizonFor) => { horizonFor = h; };
 
+/** true SOLO si Horizon responde 404 explícito. Timeout/5xx/cualquier otro error -> false (no se asume inexistente). */
+export async function horizonAccountMissing(address: string): Promise<boolean> {
+  try { await horizonFor().loadAccount(address); return false; }
+  catch (e: any) { return e?.response?.status === 404; }
+}
+
 export async function walletState(address: string): Promise<WalletState> {
   let acct: any;
-  try { acct = await horizonFor().loadAccount(address); }
+  try { acct = await withRetry('Horizon loadAccount', () => horizonFor().loadAccount(address)); }
   catch (e: any) {
     if (e?.response?.status === 404 || e?.name === 'NotFoundError' || e?.constructor?.name === 'NotFoundError') return 'no_account';
     throw coded(502, 'horizon_error', `Horizon no respondió: ${e?.message ?? e}`);
@@ -50,7 +57,7 @@ export async function assertReceiverReady(address: string) {
 /** Tx sin firmar: source = platform (paga fee y reserva de la cuenta), changeTrust firmada por el vendedor. */
 export async function buildActivationTx(seller: string, state: Exclude<WalletState, 'ready'>): Promise<Transaction> {
   const platform = env.platformPublic();
-  const src = await horizonFor().loadAccount(platform).catch((e: any) => {
+  const src = await withRetry('Horizon loadAccount platform', () => horizonFor().loadAccount(platform)).catch((e: any) => {
     throw e?.response?.status === 404 ? coded(503, 'platform_account_missing', 'la cuenta PLATFORM_PUBLIC no existe en testnet') : coded(502, 'horizon_error', `Horizon: ${e?.message ?? e}`);
   });
   const b = new TransactionBuilder(src, { fee: '1000', networkPassphrase: Networks.TESTNET })
@@ -58,7 +65,7 @@ export async function buildActivationTx(seller: string, state: Exclude<WalletSta
   if (state === 'no_account') b.addOperation(Operation.createAccount({ destination: seller, startingBalance: '0' }));
   b.addOperation(Operation.changeTrust({ asset: usdc(), source: seller }))
     .addOperation(Operation.endSponsoringFutureReserves({ source: seller }));
-  return b.setTimeout(300).build();
+  return b.setTimeout(Number(process.env.TX_MAX_WINDOW_S ?? '60')).build();
 }
 
 /** Valida EXACTAMENTE la forma de buildActivationTx (lo que la platform va a firmar). */

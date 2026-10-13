@@ -6,6 +6,7 @@ import { db, advance, logEvent } from './db';
 import { HttpError } from './auth';
 import * as tw from './tw';
 import { assertReceiverReady, SELLER_NOT_READY } from './wallet';
+import { tightenTimebounds } from './timebounds';
 
 const pub = (secret: string) => Keypair.fromSecret(secret).publicKey();
 
@@ -60,11 +61,15 @@ export async function mockRampFund(orderId: string) {
   const amount = Number(order.amount_usdc);
   const { error: lockErr } = await db().from('ramp_mock_payments').insert({ order_id: order.id, amount_usdc: amount });
   if (lockErr) throw new HttpError(409, 'fondeo ya en curso o hecho');
+  // El escrow on-chain debe ser exactamente por el monto del pedido (nunca 'balance > 0').
+  const esc = await tw.onChainEscrow(order.contract_id);
+  const before = await tw.getBalance(order.contract_id);
   let sent;
   try { sent = await tw.fundEscrow(order.contract_id, amount, env.treasurySecret()); }
   catch (e) { await db().from('ramp_mock_payments').update({ state: 'failed' }).eq('order_id', order.id); throw e; }
   const bal = await tw.getBalance(order.contract_id);
-  if (bal + 1e-7 < amount) throw new Error(`balance on-chain ${bal} < ${amount}`);
+  const chk = fundingCheck({ orderAmount: amount, escrowAmountStroops: esc?.amount, before, after: bal });
+  if (!chk.ok) { await logEvent(order.id, 'funding_mismatch', { reason: chk.reason, amount }); throw new HttpError(409, `fondeo no verificado: ${chk.reason}`); }
   const pin = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await db().from('ramp_mock_payments').update({ state: 'sent', tx_hash: sent.hash }).eq('order_id', order.id);
   await advance(order.id, 'escrow_creado', {
@@ -101,7 +106,9 @@ export async function approveAndRelease(order: any, reason: ApproveReason) {
   const g = await assertOpen();
   if (!g.approved) throw new HttpError(409, 'hito no aprobado on-chain');
   const bal = await tw.getBalance(order.contract_id);
-  if (bal + 1e-7 < Number(order.amount_usdc)) throw new HttpError(409, `sin fondos on-chain (${bal})`);
+  const rc = releaseCheck(bal, Number(order.amount_usdc));
+  if (!rc.ok) { await logEvent(order.id, 'release_refused', { reason: rc.reason }); throw new HttpError(409, `sin fondos on-chain (${bal})`); }
+  if (rc.excess > 0) console.warn(`[release] ${order.id}: excedente ${rc.excess} USDC queda en el contrato (TW libera solo escrow.amount)`);
   const rel = await tw.releaseFunds(order.contract_id, env.releaseSignerSecret());
   await advance(order.id, 'entregado', { released_tx: rel.hash, released_at: new Date().toISOString(), status: 'liberado' });
   await logEvent(order.id, 'released', { hash: rel.hash, reason, hours_to_release: order.funded_at ? Math.round((Date.now() - Date.parse(order.funded_at)) / 36e5 * 10) / 10 : undefined });
@@ -149,7 +156,7 @@ export async function openDispute(order: any, buyerSub: string, input: { reason:
 /** dispute-escrow firmado por el approver, validado (1 invocación a NUESTRO contrato) y enviado con fee-bump. Verifica on-chain. */
 export async function disputeOnChain(contractId: string): Promise<string> {
   const x = await tw.disputeEscrowXdr(contractId, Keypair.fromSecret(env.approverSecret()).publicKey());
-  const inner = signWith(TransactionBuilder.fromXDR(x.unsignedTransaction, Networks.TESTNET) as Transaction, env.approverSecret());
+  const inner = signWith(tightenTimebounds(x.unsignedTransaction), env.approverSecret());
   validateEscrowTx(inner.toXDR(), { contractId, fns: ['dispute_escrow'], source: Keypair.fromSecret(env.approverSecret()).publicKey() });
   const { hash } = await feeBumpAndSend(inner);
   const g = await tw.releaseGuard(contractId);
@@ -168,8 +175,7 @@ export async function resolveOrderDispute(order: any, resolverSecret: string, bu
   const g = await tw.releaseGuard(order.contract_id);
   if (!g.disputed) throw new HttpError(409, 'el escrow no está en disputa on-chain');
   const bal = await tw.getBalance(order.contract_id);
-  const toBuyer = Math.round(bal * buyerPct / 100 * 1e7) / 1e7;
-  const toSeller = Math.round((bal - toBuyer) * 1e7) / 1e7;
+  const { toBuyer, toSeller } = disputeSplit(bal, Number(order.amount_usdc), buyerPct);
   const distributions = [
     ...(toBuyer > 0 ? [{ address: order.buyer_address, amount: toBuyer }] : []),
     ...(toSeller > 0 ? [{ address: order.seller_address, amount: toSeller }] : []),
@@ -181,4 +187,30 @@ export async function resolveOrderDispute(order: any, resolverSecret: string, bu
   await db().from('disputes').update({ state: 'resolved', resolution, resolved_tx: r.hash, resolved_at: now }).eq('order_id', order.id);
   await logEvent(order.id, 'dispute_resolved', { hash: r.hash, ...resolution });
   return { resolvedTx: r.hash, ...resolution };
+}
+
+const EPS = 1e-7;
+/** Fondeo válido: escrow on-chain por el monto exacto del pedido, el depósito propio cubre el monto (after-before ≥ monto)
+ *  y el saldo total ≥ monto. Un depósito parcial o ajeno nunca cuenta como pagado. */
+export function fundingCheck(p: { orderAmount: number; escrowAmountStroops: unknown; before: number; after: number }): { ok: true } | { ok: false; reason: string } {
+  const escAmt = Number(p.escrowAmountStroops ?? NaN) / 1e7;
+  if (!(Math.abs(escAmt - p.orderAmount) < EPS)) return { ok: false, reason: 'escrow_amount_mismatch' };
+  if (p.after - p.before + EPS < p.orderAmount) return { ok: false, reason: 'deposit_short' };
+  if (p.after + EPS < p.orderAmount) return { ok: false, reason: 'balance_short' };
+  return { ok: true };
+}
+/** TW single-release libera escrow.amount (menos fee TW 0.3%), NO el saldo total (probado en t18): un excedente queda
+ *  en el contrato y nunca llega al vendedor. Se exige saldo ≥ monto; el excedente solo se reporta. */
+export function releaseCheck(bal: number, orderAmount: number): { ok: true; excess: number } | { ok: false; reason: 'insufficient' } {
+  if (bal + EPS < orderAmount) return { ok: false, reason: 'insufficient' };
+  return { ok: true, excess: Math.max(0, Math.round((bal - orderAmount) * 1e7) / 1e7) };
+}
+/** Disputa: el porcentaje se aplica sobre el monto del pedido; el vendedor nunca recibe más que su parte de ese monto.
+ *  Excedente (saldo - monto) vuelve al comprador. La suma = saldo (requisito de TW). */
+export function disputeSplit(bal: number, orderAmount: number, buyerPct: number) {
+  const r = (x: number) => Math.round(x * 1e7) / 1e7;
+  const base = Math.min(bal, orderAmount);
+  const toSeller = r(base - r(base * buyerPct / 100));
+  const toBuyer = r(bal - toSeller);
+  return { toBuyer, toSeller };
 }
