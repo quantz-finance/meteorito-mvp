@@ -35,13 +35,14 @@ export async function run(t: T) {
   let n = await nonceFor(expired);
   t.check('nonce emitido con token vencido (dentro de ventana)', /^[a-f0-9]{48}$/.test(n ?? ''), String(n));
   r = await call(expired, sessHdr(kp, 'buyer2', n));
-  t.check('sin wallet ligada -> 401 (requiere token fresco)', !r.ok && r.code === 'session_expired');
+  t.check('sin wallet ligada -> 401 session_wallet_mismatch (no reintentable)', !r.ok && r.code === 'session_wallet_mismatch');
 
   // Binding con token fresco (pay start real): liga buyer2 -> kp.
   __setHorizonForTests(() => ({ loadAccount: async () => { throw Object.assign(new Error('nf'), { response: { status: 404 } }); } }));
   db.tables.orders.push({ id: '77777777-7777-4777-8777-777777777777', slug: 'zp6ebt', status: 'creado', seller_user_id: 's2', seller_address: Keypair.random().publicKey(), price_crc: 5000 });
   let rr = res(); await pay(req(await token({ sub: 'buyer2' }), { slug: 'zp6ebt', step: 'start', proof: addrProof(kp, 'pay', 'zp6ebt') }), rr);
   t.check('token fresco + prueba -> liga sub -> wallet (aunque el pago se frene)', db.tables.user_wallets.length === 1 && db.tables.user_wallets[0].wallet_address === kp.publicKey(), JSON.stringify(db.tables.user_wallets));
+  __setHorizonForTests(() => ({ loadAccount: async () => ({ balances: [] }) })); // wallet ligada existe on-chain
   await bindWalletIfFresh({ sub: 'buyer2', iss: 'x', renewed: false }, other.publicKey());
   t.check('binding no se sobrescribe', db.tables.user_wallets[0].wallet_address === kp.publicKey());
   t.check('token renovado nunca liga', (await bindWalletIfFresh({ sub: 'zz', iss: 'x', renewed: true }, other.publicKey()), !db.tables.user_wallets.some((w: any) => w.sub === 'zz')));
@@ -53,7 +54,7 @@ export async function run(t: T) {
   t.check('reutilizar nonce -> 401', !r.ok && r.code === 'session_expired');
   n = await nonceFor(expired);
   r = await call(expired, sessHdr(other, 'buyer2', n, 'POST', '/api/escrow/pay', other.publicKey()));
-  t.check('wallet distinta a la ligada -> 401', !r.ok && r.code === 'session_expired');
+  t.check('wallet distinta a la ligada -> 401 session_wallet_mismatch', !r.ok && r.code === 'session_wallet_mismatch');
   r = await call(expired, sessHdr(other, 'buyer2', n, 'POST', '/api/escrow/pay', kp.publicKey()));
   t.check('firma de otra llave con address ligada -> 401', !r.ok && r.code === 'session_expired');
   r = await call(expired, sessHdr(kp, 'buyer2', n, 'GET'));
