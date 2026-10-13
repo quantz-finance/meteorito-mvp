@@ -2,8 +2,8 @@
 import './polyfills'; // antes de @cavos/kit
 import { CavosProvider, useCavos } from '@cavos/kit/react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { APP_SALT, CAVOS_APP_ID } from './config';
-import type { MeteoritoAuth } from './types';
+import { CAVOS_SECURE_STEP, CAVOS_SOCIAL_RECOVERY, APP_SALT, CAVOS_APP_ID } from './config';
+import { walletInfo, type MeteoritoAuth } from './types';
 import { Brand } from '@/constants/Colors';
 
 export function CavosRoot({ children }: { children: ReactNode }) {
@@ -13,8 +13,8 @@ export function CavosRoot({ children }: { children: ReactNode }) {
   if (!mounted) return null;
   return (
     <CavosProvider
-      config={{ appId: CAVOS_APP_ID, chain: 'stellar', network: 'testnet', appSalt: APP_SALT, persistSession: true }}
-      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], emailMode: 'otp', primaryColor: Brand.purple }}>
+      config={{ appId: CAVOS_APP_ID, chain: 'stellar', network: 'testnet', appSalt: APP_SALT, persistSession: true, socialRecovery: CAVOS_SOCIAL_RECOVERY }}
+      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], emailMode: 'otp', primaryColor: Brand.purple, secureStep: CAVOS_SECURE_STEP }}>
       {children}
     </CavosProvider>
   );
@@ -42,5 +42,6 @@ export function useAuth(): MeteoritoAuth {
     getAuthToken: () => { try { return window.sessionStorage.getItem(`cavos-kit:token:${CAVOS_APP_ID}`); } catch { return null; } },
     signMessage: async (m) => { const r = await stellarWallet(c).signMessage(m); return { publicKey: r.publicKey, signature: b64(r.signature) }; },
     signXdr: (x) => stellarWallet(c).signXdr(x),
+    wallet: walletInfo(c),
   };
 }
