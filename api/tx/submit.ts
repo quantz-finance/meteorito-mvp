@@ -4,7 +4,7 @@
 // El usuario nunca necesita XLM. (signXdr de @cavos/kit no expone relayer: firma y no envía.)
 import { json, fail, orderBySlug, advance, logEvent } from '../_lib/db';
 import { requireCavosUser, HttpError } from '../_lib/auth';
-import { env } from '../_lib/env';
+import { env, autoReleaseAt } from '../_lib/env';
 import { validateEscrowTx, feeBumpAndSend } from '../_lib/feebump';
 
 const ACTIONS: Record<string, { fn: string; role: 'seller' | 'buyer'; from: string }> = {
@@ -35,7 +35,7 @@ export default async function handler(req: any, res: any) {
     }
     const sent = await feeBumpAndSend(inner);
     if (action === 'ship') {
-      const autoRelease = new Date(Date.now() + env.autoReleaseHours() * 3600_000).toISOString();
+      const autoRelease = autoReleaseAt();
       await advance(order.id, 'fondeado', { shipped_tx: sent.hash, shipped_at: new Date().toISOString(), auto_release_at: autoRelease, status: 'enviado' });
     }
     await logEvent(order.id, `tx_${action}`, { hash: sent.hash, innerHash: sent.innerHash, feeBump: true });
