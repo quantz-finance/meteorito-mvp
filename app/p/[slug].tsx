@@ -31,7 +31,7 @@ export default function LinkDeVenta() {
   const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
 
   const load = () => { if (slug) getPublicOrder(String(slug)).then(setOrder).catch((e) => setError((e as Error).message)); };
-  // Respaldo del pg_cron: si el plazo de 24h ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
+  // Respaldo del pg_cron: si el plazo de liberación (AUTO_RELEASE_MINUTES) ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
   useEffect(() => {
     if (order?.status === 'enviado' && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
       fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});

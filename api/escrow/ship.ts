@@ -3,7 +3,7 @@
 //  Modo seller: el cliente firma con wallet.signXdr y lo manda a /api/tx/submit (action 'ship'), que hace fee-bump.
 import { json, fail, orderBySlug, db, advance, logEvent } from '../_lib/db';
 import { requireCavosUser, HttpError } from '../_lib/auth';
-import { env } from '../_lib/env';
+import { env, autoReleaseAt } from '../_lib/env';
 import { evidenceHash } from '../_lib/escrow';
 import * as tw from '../_lib/tw';
 
@@ -16,7 +16,7 @@ export default async function handler(req: any, res: any) {
     const order = await orderBySlug(slug);
     if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no sos el vendedor');
     if (order.status !== 'fondeado') throw new HttpError(409, `status ${order.status}`);
-    const autoRelease = () => new Date(Date.now() + env.autoReleaseHours() * 3600_000).toISOString();
+    const autoRelease = () => autoReleaseAt();
 
       if (!evidence || JSON.stringify(evidence).length > 4000) throw new HttpError(400, 'evidencia inválida');
       const h = evidenceHash(evidence);

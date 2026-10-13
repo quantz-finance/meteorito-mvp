@@ -1,5 +1,5 @@
 // GET /api/health — verifica que el runtime puede cargar TODAS las dependencias del API (CJS, sin require(esm)).
-// Sin secretos, sin env, sin DB ni red. Si alguna dependencia no carga, la función falla al importar (500).
+// Sin secretos (solo config pública: autoReleaseMinutes), sin env requeridas, sin DB ni red. Si alguna dependencia no carga, la función falla al importar (500).
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import * as jose from 'jose';
@@ -44,6 +44,7 @@ export default function handler(req: any, res: any) {
   res.setHeader('Cache-Control', 'no-store');
   res.send(JSON.stringify({
     ok, loaded, node: process.version,
+    config: { autoReleaseMinutes: env.env.autoReleaseMinutes() },
     versions: { jose: version('jose'), '@stellar/stellar-sdk': version('@stellar/stellar-sdk'), '@stellar/stellar-base': version('@stellar/stellar-base'), '@supabase/supabase-js': version('@supabase/supabase-js') },
   }));
 }

@@ -1,3 +1,4 @@
+import { timeLeft, useAutoReleaseWindow } from '@/lib/autorelease';
 import { friendlyPayError } from '@/lib/wallet';
 // Comprador: Pagar seguro -> SINPE simulado -> "Ya pagué" -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
@@ -20,6 +21,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [pin, setPin] = useState<string | null>(null);
   const [sheet, setSheet] = useState<'sinpe' | 'pin' | 'released' | 'dispute' | null>(null);
 
+  const win = useAutoReleaseWindow();
   const run = async (f: () => Promise<void>) => { setBusy(true); setErr(null); try { await f(); } catch (e) { trackError('paybox', e); setErr(friendlyPayError((e as Error).message)); } finally { setBusy(false); } };
 
   const sheets = <>
@@ -75,7 +77,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   } else if (order.status === 'enviado') {
     footer = <>
       <Text style={[T.footnote, { textAlign: 'center' }]}>
-        Si no reportás un problema, el pago se libera solo{order.auto_release_at ? ` el ${new Date(order.auto_release_at).toLocaleString()}` : ' en 24 h'}.
+        Si no reportás un problema, el pago se libera solo{order.auto_release_at ? ` en ${timeLeft(order.auto_release_at)} (${new Date(order.auto_release_at).toLocaleString()})` : ` en ${win}`}.
       </Text>
       {err && <ErrorText>{err}</ErrorText>}
       <PrimaryButton title="Recibí y está bien" icon="checkmark-circle" loading={busy}

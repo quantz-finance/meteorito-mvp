@@ -1,3 +1,4 @@
+import { useAutoReleaseWindow } from '@/lib/autorelease';
 import { StyleSheet, Text, View } from 'react-native';
 import { Glow, LivelyMascot, Reveal, SpaceBackground } from '@/components/space';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,13 +7,16 @@ import { ErrorText, Icon, PrimaryButton, type IconName } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 
-const PERKS: { icon: IconName; text: string }[] = [
+const perks = (w: string): { icon: IconName; text: string }[] => [
   { icon: 'shield-checkmark', text: 'El vendedor cobra solo cuando recibís' },
   { icon: 'keypad', text: 'PIN de entrega para confirmar' },
-  { icon: 'time', text: 'Pago liberado en 24 h si todo está bien' },
+  { icon: 'time', text: `Pago liberado en ${w} si todo está bien` },
 ];
+import { track } from '@/lib/analytics';
+import { LegalLinks } from '@/components/LegalLinks';
 
 export default function Welcome() {
+  const PERKS = perks(useAutoReleaseWindow());
   const { openLogin, isLoading, isAuthenticated, error, configured } = useAuth();
   const busy = isLoading || isAuthenticated; // autenticado pero cargando la cuenta
   return (
@@ -36,7 +40,8 @@ export default function Welcome() {
       <View style={s.bottom}>
         {!configured && <ErrorText>Falta EXPO_PUBLIC_CAVOS_APP_ID en el .env</ErrorText>}
         {error && <ErrorText>{error}</ErrorText>}
-        <PrimaryButton title="Entrar" loading={busy} disabled={!configured} onPress={openLogin} />
+        <PrimaryButton title="Entrar" loading={busy} disabled={!configured} onPress={() => { track('login_started'); openLogin(); }} />
+        <LegalLinks />
         <Text style={s.hint}>Con Google, Apple o tu correo. Sin contraseñas. · Modo prueba</Text>
       </View>
     </SafeAreaView>
