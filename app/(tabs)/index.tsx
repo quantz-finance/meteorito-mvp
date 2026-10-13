@@ -21,6 +21,7 @@ export default function Inicio() {
   const { email, address } = auth;
   const [bal, setBal] = useState<Balances | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [walletMsg, setWalletMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
   const [help, setHelp] = useState(false);
@@ -36,7 +37,7 @@ export default function Inicio() {
     setLoading(true); setErr(null);
     try { setBal(await fetchBalances(address)); } catch (e) { setErr(String((e as Error).message ?? e)); }
     finally { setLoading(false); }
-    if (supabaseConfigured) getSellerOrders(address).then((os) => { setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setErr(m)); }).catch(() => setOrders([]));
+    if (supabaseConfigured) getSellerOrders(address).then((os) => { setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => setWalletMsg(m)); }).catch(() => setOrders([]));
     else setOrders([]);
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -59,8 +60,9 @@ export default function Inicio() {
         </View>
         {!bal && !err ? <Skeleton w="70%" h={48} style={{ marginTop: S.sm }} />
           : <Text style={[T.money, { marginTop: S.sm }]} adjustsFontSizeToFit numberOfLines={1}>{formatCRC(crc)}</Text>}
-        {err ? <Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Deslizá hacia abajo para reintentar.</Text>
-          : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros protegidos llegan acá.</Text>}
+        {err ? <Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Desliza hacia abajo para reintentar.</Text>
+          : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros protegidos llegan aquí.</Text>}
+        {walletMsg ? <Text style={[T.footnote, { color: C.orange }]}>{walletMsg}</Text> : null}
         <LivelyMascot size={104} style={s.mascot} parallax={-0.15} />
       </View></Reveal>
       {/* 2 acciones grandes */}
