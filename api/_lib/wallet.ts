@@ -6,6 +6,21 @@ import { env } from './env';
 import { HttpError } from './auth';
 import { feeBumpAndSend } from './feebump';
 
+const coded = (status: number, code: string, msg: string, extra: Record<string, unknown> = {}) => Object.assign(new HttpError(status, msg), { code, ...extra });
+
+/** Config que necesita la activación (solo NOMBRES, nunca valores). */
+export function activationConfig() {
+  const missing = ['PLATFORM_PUBLIC', 'PLATFORM_SECRET'].filter((n) => !process.env[n]);
+  let matches = false;
+  if (!missing.length) { try { matches = Keypair.fromSecret(process.env.PLATFORM_SECRET!).publicKey() === process.env.PLATFORM_PUBLIC; } catch { matches = false; } }
+  return { missing, platformMatches: matches };
+}
+export function assertActivationConfig() {
+  const c = activationConfig();
+  if (c.missing.length) throw coded(503, 'config_missing', `falta configurar en el servidor: ${c.missing.join(', ')}`, { missing: c.missing });
+  if (!c.platformMatches) throw coded(503, 'platform_mismatch', 'PLATFORM_SECRET no corresponde a PLATFORM_PUBLIC (o es inválido)');
+}
+
 export type WalletState = 'ready' | 'no_account' | 'no_trustline';
 export const usdc = () => new Asset('USDC', env.usdcIssuer());
 
@@ -18,7 +33,10 @@ export const __setHorizonForTests = (h: typeof horizonFor) => { horizonFor = h; 
 export async function walletState(address: string): Promise<WalletState> {
   let acct: any;
   try { acct = await horizonFor().loadAccount(address); }
-  catch (e: any) { if (e?.response?.status === 404 || e?.name === 'NotFoundError') return 'no_account'; throw e; }
+  catch (e: any) {
+    if (e?.response?.status === 404 || e?.name === 'NotFoundError' || e?.constructor?.name === 'NotFoundError') return 'no_account';
+    throw coded(502, 'horizon_error', `Horizon no respondió: ${e?.message ?? e}`);
+  }
   const ok = (acct.balances ?? []).some((b: any) => b.asset_code === 'USDC' && b.asset_issuer === env.usdcIssuer());
   return ok ? 'ready' : 'no_trustline';
 }
@@ -32,7 +50,9 @@ export async function assertReceiverReady(address: string) {
 /** Tx sin firmar: source = platform (paga fee y reserva de la cuenta), changeTrust firmada por el vendedor. */
 export async function buildActivationTx(seller: string, state: Exclude<WalletState, 'ready'>): Promise<Transaction> {
   const platform = env.platformPublic();
-  const src = await horizonFor().loadAccount(platform);
+  const src = await horizonFor().loadAccount(platform).catch((e: any) => {
+    throw e?.response?.status === 404 ? coded(503, 'platform_account_missing', 'la cuenta PLATFORM_PUBLIC no existe en testnet') : coded(502, 'horizon_error', `Horizon: ${e?.message ?? e}`);
+  });
   const b = new TransactionBuilder(src, { fee: '1000', networkPassphrase: Networks.TESTNET })
     .addOperation(Operation.beginSponsoringFutureReserves({ sponsoredId: seller }));
   if (state === 'no_account') b.addOperation(Operation.createAccount({ destination: seller, startingBalance: '0' }));
@@ -63,6 +83,6 @@ export function validateActivationTx(xdr: string, seller: string): Transaction {
 export async function signAndSubmitActivation(tx: Transaction) {
   // Platform firma el inner (sponsor + source) y lo envuelve en fee-bump pagado por la platform: el vendedor nunca necesita XLM.
   tx.sign(Keypair.fromSecret(env.platformSecret()));
-  const { hash } = await feeBumpAndSend(tx);
+  const { hash } = await feeBumpAndSend(tx).catch((e: any) => { throw coded(502, 'submit_failed', e?.message ?? String(e)); });
   return hash;
 }

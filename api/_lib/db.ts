@@ -7,7 +7,13 @@ export const db = (): any => (c ??= createClient(env.supabaseUrl(), env.supabase
 /** Solo tests: inyecta un cliente falso. */
 export const __setDbForTests = (fake: any) => { c = fake; };
 export function json(res: any, status: number, body: unknown) { res.status(status).setHeader('Content-Type', 'application/json'); res.send(JSON.stringify(body)); }
-export function fail(res: any, e: any) { return json(res, e instanceof HttpError ? e.status : 500, { error: e.message }); }
+export function fail(res: any, e: any) {
+  const body: any = { error: e?.message ?? String(e) };
+  if (e?.code && typeof e.code === 'string') body.code = e.code;
+  if (Array.isArray(e?.missing)) body.missing = e.missing;
+  if (!(e instanceof HttpError)) console.error('[api] 500', e);
+  return json(res, e instanceof HttpError ? e.status : 500, body);
+}
 export async function orderBySlug(slug: unknown): Promise<any> {
   if (typeof slug !== 'string' || !/^[a-z0-9]{6}$/.test(slug)) throw new HttpError(400, 'slug inválido');
   const { data, error } = await db().from('orders').select('*').eq('slug', slug).maybeSingle();
