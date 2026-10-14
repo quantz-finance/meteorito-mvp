@@ -31,11 +31,12 @@ export async function run(t: T) {
   };
 
   let r = await call(expired);
-  t.check('vencido sin prueba -> 401 session_expired (español, sin ERR_JWT)', !r.ok && r.status === 401 && r.code === 'session_expired' && r.msg === SESSION_EXPIRED);
-  let n = await nonceFor(expired);
-  t.check('nonce emitido con token vencido (dentro de ventana)', /^[a-f0-9]{48}$/.test(n ?? ''), String(n));
-  r = await call(expired, sessHdr(kp, 'buyer2', n));
-  t.check('sin wallet ligada -> 401 session_wallet_mismatch (no reintentable)', !r.ok && r.code === 'session_wallet_mismatch');
+  t.check('vencido sin wallet ligada, sin prueba -> 401 session_relogin_required (español, sin ERR_JWT)', !r.ok && r.status === 401 && r.code === 'session_relogin_required' && /iniciar sesión/.test(r.msg));
+  let nr = res(); await activate(req(expired, { step: 'nonce' }), nr);
+  t.check('nonce con token vencido sin wallet ligada -> 401 session_relogin_required (sin nonce)', nr.code === 401 && nr.body.code === 'session_relogin_required' && !nr.body.nonce, JSON.stringify(nr.body));
+  r = await call(expired, sessHdr(kp, 'buyer2', 'a'.repeat(48)));
+  t.check('sin wallet ligada con prueba -> 401 session_relogin_required (no reintentable)', !r.ok && r.code === 'session_relogin_required');
+  let n: string;
 
   // Binding con token fresco (pay start real): liga buyer2 -> kp.
   __setHorizonForTests(() => ({ loadAccount: async () => { throw Object.assign(new Error('nf'), { response: { status: 404 } }); } }));

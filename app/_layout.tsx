@@ -11,6 +11,7 @@ import 'react-native-reanimated';
 
 import { CavosRoot, useAuth } from '@/lib/cavos';
 import { bindWalletOnLogin } from '@/lib/wallet';
+import { setReloginHandler } from '@/lib/api';
 import Welcome from '@/components/Welcome';
 import { Brand } from '@/constants/Colors';
 
@@ -53,8 +54,11 @@ function Gate() {
     if (authed) identify(auth.getAuthToken()).then(() => track('signed_in'));
     else resetAnalytics();
   }, [authed]);
-  // Liga sub -> wallet mientras el token Cavos está fresco (una vez por apertura; vencido = se omite).
-  useEffect(() => { if (authed) bindWalletOnLogin(auth); }, [authed, auth.wallet.state]);
+  // Liga sub -> wallet con cada token Cavos fresco nuevo (primer login y re-login; vencido = se omite).
+  const tok = authed ? auth.getAuthToken() : null;
+  useEffect(() => { if (authed) bindWalletOnLogin(auth); }, [authed, auth.wallet.state, tok]);
+  // session_relogin_required: abrir el login de Cavos SIN logout (la llave se queda en este dispositivo).
+  useEffect(() => { setReloginHandler((a) => a.openLogin()); return () => setReloginHandler(null); }, []);
   if (!isPublic && (!auth.isAuthenticated || !auth.address)) return <Welcome />;
   return (
     <Stack screenOptions={{ headerShown: false }}>

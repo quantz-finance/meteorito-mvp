@@ -24,6 +24,7 @@ export class HttpError extends Error { constructor(public status: number, msg: s
 export interface CavosUser { sub: string; email?: string; iss: string; renewed?: boolean }
 export const SESSION_EXPIRED = 'Tu sesión venció. Vuelve a cargar la página para continuar.';
 export const SESSION_OTHER_WALLET = 'Tu sesión pertenece a otra cuenta o billetera. Vuelve a iniciar sesión para continuar.';
+export const SESSION_RELOGIN = 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
 export const AUTH_INVALID = 'No pudimos verificar tu sesión. Vuelve a cargar la página.';
 const coded = (status: number, code: string, msg: string) => Object.assign(new HttpError(status, msg), { code });
 /** ref de la prueba de sesión (sin ':' para no romper el formato del mensaje). Igual en cliente (lib/api.ts). */
@@ -119,21 +120,29 @@ export async function issueSessionNonce(req: any): Promise<string> {
   const v = await verifyToken(token);
   const sub = subOf(v.payload);
   if (!sub) throw coded(401, 'auth_invalid', AUTH_INVALID);
+  if (v.expired) await requireBoundForExpired(sub);
   return sessionStore().issueNonce(sub);
+}
+
+/** Token vencido (firma/iss/aud ya válidos) y SIN fila en user_wallets: renovar nunca va a funcionar -> re-login de Cavos
+ *  (sin logout). Código propio, el cliente no reintenta. Solo aplica a ERR_JWT_EXPIRED; firma/iss/aud malos siguen auth_invalid. */
+async function requireBoundForExpired(sub: string): Promise<string> {
+  const bound = await sessionStore().boundWallet(sub);
+  if (!bound) { console.warn('[auth] renovación rechazada sin wallet ligada: requiere re-login'); throw coded(401, 'session_relogin_required', SESSION_RELOGIN); }
+  return bound;
 }
 
 /** Header X-Meteorito-Proof: base64(JSON {address, publicKey, signature, nonce}). Firma sobre sessionMessage(sub, nonce, METHOD, path). */
 async function renewExpired(req: any, sub: string, exp: number): Promise<void> {
   const fail = (why: string) => { console.warn('[auth] renovación rechazada', why); return coded(401, 'session_expired', SESSION_EXPIRED); };
+  const bound = await requireBoundForExpired(sub);
   const raw: string = req.headers?.['x-meteorito-proof'] ?? '';
   if (!raw) throw fail('sin prueba');
   let p: { address?: string; publicKey?: string; signature?: string; nonce?: string };
   try { p = JSON.parse(Buffer.from(raw, 'base64').toString()); } catch { throw fail('prueba malformada'); }
   if (!p.address || !p.publicKey || !p.signature || !p.nonce || !/^[a-f0-9]{32,128}$/.test(p.nonce)) throw fail('prueba incompleta');
-  const bound = await sessionStore().boundWallet(sub);
-  // Sin binding o wallet distinta: renovar NUNCA va a funcionar con esta prueba -> código propio (el cliente no reintenta).
+  // Wallet distinta a la ligada: renovar NUNCA va a funcionar con esta prueba -> código propio (el cliente no reintenta).
   const relogin = (why: string) => { console.warn('[auth] renovación rechazada', why); return coded(401, 'session_wallet_mismatch', SESSION_OTHER_WALLET); };
-  if (!bound) throw relogin('sin wallet ligada: requiere token fresco');
   if (p.address !== bound) throw relogin(`wallet distinta a la ligada (${p.address.slice(0, 6)} vs ${bound.slice(0, 6)})`);
   const path = String(req.url ?? '').split('?')[0];
   const msg = sessionMessage(sub, p.nonce, String(req.method ?? ''), path);
