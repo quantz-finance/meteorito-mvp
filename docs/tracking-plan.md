@@ -1,6 +1,6 @@
 # Plan de tracking — Meteorito MVP (PostHog)
 
-PostHog org **Quantz**, proyecto **658120**, host `https://us.i.posthog.com`. Key pública de proyecto (`phc_…`) en `EXPO_PUBLIC_POSTHOG_KEY` (cliente) y `POSTHOG_KEY` (server, Vercel). La misma key ya usa la landing (meteorito.app).
+PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyecto (`phc_…`) en `EXPO_PUBLIC_POSTHOG_KEY` (cliente) y `POSTHOG_KEY` (server, Vercel). La misma key ya usa la landing (meteorito.app).
 
 ## Principios de privacidad (Ley 8968)
 - **distinct_id** = `u_` + SHA-256(`meteorito-analytics-v1:` + sub de Cavos), 32 hex. El salt es una constante pública del cliente (`lib/analytics.ts`, `ANALYTICS_SALT`): sirve para no sacar el `sub` crudo del dispositivo; no es secreto. Nunca se envía `sub`, email, teléfono, IMEI, dirección de wallet ni llaves.

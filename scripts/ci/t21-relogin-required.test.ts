@@ -1,4 +1,4 @@
-// (21) Snowden 2026-10-12 (seller2 "Tu sesión venció"): token vencido + cuenta SIN fila en user_wallets.
+// (21) Sesión vencida ("Tu sesión venció"): token vencido + cuenta SIN fila en user_wallets.
 // Servidor: 401 session_relogin_required (solo ERR_JWT_EXPIRED y sin fila). Cliente: nunca reintenta, nunca logout(),
 // abre el login de Cavos; con el token fresco hace bind (nonce firmado) ANTES de cualquier otra acción.
 // Primer login: bind inmediato con el token fresco -> todo usuario nuevo queda con fila desde el inicio.
