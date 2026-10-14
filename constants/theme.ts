@@ -22,18 +22,18 @@ export const S = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 40, xxxl: 48 } as 
 export const R = { sm: 8, md: 16, lg: 24, pill: 999 } as const;
 /** Mínimo táctil iOS HIG */
 export const TOUCH = 44;
-export const BUTTON_H = 56;
+export const BUTTON_H = 50;
 
 const tab: TextStyle = { fontVariant: ['tabular-nums'] };
 export const T = {
-  largeTitle: { fontFamily: Fonts.black, fontSize: 34, lineHeight: 40, color: C.text } as TextStyle,
-  title: { fontFamily: Fonts.black, fontSize: 24, lineHeight: 32, color: C.text } as TextStyle,
-  headline: { fontFamily: Fonts.bold, fontSize: 17, lineHeight: 24, color: C.text } as TextStyle,
-  body: { fontFamily: Fonts.regular, fontSize: 16, lineHeight: 24, color: C.text } as TextStyle,
-  callout: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 22, color: C.textDim } as TextStyle,
+  largeTitle: { fontFamily: Fonts.black, fontSize: 28, lineHeight: 34, color: C.text } as TextStyle,
+  title: { fontFamily: Fonts.black, fontSize: 21, lineHeight: 27, color: C.text } as TextStyle,
+  headline: { fontFamily: Fonts.bold, fontSize: 16, lineHeight: 22, color: C.text } as TextStyle,
+  body: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 21, color: C.text } as TextStyle,
+  callout: { fontFamily: Fonts.regular, fontSize: 14, lineHeight: 20, color: C.textDim } as TextStyle,
   caption: { fontFamily: Fonts.bold, fontSize: 12, lineHeight: 16, color: C.textDim, letterSpacing: 0.6, textTransform: 'uppercase' } as TextStyle,
-  footnote: { fontFamily: Fonts.regular, fontSize: 13, lineHeight: 18, color: C.textDim } as TextStyle,
-  money: { fontFamily: Fonts.black, fontSize: 40, lineHeight: 48, color: C.text, ...tab } as TextStyle,
+  footnote: { fontFamily: Fonts.regular, fontSize: 12, lineHeight: 17, color: C.textDim } as TextStyle,
+  money: { fontFamily: Fonts.black, fontSize: 34, lineHeight: 40, color: C.text, ...tab } as TextStyle,
   moneySm: { fontFamily: Fonts.black, fontSize: 20, lineHeight: 24, color: C.text, ...tab } as TextStyle,
 };
 
