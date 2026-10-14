@@ -1,8 +1,8 @@
 import { ensureWalletReady, walletErrorNotice } from '@/lib/wallet';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Image, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ui } from '@/components/ui';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen } from '@/components/ds';
 import { categoryIcon } from '@/components/categoryIcons';
@@ -11,17 +11,25 @@ import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { CATEGORIES, CONDITIONS, checksSummary, getCategory, validateIdentifier } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { createOrder, formatCRC } from '@/lib/orders';
-import { MAX_PHOTOS, newDraftId, uploadPhoto } from '@/lib/photos';
+import { compressPhoto, MAX_PHOTOS, newDraftId, uploadCompressed, uploadPhoto } from '@/lib/photos';
 import { supabaseConfigured } from '@/lib/supabase';
 import { priceBucket, track, trackError } from '@/lib/analytics';
 
-interface Photo { uri: string; mime: string; width?: number; height?: number }
-const STEPS = ['Categoría', 'Fotos', 'Detalles', 'Precio', 'Revisar'] as const;
+type PhotoStatus = 'processing' | 'ready' | 'uploading' | 'done' | 'error';
+interface Photo { key: string; uri: string; mime: string; width?: number; height?: number; status: PhotoStatus; blob?: Blob }
+
+/** Un paso = una pregunta. 'checks' solo aparece si la categoría tiene revisión. */
+type StepKey = 'categoria' | 'fotos' | 'modelo' | 'estado' | 'identificador' | 'checks' | 'descripcion' | 'precio' | 'revisar';
+const STEP_LABEL: Record<StepKey, string> = {
+  categoria: 'Categoría', fotos: 'Fotos', modelo: 'Marca y modelo', estado: 'Estado', identificador: 'Identificador',
+  checks: 'Revisión', descripcion: 'Descripción', precio: 'Precio', revisar: 'Revisar',
+};
+let photoSeq = 0;
 
 export default function Vender() {
   const auth = useAuth();
   const { address } = auth;
-  const [step, setStep] = useState(0);
+  const [stepIdx, setStepIdx] = useState(0);
   const [categoryId, setCategoryId] = useState('celular');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
@@ -35,17 +43,34 @@ export default function Vender() {
   const [busy, setBusy] = useState(false);
 
   const cat = getCategory(categoryId)!;
+  const steps = useMemo<StepKey[]>(() => (['categoria', 'fotos', 'modelo', 'estado', 'identificador',
+    ...(cat.checks.length ? ['checks' as const] : []), 'descripcion', 'precio', 'revisar']), [cat]);
+  const step = steps[Math.min(stepIdx, steps.length - 1)];
+  const goTo = useCallback((k: StepKey) => { setError(null); setStepIdx(Math.max(0, steps.indexOf(k))); }, [steps]);
   const priceNum = Number(price.replace(/\D/g, ''));
   const idError = useMemo(() => (identifier ? validateIdentifier(cat, identifier) : null), [cat, identifier]);
+  const photosBusy = photos.some((p) => p.status === 'processing');
+
+  const setPhoto = useCallback((key: string, patch: Partial<Photo>) =>
+    setPhotos((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p))), []);
 
   async function pickPhotos() {
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS - photos.length, quality: 1,
     });
     if (res.canceled) return;
-    const added = res.assets.map((a) => ({ uri: a.uri, mime: a.mimeType ?? 'image/jpeg', width: a.width, height: a.height }));
+    const added: Photo[] = res.assets.slice(0, MAX_PHOTOS - photos.length).map((a) => ({
+      key: `p${++photoSeq}`, uri: a.uri, mime: a.mimeType ?? 'image/jpeg', width: a.width, height: a.height, status: 'processing',
+    }));
     setPhotos((p) => [...p, ...added].slice(0, MAX_PHOTOS));
+    // Comprimir en el dispositivo apenas se eligen (una a la vez): cada foto muestra su propio estado
+    // y al publicar solo queda subir JPEGs livianos.
+    for (const ph of added) {
+      try { setPhoto(ph.key, { status: 'ready', blob: await compressPhoto(ph) }); }
+      catch { setPhoto(ph.key, { status: 'ready' }); } // se reintenta comprimir al subir
+    }
   }
+  const removePhoto = useCallback((key: string) => { haptic.tap(); setPhotos((ps) => ps.filter((p) => p.key !== key)); }, []);
 
   async function submit() {
     setError(null);
@@ -62,13 +87,23 @@ export default function Vender() {
       await ensureWalletReady(auth).catch((e) => { throw new Error(walletErrorNotice(e)); });
       const draftId = newDraftId();
       const urls: string[] = [];
-      for (const [i, p] of photos.entries()) urls.push(await uploadPhoto(auth, p, draftId, i).catch((e) => { track('photo_upload_failed', { context: 'listing', index: i }); throw e; }));
+      for (const [i, p] of photos.entries()) {
+        setPhoto(p.key, { status: 'uploading' });
+        try {
+          urls.push(p.blob ? await uploadCompressed(auth, p.blob, draftId, i) : await uploadPhoto(auth, p, draftId, i));
+          setPhoto(p.key, { status: 'done' });
+        } catch (e) {
+          setPhoto(p.key, { status: 'error' });
+          track('photo_upload_failed', { context: 'listing', index: i });
+          throw e;
+        }
+      }
       const slug = await createOrder(auth, {
         category: cat.id, brand: brand.trim(), model: model.trim(),
         condition, price_crc: priceNum, description: description.trim(), identifier: identifier.trim(),
         photos: urls, checks: checksSummary(cat, checks),
       });
-      setBrand(''); setModel(''); setPrice(''); setDescription(''); setIdentifier(''); setChecks({}); setPhotos([]); setStep(0);
+      setBrand(''); setModel(''); setPrice(''); setDescription(''); setIdentifier(''); setChecks({}); setPhotos([]); setStepIdx(0);
       track('link_created', { category: cat.id, photos: urls.length, price_bucket: priceBucket(priceNum) });
       router.push({ pathname: '/compartir/[slug]', params: { slug } });
     } catch (e) {
@@ -82,45 +117,49 @@ export default function Vender() {
 
   /** Validación por paso (solo UX; submit() sigue validando todo). */
   function stepError(): string | null {
-    if (step === 1 && photos.length < 1) return 'Agregá al menos una foto';
-    if (step === 2) {
-      if (!brand.trim() || !model.trim()) return 'Completá marca y modelo';
-      const e = validateIdentifier(cat, identifier); if (e) return e;
+    if (step === 'fotos') {
+      if (photos.length < 1) return 'Agregá al menos una foto';
+      if (photosBusy) return 'Esperá a que terminen de cargar las fotos';
     }
-    if (step === 3 && (!priceNum || priceNum < 1000)) return 'Poné un precio válido en colones';
+    if (step === 'modelo' && (!brand.trim() || !model.trim())) return 'Completá marca y modelo';
+    if (step === 'identificador') return validateIdentifier(cat, identifier);
+    if (step === 'precio' && (!priceNum || priceNum < 1000)) return 'Poné un precio válido en colones';
     return null;
   }
   function next() {
     const e = stepError();
     if (e) { haptic.error(); return setError(e); }
     setError(null);
-    if (step < STEPS.length - 1) { track('sell_step_completed', { step, step_name: STEPS[step] as any }); setStep(step + 1); } else { track('sell_submit_tapped', { step }); submit(); }
+    if (stepIdx < steps.length - 1) { track('sell_step_completed', { step: stepIdx, step_name: step as any }); setStepIdx(stepIdx + 1); }
+    else { track('sell_submit_tapped', { step: stepIdx }); submit(); }
   }
 
+  const last = step === 'revisar';
+  const optional = step === 'descripcion' || (step === 'identificador' && !cat.identifier.required);
   const footer = (
     <View style={{ flexDirection: 'row', gap: S.sm }}>
-      {step > 0 && <View style={{ width: 56 }}><IconButton icon="chevron-back" label="Atrás" onPress={() => { setError(null); setStep(step - 1); }} /></View>}
+      {stepIdx > 0 && <View style={{ width: 52 }}><IconButton icon="chevron-back" label="Atrás" onPress={() => { setError(null); setStepIdx(stepIdx - 1); }} /></View>}
       <View style={{ flex: 1 }}>
-        <PrimaryButton title={step === STEPS.length - 1 ? 'Crear link de venta' : 'Continuar'} icon={step === STEPS.length - 1 ? 'link' : undefined}
-          loading={busy} onPress={next} />
+        <PrimaryButton title={last ? 'Crear link de venta' : optional && !(step === 'descripcion' ? description : identifier).trim() ? 'Omitir' : 'Continuar'}
+          icon={last ? 'link' : undefined} loading={busy} disabled={step === 'fotos' && photosBusy} onPress={next} />
       </View>
     </View>
   );
 
   return (
-    <Screen title="Vender" subtitle={`Paso ${step + 1} de ${STEPS.length} · ${STEPS[step]}`} footer={footer}>
-      <View style={s.progress}>{STEPS.map((_, i) => <View key={i} style={[s.progressSeg, i <= step && { backgroundColor: C.lilac }]} />)}</View>
+    <Screen title="Vender" subtitle={`Paso ${stepIdx + 1} de ${steps.length} · ${STEP_LABEL[step]}`} footer={footer}>
+      <View style={s.progress}>{steps.map((_, i) => <View key={i} style={[s.progressSeg, i <= stepIdx && { backgroundColor: C.lilac }]} />)}</View>
 
-      {step === 0 && <>
+      {step === 'categoria' && <>
         <Text style={T.title}>¿Qué vas a vender?</Text>
         <View style={s.grid}>
           {CATEGORIES.map((c) => {
             const on = c.id === categoryId;
             return (
               <Pressable key={c.id} accessibilityRole="button" accessibilityState={{ selected: on }}
-                onPress={() => { haptic.tap(); if (c.id !== categoryId) { setCategoryId(c.id); setChecks({}); } }}
+                onPress={() => { haptic.tap(); if (c.id !== categoryId) { setCategoryId(c.id); setChecks({}); setIdentifier(''); } }}
                 style={({ pressed }) => [s.tile, on && s.tileOn, pressed && { opacity: 0.85 }]}>
-                <Icon name={categoryIcon(c.id)} size={32} color={on ? C.purpleDark : C.lilac} />
+                <Icon name={categoryIcon(c.id)} size={28} color={on ? C.purpleDark : C.lilac} />
                 <Text style={[T.headline, on && { color: C.purpleDark }]}>{c.label}</Text>
               </Pressable>
             );
@@ -128,62 +167,77 @@ export default function Vender() {
         </View>
       </>}
 
-      {step === 1 && <>
-        <Text style={T.title}>Agregá fotos</Text>
+      {step === 'fotos' && <>
+        <Text style={T.title}>Agregá fotos 📸</Text>
         <Text style={T.callout}>De 1 a 4 fotos claras, con buena luz. Tocá una para quitarla.</Text>
         <View style={s.grid}>
-          {photos.map((p, i) => (
-            <Pressable key={p.uri} style={s.photo} accessibilityLabel="Quitar foto" onPress={() => { haptic.tap(); setPhotos((ps) => ps.filter((_, j) => j !== i)); }}>
-              <Image source={{ uri: p.uri }} style={StyleSheet.absoluteFill} />
-              <View style={s.photoX}><Icon name="close" size={16} color={C.white} /></View>
-            </Pressable>
-          ))}
-          {photos.length < 4 && (
+          {photos.map((p) => <PhotoTile key={p.key} photo={p} index={photos.indexOf(p)} total={photos.length} onRemove={busy ? undefined : removePhoto} />)}
+          {photos.length < MAX_PHOTOS && (
             <Pressable onPress={pickPhotos} accessibilityRole="button" style={({ pressed }) => [s.photo, s.photoAdd, pressed && { opacity: 0.8 }]}>
-              <Icon name="camera" size={32} color={C.lilac} />
-              <Text style={[T.footnote, { color: C.lilac }]}>Agregar ({photos.length}/4)</Text>
+              <Icon name="camera" size={28} color={C.lilac} />
+              <Text style={[T.footnote, { color: C.lilac }]}>Agregar ({photos.length}/{MAX_PHOTOS})</Text>
             </Pressable>
           )}
         </View>
       </>}
 
-      {step === 2 && <>
-        <Text style={T.title}>Detalles del {cat.label.toLowerCase()}</Text>
-        <Field label="Marca"><TextInput style={ui.input} placeholder="Ej. Apple, Sony, Lenovo" placeholderTextColor={C.textDim} value={brand} onChangeText={setBrand} /></Field>
-        <Field label="Modelo"><TextInput style={ui.input} placeholder="Ej. iPhone 13 128 GB" placeholderTextColor={C.textDim} value={model} onChangeText={setModel} /></Field>
-        <Field label="Estado">
-          <View style={ui.row}>
-            {CONDITIONS.map((c) => (
-              <Pressable key={c} onPress={() => { haptic.tap(); setCondition(c); }} style={[ui.chip, c === condition && ui.chipOn]}>
-                <Text style={[ui.chipText, c === condition && { color: C.purpleDark }]}>{c}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Field>
-        <Field label={cat.identifier.label} hint="Nunca se muestra completo: el comprador solo ve los últimos 4.">
-          <TextInput style={ui.input} placeholder={cat.identifier.label} placeholderTextColor={C.textDim} autoCapitalize="characters"
-            keyboardType={cat.identifier.kind === 'imei' ? 'number-pad' : 'default'} value={identifier} onChangeText={setIdentifier} />
-          {idError && <Text style={ui.error}>{idError}</Text>}
-        </Field>
-        {cat.checks.length > 0 && (
-          <Card>
-            <Text style={T.caption}>Revisión antes de vender</Text>
-            {cat.checks.map((c) => (
-              <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, minHeight: TOUCH }}>
-                <Text style={[T.body, { flex: 1 }]}>{c.label}{c.blocksRelease ? ' *' : ''}</Text>
-                <Switch value={!!checks[c.id]} onValueChange={(v) => { haptic.tap(); setChecks((x) => ({ ...x, [c.id]: v })); }} trackColor={{ true: C.success, false: C.surface2 }} />
-              </View>
-            ))}
-            <Text style={T.footnote}>* Obligatorio para liberar el pago.</Text>
-          </Card>
-        )}
-        <Field label="Descripción (opcional)">
-          <TextInput style={[ui.input, { minHeight: 96, paddingTop: S.sm + 4, textAlignVertical: 'top' }]} multiline placeholder="Batería, detalles, qué incluye…"
-            placeholderTextColor={C.textDim} value={description} onChangeText={setDescription} />
-        </Field>
+      {step === 'modelo' && <>
+        <Text style={T.title}>¿Qué {cat.label.toLowerCase()} es?</Text>
+        <Field label="Marca"><TextInput style={ui.input} placeholder="Ej. Apple, Sony, Lenovo" placeholderTextColor={C.textDim} value={brand} onChangeText={setBrand} autoFocus returnKeyType="next" /></Field>
+        <Field label="Modelo"><TextInput style={ui.input} placeholder="Ej. iPhone 13 128 GB" placeholderTextColor={C.textDim} value={model} onChangeText={setModel} returnKeyType="next" onSubmitEditing={next} /></Field>
       </>}
 
-      {step === 3 && <>
+      {step === 'estado' && <>
+        <Text style={T.title}>¿Cómo está?</Text>
+        <View style={{ gap: S.sm }}>
+          {CONDITIONS.map((c) => {
+            const on = c === condition;
+            return (
+              <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: on }}
+                onPress={() => { haptic.tap(); setCondition(c); }} style={[s.option, on && s.optionOn]}>
+                <Text style={[T.headline, on && { color: C.purpleDark }]}>{c}</Text>
+                <Icon name={on ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={on ? C.purpleDark : C.textDim} />
+              </Pressable>
+            );
+          })}
+        </View>
+      </>}
+
+      {step === 'identificador' && <>
+        <Text style={T.title}>{cat.identifier.label}</Text>
+        <Text style={T.callout}>{cat.identifier.kind === 'imei'
+          ? 'Lo encontrás en Ajustes › General › Información. Podés dejarlo vacío por ahora.'
+          : cat.identifier.required ? 'Lo usamos para verificar el equipo.' : 'Podés dejarlo vacío.'}</Text>
+        <TextInput style={ui.input} placeholder={cat.identifier.kind === 'imei' ? '15 dígitos' : cat.identifier.label} placeholderTextColor={C.textDim}
+          autoCapitalize="characters" autoFocus
+          keyboardType={cat.identifier.kind === 'imei' ? 'number-pad' : 'default'} inputMode={cat.identifier.kind === 'imei' ? 'numeric' : 'text'}
+          maxLength={cat.identifier.kind === 'imei' ? 15 : 30} value={identifier}
+          onChangeText={(v) => setIdentifier(cat.identifier.kind === 'imei' ? v.replace(/\D/g, '') : v)} />
+        {idError && <Text style={ui.error}>{idError}</Text>}
+        <Text style={T.footnote}>Nunca se muestra completo: el comprador solo ve los últimos 4.</Text>
+      </>}
+
+      {step === 'checks' && <>
+        <Text style={T.title}>Revisión antes de vender</Text>
+        <Card>
+          {cat.checks.map((c) => (
+            <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, minHeight: TOUCH }}>
+              <Text style={[T.body, { flex: 1 }]}>{c.label}{c.blocksRelease ? ' *' : ''}</Text>
+              <Switch value={!!checks[c.id]} onValueChange={(v) => { haptic.tap(); setChecks((x) => ({ ...x, [c.id]: v })); }} trackColor={{ true: C.success, false: C.surface2 }} />
+            </View>
+          ))}
+          <Text style={T.footnote}>* Obligatorio para liberar el pago.</Text>
+        </Card>
+      </>}
+
+      {step === 'descripcion' && <>
+        <Text style={T.title}>¿Algo más que contar?</Text>
+        <Text style={T.callout}>Opcional: batería, detalles, qué incluye.</Text>
+        <TextInput style={[ui.input, { minHeight: 96, paddingTop: S.sm + 4, textAlignVertical: 'top' }]} multiline placeholder="Batería al 89 %, incluye cargador…"
+          placeholderTextColor={C.textDim} value={description} onChangeText={setDescription} />
+      </>}
+
+      {step === 'precio' && <>
         <Text style={T.title}>¿En cuánto lo vendés?</Text>
         <Card style={{ paddingVertical: S.lg, alignItems: 'center' }}>
           <TextInput style={s.priceInput} placeholder="₡0" placeholderTextColor={C.textDim} keyboardType="number-pad" autoFocus
@@ -196,11 +250,11 @@ export default function Vender() {
         </View>
       </>}
 
-      {step === 4 && <>
+      {step === 'revisar' && <>
         <Text style={T.title}>Revisá y publicá</Text>
         <Card style={{ gap: S.md }}>
           <View style={{ flexDirection: 'row', gap: S.md, alignItems: 'center' }}>
-            {photos[0] ? <Image source={{ uri: photos[0].uri }} style={{ width: 64, height: 64, borderRadius: R.md }} />
+            {photos[0] ? <Image source={{ uri: photos[0].uri }} style={{ width: 56, height: 56, borderRadius: R.md }} />
               : <View style={[s.thumb]}><Icon name={categoryIcon(cat.id)} size={28} color={C.lilac} /></View>}
             <View style={{ flex: 1 }}>
               <Text style={T.headline}>{brand} {model}</Text>
@@ -215,8 +269,8 @@ export default function Vender() {
             </View>
           ))}
         </Card>
-        {([['Categoría', 0], ['Fotos', 1], ['Detalles', 2], ['Precio', 3]] as const).map(([l, i]) => (
-          <Pressable key={l} onPress={() => setStep(i)} style={s.editRow}>
+        {([['Categoría', 'categoria'], ['Fotos', 'fotos'], ['Marca y modelo', 'modelo'], ['Estado', 'estado'], ['Precio', 'precio']] as const).map(([l, k]) => (
+          <Pressable key={l} onPress={() => goTo(k)} style={s.editRow}>
             <Text style={T.body}>Editar {l.toLowerCase()}</Text><Icon name="chevron-forward" size={18} color={C.textDim} />
           </Pressable>
         ))}
@@ -227,6 +281,29 @@ export default function Vender() {
   );
 }
 
+const PHOTO_TEXT: Record<PhotoStatus, string> = { processing: 'Optimizando…', ready: '', uploading: 'Subiendo…', done: '', error: 'No se subió' };
+
+/** Foto con su propio estado: placeholder + spinner mientras carga/optimiza/sube. Memo: no se re-renderiza al teclear. */
+const PhotoTile = memo(function PhotoTile({ photo, index, total, onRemove }: { photo: Photo; index: number; total: number; onRemove?: (key: string) => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const busy = photo.status === 'processing' || photo.status === 'uploading' || !loaded;
+  return (
+    <Pressable style={s.photo} accessibilityLabel="Quitar foto" disabled={!onRemove || photo.status === 'uploading'} onPress={() => onRemove?.(photo.key)}>
+      <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
+      {busy || photo.status === 'error' ? (
+        <View style={s.photoOverlay}>
+          {photo.status === 'error' ? <Icon name="alert-circle" size={26} color={C.orange} /> : <ActivityIndicator color={C.white} />}
+          <Text style={[T.footnote, { color: C.white }]}>
+            {photo.status === 'uploading' ? `Subiendo ${index + 1}/${total}…` : PHOTO_TEXT[photo.status] || 'Cargando…'}
+          </Text>
+        </View>
+      ) : photo.status === 'done' ? (
+        <View style={s.photoX}><Icon name="checkmark" size={16} color={C.success} /></View>
+      ) : onRemove ? <View style={s.photoX}><Icon name="close" size={16} color={C.white} /></View> : null}
+    </Pressable>
+  );
+});
+
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return <View style={{ gap: S.sm }}><Text style={T.caption}>{label}</Text>{children}{hint ? <Text style={T.footnote}>{hint}</Text> : null}</View>;
 }
@@ -235,12 +312,15 @@ const s = StyleSheet.create({
   progress: { flexDirection: 'row', gap: S.xs },
   progressSeg: { flex: 1, height: 4, borderRadius: 2, backgroundColor: C.surface2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
-  tile: { flexBasis: '30%', flexGrow: 1, aspectRatio: 1, maxHeight: 128, backgroundColor: C.surface, borderRadius: R.lg, alignItems: 'center', justifyContent: 'center', gap: S.sm, borderWidth: 1, borderColor: C.line },
+  tile: { flexBasis: '30%', flexGrow: 1, aspectRatio: 1, maxHeight: 112, backgroundColor: C.surface, borderRadius: R.lg, alignItems: 'center', justifyContent: 'center', gap: S.sm, borderWidth: 1, borderColor: C.line },
   tileOn: { backgroundColor: C.lilac, borderColor: C.lilac },
   photo: { flexBasis: '47%', flexGrow: 1, aspectRatio: 1, borderRadius: R.lg, overflow: 'hidden', backgroundColor: C.surface },
   photoAdd: { alignItems: 'center', justifyContent: 'center', gap: S.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: C.lilac, backgroundColor: 'transparent' },
   photoX: { position: 'absolute', top: S.sm, right: S.sm, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-  priceInput: { fontFamily: Fonts.black, fontSize: 44, color: C.text, textAlign: 'center', minWidth: 200, fontVariant: ['tabular-nums'], outlineStyle: 'none' } as object,
+  priceInput: { fontFamily: Fonts.black, fontSize: 38, color: C.text, textAlign: 'center', minWidth: 200, fontVariant: ['tabular-nums'], outlineStyle: 'none' } as object,
+  option: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52, paddingHorizontal: S.md, borderRadius: R.md, backgroundColor: C.surface, borderWidth: 1, borderColor: C.line },
+  optionOn: { backgroundColor: C.lilac, borderColor: C.lilac },
+  photoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(26,11,61,0.6)', alignItems: 'center', justifyContent: 'center', gap: S.xs },
   thumb: { width: 64, height: 64, borderRadius: R.md, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
   editRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: TOUCH, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line },
 });

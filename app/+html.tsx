@@ -17,7 +17,7 @@ export default function Root({ children }: { children: ReactNode }) {
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Meteorito" />
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: 'html,body{background-color:#1A0B3D;}body{padding-top:env(safe-area-inset-top);}' }} />
+        <style dangerouslySetInnerHTML={{ __html: 'html,body{background-color:#1A0B3D;}html,body,#root{height:100%;height:100dvh;}body{overflow:hidden;overscroll-behavior:none;}' }} />
       </head>
       <body>{children}</body>
     </html>

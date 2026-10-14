@@ -38,7 +38,11 @@ export function newDraftId(): string {
 
 /** Comprime y sube una foto. index 0..3 dentro del borrador. Devuelve la URL pública. */
 export async function uploadPhoto(auth: MeteoritoAuth, p: PickedPhoto, draftId: string, index: number): Promise<string> {
-  const blob = await compressPhoto(p);
+  return uploadCompressed(auth, await compressPhoto(p), draftId, index);
+}
+
+/** Sube un JPEG ya comprimido (p. ej. comprimido al elegir la foto). */
+export async function uploadCompressed(auth: MeteoritoAuth, blob: Blob, draftId: string, index: number): Promise<string> {
   const r = await api<{ path: string; token: string; publicUrl: string }>(auth, '/api/photos/upload-url', { draftId, index, mime: 'image/jpeg', size: blob.size });
   const { error } = await supabase().storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' });
   if (error) throw new Error(`No se pudo subir la foto: ${error.message}`);

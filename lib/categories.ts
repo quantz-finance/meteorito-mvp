@@ -12,7 +12,7 @@ export interface Category {
 export const CATEGORIES: Category[] = [
   {
     id: 'celular', label: 'Celular',
-    identifier: { kind: 'imei', required: true, label: 'IMEI (marcá *#06#)' },
+    identifier: { kind: 'imei', required: false, label: 'IMEI (opcional)' },
     checks: [
       { id: 'imei_limpio', label: 'IMEI limpio (sin reporte de robo ni deuda)', blocksRelease: true },
       { id: 'cuenta_off', label: 'iCloud / cuenta de Google desactivada', blocksRelease: true },

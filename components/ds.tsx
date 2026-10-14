@@ -267,7 +267,7 @@ export const st = StyleSheet.create({
   btn: { minHeight: BUTTON_H, borderRadius: R.md, backgroundColor: C.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: S.sm, paddingHorizontal: S.lg, width: '100%', maxWidth: 560, alignSelf: 'center' },
   btnSecondary: { backgroundColor: C.lilacBg },
   btnGhost: { backgroundColor: 'transparent', minHeight: TOUCH },
-  btnText: { fontFamily: Fonts.bold, fontSize: 17 },
+  btnText: { fontFamily: Fonts.bold, fontSize: 16 },
   iconBtn: { width: TOUCH, height: TOUCH, borderRadius: TOUCH / 2, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
   disputeNote: { flexDirection: 'row', gap: S.sm, alignItems: 'center', backgroundColor: C.warnBg, borderRadius: R.sm, padding: S.sm },
   chip: { flexDirection: 'row', alignItems: 'center', gap: S.xs, borderRadius: R.pill, paddingHorizontal: S.sm + 2, paddingVertical: S.xs, alignSelf: 'flex-start' },
