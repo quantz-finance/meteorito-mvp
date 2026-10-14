@@ -98,7 +98,7 @@ export async function releaseFunds(contractId: string, releaseSignerSecret: stri
   return buildSignSend(() => tw<{ unsignedTransaction: string }>('/escrow/single-release/release-funds', { contractId, releaseSigner }), releaseSignerSecret);
 }
 
-/** Lectura con validateOnChain=true (Snowden: verificar on-chain antes de liberar). */
+/** Lectura con validateOnChain=true (verificar on-chain antes de liberar). */
 export async function getEscrow(contractId: string) {
   const q = new URLSearchParams({ validateOnChain: 'true' });
   q.append('contractIds[]', contractId); // la API exige sintaxis de array

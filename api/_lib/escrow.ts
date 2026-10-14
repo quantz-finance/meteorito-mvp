@@ -84,7 +84,7 @@ export const evidenceHash = (evidence: unknown) => 'sha256:' + createHash('sha25
 
 export type ApproveReason = 'buyer_confirm' | 'pin' | 'timeout';
 
-/** Backend approver aprueba + release signer libera, verificando on-chain antes (Snowden). */
+/** Backend approver aprueba + release signer libera, verificando on-chain antes. */
 export async function approveAndRelease(order: any, reason: ApproveReason) {
   if (order.status !== 'enviado' && order.status !== 'entregado') throw new HttpError(409, `status ${order.status}`);
   if (order.dispute_tx || order.disputed_at) throw new HttpError(409, 'pedido en disputa');
