@@ -1,12 +1,16 @@
 // Fondo espacial de Meteorito (portado de meteorito.app): capas de imagen, no cientos de nodos.
 // Solo anima transform/opacity con Reanimated (hilo UI). Respeta "Reducir movimiento".
-import { createContext, useContext, useEffect, type ReactNode } from 'react';
-import { Image, StyleSheet, useWindowDimensions, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
+import { createContext, memo, useContext, useEffect, type ReactNode } from 'react';
+import { Image, Platform, StyleSheet, useWindowDimensions, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, FadeIn, FadeInDown, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue,
   withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { C } from '@/constants/theme';
+
+/** En web (Safari iOS) Reanimated corre en el hilo JS: cada nodo animado cuesta frames.
+ *  Ahí dejamos solo lo esencial (mascota + llamas) y el fondo quieto. */
+const WEB = Platform.OS === 'web';
 
 const IMG = {
   far: require('../assets/images/space/stars-far.webp'),
@@ -25,10 +29,10 @@ export type SpaceMode = 'full' | 'calm' | 'none';
  * full: estrellas con parallax + titileo, nebulosa a la deriva, un meteorito ocasional.
  * calm: estrellas fijas y tenues (pantallas de pago: monto y botón primero).
  */
-export function SpaceBackground({ mode = 'full', scrollY }: { mode?: SpaceMode; scrollY?: SharedValue<number> | null }) {
+export const SpaceBackground = memo(function SpaceBackground({ mode = 'full', scrollY }: { mode?: SpaceMode; scrollY?: SharedValue<number> | null }) {
   const reduce = useReducedMotion();
   const { width, height } = useWindowDimensions();
-  const live = mode === 'full' && !reduce;
+  const live = mode === 'full' && !reduce && !WEB;
   const tw = useSharedValue(0.75);
   const drift = useSharedValue(0);
   const streak = useSharedValue(0);
@@ -70,14 +74,14 @@ export function SpaceBackground({ mode = 'full', scrollY }: { mode?: SpaceMode; 
       {live && <Animated.Image source={IMG.comet} style={[s.comet, streakS]} />}
     </View>
   );
-}
+});
 
 /** Entrada escalonada (fade + slide). Con reducir movimiento: solo fade. */
-export function Reveal({ i = 0, children, style }: { i?: number; children: ReactNode; style?: StyleProp<ViewStyle> }) {
+export const Reveal = memo(function Reveal({ i = 0, children, style }: { i?: number; children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const reduce = useReducedMotion();
-  const entering = reduce ? FadeIn.duration(200) : FadeInDown.delay(60 + i * 70).duration(420).springify().damping(18);
+  const entering = reduce ? FadeIn.duration(200) : FadeInDown.delay(40 + i * 50).duration(300);
   return <Animated.View entering={entering} style={style}>{children}</Animated.View>;
-}
+});
 
 /* ---------- Mascota con estela (port exacto de .meteor en meteorito.app) ----------
  * Mismas capas que el landing: 3 llamas (f1-f3), 3 líneas de velocidad (l1-l3) y 10 brasas (e1-e10)
@@ -175,8 +179,8 @@ export function LivelyMascot({ size = 96, style, parallax = 0.35, variant = 'big
         <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: variant === 'mini' ? 0.55 : reduce ? 0.8 : 1 }}>
           <View style={{ position: 'absolute', left: 0.62 * w, top: 0.6 * h, width: 0, height: 0, transform: [{ rotate: '216deg' }] }}>
             {FLAMES.map((f) => <Flame key={f.img} f={f} t={t} cq={cq} live={live} />)}
-            {live && LINES.map((l, i) => <Line key={i} l={l} t={t} cq={cq} />)}
-            {live && EMBERS.map((m, i) => <Ember key={i} m={m} t={t} cq={cq} />)}
+            {live && !WEB && LINES.map((l, i) => <Line key={i} l={l} t={t} cq={cq} />)}
+            {live && !WEB && EMBERS.map((m, i) => <Ember key={i} m={m} t={t} cq={cq} />)}
           </View>
         </View>
         <Image source={TRAIL.mascot} resizeMode="contain" style={{ width: w, height: h }} />
@@ -190,7 +194,7 @@ export function Glow({ style, color = 'rgba(255,138,61,0.35)' }: { style?: Style
   const reduce = useReducedMotion();
   const p = useSharedValue(0);
   useEffect(() => {
-    if (reduce) return;
+    if (reduce || WEB) return;
     p.value = withRepeat(withTiming(1, { duration: 3200, easing: Easing.inOut(Easing.sin) }), -1, true);
     return () => cancelAnimation(p);
   }, [reduce]);
