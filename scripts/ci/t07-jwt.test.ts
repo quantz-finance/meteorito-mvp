@@ -2,10 +2,14 @@
 import type { T } from './setup';
 import { AUD, installTestJwks, token } from './jwt';
 import { requireCavosUser } from '../../api/_lib/auth';
+import { __setDbForTests } from '../../api/_lib/db';
+import { fakeDb } from './fakedb';
 
 export async function run(t: T) {
   await installTestJwks();
+  const db = fakeDb(); db.tables.user_wallets = []; __setDbForTests(db as any);
   const call = async (tok: string) => { try { await requireCavosUser({ headers: { authorization: `Bearer ${tok}` } }); return 200; } catch (e: any) { return e.status ?? 500; } };
+  const codeOf = async (tok: string) => { try { await requireCavosUser({ headers: { authorization: `Bearer ${tok}` } }); return 'ok'; } catch (e: any) { return `${e.status}:${e.code}`; } };
   const set = (aud: string, logOnly: boolean) => { process.env.CAVOS_JWT_AUDIENCE = aud; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = logOnly ? '1' : ''; };
   const now = Math.floor(Date.now() / 1000);
 
@@ -14,6 +18,12 @@ export async function run(t: T) {
   t.check('aud incorrecto -> 401', (await call(await token({ sub: 'u1', aud: 'otra-app' }))) === 401);
   t.check('iss no permitido -> 401', (await call(await token({ sub: 'u1', iss: 'https://evil.example' }))) === 401);
   t.check('expirado -> 401', (await call(await token({ sub: 'u1', exp: now - 120 }))) === 401);
+  t.check('expirado + sin fila en user_wallets -> 401 session_relogin_required', (await codeOf(await token({ sub: 'u1', exp: now - 120 }))) === '401:session_relogin_required');
+  t.check('expirado + firma inválida -> 401 auth_invalid (no relogin)', (await codeOf(await token({ sub: 'u1', exp: now - 120, badKey: true }))) === '401:auth_invalid');
+  t.check('expirado + aud incorrecto -> 401 auth_invalid (no relogin)', (await codeOf(await token({ sub: 'u1', exp: now - 120, aud: 'otra-app' }))) === '401:auth_invalid');
+  t.check('expirado + iss no permitido -> 401 auth_invalid (no relogin)', (await codeOf(await token({ sub: 'u1', exp: now - 120, iss: 'https://evil.example' }))) === '401:auth_invalid');
+  db.tables.user_wallets.push({ sub: 'u9', wallet_address: 'GTEST' });
+  t.check('expirado + con fila, sin prueba -> 401 session_expired (renovable)', (await codeOf(await token({ sub: 'u9', exp: now - 120 }))) === '401:session_expired');
   t.check('firma inválida -> 401', (await call(await token({ sub: 'u1', badKey: true }))) === 401);
   t.check('sin token -> 401', await (async () => { try { await requireCavosUser({ headers: {} }); return false; } catch (e: any) { return e.status === 401; } })());
 

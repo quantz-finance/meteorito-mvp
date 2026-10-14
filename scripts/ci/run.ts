@@ -20,6 +20,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '17', name: 'Montos: parcial no cuenta como pagado; vendedor solo recibe el monto', file: './t17-amounts.test.ts', onchain: false },
   { id: '19', name: 'Repro prod ybbtsr: token vencido de otra cuenta/billetera -> sin bucle, re-login, re-bind seguro', file: './t19-prod-relogin.test.ts', onchain: false },
   { id: '20', name: 'Re-link: solo 404 explícito, sin items activos, token fresco + nonce, auditoría', file: './t20-relink.test.ts', onchain: false },
+  { id: '21', name: 'session_relogin_required: sin bucle ni logout, re-login + bind antes de actuar, bind en primer login', file: './t21-relogin-required.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },

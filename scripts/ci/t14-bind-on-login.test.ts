@@ -25,7 +25,7 @@ export async function run(t: T) {
   const bind = async (tok: string, kp: Keypair, sub = 'u1') => bindRaw(tok, bindP(kp, sub, await nonce(await token({ sub }))));
 
   let r = await bind(await token({ sub: 'u1', exp: now - 600 }), a);
-  t.check('token vencido -> 401, sin fila', r.code === 401 && r.body.code === 'session_expired' && db.tables.user_wallets.length === 0, JSON.stringify(r.body));
+  t.check('token vencido sin fila -> 401 session_relogin_required, sin fila', r.code === 401 && r.body.code === 'session_relogin_required' && db.tables.user_wallets.length === 0, JSON.stringify(r.body));
   r = await bind(await token({ sub: 'u1' }), a);
   t.check('token fresco -> 200 y crea fila sub -> wallet', r.code === 200 && db.tables.user_wallets.length === 1 && db.tables.user_wallets[0].sub === 'u1' && db.tables.user_wallets[0].wallet_address === a.publicKey(), JSON.stringify(r.body));
   r = await bind(await token({ sub: 'u1' }), a);
