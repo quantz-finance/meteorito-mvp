@@ -1,51 +1,75 @@
-# Meteorito MVP (cascarón v0)
+# Meteorito — "Pagá seguro"
 
-App de Meteorito en React Native + Expo Router + TypeScript. Corre como **web app** (Vercel, se instala en el iPhone desde Safari) y como **app nativa iOS** (el mismo código que después va a la App Store).
+Meteorito is an escrow payment link for second-hand phone sales in Costa Rica (e.g. a used iPhone sold through local buy/sell groups). The buyer pays into an on-chain escrow, the seller ships, and funds are released when the buyer enters a delivery PIN — or automatically after a release window. Disputes are resolved by a designated dispute resolver.
 
-Incluye: bienvenida, login con Cavos (Google, Apple o correo) en **Stellar testnet**, "Hola [correo]" con tu cuenta `G…`, saldo XLM/USDC desde Horizon testnet, cerrar sesión, sesión persistente, y las pestañas Vender, Comprar y Mis pedidos (vacías).
+> ⚠️ **Status: testnet only.** Meteorito runs exclusively on the **Stellar testnet**. The backend refuses any other network. Do not use real funds, and never put mainnet keys in this project.
 
-## Configuración
+## Features
+
+- Login with [Cavos](https://cavos.xyz) (Google, Apple or email) → non-custodial Stellar wallet, optional passkey backup.
+- Sale links: seller creates a listing with photos (IMEI optional), buyer pays in USDC (testnet).
+- Escrow via [Trustless Work](https://www.trustlesswork.com) on Stellar (Soroban).
+- Delivery PIN (locked after 3 wrong attempts), auto-release after `AUTO_RELEASE_MINUTES`.
+- Dispute flow with percentage split (manual resolver script for now).
+- Fee-bumped transactions so users don't need XLM.
+- Product analytics with PostHog (see `docs/tracking-plan.md`).
+
+## Architecture
+
+| Layer | Tech | Where |
+|---|---|---|
+| App (web + iOS/Android) | Expo + React Native + Expo Router + TypeScript | `app/`, `components/`, `constants/`, `lib/` |
+| Auth / wallet | Cavos kit (`lib/cavos.tsx` native, `lib/cavos.web.tsx` web) | `lib/` |
+| API | Vercel serverless functions (Node 22) | `api/` |
+| Database / storage | Supabase (Postgres + Storage) | `supabase/` (migrations) |
+| Chain | Stellar testnet, Horizon + Soroban, Trustless Work escrow | `api/_lib/escrow*`, `lib/horizon.ts` |
+| Ops scripts | Dispute resolution, smoke checks | `scripts/` |
+| Tests | Unit + testnet integration tests | `scripts/ci/` |
+
+Signing roles (deployer, approver, release signer, platform/fee-bump, dispute resolver) are separate keys. The dispute resolver secret is never deployed to the server; it is only used locally by `scripts/resolve-dispute.ts`.
+
+## Getting started
+
+Requirements: Node 22.x, npm.
 
 ```bash
-cp .env.example .env
-# poné tu EXPO_PUBLIC_CAVOS_APP_ID (testnet) del dashboard de Cavos
-```
-
-`.env` nunca se sube al repo (está en `.gitignore`).
-
-### Dashboard de Cavos
-- **Allowed web origins / Callback URLs**: el dominio de la app (`https://pago.meteorito.app`; mantener `https://meteorito-mvp.vercel.app` unos días por la redirección) y `http://localhost:8081` para desarrollo.
-- **Callback URL nativa**: `meteorito://cavos-auth`.
-- Red: testnet, cadena Stellar.
-
-## Probar en el iPhone hoy (web app)
-1. Abrí la URL de Vercel en **Safari**.
-2. Compartir → **Agregar a pantalla de inicio**. Abre a pantalla completa como una app.
-
-## Correr nativo en tu iPhone desde la Mac
-1. Instalá **Xcode** desde la App Store y abrilo una vez (aceptá las licencias).
-2. Xcode → Settings → **Accounts** → agregá tu **Apple ID** (gratis sirve).
-3. En el iPhone: Ajustes → Privacidad y seguridad → **Modo desarrollador** → activar y reiniciar.
-4. Conectá el iPhone por cable y confiá en la Mac.
-5. En la terminal:
-   ```bash
-   git clone <repo> && cd meteorito-mvp
-   npm i
-   cp .env.example .env   # y completá el App ID
-   npx expo run:ios --device
-   ```
-6. Si Xcode pide equipo de firma, elegí tu Apple ID (Personal Team). En el iPhone: Ajustes → General → VPN y gestión de dispositivos → confiá en tu desarrollador.
-
-Con Apple ID gratis la app dura 7 días y hay que reinstalarla. Para TestFlight/App Store hace falta la cuenta Apple Developer (USD 99). Expo Go **no** sirve (Cavos necesita módulo nativo).
-
-## Web local y build
-```bash
+git clone https://github.com/quantz-finance/meteorito-mvp.git
+cd meteorito-mvp
+npm ci
+cp .env.example .env   # fill in your own testnet values
 npx expo start --web
-npx expo export -p web   # genera dist/ (lo que usa Vercel)
 ```
 
-## Estructura
-- `lib/cavos.tsx` — SDK nativo (`@cavos/kit/react-native`), iOS/Android.
-- `lib/cavos.web.tsx` — SDK web (`@cavos/kit/react`, llaves en el vault de Cavos).
-- `lib/horizon.ts` — saldos de Horizon testnet.
-- `app/` — rutas (Expo Router).
+`.env` is git-ignored — never commit it. See `.env.example` for every variable:
+
+- `EXPO_PUBLIC_*` — client-side, public values (Cavos app ID, Supabase URL + anon key, PostHog public key).
+- Everything else is **server-only** (set in your Vercel project / local shell): Trustless Work API key, Supabase service role key, testnet signer secrets, `PIN_PEPPER`, `CRON_SECRET`, Cavos JWT settings.
+
+You'll need your own: Cavos app (testnet, Stellar), Supabase project (apply `supabase/` migrations), Trustless Work testnet API key, and funded testnet accounts ([Friendbot](https://laboratory.stellar.org/#account-creator?network=test)).
+
+### Native (iOS)
+
+Expo Go is not supported (Cavos needs a native module). Use a development build: `npx expo run:ios --device`.
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run web` | Expo dev server (web) |
+| `npm run ios` / `npm run android` | Expo dev server (native) |
+| `npm run typecheck` | TypeScript check for app and `api/` |
+| `npm run check:cjs` | Verifies the API loads as CommonJS |
+| `npm run test:ci` | Unit tests + testnet integration tests |
+| `npx expo export -p web` | Production web build into `dist/` |
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`) runs typecheck, web export, CJS check and tests on every push and PR. Testnet secrets come only from GitHub Actions secrets. **PRs from forks don't receive secrets**, so only unit tests run there; maintainers run the testnet suite before merging.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) and [SECURITY.md](SECURITY.md). Issues and PRs in Spanish or English are welcome.
+
+## License
+
+[MIT](LICENSE)
