@@ -21,11 +21,11 @@
    npm run test:ci
    npx expo export -p web
    ```
-5. Open a PR against `master` using the PR template.
+5. Open a PR against `main` using the PR template.
 
 ## Merge rule
 
-All changes land **via pull request** — no direct pushes to `master`. A PR is merged only with **green CI** and at least one maintainer approval. Changes to escrow, signing roles, auth/session or the dispute flow need a review from a core maintainer.
+All changes land **via pull request** — no direct pushes to `main`. A PR is merged only with **green CI** and at least one maintainer approval. Changes to escrow, signing roles, auth/session or the dispute flow need a review from a core maintainer.
 
 Fork PRs only run unit tests (no secrets); a maintainer runs the testnet suite before merging.
 
