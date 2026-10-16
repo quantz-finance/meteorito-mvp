@@ -1,4 +1,4 @@
-// Re-link sub -> wallet (Snowden, sobre b4153e1). Solo si TODAS:
+// Re-link sub -> wallet. Solo si TODAS:
 //  (1) Horizon responde 404 explícito para la wallet anterior (timeout/5xx/otro error -> no se reemplaza);
 //  (2) no hay pedidos/links activos apuntando a la wallet anterior (409 wallet_has_active_items; los links nunca
 //      fondeados se pueden cancelar con step 'cancel_listing');

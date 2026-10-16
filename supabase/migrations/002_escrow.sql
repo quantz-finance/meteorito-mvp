@@ -1,5 +1,5 @@
 -- Meteorito MVP: escrow Trustless Work (testnet) — 002
--- Roles (Snowden): approver = wallet backend; service provider = vendedor (o wallet 'service' en modo backend);
+-- Roles: approver = wallet backend; service provider = vendedor (o wallet 'service' en modo backend);
 -- release signer = backend; receiver = vendedor; dispute resolver = wallet Meteorito aparte; platform = Meteorito (fee 0).
 -- Solo el backend (service_role) escribe estas columnas.
 

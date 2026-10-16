@@ -1,4 +1,4 @@
-// Timebounds cortos + guardia de reconstrucción (Snowden, sobre ed905ea).
+// Timebounds cortos + guardia de reconstrucción.
 // Regla: nunca dos tx "vivas" a la vez para la misma acción. Una tx solo se reconstruye/reemplaza cuando
 // (a) el maxTime de la original ya pasó según el close time del último ledger (no el reloj local) Y
 // (b) su hash confirma que no entró. Tx sin maxTime o con ventana larga: no entran al camino de reconstrucción.

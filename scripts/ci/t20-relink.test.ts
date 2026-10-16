@@ -1,4 +1,4 @@
-// (20) Re-link sub -> wallet (condiciones Snowden): solo 404 explícito; sin items activos (409 wallet_has_active_items);
+// (20) Re-link sub -> wallet: solo 404 explícito; sin items activos (409 wallet_has_active_items);
 // token fresco + nonce de un uso; auditoría wallet_relinks. Cancelación solo de links nunca fondeados.
 import { Keypair } from '@stellar/stellar-sdk';
 import type { T } from './setup';
