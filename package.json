@@ -41,6 +41,7 @@
   "devDependencies": {
     "@types/node": "^20.19.43",
     "@types/react": "~19.2.2",
+    "playwright": "^1.64.1",
     "tsx": "4.23.15",
     "typescript": "~6.0.3"
   },
@@ -51,7 +52,10 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p api",
     "test:ci": "tsx scripts/ci/run.ts",
-    "check:cjs": "node scripts/ci/check-cjs.mjs"
+    "check:cjs": "node scripts/ci/check-cjs.mjs",
+    "demo:build": "node scripts/demo/build.mjs",
+    "demo:serve": "node scripts/demo/serve.mjs dist-demo 8081",
+    "demo:record": "tsx scripts/demo/record.ts"
   },
   "private": true,
   "engines": {
