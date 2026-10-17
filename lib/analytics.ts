@@ -2,6 +2,7 @@
 // Privacidad (Ley 8968): sin email/teléfono/IMEI/wallet/montos por persona. distinct_id = SHA-256(salt + sub de Cavos).
 // Sin autocapture de inputs, sin grabación de sesión, con opt-out persistente.
 import { Platform } from 'react-native';
+import { DEMO_ENABLED } from './demo';
 
 export const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY ?? '';
 export const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com';
@@ -46,6 +47,7 @@ const base = (): Props => ({ platform: Platform.OS, network: 'testnet', app: 'me
 export function initAnalytics() {
   if (started) return; started = true;
   optedOut = readOpt();
+  if (DEMO_ENABLED) return; // demo: sin analítica
   if (!POSTHOG_KEY || !web) return; // nativo: envío HTTP directo (send())
   import('posthog-js').then(({ default: posthog }) => {
     posthog.init(POSTHOG_KEY, {
@@ -72,7 +74,7 @@ async function send(event: string, properties: Props) {
 }
 
 export function track(event: string, props: Props = {}) {
-  if (optedOut || !POSTHOG_KEY) return;
+  if (DEMO_ENABLED || optedOut || !POSTHOG_KEY) return;
   const p = { ...base(), ...props };
   if (!web) { send(event, p); return; }
   if (ph) ph.capture(event, p); else queue.push([event, p]);

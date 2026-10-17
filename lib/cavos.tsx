@@ -4,10 +4,12 @@ import 'react-native-get-random-values';
 import { CavosProvider, useCavos } from '@cavos/kit/react-native';
 import type { ReactNode } from 'react';
 import { APP_SALT, CAVOS_APP_ID, CAVOS_RP_ID, NATIVE_REDIRECT_URI } from './config';
+import { DEMO_ENABLED, useDemoAuth } from './demo';
 import { walletInfo, type MeteoritoAuth } from './types';
 import { Brand } from '@/constants/Colors';
 
 export function CavosRoot({ children }: { children: ReactNode }) {
+  if (DEMO_ENABLED) return <>{children}</>; // demo: sin proveedor Cavos
   return (
     <CavosProvider
       config={{
@@ -32,7 +34,12 @@ function stellarWallet(c: any): any {
   return w;
 }
 
+/** Modo demo (build con EXPO_PUBLIC_DEMO_MODE): sesión simulada, sin Cavos. DEMO_ENABLED es constante en el build, el orden de hooks no cambia. */
 export function useAuth(): MeteoritoAuth {
+  return DEMO_ENABLED ? useDemoAuth() : useCavosAuth();
+}
+
+function useCavosAuth(): MeteoritoAuth {
   const c = useCavos();
   return {
     configured: !!CAVOS_APP_ID,

@@ -1,10 +1,11 @@
+import { DEMO_ENABLED } from './demo';
 // Textos legales BORRADOR (pendientes de revisión legal). Español neutro.
 export const QUANTZ_URL = 'https://quantz.finance';
 export const CONTACT_EMAIL = 'team@meteorito.app';
 export const LEGAL_UPDATED = '12 de octubre de 2026';
 
 type Doc = { title: string; sections: { h: string; p: string[] }[] };
-export const LEGAL: Record<'privacidad' | 'terminos', Doc> = {
+const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
   privacidad: {
     title: 'Política de privacidad',
     sections: [
@@ -42,3 +43,7 @@ export const LEGAL: Record<'privacidad' | 'terminos', Doc> = {
     ],
   },
 };
+
+/** En modo demo se neutraliza la mención al árbitro automatizado (el texto de producción no cambia). */
+const demoSafe = (d: Record<'privacidad' | 'terminos', Doc>) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, { ...v, sections: v.sections.map((s) => ({ ...s, p: s.p.map((t) => (/árbitro/i.test(t) ? 'Si algo sale mal antes de liberar el pago puedes abrir una disputa con evidencia. La resolución cuenta con revisión humana.' : t)) })) }])) as Record<'privacidad' | 'terminos', Doc>;
+export const LEGAL = DEMO_ENABLED ? demoSafe(BASE_LEGAL) : BASE_LEGAL;

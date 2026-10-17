@@ -1,6 +1,7 @@
 // Fotos: compresión en el dispositivo + subida por URL firmada (/api/photos/upload-url). El bucket no acepta anon.
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { api } from './api';
+import { DEMO_ENABLED } from './demo';
 import { supabase } from './supabase';
 import type { MeteoritoAuth } from './types';
 
@@ -43,8 +44,13 @@ export async function uploadPhoto(auth: MeteoritoAuth, p: PickedPhoto, draftId: 
 
 /** Sube un JPEG ya comprimido (p. ej. comprimido al elegir la foto). */
 export async function uploadCompressed(auth: MeteoritoAuth, blob: Blob, draftId: string, index: number): Promise<string> {
+  if (DEMO_ENABLED) return blobToDataUrl(blob); // demo: sin Storage; la foto queda local como data URL
   const r = await api<{ path: string; token: string; publicUrl: string }>(auth, '/api/photos/upload-url', { draftId, index, mime: 'image/jpeg', size: blob.size });
   const { error } = await supabase().storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' });
   if (error) throw new Error(`No se pudo subir la foto: ${error.message}`);
   return r.publicUrl;
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(blob); });
 }

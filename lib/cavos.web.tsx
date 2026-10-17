@@ -3,6 +3,7 @@ import './polyfills'; // antes de @cavos/kit
 import { CavosProvider, useCavos } from '@cavos/kit/react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { CAVOS_SECURE_STEP, CAVOS_SOCIAL_RECOVERY, APP_SALT, CAVOS_APP_ID } from './config';
+import { DEMO_ENABLED, useDemoAuth } from './demo';
 import { walletInfo, type MeteoritoAuth } from './types';
 import { Brand } from '@/constants/Colors';
 
@@ -11,6 +12,7 @@ export function CavosRoot({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
+  if (DEMO_ENABLED) return <>{children}</>; // demo: sin proveedor Cavos
   return (
     <CavosProvider
       config={{ appId: CAVOS_APP_ID, chain: 'stellar', network: 'testnet', appSalt: APP_SALT, persistSession: true, socialRecovery: CAVOS_SOCIAL_RECOVERY }}
@@ -28,7 +30,12 @@ function stellarWallet(c: any): any {
   return w;
 }
 
+/** Modo demo (build con EXPO_PUBLIC_DEMO_MODE): sesión simulada, sin Cavos. DEMO_ENABLED es constante en el build, el orden de hooks no cambia. */
 export function useAuth(): MeteoritoAuth {
+  return DEMO_ENABLED ? useDemoAuth() : useCavosAuth();
+}
+
+function useCavosAuth(): MeteoritoAuth {
   const c = useCavos();
   return {
     configured: !!CAVOS_APP_ID,

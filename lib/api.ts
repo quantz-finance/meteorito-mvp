@@ -3,6 +3,7 @@
 // firmada por la wallet ligada (X-Meteorito-Proof, nonce de un uso) y el servidor acepta el token vencido
 // (≤ SESSION_GRACE_DAYS, default 7). Reintento único.
 import type { MeteoritoAuth } from './types';
+import { DEMO_ENABLED, demoApi } from './demo';
 
 export async function proof(auth: MeteoritoAuth, action: string, ref: string) {
   if (!auth.address) throw new Error('Iniciá sesión');
@@ -58,6 +59,7 @@ export const __resetBindForTests = () => { boundKeys.clear(); bindInFlight = nul
 
 /** true si hizo bind ahora; false si ya estaba hecho para este token, el token no es fresco o la llave no está aquí. */
 export async function ensureBound(auth: MeteoritoAuth): Promise<boolean> {
+  if (DEMO_ENABLED) return false; // modo demo: sin bind ni red
   if (!auth.isAuthenticated || !auth.address) return false;
   if (auth.wallet && auth.wallet.state !== 'ready' && auth.wallet.state !== 'undeployed') return false;
   const token = auth.getAuthToken();
@@ -85,6 +87,7 @@ export async function ensureBound(auth: MeteoritoAuth): Promise<boolean> {
 }
 
 export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unknown): Promise<T> {
+  if (DEMO_ENABLED) return (await demoApi(path, body)) as T; // modo demo: backend simulado, nunca llega a /api real
   const token = auth.getAuthToken();
   if (!token) throw Object.assign(new Error('Tu sesión venció. Vuelve a cargar la página para continuar.'), { code: 'auth_missing' });
   await ensureBound(auth); // token fresco nuevo (login / re-login): bind primero
