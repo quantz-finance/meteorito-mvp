@@ -19,6 +19,7 @@ const HOW: { icon: IconName; title: string; text: string }[] = [
   { icon: 'cash', title: 'El vendedor cobra', text: 'Recién ahí se libera el pago. Si hay un problema, lo revisamos.' },
 ];
 import { track } from '@/lib/analytics';
+import { DEMO_ENABLED } from '@/lib/demo';
 
 export default function LinkDeVenta() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -33,7 +34,7 @@ export default function LinkDeVenta() {
   const load = () => { if (slug) getPublicOrder(String(slug)).then(setOrder).catch((e) => setError((e as Error).message)); };
   // Respaldo del pg_cron: si el plazo de liberación (AUTO_RELEASE_MINUTES) ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
   useEffect(() => {
-    if (order?.status === 'enviado' && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
+    if (!DEMO_ENABLED && order?.status === 'enviado' && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
       fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
   }, [order?.status, order?.auto_release_at]);
   useEffect(load, [slug]);
@@ -119,7 +120,7 @@ export default function LinkDeVenta() {
                 <Text style={[T.body, { flex: 1 }, !c.ok && { color: C.orange }]}>{c.label}</Text>
               </View>
             ))}
-            <Text style={T.footnote}>Meteorito verifica esto antes de liberar el pago.</Text>
+            {!DEMO_ENABLED && <Text style={T.footnote}>Meteorito verifica esto antes de liberar el pago.</Text>}
           </Card>
 
           {(order.contract_id || order.funded_tx || order.released_tx) && (
@@ -154,7 +155,7 @@ function TrustBlock({ order }: { order: PublicOrder }) {
       ) : null}
       <View style={{ flexDirection: 'row' }}>
         {imeiOk ? <Chip label={`IMEI ••••${last4} verificado`} tone="success" icon="shield-checkmark" />
-          : <Chip label="IMEI no verificado" tone="muted" icon="shield-outline" />}
+          : DEMO_ENABLED ? null : <Chip label="IMEI no verificado" tone="muted" icon="shield-outline" />}
       </View>
     </View>
   );

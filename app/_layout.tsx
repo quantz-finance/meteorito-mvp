@@ -12,6 +12,7 @@ import 'react-native-reanimated';
 import { CavosRoot, useAuth } from '@/lib/cavos';
 import { bindWalletOnLogin } from '@/lib/wallet';
 import { setReloginHandler } from '@/lib/api';
+import { DemoBadge } from '@/components/DemoBadge';
 import Welcome from '@/components/Welcome';
 import { Brand } from '@/constants/Colors';
 
@@ -61,11 +62,14 @@ function Gate() {
   useEffect(() => { setReloginHandler((a) => a.openLogin()); return () => setReloginHandler(null); }, []);
   if (!isPublic && (!auth.isAuthenticated || !auth.address)) return <Welcome />;
   return (
+    <>
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="p/[slug]" />
       <Stack.Screen name="compartir/[slug]" options={{ presentation: 'modal' }} />
       <Stack.Screen name="legal/[doc]" />
     </Stack>
+    <DemoBadge />
+    </>
   );
 }
