@@ -1,8 +1,10 @@
+import { DEMO_ENABLED, demoBalances } from './demo';
 import { HORIZON_TESTNET, USDC_TESTNET_ISSUER } from './config';
 
 export interface Balances { funded: boolean; xlm: string; usdc: string | null }
 
 export async function fetchBalances(address: string): Promise<Balances> {
+  if (DEMO_ENABLED) return demoBalances(address);
   const res = await fetch(`${HORIZON_TESTNET}/accounts/${address}`);
   if (res.status === 404) return { funded: false, xlm: '0', usdc: null };
   if (!res.ok) throw new Error(`Horizon ${res.status}`);

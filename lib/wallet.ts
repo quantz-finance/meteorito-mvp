@@ -2,6 +2,7 @@
 // el vendedor solo firma con Cavos (no necesita XLM). Idempotente: si ya está lista no pide firma.
 import type { MeteoritoAuth } from './types';
 import { fetchBalances } from './horizon';
+import { DEMO_ENABLED } from './demo';
 import { api, proof, ensureBound, __resetBindForTests as resetApiBind } from './api';
 export { relinkMessage, bindMessage } from './api';
 
@@ -18,6 +19,7 @@ export async function assertDeviceCanSign(auth: MeteoritoAuth): Promise<void> {
 }
 
 export async function ensureWalletReady(auth: MeteoritoAuth): Promise<void> {
+  if (DEMO_ENABLED) return; // demo: wallet simulada, lista
   // Ya lista on-chain (cuenta + trustline USDC): nada que hacer, sin llamar al API ni pedir firmas.
   if (auth.address) { const b = await fetchBalances(auth.address).catch(() => null); if (b?.funded && b.usdc !== null) return; }
   await assertDeviceCanSign(auth);

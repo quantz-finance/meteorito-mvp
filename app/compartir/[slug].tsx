@@ -6,6 +6,7 @@ import { Card, haptic, PrimaryButton, Screen, SuccessCheck } from '@/components/
 import { C, S, T } from '@/constants/theme';
 import { orderLink } from '@/lib/orders';
 import { track } from '@/lib/analytics';
+import { DEMO_ENABLED, setDemoRole } from '@/lib/demo';
 
 export default function Compartir() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -34,7 +35,7 @@ export default function Compartir() {
       footer={<>
         <PrimaryButton title="Compartir link" icon="share-outline" onPress={share} />
         <View style={{ flexDirection: 'row', gap: S.sm }}>
-          <View style={{ flex: 1 }}><PrimaryButton title="Ver como comprador" variant="secondary" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug } })} /></View>
+          <View style={{ flex: 1 }}><PrimaryButton title="Ver como comprador" variant="secondary" onPress={() => { if (DEMO_ENABLED) setDemoRole('buyer'); router.push({ pathname: '/p/[slug]', params: { slug } }); }} /></View>
           <View style={{ flex: 1 }}><PrimaryButton title="Listo" variant="secondary" onPress={() => router.replace('/pedidos')} /></View>
         </View>
       </>}>

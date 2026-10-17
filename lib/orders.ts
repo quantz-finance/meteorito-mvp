@@ -1,6 +1,7 @@
 import type { MeteoritoAuth } from './types';
 import { supabase } from './supabase';
 import type { CheckResult } from './categories';
+import { DEMO_ENABLED, demoGetPublicOrder, demoGetSellerOrders } from './demo';
 
 export const PUBLIC_BASE_URL = 'https://pago.meteorito.app';
 export const orderLink = (slug: string) => `${PUBLIC_BASE_URL}/p/${slug}`;
@@ -48,6 +49,7 @@ export interface PublicOrder {
   imei_verified?: boolean | null; imei_last4?: string | null;
 }
 export async function getPublicOrder(slug: string): Promise<PublicOrder | null> {
+  if (DEMO_ENABLED) return demoGetPublicOrder(slug) as PublicOrder | null;
   const { data, error } = await supabase().from('public_orders').select('*').eq('slug', slug).maybeSingle();
   if (error) throw new Error(error.message);
   return data as PublicOrder | null;
@@ -55,6 +57,7 @@ export async function getPublicOrder(slug: string): Promise<PublicOrder | null> 
 
 export interface SellerOrder { slug: string; category: string; brand: string; model: string; price_crc: number; status: string; identifier_masked: string | null; created_at: string }
 export async function getSellerOrders(addr: string): Promise<SellerOrder[]> {
+  if (DEMO_ENABLED) return demoGetSellerOrders(addr);
   const { data, error } = await supabase().rpc('seller_orders', { p_seller_address: addr });
   if (error) throw new Error(error.message);
   return (data ?? []) as SellerOrder[];

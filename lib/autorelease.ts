@@ -1,5 +1,6 @@
 // Ventana de liberación automática (la define el servidor: AUTO_RELEASE_MINUTES, expuesta en /api/health).
 import { useEffect, useState } from 'react';
+import { DEMO_ENABLED } from './demo';
 
 export const DEFAULT_AUTO_RELEASE_MINUTES = 1440;
 
@@ -21,6 +22,7 @@ export function timeLeft(iso: string, now = Date.now()): string {
 let cached: number | null = null;
 let inflight: Promise<number> | null = null;
 function load(): Promise<number> {
+  if (DEMO_ENABLED) return Promise.resolve(DEFAULT_AUTO_RELEASE_MINUTES); // demo: sin red
   inflight ??= fetch('/api/health').then((r) => r.json()).then((j) => {
     const v = Number(j?.config?.autoReleaseMinutes); cached = v > 0 ? v : DEFAULT_AUTO_RELEASE_MINUTES; return cached;
   }).catch(() => DEFAULT_AUTO_RELEASE_MINUTES);

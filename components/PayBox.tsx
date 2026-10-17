@@ -12,6 +12,7 @@ import { api, proof } from '@/lib/api';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, type PublicOrder } from '@/lib/orders';
 import { track, trackError } from '@/lib/analytics';
+import { DEMO_ENABLED } from '@/lib/demo';
 
 export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () => void }) {
   const auth = useAuth();
@@ -72,6 +73,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'start', proof: await proof(auth, 'pay', order.slug) });
           setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference });
           setSheet('sinpe');
+          if (DEMO_ENABLED) onChange(); // demo: refresca el pedido (escrow_creado) para que se abra la hoja SINPE
         })} />
     </>;
   } else if (sinpe && order.status === 'escrow_creado') {
