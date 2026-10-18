@@ -18,7 +18,7 @@ export async function run(t: T) {
   t.check('lista de hosts bloqueados incluye el dominio de producción', DEMO_BLOCKED_HOSTS.includes('pago.meteorito.app'));
   t.check('.env.example no activa el demo', !/^EXPO_PUBLIC_DEMO_MODE=(1|true)/im.test(readFileSync(join(root, '.env.example'), 'utf8')));
   t.check('vercel.json no activa el demo', !/DEMO_MODE/.test(readFileSync(join(root, 'vercel.json'), 'utf8')));
-  t.check('el texto legal de producción conserva su redacción (cambio solo en demo)', LEGAL_SRC.includes('apoyo de un árbitro automatizado'));
+  t.check('el texto legal ya no promete un árbitro automatizado', !LEGAL_SRC.includes('apoyo de un árbitro automatizado'));
   // Datos de ejemplo con forma Stellar
   t.check('direcciones demo con formato G… de 56 chars', /^G[A-Z2-7]{55}$/.test(DEMO_SELLER.address) && /^G[A-Z2-7]{55}$/.test(DEMO_BUYER.address), `${DEMO_SELLER.address.length}/${DEMO_BUYER.address.length}`);
   t.check('hash/contrato de ejemplo con formato y deterministas', /^[0-9a-f]{64}$/.test(demoTxHash('a')) && demoTxHash('a') === demoTxHash('a') && demoTxHash('a') !== demoTxHash('b') && /^C[A-Z2-7]{55}$/.test(demoContractId('a')));
@@ -40,5 +40,5 @@ export async function run(t: T) {
   t.check('(4) saldo del vendedor sube con el cobro', Number(o.balance) > 120, o.balance);
   t.check('(5) disputa abierta', o.status5 === 'en_disputa');
   t.check('monto USDC = CRC / tasa', o.amount === 500, String(o.amount));
-  t.check('demo neutraliza el árbitro automático en textos legales', o.legalArbiter === false);
+  t.check('los textos legales no mencionan árbitro automatizado', o.legalArbiter === false);
 }

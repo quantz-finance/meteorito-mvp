@@ -45,9 +45,7 @@ Cada acción valida el rol (p. ej. cobrar con el PIN solo en vista vendedor; pag
 
 ### Qué se oculta/neutraliza solo en demo
 
-- Chip "IMEI no verificado" y la nota "Meteorito verifica esto antes de liberar el pago." en el link del comprador.
-- Mención al "árbitro automatizado" en los Términos (se reemplaza por "revisión humana").
-- Producción **no cambia** esos textos.
+- Ya no hay textos neutralizados solo para demo: los textos de IMEI y de disputas son veraces (declarados por el vendedor, sin verificación; disputas resueltas manualmente) y son iguales en producción y en demo.
 
 ## Grabar con Playwright
 

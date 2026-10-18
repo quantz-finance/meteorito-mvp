@@ -120,7 +120,7 @@ export default function LinkDeVenta() {
                 <Text style={[T.body, { flex: 1 }, !c.ok && { color: C.orange }]}>{c.label}</Text>
               </View>
             ))}
-            {!DEMO_ENABLED && <Text style={T.footnote}>Meteorito verifica esto antes de liberar el pago.</Text>}
+            <Text style={T.footnote}>Son datos que declara el vendedor; Meteorito no los verifica (por ahora no hay verificación de IMEI ni de iCloud). Revisá el equipo cuando lo recibas, antes de darle tu PIN al vendedor.</Text>
           </Card>
 
           {(order.contract_id || order.funded_tx || order.released_tx) && (
@@ -141,8 +141,6 @@ export default function LinkDeVenta() {
 }
 
 function TrustBlock({ order }: { order: PublicOrder }) {
-  const last4 = order.imei_last4 ?? order.identifier_masked?.replace(/\D/g, '').slice(-4);
-  const imeiOk = order.imei_verified === true && !!last4;
   return (
     <View style={{ gap: S.sm }}>
       {order.seller_name ? (
@@ -154,8 +152,7 @@ function TrustBlock({ order }: { order: PublicOrder }) {
         </View>
       ) : null}
       <View style={{ flexDirection: 'row' }}>
-        {imeiOk ? <Chip label={`IMEI ••••${last4} verificado`} tone="success" icon="shield-checkmark" />
-          : DEMO_ENABLED ? null : <Chip label="IMEI no verificado" tone="muted" icon="shield-outline" />}
+        <Chip label={order.identifier_masked ? 'Identificador declarado por el vendedor' : 'El vendedor no declaró identificador'} tone="muted" icon="information-circle-outline" />
       </View>
     </View>
   );
