@@ -1,5 +1,10 @@
 # Meteorito — "Pagá seguro"
 
+
+## Video
+
+Video de presentación (ES / EN): [Español](meteorito-demo-es.mp4) · [English](meteorito-demo-en.mp4)
+
 **Links:** [Landing — meteorito.app](https://meteorito.app) · [Testnet app — pago.meteorito.app](https://pago.meteorito.app) · [Quantz — quantz.finance](https://quantz.finance)
 
 Meteorito is an escrow payment link for second-hand phone sales in Costa Rica (e.g. a used iPhone sold through local buy/sell groups). The buyer pays into an on-chain escrow, the seller ships, and funds are released when the buyer enters a delivery PIN — or automatically after a release window. Disputes are resolved by a designated dispute resolver.
