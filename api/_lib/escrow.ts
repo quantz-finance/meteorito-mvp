@@ -79,6 +79,33 @@ export async function mockRampFund(orderId: string) {
   return { fundedTx: sent.hash, pin };
 }
 
+/** Pago directo en USDC (sin SINPE): el comprador firma fund-escrow con su wallet; wallet platform paga el fee.
+ *  Misma verificación on-chain que el ramp simulado (monto exacto del pedido en DB). Devuelve el PIN una sola vez. */
+export async function fundDirectXdr(order: any) {
+  if (order.status !== 'escrow_creado' || !order.contract_id) throw new HttpError(409, `status ${order.status}`);
+  const x = await tw.fundEscrowXdr(order.contract_id, Number(order.amount_usdc), order.buyer_address);
+  return { unsignedXdr: x.unsignedTransaction, amountUsdc: Number(order.amount_usdc) };
+}
+export async function fundDirect(orderId: string, signedXdr: string) {
+  const { data: order } = await db().from('orders').select('*').eq('id', orderId).single();
+  if (order.funded_tx) return { fundedTx: order.funded_tx as string, pin: null };
+  if (order.status !== 'escrow_creado') throw new HttpError(409, `status ${order.status}`);
+  const amount = Number(order.amount_usdc);
+  const inner = validateEscrowTx(signedXdr, { contractId: order.contract_id, fns: ['fund_escrow'], source: order.buyer_address });
+  const esc = await tw.onChainEscrow(order.contract_id);
+  const before = await tw.getBalance(order.contract_id);
+  const sent = await feeBumpAndSend(inner);
+  const bal = await tw.getBalance(order.contract_id);
+  const chk = fundingCheck({ orderAmount: amount, escrowAmountStroops: esc?.amount, before, after: bal });
+  if (!chk.ok) { await logEvent(order.id, 'funding_mismatch', { reason: chk.reason, amount, direct: true }); throw new HttpError(409, `fondeo no verificado: ${chk.reason}`); }
+  const pin = String(randomInt(0, 1_000_000)).padStart(6, '0');
+  await advance(order.id, 'escrow_creado', {
+    funded_tx: sent.hash, funded_at: new Date().toISOString(), status: 'fondeado', delivery_pin_hash: pinHash(order.id, pin),
+  });
+  await logEvent(order.id, 'funded', { hash: sent.hash, amount, ramp: 'direct_usdc' });
+  return { fundedTx: sent.hash, pin };
+}
+
 export const pinHash = (orderId: string, pin: string) => createHash('sha256').update(`${env.pinPepper()}:${orderId}:${pin}`).digest('hex');
 export const evidenceHash = (evidence: unknown) => 'sha256:' + createHash('sha256').update(JSON.stringify(evidence)).digest('hex');
 

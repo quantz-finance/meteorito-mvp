@@ -22,6 +22,8 @@ const addrProof = (kp: Keypair, action: string, ref: string) => { const m = proo
 
 export async function run(t: T) {
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = ''; delete process.env.SESSION_GRACE_DAYS;
+  // Sin secretos testnet (local/forks) no hay PLATFORM_*: usar una llave efímera (activate solo patrocina; Horizon está simulado).
+  if (!process.env.PLATFORM_SECRET || !process.env.PLATFORM_PUBLIC) { const pk = Keypair.random(); process.env.PLATFORM_SECRET = pk.secret(); process.env.PLATFORM_PUBLIC = pk.publicKey(); }
   const now = Math.floor(Date.now() / 1000);
   const oldW = Keypair.random(), newW = Keypair.random(), buyer2 = Keypair.random(), ready = Keypair.random();
   const onChain = new Set([buyer2.publicKey(), ready.publicKey()]);

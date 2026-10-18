@@ -66,6 +66,12 @@ export async function deploySingleRelease(p: { signerSecret: string; engagementI
   return { contractId: sent.contractId, hash: sent.hash };
 }
 
+/** XDR sin firmar de fund-escrow con el comprador como signer (pago directo en USDC desde su wallet Stellar). */
+export async function fundEscrowXdr(contractId: string, amount: number, signer: string) {
+  ciGuard(contractId);
+  return tw<{ unsignedTransaction: string }>('/escrow/single-release/fund-escrow', { contractId, signer, amount });
+}
+
 export async function fundEscrow(contractId: string, amount: number, signerSecret: string) {
   ciGuard(contractId);
   const signer = Keypair.fromSecret(signerSecret).publicKey();

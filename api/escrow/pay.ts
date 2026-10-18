@@ -3,7 +3,7 @@
 // confirm_sinpe ("Ya pagué"): ramp-provider.mock fondea el escrow. Devuelve el PIN de entrega UNA vez.
 import { json, fail, orderBySlug } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
-import { deployFor, mockRampFund } from '../_lib/escrow';
+import { deployFor, mockRampFund, fundDirectXdr, fundDirect } from '../_lib/escrow';
 import { walletState } from '../_lib/wallet';
 
 export default async function handler(req: any, res: any) {
@@ -31,6 +31,14 @@ export default async function handler(req: any, res: any) {
       if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no sos el comprador de este pedido');
       const r = await mockRampFund(order.id);
       return json(res, 200, r);
+    }
+    // Pago directo en USDC desde una wallet Stellar (sin SINPE): el comprador firma fund-escrow; platform paga el fee.
+    if (step === 'fund_xdr' || step === 'fund_direct') {
+      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no sos el comprador de este pedido');
+      if (step === 'fund_xdr') return json(res, 200, await fundDirectXdr(order));
+      const { signedXdr } = req.body ?? {};
+      if (typeof signedXdr !== 'string' || signedXdr.length > 20000) throw new HttpError(400, 'XDR inválido');
+      return json(res, 200, await fundDirect(order.id, signedXdr));
     }
     throw new HttpError(400, 'step inválido');
   } catch (e) { return fail(res, e); }
