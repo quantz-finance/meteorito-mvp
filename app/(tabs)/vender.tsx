@@ -206,8 +206,8 @@ export default function Vender() {
       {step === 'identificador' && <>
         <Text style={T.title}>{cat.identifier.label}</Text>
         <Text style={T.callout}>{cat.identifier.kind === 'imei'
-          ? 'Lo encontrás en Ajustes › General › Información. Podés dejarlo vacío por ahora.'
-          : cat.identifier.required ? 'Lo usamos para verificar el equipo.' : 'Podés dejarlo vacío.'}</Text>
+          ? 'Lo encontrás en Ajustes › General › Información. Es opcional, lo declarás vos y Meteorito no lo verifica. Podés dejarlo vacío.'
+          : cat.identifier.required ? 'Se le muestra al comprador como dato que declarás vos; Meteorito no lo verifica.' : 'Podés dejarlo vacío.'}</Text>
         <TextInput style={ui.input} placeholder={cat.identifier.kind === 'imei' ? '15 dígitos' : cat.identifier.label} placeholderTextColor={C.textDim}
           autoCapitalize="characters" autoFocus
           keyboardType={cat.identifier.kind === 'imei' ? 'number-pad' : 'default'} inputMode={cat.identifier.kind === 'imei' ? 'numeric' : 'text'}

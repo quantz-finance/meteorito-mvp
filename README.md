@@ -1,8 +1,21 @@
 # Meteorito — "Pagá seguro"
 
+**Links:** [Landing — meteorito.app](https://meteorito.app) · [Testnet app — pago.meteorito.app](https://pago.meteorito.app) · [Quantz — quantz.finance](https://quantz.finance)
+
 Meteorito is an escrow payment link for second-hand phone sales in Costa Rica (e.g. a used iPhone sold through local buy/sell groups). The buyer pays into an on-chain escrow, the seller ships, and funds are released when the buyer enters a delivery PIN — or automatically after a release window. Disputes are resolved by a designated dispute resolver.
 
 > ⚠️ **Status: testnet only.** Meteorito runs exclusively on the **Stellar testnet**. The backend refuses any other network. Do not use real funds, and never put mainnet keys in this project.
+
+## Status & limitations
+
+Meteorito is a hackathon-stage prototype. To be upfront about what it is and is not today:
+
+- **Testnet only.** It runs on the Stellar testnet; there is no mainnet deployment and no real money moves.
+- **SINPE is simulated.** The SINPE Móvil payment step is simulated by a testnet treasury that funds the escrow; there is no real fiat on-ramp.
+- **Escrow via Trustless Work contracts.** Funds sit in a Trustless Work escrow contract on Stellar, but some contract roles (approver, release signer, platform/fee-bump) are operated by Meteorito's backend, so it is not fully trustless.
+- **Disputes are resolved manually.** A buyer can open a dispute on-chain; the team resolves it manually (see `scripts/resolve-dispute.ts`). There is no automated arbiter.
+- **No IMEI/iCloud verification yet.** The IMEI/serial and device checks are declared by the seller and are not verified by Meteorito. Buyers must inspect the device on receipt before handing over the PIN.
+- **Drafted legal texts.** Terms and privacy policy are drafts pending legal review.
 
 ## Features
 
