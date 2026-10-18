@@ -32,6 +32,14 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         {err && <ErrorText>{err}</ErrorText>}
         <PrimaryButton title="Ya pagué" icon="checkmark" loading={busy}
           onPress={() => run(async () => { track('pay_confirm_tapped'); const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'confirm_sinpe' }); track('payment_funded_client'); setPin(r.pin); setSheet('pin'); onChange(); })} />
+        {!DEMO_ENABLED && <PrimaryButton title="Pagar directo con USDC (wallet Stellar)" icon="wallet-outline" variant="secondary" loading={busy}
+          onPress={() => run(async () => {
+            track('pay_direct_usdc_tapped');
+            const x = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'fund_xdr' });
+            const signedXdr = await auth.signXdr(x.unsignedXdr);
+            const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'fund_direct', signedXdr });
+            track('payment_funded_client'); setPin(r.pin); setSheet('pin'); onChange();
+          })} />}
       </>}>
       {sinpe && <>
         <Card style={{ alignItems: 'center', paddingVertical: S.lg }}>
@@ -73,7 +81,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'start', proof: await proof(auth, 'pay', order.slug) });
           setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference });
           setSheet('sinpe');
-          if (DEMO_ENABLED) onChange(); // demo: refresca el pedido (escrow_creado) para que se abra la hoja SINPE
+          onChange(); // refresca el pedido (escrow_creado) para que se abra la hoja SINPE (antes solo en demo: bug)
         })} />
     </>;
   } else if (sinpe && order.status === 'escrow_creado') {
