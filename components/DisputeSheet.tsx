@@ -1,6 +1,7 @@
 // Comprador: "Tengo un problema" -> motivo + descripción + fotos opcionales -> /api/escrow/dispute.
 // Pantalla de pago/disputa: sin efectos de fondo (Sheet sólido).
 import * as ImagePicker from 'expo-image-picker';
+import { userMessage } from '@/lib/cavosSession';
 import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ErrorText, haptic, Icon, PrimaryButton, Sheet, type IconName } from '@/components/ds';
@@ -39,7 +40,7 @@ export function DisputeSheet({ visible, onClose, slug, onOpened }: { visible: bo
       for (const [i, p] of photos.entries()) evidence.push(await uploadPhoto(auth, p, draft, i));
       await guestApi(auth, '/api/escrow/dispute', { slug, reason, description: text.trim() || null, evidence });
       haptic.success(); onOpened(); onClose();
-    } catch (e) { haptic.error(); setErr((e as Error).message); }
+    } catch (e) { haptic.error(); setErr(userMessage((e as Error).message)); }
     finally { setBusy(false); }
   }
 

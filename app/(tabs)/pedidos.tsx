@@ -1,4 +1,5 @@
 import { ensureSellerWalletOnLoad } from '@/lib/wallet';
+import { userMessage } from '@/lib/cavosSession';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, Text, View } from 'react-native';
@@ -37,7 +38,7 @@ export default function Pedidos() {
   const load = useCallback(async () => {
     if (!address || !supabaseConfigured) { setOrders([]); return; }
     setLoading(true); setError(null);
-    try { const os = await getSellerOrders(address); setOrders(os); setUpdatedAt(Date.now()); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError((e as Error).message); setOrders((o) => o ?? []); }
+    try { const os = await getSellerOrders(address); setOrders(os); setUpdatedAt(Date.now()); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError(userMessage((e as Error).message)); setOrders((o) => o ?? []); }
     finally { setLoading(false); }
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));

@@ -1,4 +1,5 @@
 import { ensureWalletReady, walletErrorNotice } from '@/lib/wallet';
+import { userMessage } from '@/lib/cavosSession';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
@@ -155,7 +156,7 @@ export default function Vender() {
     } catch (e) {
       haptic.error();
       trackError('create_listing', e);
-      setError((e as Error).message);
+      setError(userMessage((e as Error).message));
     } finally {
       setBusy(false);
     }

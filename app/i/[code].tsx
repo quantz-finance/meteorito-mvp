@@ -2,6 +2,7 @@
 //  - COMPRADOR (misma llave de invitado): estado en vivo + link para mandarle al vendedor + "Ir a pagar" cuando el vendedor publique.
 //  - VENDEDOR (cualquier otro): resumen de lo que piden y "Publicar para esta compra" (requiere su cuenta Cavos).
 import * as Clipboard from 'expo-clipboard';
+import { userMessage } from '@/lib/cavosSession';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, Share, Text, View } from 'react-native';
@@ -82,7 +83,7 @@ export default function Invitacion() {
           <Freshness at={updatedAt} live={inv.status === 'abierta'} />
         </Card>
         {inv.status === 'abierta' && (
-          <PrimaryButton title="Cancelar invitación" variant="ghost" loading={busy} onPress={async () => { setBusy(true); try { await cancelInvite(auth, inv.code); await load(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); } }} />
+          <PrimaryButton title="Cancelar invitación" variant="ghost" loading={busy} onPress={async () => { setBusy(true); try { await cancelInvite(auth, inv.code); await load(); } catch (e) { setErr(userMessage((e as Error).message)); } finally { setBusy(false); } }} />
         )}
         {err && <ErrorText>{err}</ErrorText>}
       </Screen>

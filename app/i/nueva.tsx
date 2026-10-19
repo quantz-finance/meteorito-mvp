@@ -1,5 +1,6 @@
 // Comprador (sin cuenta): pide a un vendedor que publique el artículo. Crea una INVITACIÓN; el vendedor la confirma y manda el link de pago.
 import { router } from 'expo-router';
+import { userMessage } from '@/lib/cavosSession';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Card, ErrorText, Icon, PrimaryButton, Screen, TestnetPill } from '@/components/ds';
@@ -30,7 +31,7 @@ export default function NuevaInvitacion() {
       const code = await createInvite(auth, { category: categoryId, brand: brand.trim(), model: model.trim(), price_crc: priceNum, note: note.trim() || undefined });
       track('invite_created', { category: categoryId });
       router.replace({ pathname: '/i/[code]', params: { code } });
-    } catch (e) { trackError('create_invite', e); setErr((e as Error).message); } finally { setBusy(false); }
+    } catch (e) { trackError('create_invite', e); setErr(userMessage((e as Error).message)); } finally { setBusy(false); }
   }
 
   return (

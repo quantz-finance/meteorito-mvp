@@ -90,7 +90,8 @@ export async function ensureBound(auth: MeteoritoAuth): Promise<boolean> {
 export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unknown): Promise<T> {
   if (DEMO_ENABLED) return (await demoApi(path, body)) as T; // modo demo: backend simulado, nunca llega a /api real
   const token = auth.getAuthToken();
-  if (!token) throw Object.assign(new Error('Tu sesión venció. Vuelve a cargar la página para continuar.'), { code: 'auth_missing' });
+  // Sin token (sesión fuera de la gracia o borrada): pedir volver a entrar, nunca "recarga la página".
+  if (!token) { onRelogin(auth); throw reloginErr(); }
   await ensureBound(auth); // token fresco nuevo (login / re-login): bind primero
   const send = async (withProof: boolean) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
@@ -108,6 +109,7 @@ export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unkn
   if (!r.ok) {
     if (j.code === 'session_relogin_required') { onRelogin(auth); throw reloginErr(j.error); } // nunca se reintenta
     if (r.status === 401) console.error('[api] auth', path, j.code, j.error);
+    if (r.status === 401 && j.code === 'session_expired') { onRelogin(auth); throw reloginErr(); } // vencida fuera de la gracia: re-login
     if (j.code === 'session_wallet_mismatch') console.error('[api] la sesión (token) es de otra cuenta/billetera que la conectada: requiere volver a iniciar sesión');
     throw Object.assign(new Error(j.error ?? `Error ${r.status}`), { status: r.status, code: j.code ?? `http_${r.status}`, missing: j.missing });
   }
