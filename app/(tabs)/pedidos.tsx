@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
 import { formatCRC, getPublicOrder, getSellerOrders, type PublicOrder, orderLink, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
+import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 
 const NEXT_HINT: Record<string, string> = {
   creado: 'Comparte el link. Cuando el comprador pague, te avisamos acá.',
@@ -37,6 +38,13 @@ export default function Pedidos() {
     finally { setLoading(false); }
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Refresco silencioso (sin spinner ni borrar errores): el vendedor ve 'Pago liberado' sin recargar.
+  const silentRefresh = useCallback(async () => {
+    if (!address || !supabaseConfigured) return;
+    try { setOrders(await getSellerOrders(address)); } catch { /* se reintenta en el siguiente ciclo */ }
+  }, [address]);
+  useOrdersRefresh(silentRefresh, orders);
 
   // Datos públicos del pedido abierto (contrato, hashes, shipped_tx): la RPC seller_orders no los trae.
   const [detail, setDetail] = useState<PublicOrder | null>(null);

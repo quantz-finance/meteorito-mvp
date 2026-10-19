@@ -11,6 +11,15 @@ Meteorito is an escrow payment link for second-hand phone sales in Costa Rica (e
 
 > ⚠️ **Status: testnet only.** Meteorito runs exclusively on the **Stellar testnet**. The backend refuses any other network. Do not use real funds, and never put mainnet keys in this project.
 
+## Prueba para jueces (testnet)
+
+> 🧪 **Cómo probar sin tropiezos:**
+> - Usa un **correo nuevo** (nunca usado en la app) para **cada rol**: uno para el vendedor y otro para el comprador.
+> - Lo ideal es usar **ventanas o perfiles de navegador separados** para cada rol.
+> - Si la app pide una **frase de recuperación**, guárdala.
+> - **No cierres sesión** en cuentas que no tengan respaldo.
+> - Las sesiones antiguas pueden mostrar **«Tu sesión venció»**; en ese caso, usa un correo nuevo.
+
 ## Status & limitations
 
 Meteorito is a hackathon-stage prototype. To be upfront about what it is and is not today:
