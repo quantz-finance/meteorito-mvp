@@ -75,7 +75,7 @@ const role = (page: Page, r: 'seller' | 'buyer') => page.evaluate((x) => (window
   await page.getByText('Ya pagué', { exact: true }).waitFor();
   await shot(page, '02b-sinpe'); await beat(page, 2500);
   await tap(page, 'Ya pagué', 2500);
-  await page.getByText('¡Fondos en custodia!').waitFor();
+  await page.getByText('Pago de prueba en custodia').waitFor();
   await page.getByText('Tu PIN de entrega').waitFor();
   await shot(page, '02c-pin-visible'); await beat(page, 4000);   // PIN visible UNA vez
   await tap(page, 'Listo, lo guardé', 2000);
