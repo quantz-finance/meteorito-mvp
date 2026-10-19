@@ -21,9 +21,12 @@ export function CavosRoot({ children }: { children: ReactNode }) {
     authStore.setHint(trace);
     if (trace) { authStore.requestLoad(); return; }
     if (isPublicPath()) return; // comprador con link: cero SDK de wallet
+    // Precarga del SDK solo cuando la página ya terminó de cargar y pasó un respiro: así no le quita ancho de banda a imágenes/fuentes del primer pantallazo.
     const w = window as any;
-    const id = w.requestIdleCallback ? w.requestIdleCallback(() => authStore.requestLoad(), { timeout: 2500 }) : setTimeout(() => authStore.requestLoad(), 1500);
-    return () => { w.cancelIdleCallback ? w.cancelIdleCallback(id) : clearTimeout(id); };
+    let id: any; let idle: any;
+    const schedule = () => { id = setTimeout(() => { idle = w.requestIdleCallback ? w.requestIdleCallback(() => authStore.requestLoad(), { timeout: 4000 }) : (authStore.requestLoad(), null); }, 3500); };
+    if (document.readyState === 'complete') schedule(); else window.addEventListener('load', schedule, { once: true });
+    return () => { window.removeEventListener('load', schedule); clearTimeout(id); if (idle != null && w.cancelIdleCallback) w.cancelIdleCallback(idle); };
   }, []);
   if (!mounted) return null;
   if (DEMO_ENABLED || !load) return <>{children}</>; // demo: sin proveedor Cavos
