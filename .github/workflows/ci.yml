@@ -1,6 +1,8 @@
 name: CI
 on:
+  # Solo main + PRs: un push a una rama con PR abierto disparaba el job dos veces (~9 USDC de treasury por corrida).
   push:
+    branches: [main]
   pull_request:
 
 # Un solo run on-chain a la vez (comparten wallets de testnet).

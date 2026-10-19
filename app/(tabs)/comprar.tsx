@@ -1,5 +1,6 @@
 import { Text, View } from 'react-native';
-import { Card, Chip, Icon, Screen, type IconName } from '@/components/ds';
+import { router } from 'expo-router';
+import { Card, Chip, Icon, PrimaryButton, Screen, type IconName } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
@@ -20,6 +21,12 @@ export default function Comprar() {
             <View style={{ flex: 1 }}><Text style={T.headline}>{s.title}</Text><Text style={T.footnote}>{s.text}</Text></View>
           </View>
         ))}
+      </Card>
+      <Card style={{ alignItems: 'center', gap: S.sm, paddingVertical: S.lg }}>
+        <Icon name="paper-plane-outline" size={32} color={C.lilac} />
+        <Text style={T.headline}>¿Quieres algo que aún no está publicado?</Text>
+        <Text style={[T.callout, { textAlign: 'center' }]}>Invita a un vendedor: dices qué quieres y a qué precio, él publica y te manda el link de pago.</Text>
+        <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" onPress={() => router.push('/i/nueva')} />
       </Card>
       <Card style={{ alignItems: 'center', gap: S.sm, paddingVertical: S.lg }}>
         <Icon name="storefront-outline" size={32} color={C.lilac} />

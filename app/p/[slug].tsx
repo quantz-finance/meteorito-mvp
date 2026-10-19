@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { LivelyMascot, Reveal, ScrollCtx, SpaceBackground } from '@/components/space';
 import { PayBox } from '@/components/PayBox';
+import { PrimaryButton } from '@/components/ds';
 import { ChainLinks, chainLinks } from '@/components/ChainLinks';
 import { Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, TestnetPill, type IconName } from '@/components/ds';
 import { categoryIcon } from '@/components/categoryIcons';
@@ -19,6 +20,9 @@ const HOW: { icon: IconName; title: string; text: string }[] = [
   { icon: 'cash', title: 'El vendedor cobra', text: 'Recién ahí se libera el pago. Si hay un problema, lo revisamos.' },
 ];
 import { track } from '@/lib/analytics';
+import { Freshness } from '@/components/Freshness';
+import { LearnSheet } from '@/components/LearnSheet';
+import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { DEMO_ENABLED } from '@/lib/demo';
 
 export default function LinkDeVenta() {
@@ -28,10 +32,15 @@ export default function LinkDeVenta() {
   const { width } = useWindowDimensions();
   const [order, setOrder] = useState<PublicOrder | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [learn, setLearn] = useState(false);
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
 
-  const load = () => { if (slug) getPublicOrder(String(slug)).then(setOrder).catch((e) => setError((e as Error).message)); };
+  const load = () => { if (slug) getPublicOrder(String(slug)).then((o) => { setOrder(o); setError(null); setUpdatedAt(Date.now()); }).catch((e) => setError((e as Error).message)); };
+  // Sincronización con el servidor: si el vendedor envía o el comprador paga, esta pantalla lo refleja sola (cada POLL_MS y al volver el foco).
+  const silent = async () => { if (!slug) return; try { const o = await getPublicOrder(String(slug)); setOrder(o); setUpdatedAt(Date.now()); } catch { /* reintenta en el siguiente ciclo */ } };
+  useOrdersRefresh(silent, order ? [order] : null);
   // Respaldo del pg_cron: si el plazo de liberación (AUTO_RELEASE_MINUTES) ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
   useEffect(() => {
     if (!DEMO_ENABLED && order?.status === 'enviado' && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
@@ -132,6 +141,9 @@ export default function LinkDeVenta() {
               <ChainLinks order={order} />
             </View>
           )}
+          <PrimaryButton title="¿Qué es la custodia en blockchain?" variant="ghost" icon="help-circle-outline" onPress={() => setLearn(true)} />
+          <LearnSheet visible={learn} onClose={() => setLearn(false)} />
+          <Freshness at={updatedAt} live={!['liberado', 'resuelto', 'cancelado'].includes(order.status)} align="center" />
           {isAuthenticated && <Text style={[T.footnote, { textAlign: 'center' }]}>Sesión iniciada como {email}</Text>}
         </>}
       </Animated.ScrollView>

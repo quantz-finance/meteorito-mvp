@@ -6,6 +6,7 @@ import { db, json, fail } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
 import { walletState } from '../_lib/wallet';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
+import { inviteByCode, inviteErr, validCode } from '../_lib/invites';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 const slug = () => { const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; let s = ''; while (s.length < 6) { const b = randomBytes(1)[0]; if (b < 252) s += a[b % 36]; } return s; };
@@ -31,6 +32,16 @@ export default async function handler(req: any, res: any) {
     if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(prefix))) throw new HttpError(400, 'fotos inválidas');
     // El link no se publica si la wallet del vendedor no puede recibir USDC (activar con /api/wallet/activate).
     if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Activala y vuelve a publicar.'), { code: 'wallet_not_ready' });
+    // Publicación en respuesta a una invitación del comprador: la invitación debe seguir abierta y el precio acordado coincidir.
+    let invite: any = null;
+    if (b.invite != null) {
+      if (!validCode(b.invite)) throw new HttpError(400, 'invitación inválida');
+      invite = await inviteByCode(b.invite);
+      if (!invite) throw new HttpError(404, 'La invitación no existe.');
+      if (invite.status !== 'abierta') throw Object.assign(new HttpError(409, 'Esta invitación ya fue aceptada o cancelada.'), { code: 'invite_not_open' });
+      if (invite.buyer_user_id === user.sub) throw new HttpError(400, 'No puedes aceptar tu propia invitación.');
+      if (price !== invite.price_crc) throw Object.assign(new HttpError(409, `El precio acordado en la invitación es ₡${invite.price_crc}.`), { code: 'invite_price_mismatch' });
+    }
     const row = {
       seller_address: seller, seller_user_id: user.sub, seller_email: user.email ?? null,
       category: b.category, brand: str(b.brand, 60), model: str(b.model, 80), condition: str(b.condition, 40),
@@ -40,7 +51,15 @@ export default async function handler(req: any, res: any) {
     for (let i = 0; i < 5; i++) {
       const s = slug();
       const { error } = await db().from('orders').insert({ ...row, slug: s });
-      if (!error) { await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price }); return json(res, 200, { slug: s }); }
+      if (!error) {
+        if (invite) { // aceptar la invitación (condicionado a que siga abierta: una sola publicación por invitación)
+          const { data: ok, error: e2 } = await db().from('invitations').update({ status: 'aceptada', order_slug: s, seller_user_id: user.sub, accepted_at: new Date().toISOString() }).eq('code', invite.code).eq('status', 'abierta').select('code');
+          if (e2) inviteErr(e2);
+          if (!ok?.length) { await db().from('orders').update({ status: 'cancelado' }).eq('slug', s).eq('status', 'creado'); throw Object.assign(new HttpError(409, 'Esta invitación ya fue aceptada por otra publicación.'), { code: 'invite_not_open' }); }
+        }
+        await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price, from_invite: !!invite });
+        return json(res, 200, { slug: s });
+      }
       if (error.code !== '23505') throw error;
     }
     throw new Error('no se pudo generar slug');

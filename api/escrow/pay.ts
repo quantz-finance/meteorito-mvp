@@ -2,17 +2,34 @@
 // start: despliega el escrow (si no existe) y devuelve los datos del SINPE simulado (monto desde DB).
 // confirm_sinpe ("Ya pagué"): ramp-provider.mock fondea el escrow. Devuelve el PIN de entrega UNA vez.
 import { json, fail, orderBySlug } from '../_lib/db';
-import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
+import { requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
 import { deployFor, mockRampFund, fundDirectXdr, fundDirect } from '../_lib/escrow';
 import { walletState } from '../_lib/wallet';
+import { requireBuyerIdentity, isBuyerOf, isGuestSub } from '../_lib/guest';
+import { env } from '../_lib/env';
+import { inviteForOrder } from '../_lib/invites';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
-    const user = await requireCavosUser(req);
+    const who = await requireBuyerIdentity(req);
     const { slug, step, proof } = req.body ?? {};
     let order = await orderBySlug(slug);
+    if (step === 'start' && who.guest) {
+      // Link creado a partir de una invitación: queda reservado para quien invitó (su llave de invitado).
+      const reserved = await inviteForOrder(order.slug);
+      if (reserved && reserved.buyer_user_id !== who.guest) throw Object.assign(new HttpError(403, 'Este link de pago está reservado para quien inició la compra. Abre el link desde el mismo navegador donde creaste la invitación.'), { code: 'invite_reserved' });
+      // Compra como INVITADO: sin cuenta ni wallet. El escrow queda con la wallet platform como buyer_address (docs/guest-checkout.md).
+      if (order.contract_id && order.buyer_user_id !== who.guest) throw new HttpError(403, 'este pedido ya tiene comprador');
+      if (who.cavos && who.cavos.sub === order.seller_user_id) throw Object.assign(new HttpError(409, 'No puedes comprar tu propio artículo.'), { code: 'self_purchase' });
+      await deployFor(order, env.platformPublic(), who.guest);
+      order = await orderBySlug(slug);
+      return json(res, 200, { contractId: order.contract_id, amountUsdc: Number(order.amount_usdc), priceCrc: Number(order.price_crc), sinpe: { simulated: true, reference: `MET-${order.slug.toUpperCase()}` }, guest: true });
+    }
     if (step === 'start') {
+      const user = who.cavos; if (!user) throw new HttpError(401, 'Inicia sesión para continuar.');
+      const reservedFor = await inviteForOrder(order.slug);
+      if (reservedFor && reservedFor.buyer_user_id !== user.sub) throw Object.assign(new HttpError(403, 'Este link de pago está reservado para quien inició la compra.'), { code: 'invite_reserved' });
       // Pedido ya tomado: solo su comprador puede re-consultarlo (no exponer datos de pago a otro sub).
       if (order.contract_id && order.buyer_user_id !== user.sub) throw new HttpError(403, 'este pedido ya tiene comprador');
       const buyer = await requireAddressProof(proof, 'pay', order.slug);
@@ -28,13 +45,14 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { contractId: order.contract_id, amountUsdc: Number(order.amount_usdc), priceCrc: Number(order.price_crc), sinpe: { simulated: true, reference: `MET-${order.slug.toUpperCase()}` } });
     }
     if (step === 'confirm_sinpe') {
-      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no eres el comprador de este pedido');
+      if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
       const r = await mockRampFund(order.id);
       return json(res, 200, r);
     }
     // Pago directo en USDC desde una wallet Stellar (sin SINPE): el comprador firma fund-escrow; platform paga el fee.
     if (step === 'fund_xdr' || step === 'fund_direct') {
-      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no eres el comprador de este pedido');
+      if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
+      if (isGuestSub(order.buyer_user_id)) throw new HttpError(400, 'El pago directo con USDC requiere cuenta propia; como invitado usa el pago simulado.');
       if (step === 'fund_xdr') return json(res, 200, await fundDirectXdr(order));
       const { signedXdr } = req.body ?? {};
       if (typeof signedXdr !== 'string' || signedXdr.length > 20000) throw new HttpError(400, 'XDR inválido');

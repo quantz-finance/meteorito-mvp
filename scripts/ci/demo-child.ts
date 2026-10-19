@@ -41,7 +41,7 @@ const out: Record<string, unknown> = {};
   const s2 = await demo.demoSeed('enviado'); mk('buyer');
   await api(buyer, '/api/escrow/dispute', { slug: s2, reason: 'no_llego', description: null, evidence: [] });
   out.status5 = (await getPublicOrder(s2) as any).status;
-  try { supabase(); out.supabase = 'ok'; } catch { out.supabase = 'blocked'; }
+  try { await supabase(); out.supabase = 'ok'; } catch { out.supabase = 'blocked'; }
   out.legalArbiter = JSON.stringify(LEGAL).includes('árbitro');
   out.fetchCalls = calls;
   console.log('RESULT ' + JSON.stringify(out));
