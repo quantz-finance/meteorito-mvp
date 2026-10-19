@@ -1,6 +1,7 @@
 // Activa la wallet Cavos del vendedor para recibir USDC (cuenta + trustline). La platform patrocina reservas y fee;
 // el vendedor solo firma con Cavos (no necesita XLM). Idempotente: si ya está lista no pide firma.
 import type { MeteoritoAuth } from './types';
+import { userMessage } from './cavosSession';
 import { fetchBalances } from './horizon';
 import { DEMO_ENABLED } from './demo';
 import { api, proof, ensureBound, __resetBindForTests as resetApiBind } from './api';
@@ -43,7 +44,7 @@ export async function ensureWalletReady(auth: MeteoritoAuth): Promise<void> {
 export function friendlyPayError(msg: string): string {
   if (/trustline|could not be validated|TW \/|send-transaction|result_codes/i.test(msg))
     return 'El vendedor todavía no puede recibir pagos. Avísale que abra Meteorito para activar su cuenta e intenta de nuevo.';
-  return msg;
+  return userMessage(msg); // errores técnicos de Cavos -> español
 }
 
 /** Vendedores con links ya publicados (antes de la activación obligatoria): activar al abrir Inicio/Pedidos.

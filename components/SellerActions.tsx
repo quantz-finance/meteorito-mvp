@@ -1,6 +1,7 @@
 // Vendedor: "Marqué enviado" (evidencia -> hash en Supabase y en TW) y "Ingresar PIN del comprador".
 // La lógica (llamadas a la API y firma) es la misma; solo cambió la presentación.
 import { useState } from 'react';
+import { userMessage } from '@/lib/cavosSession';
 import { Text, TextInput, View } from 'react-native';
 import { ErrorText, PrimaryButton, SuccessCheck } from '@/components/ds';
 import { ui } from '@/components/ui';
@@ -16,7 +17,7 @@ export function SellerActions({ slug, status, onChange }: { slug: string; status
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
-  const run = async (f: () => Promise<void>, ok: string) => { setBusy(true); setErr(null); try { await f(); setDone(ok); onChange(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); } };
+  const run = async (f: () => Promise<void>, ok: string) => { setBusy(true); setErr(null); try { await f(); setDone(ok); onChange(); } catch (e) { setErr(userMessage((e as Error).message)); } finally { setBusy(false); } };
 
   if (done) return <View style={{ gap: S.md, alignItems: 'center', paddingVertical: S.md }}>
     <SuccessCheck celebrate={done.startsWith('¡Cobrado')} />

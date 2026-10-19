@@ -17,12 +17,14 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { LearnSheet } from '@/components/LearnSheet';
 import { LegalLinks } from '@/components/LegalLinks';
+import { needsRelogin, RELOGIN_TITLE } from '@/lib/cavosSession';
 
 export default function Welcome() {
   const PERKS = perks(useAutoReleaseWindow());
   const { openLogin, isLoading, isAuthenticated, error, configured } = useAuth();
   const [learn, setLearn] = useState(false);
   const busy = isLoading || isAuthenticated; // autenticado pero cargando la cuenta
+  const relogin = needsRelogin(error); // sesión vencida/sin token: pantalla clara "Entrar de nuevo", nunca el error del SDK
   // Layout en scroll: nada se superpone. En pantallas altas el espaciador empuja los CTAs abajo;
   // en pantallas bajas (360x640) la página simplemente hace scroll.
   const { height, width } = useWindowDimensions();
@@ -58,8 +60,16 @@ export default function Welcome() {
           <View style={{ flexGrow: 1, minHeight: gapY }} />
           <View style={[s.ctas, tiny && { gap: S.sm }]}>
             {!configured && <ErrorText>Falta EXPO_PUBLIC_CAVOS_APP_ID en el .env</ErrorText>}
-            {error && <ErrorText>{error}</ErrorText>}
-            <PrimaryButton title="Entrar" loading={busy} disabled={!configured} onPress={() => { track('login_started'); openLogin(); }} />
+            {relogin ? (
+              <View style={s.relogin} testID="relogin-card">
+                <Icon name="log-in-outline" size={20} color={C.lilac} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.reloginTitle}>{RELOGIN_TITLE}</Text>
+                  <Text style={s.reloginText}>{error}</Text>
+                </View>
+              </View>
+            ) : error ? <ErrorText>{error}</ErrorText> : null}
+            <PrimaryButton title={relogin ? 'Entrar de nuevo' : 'Entrar'} loading={busy} disabled={!configured} onPress={() => { track('login_started'); openLogin(); }} />
             <PrimaryButton title={width < 350 ? 'Comprar sin cuenta' : 'Quiero comprar (sin cuenta)'} variant="secondary" icon="paper-plane-outline" onPress={() => { track('invite_start_tapped'); router.push('/i/nueva'); }} />
             <PrimaryButton title="¿Cómo funciona?" variant="ghost" icon="help-circle-outline" onPress={() => { track('learn_cta_tapped'); setLearn(true); }} />
           </View>
@@ -78,6 +88,9 @@ const s = StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: S.lg },
   col: { flexGrow: 1, width: '100%', maxWidth: 440, alignSelf: 'center' },
   hero: { alignItems: 'center' },
+  relogin: { flexDirection: 'row', gap: S.sm, alignItems: 'flex-start', padding: S.md, borderRadius: 16, backgroundColor: 'rgba(108,43,217,0.18)', borderWidth: 1, borderColor: 'rgba(196,167,255,0.35)' },
+  reloginTitle: { color: C.text, fontFamily: Fonts.bold, fontSize: 16, lineHeight: 22 },
+  reloginText: { color: C.muted, fontFamily: Fonts.regular, fontSize: 14, lineHeight: 20, marginTop: 2 },
   glow: { position: 'absolute', top: -S.md, alignSelf: 'center', backgroundColor: 'rgba(108,43,217,0.45)' },
   title: { fontFamily: Fonts.black, fontSize: 34, lineHeight: 40, color: C.white, marginTop: S.md },
   subtitle: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 22, color: C.lilac, textAlign: 'center', marginTop: S.sm, maxWidth: 320 },

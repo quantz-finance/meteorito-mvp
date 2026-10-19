@@ -12,6 +12,8 @@ import { Fonts } from '@/constants/Colors';
 import Reanimated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { moneyProgress } from '@/lib/progress';
 import { anim, pressTransition } from '@/constants/motion';
+import { BackButton } from '@/components/BackButton';
+import type { Href } from 'expo-router';
 import { MeteorBurst, ScrollCtx, SpaceBackground, type SpaceMode } from '@/components/space';
 
 const WEB = Platform.OS === 'web';
@@ -28,13 +30,16 @@ export const haptic = {
 
 /* ---------- Layout ---------- */
 /** Pantalla con título grande iOS, safe area superior y footer fijo opcional (zona del pulgar). */
-export function Screen({ title, subtitle, right, children, footer, scroll = true, refreshControl, contentStyle, space = 'full' }: {
+export function Screen({ title, subtitle, right, children, footer, scroll = true, refreshControl, contentStyle, space = 'full', back }: {
+  /** Muestra el botón Volver arriba a la izquierda; el valor es a dónde ir si no hay historial. */
+  back?: Href;
   title?: string; subtitle?: string; right?: ReactNode; children: ReactNode; footer?: ReactNode; scroll?: boolean; space?: SpaceMode;
   refreshControl?: React.ComponentProps<typeof ScrollView>['refreshControl']; contentStyle?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
+  const backBtn = back ? <BackButton fallback={back} /> : null;
   const header = title ? (
     <View style={st.header}>
       <View style={{ flex: 1 }}>
@@ -48,9 +53,9 @@ export function Screen({ title, subtitle, right, children, footer, scroll = true
     <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
       keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}
       onScroll={onScroll} scrollEventThrottle={16}>
-      <View {...anim('enter')} style={{ gap: S.lg }}>{header}{children}</View>
+      <View {...anim('enter')} style={{ gap: S.lg }}>{backBtn}{header}{children}</View>
     </Reanimated.ScrollView>
-  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md }, contentStyle]}><View {...anim('enter')} style={{ flex: 1, gap: S.lg }}>{header}{children}</View></View>;
+  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md }, contentStyle]}><View {...anim('enter')} style={{ flex: 1, gap: S.lg }}>{backBtn}{header}{children}</View></View>;
   return (
     <ScrollCtx.Provider value={scrollY}>
       <View style={st.screen}>
