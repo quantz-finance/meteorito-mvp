@@ -26,7 +26,7 @@ export type WalletState = 'ready' | 'no_account' | 'no_trustline';
 export const usdc = () => new Asset('USDC', env.usdcIssuer());
 
 /** Mensaje para el comprador cuando el vendedor aún no activó su wallet (nunca el 400 crudo de TW). */
-export const SELLER_NOT_READY = 'El vendedor todavía no activó su cuenta para recibir pagos. Avisale que abra Meteorito para activarla y volvé a intentar en unos minutos.';
+export const SELLER_NOT_READY = 'El vendedor todavía no activó su cuenta para recibir pagos. Avísale que abra Meteorito para activarla y vuelve a intentar en unos minutos.';
 
 let horizonFor: () => { loadAccount(a: string): Promise<any> } = () => new Horizon.Server(env.horizon());
 export const __setHorizonForTests = (h: typeof horizonFor) => { horizonFor = h; };

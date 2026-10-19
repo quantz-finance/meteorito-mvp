@@ -30,8 +30,8 @@ export function DisputeSheet({ visible, onClose, slug, onOpened }: { visible: bo
     if (!res.canceled) setPhotos((p) => [...p, ...res.assets.map((a) => ({ uri: a.uri, width: a.width, height: a.height }))].slice(0, MAX_PHOTOS));
   }
   async function submit() {
-    if (!reason) return setErr('Elegí qué pasó');
-    if (reason === 'otro' && !text.trim()) return setErr('Contanos qué pasó');
+    if (!reason) return setErr('Elige qué pasó');
+    if (reason === 'otro' && !text.trim()) return setErr('Cuéntanos qué pasó');
     setBusy(true); setErr(null);
     try {
       const draft = newDraftId();
@@ -63,7 +63,7 @@ export function DisputeSheet({ visible, onClose, slug, onOpened }: { visible: bo
         })}
       </View>
       <TextInput style={[ui.input, { minHeight: 96, paddingTop: S.sm + 4, textAlignVertical: 'top' }]} multiline maxLength={2000}
-        placeholder="Contanos qué pasó (opcional)" placeholderTextColor={C.textDim} value={text} onChangeText={setText} />
+        placeholder="Cuéntanos qué pasó (opcional)" placeholderTextColor={C.textDim} value={text} onChangeText={setText} />
       <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
         {photos.map((p, i) => (
           <Pressable key={p.uri} onPress={() => setPhotos((x) => x.filter((_, j) => j !== i))} accessibilityLabel="Quitar foto" style={s.thumb}>

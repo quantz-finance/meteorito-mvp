@@ -27,7 +27,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
 
   const sheets = <>
     <DisputeSheet visible={sheet === 'dispute'} onClose={() => setSheet(null)} slug={order.slug} onOpened={onChange} />
-    <Sheet visible={sheet === 'sinpe' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Pagá por SINPE Móvil"
+    <Sheet visible={sheet === 'sinpe' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Paga por SINPE Móvil"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
         <PrimaryButton title="Ya pagué" icon="checkmark" loading={busy}
@@ -47,8 +47,8 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.money}>{formatCRC(sinpe.priceCrc)}</Text>
           <Text style={T.footnote}>Referencia {sinpe.reference}</Text>
         </Card>
-        <Row icon="lock-closed" text="Tu dinero queda apartado. El vendedor cobra cuando recibís el producto." />
-        <Row icon="flask-outline" text='Modo prueba: no se mueve dinero real. Tocá "Ya pagué" para simular el pago.' />
+        <Row icon="lock-closed" text="Tu dinero queda apartado. El vendedor cobra cuando recibes el producto." />
+        <Row icon="flask-outline" text='Modo prueba: no se mueve dinero real. Toca "Ya pagué" para simular el pago.' />
       </>}
     </Sheet>
     <Sheet visible={sheet === 'pin' && !!pin} onClose={() => setSheet(null)}
@@ -89,7 +89,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   } else if (order.status === 'enviado') {
     footer = <>
       <Text style={[T.footnote, { textAlign: 'center' }]}>
-        Si no reportás un problema, el pago se libera solo{order.auto_release_at ? ` en ${timeLeft(order.auto_release_at)} (${new Date(order.auto_release_at).toLocaleString()})` : ` en ${win}`}.
+        Si no reportas un problema, el pago se libera solo{order.auto_release_at ? ` en ${timeLeft(order.auto_release_at)} (${new Date(order.auto_release_at).toLocaleString()})` : win ? ` en ${win}` : ' al vencer el plazo de liberación automática'}.
       </Text>
       {err && <ErrorText>{err}</ErrorText>}
       <PrimaryButton title="Recibí y está bien" icon="checkmark-circle" loading={busy}

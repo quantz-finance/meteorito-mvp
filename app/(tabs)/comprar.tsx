@@ -3,9 +3,9 @@ import { Card, Chip, Icon, Screen, type IconName } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'link', title: 'Abrí el link del vendedor', text: 'Te lo manda por WhatsApp o Messenger.' },
-  { icon: 'lock-closed', title: 'Pagá protegido', text: 'Tu dinero queda apartado hasta que recibas el producto.' },
-  { icon: 'keypad', title: 'Revisá y da tu PIN', text: 'Solo cuando lo tengas en la mano y funcione.' },
+  { icon: 'link', title: 'Abre el link del vendedor', text: 'Te lo manda por WhatsApp o Messenger.' },
+  { icon: 'lock-closed', title: 'Paga protegido', text: 'Tu dinero queda apartado hasta que recibas el producto.' },
+  { icon: 'keypad', title: 'Revisa y da tu PIN', text: 'Solo cuando lo tengas en la mano y funcione.' },
 ];
 
 export default function Comprar() {

@@ -12,9 +12,9 @@ import { formatCRC, getSellerOrders, orderLink, STATUS_LABEL, type SellerOrder }
 import { supabaseConfigured } from '@/lib/supabase';
 
 const NEXT_HINT: Record<string, string> = {
-  creado: 'Compartí el link. Cuando el comprador pague, te avisamos acá.',
+  creado: 'Comparte el link. Cuando el comprador pague, te avisamos acá.',
   escrow_creado: 'El comprador está pagando.',
-  fondeado: 'El dinero está apartado. Coordiná la entrega y marcala como enviada.',
+  fondeado: 'El dinero está apartado. Coordina la entrega y márcala como enviada.',
   enviado: 'Al entregar, pedile el PIN al comprador para cobrar.',
   entregado: 'Entregado. El pago se está liberando.',
   liberado: 'Cobrado. ¡Buena venta!',
@@ -49,7 +49,7 @@ export default function Pedidos() {
           <Card style={{ alignItems: 'center', paddingVertical: S.xl, gap: S.md }}>
             <Icon name="cube-outline" size={40} color={C.lilac} />
             <Text style={T.headline}>Sin pedidos todavía</Text>
-            <Text style={[T.callout, { textAlign: 'center' }]}>Creá un link de venta y compartilo por WhatsApp o Messenger.</Text>
+            <Text style={[T.callout, { textAlign: 'center' }]}>Crea un link de venta y compartilo por WhatsApp o Messenger.</Text>
             <PrimaryButton title="Crear link de venta" icon="add" onPress={() => router.push('/vender')} />
           </Card>
         ) : orders.map((o, i) => <Reveal key={o.slug} i={i}><OrderCard order={o} onPress={() => setOpenSlug(o.slug)} /></Reveal>)}

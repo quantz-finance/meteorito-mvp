@@ -1,7 +1,7 @@
 import { ensureWalletReady, walletErrorNotice } from '@/lib/wallet';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ui } from '@/components/ui';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen } from '@/components/ds';
@@ -26,19 +26,44 @@ const STEP_LABEL: Record<StepKey, string> = {
 };
 let photoSeq = 0;
 
+const MIN_PRICE = 1000, MAX_PRICE = 50_000_000;
+const PRICE_ERROR = `Ingresa un precio válido: mínimo ${formatCRC(MIN_PRICE)}, máximo ${formatCRC(MAX_PRICE)}.`;
+const priceInvalid = (n: number) => !n || n < MIN_PRICE || n > MAX_PRICE;
+
+/** Borrador de la venta: vive en memoria del módulo (sobrevive al cambiar de pestaña) y en sessionStorage en web
+ *  (sobrevive a recargas, sin fotos). Se descarta al publicar o si cambia la cuenta. */
+interface Draft { owner: string | null; stepIdx: number; categoryId: string; brand: string; model: string; condition: string; price: string; description: string; identifier: string; checks: Record<string, boolean>; photos: Photo[] }
+const DRAFT_KEY = 'meteorito:sell-draft';
+let memDraft: Draft | null = null;
+function loadDraft(owner: string | null): Draft | null {
+  if (!memDraft) {
+    try { const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(DRAFT_KEY) : null; if (raw) memDraft = { ...JSON.parse(raw), photos: [] }; } catch { /* sin storage */ }
+  }
+  if (!memDraft || (memDraft.owner && owner && memDraft.owner !== owner)) return null;
+  return memDraft;
+}
+function saveDraft(d: Draft | null) {
+  memDraft = d;
+  try {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    if (d) window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ ...d, photos: [] })); else window.sessionStorage.removeItem(DRAFT_KEY);
+  } catch { /* sin storage */ }
+}
+
 export default function Vender() {
   const auth = useAuth();
   const { address } = auth;
-  const [stepIdx, setStepIdx] = useState(0);
-  const [categoryId, setCategoryId] = useState('celular');
-  const [brand, setBrand] = useState('');
-  const [model, setModel] = useState('');
-  const [condition, setCondition] = useState<string>(CONDITIONS[2]);
-  const [price, setPrice] = useState('');
-  const [description, setDescription] = useState('');
-  const [identifier, setIdentifier] = useState('');
-  const [checks, setChecks] = useState<Record<string, boolean>>({});
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [d0] = useState(() => loadDraft(address));
+  const [stepIdx, setStepIdx] = useState(d0 && d0.photos.length === 0 && d0.stepIdx > 1 ? 1 : d0?.stepIdx ?? 0);
+  const [categoryId, setCategoryId] = useState(d0?.categoryId ?? 'celular');
+  const [brand, setBrand] = useState(d0?.brand ?? '');
+  const [model, setModel] = useState(d0?.model ?? '');
+  const [condition, setCondition] = useState<string>(d0?.condition ?? CONDITIONS[2]);
+  const [price, setPrice] = useState(d0?.price ?? '');
+  const [description, setDescription] = useState(d0?.description ?? '');
+  const [identifier, setIdentifier] = useState(d0?.identifier ?? '');
+  const [checks, setChecks] = useState<Record<string, boolean>>(d0?.checks ?? {});
+  const [photos, setPhotos] = useState<Photo[]>(d0?.photos ?? []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -50,6 +75,13 @@ export default function Vender() {
   const priceNum = Number(price.replace(/\D/g, ''));
   const idError = useMemo(() => (identifier ? validateIdentifier(cat, identifier) : null), [cat, identifier]);
   const photosBusy = photos.some((p) => p.status === 'processing');
+
+  useEffect(() => { // persistir borrador
+    saveDraft({ owner: address, stepIdx, categoryId, brand, model, condition, price, description, identifier, checks, photos });
+  }, [address, stepIdx, categoryId, brand, model, condition, price, description, identifier, checks, photos]);
+  useEffect(() => { // el error de "falta foto" ya no aplica una vez que hay una
+    if (photos.length > 0) setError((e) => (e && /foto/i.test(e) && /al menos/i.test(e) ? null : e));
+  }, [photos.length]);
 
   const setPhoto = useCallback((key: string, patch: Partial<Photo>) =>
     setPhotos((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p))), []);
@@ -74,10 +106,10 @@ export default function Vender() {
 
   async function submit() {
     setError(null);
-    if (!address) return setError('Iniciá sesión de nuevo');
-    if (!brand.trim() || !model.trim()) return setError('Completá marca y modelo');
-    if (!priceNum || priceNum < 1000) return setError('Poné un precio válido en colones');
-    if (photos.length < 1) return setError('Agregá al menos una foto');
+    if (!address) return setError('Inicia sesión de nuevo');
+    if (!brand.trim() || !model.trim()) return setError('Completa marca y modelo');
+    if (priceInvalid(priceNum)) return setError(PRICE_ERROR);
+    if (photos.length < 1) return setError('Agrega al menos una foto');
     const idErr = validateIdentifier(cat, identifier);
     if (idErr) return setError(idErr);
     if (!supabaseConfigured) return setError('Falta configurar Supabase (.env)');
@@ -103,7 +135,7 @@ export default function Vender() {
         condition, price_crc: priceNum, description: description.trim(), identifier: identifier.trim(),
         photos: urls, checks: checksSummary(cat, checks),
       });
-      setBrand(''); setModel(''); setPrice(''); setDescription(''); setIdentifier(''); setChecks({}); setPhotos([]); setStepIdx(0);
+      setBrand(''); setModel(''); setPrice(''); setDescription(''); setIdentifier(''); setChecks({}); setPhotos([]); setStepIdx(0); saveDraft(null);
       track('link_created', { category: cat.id, photos: urls.length, price_bucket: priceBucket(priceNum) });
       router.push({ pathname: '/compartir/[slug]', params: { slug } });
     } catch (e) {
@@ -118,12 +150,13 @@ export default function Vender() {
   /** Validación por paso (solo UX; submit() sigue validando todo). */
   function stepError(): string | null {
     if (step === 'fotos') {
-      if (photos.length < 1) return 'Agregá al menos una foto';
-      if (photosBusy) return 'Esperá a que terminen de cargar las fotos';
+      if (photos.length < 1) return 'Agrega al menos una foto';
+      if (photosBusy) return 'Espera a que terminen de cargar las fotos';
     }
-    if (step === 'modelo' && (!brand.trim() || !model.trim())) return 'Completá marca y modelo';
+    if (step === 'modelo' && (!brand.trim() || !model.trim())) return 'Completa marca y modelo';
     if (step === 'identificador') return validateIdentifier(cat, identifier);
-    if (step === 'precio' && (!priceNum || priceNum < 1000)) return 'Poné un precio válido en colones';
+    if (step === 'checks') { const miss = cat.checks.filter((c) => c.blocksRelease && !checks[c.id]); if (miss.length) return `Activa los puntos marcados como Obligatorio para continuar (${miss.length} pendiente${miss.length === 1 ? '' : 's'}).`; }
+    if (step === 'precio' && priceInvalid(priceNum)) return PRICE_ERROR;
     return null;
   }
   function next() {
@@ -168,8 +201,8 @@ export default function Vender() {
       </>}
 
       {step === 'fotos' && <>
-        <Text style={T.title}>Agregá fotos 📸</Text>
-        <Text style={T.callout}>De 1 a 4 fotos claras, con buena luz. Tocá una para quitarla.</Text>
+        <Text style={T.title}>Agrega fotos 📸</Text>
+        <Text style={T.callout}>De 1 a 4 fotos claras, con buena luz. Toca una para quitarla.</Text>
         <View style={s.grid}>
           {photos.map((p) => <PhotoTile key={p.key} photo={p} index={photos.indexOf(p)} total={photos.length} onRemove={busy ? undefined : removePhoto} />)}
           {photos.length < MAX_PHOTOS && (
@@ -206,8 +239,8 @@ export default function Vender() {
       {step === 'identificador' && <>
         <Text style={T.title}>{cat.identifier.label}</Text>
         <Text style={T.callout}>{cat.identifier.kind === 'imei'
-          ? 'Lo encontrás en Ajustes › General › Información. Es opcional, lo declarás vos y Meteorito no lo verifica. Podés dejarlo vacío.'
-          : cat.identifier.required ? 'Se le muestra al comprador como dato que declarás vos; Meteorito no lo verifica.' : 'Podés dejarlo vacío.'}</Text>
+          ? 'Lo encuentras en Ajustes › General › Información. Es opcional, lo declaras tú y Meteorito no lo verifica. Puedes dejarlo vacío.'
+          : cat.identifier.required ? 'Se le muestra al comprador como dato que declaras tú; Meteorito no lo verifica.' : 'Puedes dejarlo vacío.'}</Text>
         <TextInput style={ui.input} placeholder={cat.identifier.kind === 'imei' ? '15 dígitos' : cat.identifier.label} placeholderTextColor={C.textDim}
           autoCapitalize="characters" autoFocus
           keyboardType={cat.identifier.kind === 'imei' ? 'number-pad' : 'default'} inputMode={cat.identifier.kind === 'imei' ? 'numeric' : 'text'}
@@ -220,13 +253,20 @@ export default function Vender() {
       {step === 'checks' && <>
         <Text style={T.title}>Revisión antes de vender</Text>
         <Card>
-          {cat.checks.map((c) => (
-            <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, minHeight: TOUCH }}>
-              <Text style={[T.body, { flex: 1 }]}>{c.label}{c.blocksRelease ? ' *' : ''}</Text>
-              <Switch value={!!checks[c.id]} onValueChange={(v) => { haptic.tap(); setChecks((x) => ({ ...x, [c.id]: v })); }} trackColor={{ true: C.success, false: C.surface2 }} />
-            </View>
-          ))}
-          <Text style={T.footnote}>* Obligatorio para liberar el pago.</Text>
+          {cat.checks.map((c) => {
+            const toggle = (v: boolean) => { haptic.tap(); setChecks((x) => ({ ...x, [c.id]: v })); setError(null); };
+            return (
+              <View key={c.id} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, minHeight: TOUCH }}>
+                <Pressable style={{ flex: 1, minHeight: TOUCH, justifyContent: 'center' }} accessibilityRole="switch" accessibilityState={{ checked: !!checks[c.id] }}
+                  onPress={() => toggle(!checks[c.id])}>
+                  <Text style={T.body}>{c.label}</Text>
+                  {c.blocksRelease && <Text style={[T.footnote, { color: C.orange }]}>Obligatorio</Text>}
+                </Pressable>
+                <Switch value={!!checks[c.id]} onValueChange={toggle} accessibilityLabel={c.label} trackColor={{ true: C.success, false: C.surface2 }} />
+              </View>
+            );
+          })}
+          <Text style={T.footnote}>Los puntos marcados como Obligatorio deben estar activados para publicar: son condición para liberar el pago.</Text>
         </Card>
       </>}
 
@@ -238,7 +278,7 @@ export default function Vender() {
       </>}
 
       {step === 'precio' && <>
-        <Text style={T.title}>¿En cuánto lo vendés?</Text>
+        <Text style={T.title}>¿En cuánto lo vendes?</Text>
         <Card style={{ paddingVertical: S.lg, alignItems: 'center' }}>
           <TextInput style={s.priceInput} placeholder="₡0" placeholderTextColor={C.textDim} keyboardType="number-pad" autoFocus
             value={priceNum ? formatCRC(priceNum) : ''} onChangeText={setPrice} accessibilityLabel="Precio en colones" />
@@ -246,12 +286,12 @@ export default function Vender() {
         </Card>
         <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'flex-start' }}>
           <Icon name="shield-checkmark" size={20} color={C.success} />
-          <Text style={[T.callout, { flex: 1 }]}>Recibís el monto completo. El comprador paga protegido y vos cobrás al entregar.</Text>
+          <Text style={[T.callout, { flex: 1 }]}>Recibes el monto completo. El comprador paga protegido y tú cobras al entregar.</Text>
         </View>
       </>}
 
       {step === 'revisar' && <>
-        <Text style={T.title}>Revisá y publicá</Text>
+        <Text style={T.title}>Revisa y publica</Text>
         <Card style={{ gap: S.md }}>
           <View style={{ flexDirection: 'row', gap: S.md, alignItems: 'center' }}>
             {photos[0] ? <Image source={{ uri: photos[0].uri }} style={{ width: 56, height: 56, borderRadius: R.md }} />
