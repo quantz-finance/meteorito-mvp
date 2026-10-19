@@ -60,7 +60,7 @@ export default function LinkDeVenta() {
   const contentW = Math.min(width, 560) - S.md * 2;
 
   if (error) return <Center icon="cloud-offline-outline" title="No se pudo cargar" text={error} />;
-  if (order === null) return <Center icon="link-outline" title="Este link no existe" text="Pedile al vendedor que te mande el link de nuevo." />;
+  if (order === null) return <Center icon="link-outline" title="Este link no existe" text="Pídele al vendedor que te mande el link de nuevo." />;
 
   const cat = order ? getCategory(order.category) : undefined;
   return (
