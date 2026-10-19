@@ -14,8 +14,8 @@ import { formatCRC, getPublicOrder, STATUS_LABEL, type PublicOrder } from '@/lib
 
 const EXPLORER = 'https://stellar.expert/explorer/testnet';
 const HOW: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'lock-closed', title: 'Pagás protegido', text: 'Tu dinero queda apartado. El vendedor todavía no lo recibe.' },
-  { icon: 'cube', title: 'Recibís y revisás', text: 'Cuando lo tengas en la mano y funcione, le das tu PIN al vendedor.' },
+  { icon: 'lock-closed', title: 'Pagas protegido', text: 'Tu dinero queda apartado. El vendedor todavía no lo recibe.' },
+  { icon: 'cube', title: 'Recibes y revisas', text: 'Cuando lo tengas en la mano y funcione, le das tu PIN al vendedor.' },
   { icon: 'cash', title: 'El vendedor cobra', text: 'Recién ahí se libera el pago. Si hay un problema, lo revisamos.' },
 ];
 import { track } from '@/lib/analytics';
@@ -120,7 +120,7 @@ export default function LinkDeVenta() {
                 <Text style={[T.body, { flex: 1 }, !c.ok && { color: C.orange }]}>{c.label}</Text>
               </View>
             ))}
-            <Text style={T.footnote}>Son datos que declara el vendedor; Meteorito no los verifica (por ahora no hay verificación de IMEI ni de iCloud). Revisá el equipo cuando lo recibas, antes de darle tu PIN al vendedor.</Text>
+            <Text style={T.footnote}>Son datos que declara el vendedor; Meteorito no los verifica (por ahora no hay verificación de IMEI ni de iCloud). Revisa el equipo cuando lo recibas, antes de darle tu PIN al vendedor.</Text>
           </Card>
 
           {(order.contract_id || order.funded_tx || order.released_tx) && (

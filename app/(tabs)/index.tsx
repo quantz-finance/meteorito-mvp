@@ -45,8 +45,8 @@ export default function Inicio() {
   const crc = bal ? Number(bal.usdc ?? 0) * CRC_USDC_RATE : 0;
   const name = displayName(email);
   const actions: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
-    { icon: 'pricetag', label: 'Vender', hint: 'Creá un link de pago seguro', onPress: () => router.push('/vender') },
-    { icon: 'link', label: 'Pagar un link', hint: 'Pegá el link del vendedor', onPress: () => setPayOpen(true) },
+    { icon: 'pricetag', label: 'Vender', hint: 'Crea un link de pago seguro', onPress: () => router.push('/vender') },
+    { icon: 'link', label: 'Pagar un link', hint: 'Pega el link del vendedor', onPress: () => setPayOpen(true) },
   ];
 
   return (
@@ -86,7 +86,7 @@ export default function Inicio() {
           : orders.length === 0 ? (
             <Card style={{ alignItems: 'center', paddingVertical: S.lg, gap: S.md }}>
               <Icon name="sparkles" size={28} color={C.lilac} />
-              <Text style={[T.callout, { textAlign: 'center' }]}>Todavía no tenés pedidos. Creá tu primer link de venta en un minuto.</Text>
+              <Text style={[T.callout, { textAlign: 'center' }]}>Todavía no tienes pedidos. Crea tu primer link de venta en un minuto.</Text>
               <PrimaryButton title="Vender algo" icon="add" onPress={() => router.push('/vender')} />
             </Card>
           ) : orders.slice(0, 3).map((o, i) => <Reveal key={o.slug} i={3 + i}><OrderCard order={o} timeline={false} onPress={() => router.push('/pedidos')} /></Reveal>)}
@@ -94,7 +94,7 @@ export default function Inicio() {
 
       <Sheet visible={payOpen} onClose={() => setPayOpen(false)} title="Pagar un link"
         footer={<PrimaryButton title="Ver producto" icon="arrow-forward" disabled={!linkSlug} onPress={goPay} />}>
-        <Text style={T.callout}>Pegá el link que te mandó el vendedor (o solo el código).</Text>
+        <Text style={T.callout}>Pega el link que te mandó el vendedor (o solo el código).</Text>
         <TextInput style={ui.input} placeholder="meteorito.app/p/…" placeholderTextColor={C.textDim} value={link} onChangeText={setLink}
           autoCapitalize="none" autoCorrect={false} keyboardType="url" returnKeyType="go" onSubmitEditing={goPay} autoFocus />
         {link.trim() && !linkSlug ? <ErrorText>Ese link no parece de Meteorito.</ErrorText> : null}

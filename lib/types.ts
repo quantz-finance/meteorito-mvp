@@ -25,6 +25,8 @@ export interface WalletInfo {
   hasPasskey: boolean;
   /** Aprobar este dispositivo con la passkey sincronizada (si hay). */
   approveDevice: () => Promise<void>;
+  /** Autoriza este dispositivo por la vía que elija Cavos (recuperación social/enclave). Lanza si no hay respaldo. Puede faltar en nativo. */
+  authorize?: () => Promise<void>;
   /** Registrar passkey de respaldo (antes de cerrar sesión). */
   enrollPasskey: () => Promise<void>;
 }
@@ -35,6 +37,6 @@ export function walletInfo(c: any): WalletInfo {
   const state: WalletInfo['state'] = ws.needsDeviceApproval ? 'needs-approval' : ws.isReady ? 'ready' : ws.isUndeployed ? 'undeployed' : 'loading';
   return {
     state, recoveryProtected: !!ws.recovery?.protected, hasPasskey: !!ws.hasPasskey,
-    approveDevice: () => c.approveDeviceWithPasskey(), enrollPasskey: () => c.enrollPasskeyDefault(),
+    approveDevice: () => c.approveDeviceWithPasskey(), authorize: typeof c.authorizeDevice === 'function' ? () => c.authorizeDevice() : undefined, enrollPasskey: () => c.enrollPasskeyDefault(),
   };
 }

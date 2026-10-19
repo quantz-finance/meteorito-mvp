@@ -6,7 +6,7 @@ import type { MeteoritoAuth } from './types';
 import { DEMO_ENABLED, demoApi } from './demo';
 
 export async function proof(auth: MeteoritoAuth, action: string, ref: string) {
-  if (!auth.address) throw new Error('Iniciá sesión');
+  if (!auth.address) throw new Error('Inicia sesión');
   const ts = Math.floor(Date.now() / 1000);
   const message = `meteorito:${action}:${ref}:${auth.address}:${ts}`;
   const { publicKey, signature } = await auth.signMessage(message);

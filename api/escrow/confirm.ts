@@ -14,9 +14,9 @@ export default async function handler(req: any, res: any) {
     const { slug, reason, pin } = req.body ?? {};
     const order = await orderBySlug(slug);
     if (reason === 'buyer_confirm') {
-      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no sos el comprador');
+      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no eres el comprador');
     } else if (reason === 'pin') {
-      if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no sos el vendedor');
+      if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no eres el vendedor');
       if ((order.pin_attempts ?? 0) >= 3) throw new HttpError(429, 'demasiados intentos de PIN');
       const ok = typeof pin === 'string' && /^\d{6}$/.test(pin) && order.delivery_pin_hash &&
         timingSafeEqual(Buffer.from(pinHash(order.id, pin)), Buffer.from(order.delivery_pin_hash));

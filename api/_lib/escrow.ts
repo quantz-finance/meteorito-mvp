@@ -23,7 +23,7 @@ export function serviceProviderFor(order: any) {
 export async function deployFor(order: any, buyerAddress: string, buyerUserId: string) {
   if (order.contract_id) return order.contract_id as string;
   if (order.status !== 'creado') throw new HttpError(409, `status ${order.status}`);
-  if (buyerAddress === order.seller_address || buyerUserId === order.seller_user_id) throw new HttpError(400, 'no podés comprar tu propio link');
+  if (buyerAddress === order.seller_address || buyerUserId === order.seller_user_id) throw new HttpError(400, 'no puedes comprar tu propio link');
   // Receiver sin cuenta/trustline USDC -> TW responde 400 crudo. Lo detectamos antes con un error accionable.
   await assertReceiverReady(order.seller_address);
   const amount = grossUsdc(Number(order.price_crc));

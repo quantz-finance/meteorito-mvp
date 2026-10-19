@@ -28,13 +28,13 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { contractId: order.contract_id, amountUsdc: Number(order.amount_usdc), priceCrc: Number(order.price_crc), sinpe: { simulated: true, reference: `MET-${order.slug.toUpperCase()}` } });
     }
     if (step === 'confirm_sinpe') {
-      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no sos el comprador de este pedido');
+      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no eres el comprador de este pedido');
       const r = await mockRampFund(order.id);
       return json(res, 200, r);
     }
     // Pago directo en USDC desde una wallet Stellar (sin SINPE): el comprador firma fund-escrow; platform paga el fee.
     if (step === 'fund_xdr' || step === 'fund_direct') {
-      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no sos el comprador de este pedido');
+      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no eres el comprador de este pedido');
       if (step === 'fund_xdr') return json(res, 200, await fundDirectXdr(order));
       const { signedXdr } = req.body ?? {};
       if (typeof signedXdr !== 'string' || signedXdr.length > 20000) throw new HttpError(400, 'XDR inválido');

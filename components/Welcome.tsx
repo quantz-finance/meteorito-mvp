@@ -7,10 +7,10 @@ import { ErrorText, Icon, PrimaryButton, type IconName } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 
-const perks = (w: string): { icon: IconName; text: string }[] => [
-  { icon: 'shield-checkmark', text: 'El vendedor cobra solo cuando recibís' },
+const perks = (w: string | null): { icon: IconName; text: string }[] => [
+  { icon: 'shield-checkmark', text: 'El vendedor cobra solo cuando recibes' },
   { icon: 'keypad', text: 'PIN de entrega para confirmar' },
-  { icon: 'time', text: `Pago liberado en ${w} si todo está bien` },
+  { icon: 'time', text: w ? `Pago liberado en ${w} si todo está bien` : 'Pago liberado automáticamente si todo está bien' },
 ];
 import { track } from '@/lib/analytics';
 import { LegalLinks } from '@/components/LegalLinks';
@@ -33,7 +33,7 @@ export default function Welcome() {
         <Glow style={s.glow} color="rgba(108,43,217,0.45)" />
         <Reveal i={0}><LivelyMascot size={mascot} style={s.mascot} parallax={0} /></Reveal>
         <Reveal i={1} style={{ alignItems: 'center' }}><Text style={[s.title, compact && { fontSize: 32 }]}>Meteorito</Text>
-        <Text style={s.subtitle}>Comprá y vendé celulares, consolas, laptops y más, con el pago protegido.</Text></Reveal>
+        <Text style={s.subtitle}>Compra y vende celulares, consolas, laptops y más, con el pago protegido.</Text></Reveal>
         <View style={{ gap: compact ? S.sm : S.sm + 4, marginTop: compact ? S.md : S.lg, alignSelf: 'stretch' }}>
           {PERKS.map((p, i) => (
             <Reveal key={p.text} i={2 + i}><View style={[s.perk, compact && { minHeight: 44 }]}>

@@ -20,18 +20,19 @@ export function timeLeft(iso: string, now = Date.now()): string {
 }
 
 let cached: number | null = null;
-let inflight: Promise<number> | null = null;
-function load(): Promise<number> {
+let inflight: Promise<number | null> | null = null;
+function load(): Promise<number | null> {
   if (DEMO_ENABLED) return Promise.resolve(DEFAULT_AUTO_RELEASE_MINUTES); // demo: sin red
   inflight ??= fetch('/api/health').then((r) => r.json()).then((j) => {
-    const v = Number(j?.config?.autoReleaseMinutes); cached = v > 0 ? v : DEFAULT_AUTO_RELEASE_MINUTES; return cached;
-  }).catch(() => DEFAULT_AUTO_RELEASE_MINUTES);
+    const v = Number(j?.config?.autoReleaseMinutes); if (v > 0) cached = v; else inflight = null; return cached;
+  }).catch(() => { inflight = null; return null; });
   return inflight;
 }
 
-/** Texto de la ventana ("24 h"). Muestra el default hasta que responde el servidor. */
-export function useAutoReleaseWindow(): string {
-  const [m, setM] = useState(cached ?? DEFAULT_AUTO_RELEASE_MINUTES);
+/** Texto de la ventana real del servidor ("24 h", "10 min"). null hasta que responde /api/health (o si falla):
+ *  la UI usa un texto genérico en vez de inventar un plazo. */
+export function useAutoReleaseWindow(): string | null {
+  const [m, setM] = useState<number | null>(cached);
   useEffect(() => { if (cached == null) load().then(setM); }, []);
-  return formatWindow(m);
+  return m ? formatWindow(m) : null;
 }

@@ -14,7 +14,7 @@ export default async function handler(req: any, res: any) {
     const user = await requireCavosUser(req);
     const { slug, evidence } = req.body ?? {};
     const order = await orderBySlug(slug);
-    if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no sos el vendedor');
+    if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no eres el vendedor');
     if (order.status !== 'fondeado') throw new HttpError(409, `status ${order.status}`);
     const autoRelease = () => autoReleaseAt();
 

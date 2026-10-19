@@ -24,7 +24,7 @@ export function SellerActions({ slug, status, onChange }: { slug: string; status
   </View>;
 
   if (status === 'fondeado') return <View style={{ gap: S.sm }}>
-    <Text style={T.caption}>¿Cómo lo entregás?</Text>
+    <Text style={T.caption}>¿Cómo lo entregas?</Text>
     <TextInput style={ui.input} placeholder="Encuentro, envío, número de guía…" placeholderTextColor={C.textDim} value={note} onChangeText={setNote} />
     <PrimaryButton title="Marcar como enviado" icon="paper-plane" loading={busy} disabled={!note.trim()}
       onPress={() => run(async () => {
