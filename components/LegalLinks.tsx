@@ -38,7 +38,7 @@ export function LegalLinks({ onNavigate }: { onNavigate?: () => void }) {
         <L t="Términos de uso" on={() => go('terminos')} /><Text style={s.sep}>·</Text>
         <L t="Quiénes somos" on={about} />
       </View>
-      <Text style={[T.footnote, { textAlign: 'center', fontSize: 12 }]}>Meteorito es un producto de Quantz · Costa Rica</Text>
+      <Text style={[T.footnote, { textAlign: 'center', fontSize: 12 }]}>Meteorito · Costa Rica</Text>
     </View>
   );
 }
