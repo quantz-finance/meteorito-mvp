@@ -29,6 +29,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '28', name: 'Frescura: etiqueta "actualizado hace Xs"', file: './t28-freshness.test.ts', onchain: false },
   { id: '29', name: 'Educación: sin seguro/protegido/garantía + nota beta', file: './t29-learn-copy.test.ts', onchain: false },
   { id: '30', name: 'Sesión Cavos: PWA iOS, recarga, pestaña nueva, vencido en gracia, vencida, logout + errores traducidos', file: './t30-cavos-session.test.ts', onchain: false },
+  { id: '31', name: 'Copy en tuteo: sin voseo en la UI ni en mensajes del API', file: './t31-tuteo.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },

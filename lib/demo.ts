@@ -115,7 +115,7 @@ const pub = (o: DemoOrder) => {
 /** Reemplazo de los endpoints /api/*: misma forma de respuesta, sin red. */
 export async function demoApi(path: string, body: any = {}): Promise<any> {
   const st = S(); const p = path.split('?')[0];
-  const need = (role: DemoRole) => { if (st.role !== role) throw err(403, 'demo_wrong_role', role === 'buyer' ? 'Esta acción es del comprador. Cambiá a la vista comprador.' : 'Esta acción es del vendedor. Cambiá a la vista vendedor.'); };
+  const need = (role: DemoRole) => { if (st.role !== role) throw err(403, 'demo_wrong_role', role === 'buyer' ? 'Esta acción es del comprador. Cambia a la vista comprador.' : 'Esta acción es del vendedor. Cambia a la vista vendedor.'); };
   const get = (slug: string) => { const o = st.orders[slug]; if (!o) throw err(404, 'not_found', 'Pedido no encontrado'); return o; };
   const now = () => new Date().toISOString();
 

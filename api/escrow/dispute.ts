@@ -18,7 +18,7 @@ export default async function handler(req: any, res: any) {
     const prefix = publicPrefix(sub);
     const ev = Array.isArray(evidence) ? evidence : [];
     if (ev.length > MAX_PHOTOS || ev.some((u) => typeof u !== 'string' || !u.startsWith(prefix))) throw new HttpError(400, 'evidencia inválida');
-    if (reason === 'otro' && !description?.trim()) throw new HttpError(400, 'contanos qué pasó');
+    if (reason === 'otro' && !description?.trim()) throw new HttpError(400, 'cuéntanos qué pasó');
     const order = await orderBySlug(slug);
     const buyerSub = who.ids.find((i) => i === order.buyer_user_id) ?? sub;
     const r = await openDispute(order, buyerSub, { reason: reason as DisputeReason, description: description?.trim() || null, evidence: ev });

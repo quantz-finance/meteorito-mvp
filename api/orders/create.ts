@@ -31,7 +31,7 @@ export default async function handler(req: any, res: any) {
     if (photos.length < 1) throw new HttpError(400, 'agrega al menos una foto');
     if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(prefix))) throw new HttpError(400, 'fotos inválidas');
     // El link no se publica si la wallet del vendedor no puede recibir USDC (activar con /api/wallet/activate).
-    if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Activala y vuelve a publicar.'), { code: 'wallet_not_ready' });
+    if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Actívala y vuelve a publicar.'), { code: 'wallet_not_ready' });
     // Publicación en respuesta a una invitación del comprador: la invitación debe seguir abierta y el precio acordado coincidir.
     let invite: any = null;
     if (b.invite != null) {
