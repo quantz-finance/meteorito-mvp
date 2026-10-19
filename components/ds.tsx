@@ -3,7 +3,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View,
   type PressableProps, type StyleProp, type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -154,17 +154,20 @@ export function SkeletonCard() {
 /* ---------- Bottom sheet ---------- */
 export function Sheet({ visible, onClose, title, children, footer }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode }) {
   const insets = useSafeAreaInsets();
+  // La hoja nunca supera la pantalla (iPhone SE 568 px): título y botón cerrar siempre visibles, el contenido hace scroll.
+  const { height } = useWindowDimensions();
+  const maxH = Math.min(height - insets.top - S.md, 760);
   return (
     <Modal visible={visible} transparent animationType={WEB ? 'none' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
       <View {...anim('fade')} style={st.sheetWrap}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Cerrar" />
-        <View {...anim('sheet')} style={[st.sheet, { paddingBottom: Math.max(insets.bottom, S.md) }]}>
+        <View {...anim('sheet')} style={[st.sheet, { paddingBottom: Math.max(insets.bottom, S.md), maxHeight: maxH }]}>
           <View style={st.grabber} />
           {title ? <View style={[st.rowBetween, { marginBottom: S.md }]}>
             <Text style={T.title}>{title}</Text>
             <IconButton icon="close" label="Cerrar" onPress={onClose} />
           </View> : null}
-          <ScrollView style={{ maxHeight: 520 }} contentContainerStyle={{ gap: S.md }} keyboardShouldPersistTaps="handled">{children}</ScrollView>
+          <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ gap: S.md }} keyboardShouldPersistTaps="handled">{children}</ScrollView>
           {footer ? <View style={{ marginTop: S.md, gap: S.sm }}>{footer}</View> : null}
         </View>
       </View>
