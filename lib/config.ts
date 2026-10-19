@@ -14,3 +14,8 @@ export function cavosRecoveryConfig(v: string | undefined) {
 const RECOVERY = cavosRecoveryConfig(process.env.EXPO_PUBLIC_CAVOS_SOCIAL_RECOVERY);
 export const CAVOS_SOCIAL_RECOVERY = RECOVERY.social;
 export const CAVOS_SECURE_STEP = RECOVERY.secureStep;
+
+/** Red Stellar para los links del explorador (el backend hoy solo soporta testnet). EXPO_PUBLIC_STELLAR_NETWORK=public|mainnet -> /public. */
+export const STELLAR_NETWORK: 'testnet' | 'public' = /^(public|mainnet)$/i.test(process.env.EXPO_PUBLIC_STELLAR_NETWORK ?? '') ? 'public' : 'testnet';
+export const stellarExpertBase = (network: 'testnet' | 'public' = STELLAR_NETWORK) => `https://stellar.expert/explorer/${network}`;
+export const stellarExpertUrl = (kind: 'contract' | 'tx', id: string, network: 'testnet' | 'public' = STELLAR_NETWORK) => `${stellarExpertBase(network)}/${kind}/${id}`;

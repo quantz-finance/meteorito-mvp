@@ -22,9 +22,11 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '20', name: 'Re-link: solo 404 explícito, sin items activos, token fresco + nonce, auditoría', file: './t20-relink.test.ts', onchain: false },
   { id: '21', name: 'session_relogin_required: sin bucle ni logout, re-login + bind antes de actuar, bind en primer login', file: './t21-relogin-required.test.ts', onchain: false },
   { id: '22', name: 'Modo demo: apagado por defecto, sin puerta en prod, sin red al backend real', file: './t22-demo.test.ts', onchain: false },
+  { id: '23', name: 'Redondeo USDC (sin ₡5 de más), stepper por estado real, links Stellar Expert', file: './t23-rounding-links.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },
+  { id: '24', name: 'On-chain: monto 7 decimales -> vendedor recibe ₡2 500 exactos', file: './t24-rounding-onchain.test.ts', onchain: true },
   { id: '18', name: 'Excedente on-chain: vendedor recibe solo el monto del pedido', file: './t18-excess-onchain.test.ts', onchain: true },
 ];
 

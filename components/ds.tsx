@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, R, S, T, TOUCH, BUTTON_H, shadow } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import Reanimated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
+import { moneyProgress } from '@/lib/progress';
 import { MeteorBurst, ScrollCtx, SpaceBackground, type SpaceMode } from '@/components/space';
 
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -189,16 +190,7 @@ export const MONEY_STEPS: { key: string; label: string; icon: IconName }[] = [
   { key: 'entregado', label: 'Entregado', icon: 'cube' },
   { key: 'liberado', label: 'Liberado', icon: 'cash' },
 ];
-/** Cuántos pasos del dinero están completos según el status del pedido. */
-export function moneyProgress(status: string): number {
-  switch (status) {
-    case 'fondeado': return 1;
-    case 'enviado': case 'en_disputa': return 2;
-    case 'entregado': return 3;
-    case 'liberado': case 'resuelto': return 4;
-    default: return 0;
-  }
-}
+export { moneyProgress };
 export function statusTone(status: string): 'lilac' | 'success' | 'warn' | 'muted' {
   if (status === 'liberado' || status === 'resuelto') return 'success';
   if (status === 'en_disputa' || status === 'cancelado') return 'warn';
@@ -206,8 +198,8 @@ export function statusTone(status: string): 'lilac' | 'success' | 'warn' | 'mute
   return 'lilac';
 }
 
-export function MoneyTimeline({ status, compact }: { status: string; compact?: boolean }) {
-  const done = moneyProgress(status);
+export function MoneyTimeline({ status, compact, shipped }: { status: string; compact?: boolean; shipped?: boolean }) {
+  const done = moneyProgress(status, shipped);
   const dispute = status === 'en_disputa';
   const note = dispute ? <View style={st.disputeNote}><Icon name="alert-circle" size={18} color={C.orange} /><Text style={[T.footnote, { color: C.orange, flex: 1 }]}>Lo estamos revisando, respondemos en 24-48h.</Text></View> : null;
   const dot = compact ? 24 : 32;
@@ -216,7 +208,7 @@ export function MoneyTimeline({ status, compact }: { status: string; compact?: b
     <View style={{ flexDirection: 'row', alignItems: 'flex-start' }} accessibilityLabel={`Estado del pago: ${done} de 4 pasos`}>
       {MONEY_STEPS.map((s, i) => {
         const isDone = i < done;
-        const isNext = i === done && !dispute;
+        const isNext = i === done && done > 0 && !dispute; // antes del pago nada está "en curso"
         const isProblem = dispute && i === done;
         const color = isProblem ? C.orange : isDone ? C.success : isNext ? C.lilac : C.surface2;
         const fg = isDone || isProblem ? C.purpleDark : isNext ? C.purpleDark : C.textDim;

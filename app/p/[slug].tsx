@@ -1,10 +1,11 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Linking, Pressable, ScrollView as RNScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, ScrollView as RNScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { LivelyMascot, Reveal, ScrollCtx, SpaceBackground } from '@/components/space';
 import { PayBox } from '@/components/PayBox';
+import { ChainLinks, chainLinks } from '@/components/ChainLinks';
 import { Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, TestnetPill, type IconName } from '@/components/ds';
 import { categoryIcon } from '@/components/categoryIcons';
 import { C, R, S, T } from '@/constants/theme';
@@ -12,7 +13,6 @@ import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, getPublicOrder, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
 
-const EXPLORER = 'https://stellar.expert/explorer/testnet';
 const HOW: { icon: IconName; title: string; text: string }[] = [
   { icon: 'lock-closed', title: 'Pagas protegido', text: 'Tu dinero queda apartado. El vendedor todavía no lo recibe.' },
   { icon: 'cube', title: 'Recibes y revisas', text: 'Cuando lo tengas en la mano y funcione, le das tu PIN al vendedor.' },
@@ -58,7 +58,10 @@ export default function LinkDeVenta() {
             <LivelyMascot size={40} parallax={0.3} variant="mini" />
             <Text style={T.headline}>Meteorito</Text>
           </View>
-          <TestnetPill />
+          <View style={{ alignItems: 'flex-end', gap: S.xs }}>
+            <TestnetPill />
+            {isAuthenticated && email ? <Text style={T.footnote} numberOfLines={1}>{email}</Text> : null}
+          </View>
         </View>
 
         {order === undefined ? (
@@ -91,7 +94,7 @@ export default function LinkDeVenta() {
           {moneyProgress(order.status) > 0 || order.status === 'en_disputa' ? (
             <Card style={{ gap: S.md }}>
               <Text style={T.caption}>Estado de tu pago</Text>
-              <MoneyTimeline status={order.status} />
+              <MoneyTimeline status={order.status} shipped={!!(order as any).shipped_tx} />
             </Card>
           ) : (
             <Card style={{ gap: S.md }}>
@@ -123,12 +126,10 @@ export default function LinkDeVenta() {
             <Text style={T.footnote}>Son datos que declara el vendedor; Meteorito no los verifica (por ahora no hay verificación de IMEI ni de iCloud). Revisa el equipo cuando lo recibas, antes de darle tu PIN al vendedor.</Text>
           </Card>
 
-          {(order.contract_id || order.funded_tx || order.released_tx) && (
+          {chainLinks(order).length > 0 && (
             <View style={{ gap: S.xs }}>
-              <Text style={T.caption}>Detalles</Text>
-              {order.contract_id && <DetailLink label="Ver pago protegido" url={`${EXPLORER}/contract/${order.contract_id}`} />}
-              {order.funded_tx && <DetailLink label="Ver comprobante de pago" url={`${EXPLORER}/tx/${order.funded_tx}`} />}
-              {order.released_tx && <DetailLink label="Ver comprobante de liberación" url={`${EXPLORER}/tx/${order.released_tx}`} />}
+              <Text style={T.caption}>Evidencia en la blockchain</Text>
+              <ChainLinks order={order} />
             </View>
           )}
           {isAuthenticated && <Text style={[T.footnote, { textAlign: 'center' }]}>Sesión iniciada como {email}</Text>}
@@ -155,14 +156,6 @@ function TrustBlock({ order }: { order: PublicOrder }) {
         <Chip label={order.identifier_masked ? 'Identificador declarado por el vendedor' : 'El vendedor no declaró identificador'} tone="muted" icon="information-circle-outline" />
       </View>
     </View>
-  );
-}
-
-function DetailLink({ label, url }: { label: string; url: string }) {
-  return (
-    <Pressable onPress={() => Linking.openURL(url)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 44 }}>
-      <Text style={[T.callout, { color: C.lilac }]}>{label}</Text><Icon name="open-outline" size={16} color={C.lilac} />
-    </Pressable>
   );
 }
 

@@ -13,7 +13,9 @@ const pub = (secret: string) => Keypair.fromSecret(secret).publicKey();
 /** Monto bruto a depositar para que el vendedor reciba price_crc neto del 0.3% de TW. Siempre desde el pedido en DB. */
 export function grossUsdc(priceCrc: number) {
   const net = priceCrc / env.crcUsdcRate();
-  return Math.ceil((net / (1 - env.twFee())) * 100) / 100;
+  // Redondeo hacia arriba al stroop (1e-7), no al centavo: con centavos el vendedor recibía hasta ~₡5 de más (1 ¢ × ₡510)
+  // y el comprador pagaba de más (ej. ₡15 000 -> el vendedor veía ₡15 005). El -1e-9 evita que el ruido de float suba un stroop.
+  return Math.ceil((net / (1 - env.twFee())) * 1e7 - 1e-6) / 1e7;
 }
 
 export function serviceProviderFor(order: any) {
