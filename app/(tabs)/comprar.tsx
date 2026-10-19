@@ -4,13 +4,13 @@ import { C, S, T } from '@/constants/theme';
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
   { icon: 'link', title: 'Abre el link del vendedor', text: 'Te lo manda por WhatsApp o Messenger.' },
-  { icon: 'lock-closed', title: 'Paga protegido', text: 'Tu dinero queda apartado hasta que recibas el producto.' },
+  { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu dinero queda apartado hasta que recibas el producto.' },
   { icon: 'keypad', title: 'Revisa y da tu PIN', text: 'Solo cuando lo tengas en la mano y funcione.' },
 ];
 
 export default function Comprar() {
   return (
-    <Screen title="Comprar" subtitle="Celulares, consolas, laptops y más, con pago protegido.">
+    <Screen title="Comprar" subtitle="Celulares, consolas, laptops y más, con fondos en custodia (escrow).">
       <Card style={{ gap: S.md }}>
         {STEPS.map((s) => (
           <View key={s.title} style={{ flexDirection: 'row', gap: S.md, alignItems: 'center' }}>

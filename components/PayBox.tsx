@@ -1,6 +1,6 @@
 import { timeLeft, useAutoReleaseWindow } from '@/lib/autorelease';
 import { ensureWalletReady, friendlyPayError, walletErrorNotice } from '@/lib/wallet';
-// Comprador: Pagar seguro -> SINPE simulado -> "Ya pagué" -> fondos en escrow TW testnet. Luego "Recibí".
+// Comprador: Pagar en custodia -> SINPE simulado -> "Ya pagué" -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
 import { useState } from 'react';
 import { DisputeSheet } from '@/components/DisputeSheet';
@@ -55,7 +55,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     <Sheet visible={sheet === 'pin' && !!pin} onClose={() => setSheet(null)}
       footer={<PrimaryButton title="Listo, lo guardé" onPress={() => setSheet(null)} />}>
       <SuccessCheck />
-      <Text style={[T.title, { textAlign: 'center' }]}>¡Pago protegido!</Text>
+      <Text style={[T.title, { textAlign: 'center' }]}>¡Fondos en custodia!</Text>
       <Card style={{ alignItems: 'center' }}>
         <Text style={T.caption}>Tu PIN de entrega</Text>
         <Text style={{ fontFamily: Fonts.black, fontSize: 40, letterSpacing: 8, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
@@ -66,7 +66,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     <Sheet visible={sheet === 'released'} onClose={() => setSheet(null)} footer={<PrimaryButton title="Cerrar" onPress={() => setSheet(null)} />}>
       <SuccessCheck celebrate />
       <Text style={[T.title, { textAlign: 'center' }]}>¡Listo! Pago liberado</Text>
-      <Text style={[T.callout, { textAlign: 'center' }]}>Gracias por comprar seguro con Meteorito.</Text>
+      <Text style={[T.callout, { textAlign: 'center' }]}>Gracias por usar Meteorito.</Text>
       <ChainLinks order={order} align="center" />
     </Sheet>
   </>;
@@ -76,11 +76,11 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     // Sesión en curso: no mostrar "Entrar" a quien ya inició sesión.
     footer = <PrimaryButton title="Cargando tu cuenta…" loading disabled onPress={() => {}} />;
   } else if (!auth.isAuthenticated) {
-    footer = <PrimaryButton title="Entrar para pagar seguro" icon="shield-checkmark" onPress={auth.openLogin} />;
+    footer = <PrimaryButton title="Entrar para pagar en custodia" icon="shield-checkmark" onPress={auth.openLogin} />;
   } else if (order.status === 'creado' || (order.status === 'escrow_creado' && !sinpe)) {
     footer = <>
       {err && !sheet && <ErrorText>{err}</ErrorText>}
-      <PrimaryButton title={busy ? 'Preparando…' : `Pagar seguro ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
+      <PrimaryButton title={busy ? 'Preparando…' : `Pagar en custodia ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
         onPress={() => run(async () => {
           // Comprador nuevo: activar su wallet (cuenta + trustline USDC patrocinadas) para poder recibir reembolsos.
           if (!order.contract_id) await ensureWalletReady(auth).catch((e) => { throw new Error(walletErrorNotice(e)); });
@@ -103,7 +103,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     </>;
   } else if (order.status === 'fondeado') {
     footer = pin ? <PrimaryButton title="Ver mi PIN de entrega" icon="keypad" variant="secondary" onPress={() => setSheet('pin')} />
-      : <Text style={[T.callout, { textAlign: 'center' }]}>Pago protegido. Esperando que el vendedor lo envíe.</Text>;
+      : <Text style={[T.callout, { textAlign: 'center' }]}>Fondos en custodia. Esperando que el vendedor lo envíe.</Text>;
   } else if (order.status === 'liberado' || order.status === 'resuelto' || order.status === 'entregado') {
     footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
       <Icon name="checkmark-circle" size={22} color={C.success} /><Text style={[T.headline, { color: C.success }]}>{order.status === 'entregado' ? 'Entregado' : 'Pago liberado'}</Text>

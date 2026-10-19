@@ -24,7 +24,7 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
         'No enviamos tu correo, teléfono, IMEI, dirección de billetera ni llaves. Te identificamos con un código seudónimo (un hash de tu identificador de cuenta). No grabamos tu pantalla ni tus sesiones. Los montos se registran en rangos o de forma no ligada a tu persona.',
         'Puedes desactivar la analítica en cualquier momento desde Mi cuenta > Analítica de uso.',
       ] },
-      { h: 'Para qué usamos los datos', p: ['Para operar el pago seguro, prevenir fraude, resolver disputas, mejorar la app y elaborar estadísticas agregadas. No vendemos tus datos.'] },
+      { h: 'Para qué usamos los datos', p: ['Para operar el pago en custodia, prevenir fraude, resolver disputas, mejorar la app y elaborar estadísticas agregadas. No vendemos tus datos.'] },
       { h: 'Tus derechos', p: ['Según la Ley 8968 tienes derecho de acceso, rectificación, cancelación y oposición (derechos ARCO), y a revocar tu consentimiento. Escríbenos a ' + CONTACT_EMAIL + '.'] },
       { h: 'Proveedores', p: ['Cavos (inicio de sesión y billetera), Trustless Work y Stellar (escrow), Supabase (base de datos y fotos), Vercel (hosting) y PostHog (analítica). Algunos procesan datos fuera de Costa Rica.'] },
       { h: 'Contacto', p: [CONTACT_EMAIL + ' · quantz.finance'] },
@@ -33,12 +33,12 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
   terminos: {
     title: 'Términos de uso',
     sections: [
-      { h: 'El servicio', p: ['Meteorito ofrece links de "Paga seguro" para compras entre personas: el pago queda apartado en escrow y se libera al vendedor cuando el comprador confirma la entrega.'] },
+      { h: 'El servicio', p: ['Meteorito ofrece links de pago en custodia para compras entre personas: el pago queda apartado en escrow y se libera al vendedor cuando el comprador confirma la entrega.'] },
       { h: 'Modo prueba', p: ['El servicio está en fase de pruebas en la testnet de Stellar. No uses Meteorito para operaciones con dinero real hasta que lo anunciemos.'] },
       { h: 'Escrow', p: ['Los fondos quedan en un contrato de escrow de Trustless Work en Stellar, no en una cuenta de Meteorito. Meteorito opera los roles del contrato que aprueban y liberan el pago, así que no es un esquema totalmente descentralizado. El PIN de entrega lo recibe el comprador y lo ingresa el vendedor para cobrar; si nadie reclama, el pago se libera automáticamente al vencer el plazo, o por resolución de una disputa.'] },
       { h: 'Tus responsabilidades', p: ['Vendedores: publicar información veraz del producto (el IMEI o serie y el estado de iCloud son datos que declaras tú; Meteorito no los verifica) y no vender artículos robados o ilegales. Compradores: revisar el equipo al recibirlo y dar tu PIN solo cuando lo tengas en la mano y estés conforme.'] },
       { h: 'Disputas', p: ['Si algo sale mal antes de liberar el pago puedes abrir una disputa con evidencia. La disputa se registra en el contrato y el equipo de Meteorito la revisa y resuelve manualmente; no es una decisión automática.'] },
-      { h: 'Limitación', p: ['Meteorito no es parte de la compraventa ni garantiza los productos. Durante la fase de pruebas el servicio se ofrece "tal cual".'] },
+      { h: 'Limitación', p: ['Meteorito no es parte de la compraventa ni garantiza los productos ni el resultado de la operación; solo mantiene los fondos apartados en custodia (escrow) hasta la confirmación o resolución. Durante la fase de pruebas el servicio se ofrece "tal cual".'] },
       { h: 'Contacto', p: [CONTACT_EMAIL + ' · quantz.finance'] },
     ],
   },

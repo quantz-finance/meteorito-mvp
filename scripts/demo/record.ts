@@ -69,13 +69,13 @@ const role = (page: Page, r: 'seller' | 'buyer') => page.evaluate((x) => (window
 
   // (2) Comprador abre /p/[slug] y paga
   await tap(page, 'Ver como comprador', 2500);
-  await page.getByText('Pagar seguro').first().waitFor();
+  await page.getByText('Pagar en custodia').first().waitFor();
   await shot(page, '02a-comprador-link'); await beat(page, 2500);
-  await tap(page, /Pagar seguro ₡/, 2000);
+  await tap(page, /Pagar en custodia ₡/, 2000);
   await page.getByText('Ya pagué', { exact: true }).waitFor();
   await shot(page, '02b-sinpe'); await beat(page, 2500);
   await tap(page, 'Ya pagué', 2500);
-  await page.getByText('¡Pago protegido!').waitFor();
+  await page.getByText('¡Fondos en custodia!').waitFor();
   await page.getByText('Tu PIN de entrega').waitFor();
   await shot(page, '02c-pin-visible'); await beat(page, 4000);   // PIN visible UNA vez
   await tap(page, 'Listo, lo guardé', 2000);

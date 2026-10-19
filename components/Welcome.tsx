@@ -33,7 +33,7 @@ export default function Welcome() {
         <Glow style={s.glow} color="rgba(108,43,217,0.45)" />
         <Reveal i={0}><LivelyMascot size={mascot} style={s.mascot} parallax={0} /></Reveal>
         <Reveal i={1} style={{ alignItems: 'center' }}><Text style={[s.title, compact && { fontSize: 32 }]}>Meteorito</Text>
-        <Text style={s.subtitle}>Compra y vende celulares, consolas, laptops y más, con el pago protegido.</Text></Reveal>
+        <Text style={s.subtitle}>Compra y vende celulares, consolas, laptops y más, con los fondos en custodia hasta la entrega.</Text></Reveal>
         <View style={{ gap: compact ? S.sm : S.sm + 4, marginTop: compact ? S.md : S.lg, alignSelf: 'stretch' }}>
           {PERKS.map((p, i) => (
             <Reveal key={p.text} i={2 + i}><View style={[s.perk, compact && { minHeight: 44 }]}>

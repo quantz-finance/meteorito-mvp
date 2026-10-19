@@ -1,4 +1,4 @@
-# Meteorito — "Pagá seguro"
+# Meteorito — "Pago en custodia"
 
 
 ## Video
