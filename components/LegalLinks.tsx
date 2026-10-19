@@ -1,10 +1,8 @@
 // Fila discreta de enlaces legales + interruptor de analítica (Mi cuenta).
 import { router } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import { useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { isOptedOut, setOptOut, track } from '@/lib/analytics';
-import { QUANTZ_URL } from '@/lib/legal';
 import { Fonts } from '@/constants/Colors';
 import { C, S, T, TOUCH } from '@/constants/theme';
 
@@ -24,10 +22,6 @@ export function AnalyticsToggle() {
 
 export function LegalLinks({ onNavigate }: { onNavigate?: () => void }) {
   const go = (doc: string) => { onNavigate?.(); track('legal_opened', { doc }); router.push({ pathname: '/legal/[doc]', params: { doc } }); };
-  const about = () => {
-    track('legal_opened', { doc: 'quienes_somos' });
-    if (Platform.OS === 'web') Linking.openURL(QUANTZ_URL); else WebBrowser.openBrowserAsync(QUANTZ_URL).catch(() => Linking.openURL(QUANTZ_URL));
-  };
   const L = ({ t, on }: { t: string; on: () => void }) => (
     <Pressable onPress={on} accessibilityRole="link" hitSlop={8} style={s.link}><Text style={s.linkT}>{t}</Text></Pressable>
   );
@@ -35,8 +29,7 @@ export function LegalLinks({ onNavigate }: { onNavigate?: () => void }) {
     <View style={s.legal}>
       <View style={s.links}>
         <L t="Privacidad" on={() => go('privacidad')} /><Text style={s.sep}>·</Text>
-        <L t="Términos de uso" on={() => go('terminos')} /><Text style={s.sep}>·</Text>
-        <L t="Quiénes somos" on={about} />
+        <L t="Términos de uso" on={() => go('terminos')} />
       </View>
       <Text style={[T.footnote, { textAlign: 'center', fontSize: 12 }]}>Meteorito · Costa Rica</Text>
     </View>

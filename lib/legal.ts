@@ -1,6 +1,5 @@
 // Textos legales BORRADOR (pendientes de revisión legal). Español neutro.
 // Redacción prudente: describe lo que el código hace hoy (sin verificación de IMEI/iCloud, disputas resueltas por el equipo).
-export const QUANTZ_URL = 'https://quantz.finance';
 export const CONTACT_EMAIL = 'team@meteorito.app';
 export const LEGAL_UPDATED = '12 de octubre de 2026';
 
