@@ -13,7 +13,7 @@ export function OrderCard({ order, onPress, timeline = true }: { order: SellerOr
         </View>
         <View style={{ flex: 1, gap: S.xs }}>
           <Text style={T.headline} numberOfLines={1}>{order.brand} {order.model}</Text>
-          <Chip label={STATUS_LABEL[order.status] ?? order.status} tone={statusTone(order.status)} />
+          <Chip key={order.status} swap label={STATUS_LABEL[order.status] ?? order.status} tone={statusTone(order.status)} />
         </View>
         <Text style={T.moneySm}>{formatCRC(order.price_crc)}</Text>
       </View>

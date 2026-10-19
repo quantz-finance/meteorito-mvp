@@ -82,7 +82,7 @@ export default function Pedidos() {
         {open && <>
           <View style={{ gap: S.sm }}>
             <Text style={T.money}>{formatCRC(open.price_crc)}</Text>
-            <Chip label={STATUS_LABEL[open.status] ?? open.status} tone={statusTone(open.status)} />
+            <Chip key={open.status} swap label={STATUS_LABEL[open.status] ?? open.status} tone={statusTone(open.status)} />
           </View>
           <Card style={{ gap: S.md }}>
             <MoneyTimeline status={open.status} shipped={!!detail?.shipped_tx} />

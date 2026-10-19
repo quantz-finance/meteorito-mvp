@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, ScrollView as RNScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
@@ -7,7 +7,7 @@ import { LivelyMascot, Reveal, ScrollCtx, SpaceBackground } from '@/components/s
 import { PayBox } from '@/components/PayBox';
 import { PrimaryButton } from '@/components/ds';
 import { ChainLinks, chainLinks } from '@/components/ChainLinks';
-import { Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, TestnetPill, type IconName } from '@/components/ds';
+import { toast, Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, TestnetPill, type IconName } from '@/components/ds';
 import { categoryIcon } from '@/components/categoryIcons';
 import { C, R, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
@@ -47,6 +47,13 @@ export default function LinkDeVenta() {
       fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
   }, [order?.status, order?.auto_release_at]);
   useEffect(load, [slug]);
+  // Cuando el polling trae un estado nuevo, avisar con un toast suave (el chip y el timeline animan solos).
+  const prevStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const st0 = order?.status ?? null;
+    if (prevStatus.current && st0 && st0 !== prevStatus.current) toast(`Actualizado: ${STATUS_LABEL[st0] ?? st0}`, 'info');
+    prevStatus.current = st0;
+  }, [order?.status]);
   useEffect(() => { if (order) track('payment_link_opened', { status: order.status, logged_in: isAuthenticated, category: (order as any).category ?? null }); else if (order === null) track('payment_link_not_found'); }, [order === undefined ? 0 : order === null ? 1 : order.slug]);
 
   const contentW = Math.min(width, 560) - S.md * 2;
@@ -91,7 +98,7 @@ export default function LinkDeVenta() {
               <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
                 <Chip label={cat?.label ?? order.category} icon={categoryIcon(order.category)} />
                 <Chip label={order.condition} tone="muted" />
-                <Chip label={STATUS_LABEL[order.status] ?? order.status} tone={statusTone(order.status)} />
+                <Chip key={order.status} swap label={STATUS_LABEL[order.status] ?? order.status} tone={statusTone(order.status)} />
               </View>
               <Text style={T.title}>{order.brand} {order.model}</Text>
               <TrustBlock order={order} />

@@ -1,4 +1,5 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
+import { MOTION_CSS } from '@/constants/motion';
 import type { ReactNode } from 'react';
 
 const SUPABASE_ORIGIN = (() => { try { return new URL(process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').origin; } catch { return ''; } })();
@@ -27,7 +28,7 @@ export default function Root({ children }: { children: ReactNode }) {
         {SUPABASE_ORIGIN ? <link rel="preconnect" href={SUPABASE_ORIGIN} crossOrigin="anonymous" /> : null}
         <link rel="dns-prefetch" href="https://horizon-testnet.stellar.org" />
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body,#root{height:100%;height:100dvh;}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS }} />
+        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body,#root{height:100%;height:100dvh;}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS + MOTION_CSS }} />
       </head>
       <body>
         {/* Splash inline: pinta en el primer frame (antes del JS) y la app lo quita al montar. Sin JS ni imágenes. */}

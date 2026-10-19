@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Share, Text, View } from 'react-native';
 import { Card, haptic, PrimaryButton, Screen, SuccessCheck } from '@/components/ds';
+import { toast } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 import { orderLink } from '@/lib/orders';
 import { track } from '@/lib/analytics';
@@ -26,7 +27,7 @@ export default function Compartir() {
   async function copy() {
     track('link_copied');
     await Clipboard.setStringAsync(link);
-    haptic.success();
+    haptic.success(); toast('Link copiado');
     setCopied(true);
   }
 

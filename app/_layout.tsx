@@ -2,6 +2,7 @@
 import '@/lib/polyfills';
 
 import { Nunito_400Regular, Nunito_700Bold, Nunito_900Black, useFonts } from '@expo-google-fonts/nunito';
+import { ToastHost } from '@/components/ds';
 import { DarkTheme, Stack, ThemeProvider, usePathname, useSegments } from 'expo-router';
 import { identify, initAnalytics, resetAnalytics, screen, track } from '@/lib/analytics';
 import * as SplashScreen from 'expo-splash-screen';
@@ -48,6 +49,7 @@ export default function RootLayout() {
       <CavosRoot>
         <Gate />
       </CavosRoot>
+      <ToastHost />
     </ThemeProvider>
   );
 }
