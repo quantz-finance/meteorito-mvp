@@ -9,7 +9,7 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
   privacidad: {
     title: 'Política de privacidad',
     sections: [
-      { h: 'Quiénes somos', p: ['Meteorito es un producto de Quantz (quantz.finance), con sede en Costa Rica. Esta política explica qué datos tratamos y por qué, conforme a la Ley N.º 8968 de Protección de la Persona frente al Tratamiento de sus Datos Personales.'] },
+      { h: 'Quiénes somos', p: ['Meteorito es un proyecto de Rolando Arguello Lizano (Costa Rica). Quantz, la empresa que lo operará, aún no está constituida. Esta política explica qué datos tratamos y por qué, conforme a la Ley N.º 8968 de Protección de la Persona frente al Tratamiento de sus Datos Personales.'] },
       { h: 'Modo prueba (testnet)', p: ['Hoy Meteorito funciona en la red de pruebas de Stellar. No se mueve dinero real y los saldos no tienen valor.'] },
       { h: 'Inicio de sesión', p: ['Usamos Cavos para iniciar sesión con Google, Apple o correo. Cavos nos entrega un identificador de cuenta y tu correo. Tus llaves las custodia Cavos en tu dispositivo y su bóveda: Meteorito no tiene acceso a ellas.'] },
       { h: 'Pagos y escrow', p: ['Los pagos quedan apartados en un contrato de escrow de Trustless Work sobre la red Stellar. Los fondos no quedan en una cuenta de Meteorito, sino en el contrato; sin embargo, algunos roles del contrato (aprobar y liberar el pago, y resolver disputas) los opera Meteorito, por lo que no es un esquema sin intermediarios. El pago se libera cuando el vendedor ingresa el PIN que el comprador le entrega, cuando vence el plazo de liberación automática o cuando el equipo resuelve una disputa. Las transacciones en Stellar son públicas por naturaleza.'] },
@@ -27,7 +27,7 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
       { h: 'Para qué usamos los datos', p: ['Para operar el pago en custodia, prevenir fraude, resolver disputas, mejorar la app y elaborar estadísticas agregadas. No vendemos tus datos.'] },
       { h: 'Tus derechos', p: ['Según la Ley 8968 tienes derecho de acceso, rectificación, cancelación y oposición (derechos ARCO), y a revocar tu consentimiento. Escríbenos a ' + CONTACT_EMAIL + '.'] },
       { h: 'Proveedores', p: ['Cavos (inicio de sesión y billetera), Trustless Work y Stellar (escrow), Supabase (base de datos y fotos), Vercel (hosting) y PostHog (analítica). Algunos procesan datos fuera de Costa Rica.'] },
-      { h: 'Contacto', p: [CONTACT_EMAIL + ' · quantz.finance'] },
+      { h: 'Contacto', p: [CONTACT_EMAIL] },
     ],
   },
   terminos: {
@@ -39,7 +39,7 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
       { h: 'Tus responsabilidades', p: ['Vendedores: publicar información veraz del producto (el IMEI o serie y el estado de iCloud son datos que declaras tú; Meteorito no los verifica) y no vender artículos robados o ilegales. Compradores: revisar el equipo al recibirlo y dar tu PIN solo cuando lo tengas en la mano y estés conforme.'] },
       { h: 'Disputas', p: ['Si algo sale mal antes de liberar el pago puedes abrir una disputa con evidencia. La disputa se registra en el contrato y el equipo de Meteorito la revisa y resuelve manualmente; no es una decisión automática.'] },
       { h: 'Limitación', p: ['Meteorito no es parte de la compraventa ni garantiza los productos ni el resultado de la operación; solo mantiene los fondos apartados en custodia (escrow) hasta la confirmación o resolución. Durante la fase de pruebas el servicio se ofrece "tal cual".'] },
-      { h: 'Contacto', p: [CONTACT_EMAIL + ' · quantz.finance'] },
+      { h: 'Contacto', p: [CONTACT_EMAIL] },
     ],
   },
 };
