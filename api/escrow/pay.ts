@@ -7,6 +7,7 @@ import { deployFor, mockRampFund, fundDirectXdr, fundDirect } from '../_lib/escr
 import { walletState } from '../_lib/wallet';
 import { requireBuyerIdentity, isBuyerOf, isGuestSub } from '../_lib/guest';
 import { env } from '../_lib/env';
+import { inviteForOrder } from '../_lib/invites';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -15,6 +16,9 @@ export default async function handler(req: any, res: any) {
     const { slug, step, proof } = req.body ?? {};
     let order = await orderBySlug(slug);
     if (step === 'start' && who.guest) {
+      // Link creado a partir de una invitación: queda reservado para quien invitó (su llave de invitado).
+      const reserved = await inviteForOrder(order.slug);
+      if (reserved && reserved.buyer_user_id !== who.guest) throw Object.assign(new HttpError(403, 'Este link de pago está reservado para quien inició la compra. Abre el link desde el mismo navegador donde creaste la invitación.'), { code: 'invite_reserved' });
       // Compra como INVITADO: sin cuenta ni wallet. El escrow queda con la wallet platform como buyer_address (docs/guest-checkout.md).
       if (order.contract_id && order.buyer_user_id !== who.guest) throw new HttpError(403, 'este pedido ya tiene comprador');
       if (who.cavos && who.cavos.sub === order.seller_user_id) throw Object.assign(new HttpError(409, 'No puedes comprar tu propio artículo.'), { code: 'self_purchase' });
@@ -24,6 +28,8 @@ export default async function handler(req: any, res: any) {
     }
     if (step === 'start') {
       const user = who.cavos; if (!user) throw new HttpError(401, 'Inicia sesión para continuar.');
+      const reservedFor = await inviteForOrder(order.slug);
+      if (reservedFor && reservedFor.buyer_user_id !== user.sub) throw Object.assign(new HttpError(403, 'Este link de pago está reservado para quien inició la compra.'), { code: 'invite_reserved' });
       // Pedido ya tomado: solo su comprador puede re-consultarlo (no exponer datos de pago a otro sub).
       if (order.contract_id && order.buyer_user_id !== user.sub) throw new HttpError(403, 'este pedido ya tiene comprador');
       const buyer = await requireAddressProof(proof, 'pay', order.slug);

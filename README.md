@@ -35,6 +35,8 @@ Meteorito is a hackathon-stage prototype. To be upfront about what it is and is 
 
 - Login with [Cavos](https://cavos.xyz) (Google, Apple or email) → non-custodial Stellar wallet, optional passkey backup.
 - Direct USDC payment: buyers without SINPE can lock funds straight from their Stellar wallet (`/api/escrow/pay` steps `fund_xdr` → `fund_direct`; buyer signs, platform pays the fee).
+- Guest checkout: a buyer opening a `/p/<slug>` link pays **without login or wallet** (`docs/guest-checkout.md`).
+- Buyer-initiated deals: the buyer creates an invitation (`/i/nueva`), the seller confirms by publishing, the payment link is reserved for the inviter (`docs/buyer-invites.md`). Both sides see live status ("Actualizado hace Xs").
 - Sale links: seller creates a listing with photos (IMEI optional), buyer pays in USDC (testnet).
 - Escrow via [Trustless Work](https://www.trustlesswork.com) on Stellar (Soroban).
 - Delivery PIN (locked after 3 wrong attempts), auto-release after `AUTO_RELEASE_MINUTES`.

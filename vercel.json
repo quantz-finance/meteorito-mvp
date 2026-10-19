@@ -9,6 +9,14 @@
       "destination": "/p/[slug].html"
     },
     {
+      "source": "/i/nueva",
+      "destination": "/i/nueva.html"
+    },
+    {
+      "source": "/i/:code",
+      "destination": "/i/[code].html"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }

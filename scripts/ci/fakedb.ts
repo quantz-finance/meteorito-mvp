@@ -1,7 +1,7 @@
 // Supabase en memoria para tests (subset de la API de PostgREST que usa api/_lib). PK por tabla → 23505.
-const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id', user_wallets: 'sub', session_nonces: 'nonce' };
+const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id', user_wallets: 'sub', session_nonces: 'nonce', invitations: 'code' };
 export function fakeDb() {
-  const tables: Record<string, any[]> = { orders: [], ramp_mock_payments: [], disputes: [], order_events: [] };
+  const tables: Record<string, any[]> = { orders: [], ramp_mock_payments: [], disputes: [], order_events: [], invitations: [] };
   let seq = 1;
   const from = (t: string) => {
     tables[t] ??= [];

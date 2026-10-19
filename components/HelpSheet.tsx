@@ -1,5 +1,8 @@
 import { useAutoReleaseWindow } from '@/lib/autorelease';
 import { Text, View } from 'react-native';
+import { useState } from 'react';
+import { LearnSheet } from '@/components/LearnSheet';
+import { PrimaryButton } from '@/components/ds';
 import { Icon, Sheet, type IconName } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 
@@ -12,6 +15,7 @@ const faq = (w: string | null): { icon: IconName; q: string; a: string }[] => [
 
 export function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const FAQ = faq(useAutoReleaseWindow());
+  const [learn, setLearn] = useState(false);
   return (
     <Sheet visible={visible} onClose={onClose} title="Ayuda">
       {FAQ.map((f) => (
@@ -23,6 +27,8 @@ export function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () 
           </View>
         </View>
       ))}
+      <PrimaryButton title="Cuenta Cavos, custodia y testnet" variant="secondary" icon="book-outline" onPress={() => setLearn(true)} />
+      <LearnSheet visible={learn} onClose={() => setLearn(false)} />
     </Sheet>
   );
 }

@@ -13,11 +13,15 @@ const perks = (w: string | null): { icon: IconName; text: string }[] => [
   { icon: 'time', text: w ? `Pago liberado en ${w} si todo está bien` : 'Pago liberado automáticamente si todo está bien' },
 ];
 import { track } from '@/lib/analytics';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { LearnSheet } from '@/components/LearnSheet';
 import { LegalLinks } from '@/components/LegalLinks';
 
 export default function Welcome() {
   const PERKS = perks(useAutoReleaseWindow());
   const { openLogin, isLoading, isAuthenticated, error, configured } = useAuth();
+  const [learn, setLearn] = useState(false);
   const busy = isLoading || isAuthenticated; // autenticado pero cargando la cuenta
   // Todo cabe en el viewport sin scroll: la mascota y los espacios escalan con el alto disponible
   // (Safari iOS con barras visibles deja ~650-750 px en un 13 Pro Max).
@@ -47,8 +51,11 @@ export default function Welcome() {
         {!configured && <ErrorText>Falta EXPO_PUBLIC_CAVOS_APP_ID en el .env</ErrorText>}
         {error && <ErrorText>{error}</ErrorText>}
         <PrimaryButton title="Entrar" loading={busy} disabled={!configured} onPress={() => { track('login_started'); openLogin(); }} />
+        <PrimaryButton title="Quiero comprar (sin cuenta)" variant="secondary" icon="paper-plane-outline" onPress={() => { track('invite_start_tapped'); router.push('/i/nueva'); }} />
+        <PrimaryButton title="¿Cómo funciona? Cuenta, custodia y testnet" variant="ghost" icon="help-circle-outline" onPress={() => { track('learn_cta_tapped'); setLearn(true); }} />
         <LegalLinks />
-        {!tiny && <Text style={s.hint}>Con Google, Apple o tu correo. Sin contraseñas. · Modo prueba</Text>}
+        {!tiny && <Text style={s.hint}>Con Google, Apple o tu correo: Cavos crea tu billetera, tú controlas la llave. · Beta en testnet</Text>}
+        <LearnSheet visible={learn} onClose={() => setLearn(false)} />
       </View>
     </SafeAreaView>
     </View>

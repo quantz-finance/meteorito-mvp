@@ -1,6 +1,6 @@
 import { ensureWalletReady, walletErrorNotice } from '@/lib/wallet';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ui } from '@/components/ui';
@@ -11,6 +11,7 @@ import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { CATEGORIES, CONDITIONS, checksSummary, getCategory, validateIdentifier } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { createOrder, formatCRC } from '@/lib/orders';
+import { getInvite, type Invite } from '@/lib/invites';
 import { compressPhoto, MAX_PHOTOS, newDraftId, uploadCompressed, uploadPhoto } from '@/lib/photos';
 import { supabaseConfigured } from '@/lib/supabase';
 import { priceBucket, track, trackError } from '@/lib/analytics';
@@ -66,6 +67,19 @@ export default function Vender() {
   const [photos, setPhotos] = useState<Photo[]>(d0?.photos ?? []);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Publicación en respuesta a una invitación del comprador (?invite=codigo): se precarga lo que pidió y se envía el código al publicar.
+  const { invite: inviteParam } = useLocalSearchParams<{ invite?: string }>();
+  const [invite, setInvite] = useState<Invite | null>(null);
+  useEffect(() => {
+    if (!inviteParam) { setInvite(null); return; }
+    let live = true;
+    getInvite(String(inviteParam)).then((i) => {
+      if (!live || !i || i.status !== 'abierta') { if (live && i) setError('Esta invitación ya no está abierta.'); return; }
+      setInvite(i); setCategoryId(i.category); setBrand(i.brand); setModel(i.model); setPrice(String(i.price_crc)); setStepIdx((s) => Math.max(s, 1));
+    }).catch((e) => live && setError((e as Error).message));
+    return () => { live = false; };
+  }, [inviteParam]);
 
   const cat = getCategory(categoryId)!;
   const steps = useMemo<StepKey[]>(() => (['categoria', 'fotos', 'modelo', 'estado', 'identificador',
@@ -133,7 +147,7 @@ export default function Vender() {
       const slug = await createOrder(auth, {
         category: cat.id, brand: brand.trim(), model: model.trim(),
         condition, price_crc: priceNum, description: description.trim(), identifier: identifier.trim(),
-        photos: urls, checks: checksSummary(cat, checks),
+        photos: urls, checks: checksSummary(cat, checks), ...(invite ? { invite: invite.code } : {}),
       });
       setBrand(''); setModel(''); setPrice(''); setDescription(''); setIdentifier(''); setChecks({}); setPhotos([]); setStepIdx(0); saveDraft(null);
       track('link_created', { category: cat.id, photos: urls.length, price_bucket: priceBucket(priceNum) });
@@ -181,6 +195,7 @@ export default function Vender() {
 
   return (
     <Screen title="Vender" subtitle={`Paso ${stepIdx + 1} de ${steps.length} · ${STEP_LABEL[step]}`} footer={footer}>
+      {invite && <Card style={{ gap: S.xs }}><Text style={T.headline}>Respondes a una invitación de compra</Text><Text style={T.callout}>Quieren {invite.brand} {invite.model} por {formatCRC(invite.price_crc)}. Cargamos lo que pidieron; agrega fotos y estado. El link de pago que se genere queda reservado para quien te invitó.</Text></Card>}
       <View style={s.progress}>{steps.map((_, i) => <View key={i} style={[s.progressSeg, i <= stepIdx && { backgroundColor: C.lilac }]} />)}</View>
 
       {step === 'categoria' && <>

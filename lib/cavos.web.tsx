@@ -8,7 +8,7 @@ import type { MeteoritoAuth } from './types';
 const CavosBridge = lazy(() => import('./cavosBridge'));
 
 // Rutas públicas (link de pago, legales): ahí el SDK NO se carga hasta que haga falta (login explícito o sesión previa).
-const isPublicPath = () => /^\/(p|legal)(\/|$)/.test(window.location.pathname);
+const isPublicPath = () => /^\/(p|i|legal)(\/|$)/.test(window.location.pathname);
 
 export function CavosRoot({ children }: { children: ReactNode }) {
   // El SDK usa window/localStorage: no se monta durante el render estático.
