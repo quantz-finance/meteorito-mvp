@@ -12,7 +12,7 @@ export default function Compartir() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const link = orderLink(slug);
   const [copied, setCopied] = useState(false);
-  const message = `Paga seguro con Meteorito: ${link}`;
+  const message = `Paga en custodia con Meteorito: ${link}`;
 
   async function share() {
     track('share_clicked', { method: Platform.OS === 'web' && (globalThis.navigator as any)?.share ? 'web_share' : Platform.OS === 'web' ? 'copy' : 'native_share' });
@@ -42,7 +42,7 @@ export default function Compartir() {
       <SuccessCheck />
       <View style={{ gap: S.sm }}>
         <Text style={[T.largeTitle, { textAlign: 'center' }]}>¡Tu link está listo!</Text>
-        <Text style={[T.callout, { textAlign: 'center' }]}>Mándalo por WhatsApp o Messenger. El comprador paga protegido y tú cobras al entregar.</Text>
+        <Text style={[T.callout, { textAlign: 'center' }]}>Mándalo por WhatsApp o Messenger. El comprador paga y los fondos quedan en custodia; tú cobras al entregar.</Text>
       </View>
       <Card onPress={copy} accessibilityLabel="Copiar link" style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
         <Text style={[T.body, { flex: 1 }]} numberOfLines={1}>{link.replace('https://', '')}</Text>

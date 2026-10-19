@@ -36,7 +36,7 @@ El distintivo trae un selector **Vendedor / Comprador**: al cambiar, va a *Mis p
 ## Flujo (los 5 pasos)
 
 1. **Vendedor crea el link**: Inicio → *Vender* → asistente normal → *Crear link de venta*. Slugs deterministas: `demo01`, `demo02`…
-2. **Comprador paga**: `/p/demo01` → *Pagar seguro* → *Ya pagué*. Escrow fondeado y **PIN visible una sola vez** (`482915`, fijo para que el guion pueda ingresarlo; aparece solo en la hoja del comprador).
+2. **Comprador paga**: `/p/demo01` → *Pagar en custodia* → *Ya pagué*. Escrow fondeado y **PIN visible una sola vez** (`482915`, fijo para que el guion pueda ingresarlo; aparece solo en la hoja del comprador).
 3. **Vendedor marca "Enviado"**: *Mis pedidos* → pedido → nota → *Marcar como enviado*.
 4. **Vendedor cobra**: ingresa el PIN → *Confirmar PIN y cobrar* → pago liberado (el saldo de prueba del vendedor sube; PIN incorrecto da error).
 5. **Disputa abierta**: el comprador pulsa *Tengo un problema* en un pedido fondeado/enviado → *En disputa*.

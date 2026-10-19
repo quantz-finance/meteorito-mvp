@@ -149,7 +149,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   }
   if (p === '/api/escrow/ship') {
     need('seller'); const o = get(String(body.slug));
-    if (o.status !== 'fondeado') throw err(409, 'bad_state', 'El pago todavía no está protegido.');
+    if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.');
     o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.evidence = body.evidence ?? null; emit();
     return { shippedTx: o.shipped_tx, evidenceHash: demoTxHash('ev:' + o.slug) };
   }

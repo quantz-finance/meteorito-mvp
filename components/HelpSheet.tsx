@@ -4,7 +4,7 @@ import { Icon, Sheet, type IconName } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 
 const faq = (w: string | null): { icon: IconName; q: string; a: string }[] => [
-  { icon: 'shield-checkmark', q: '¿Cómo me protege Meteorito?', a: 'El comprador paga y el dinero queda apartado. El vendedor cobra cuando el comprador recibe el producto y lo revisa.' },
+  { icon: 'shield-checkmark', q: '¿Cómo funciona la custodia?', a: 'El comprador paga y el dinero queda apartado en custodia (escrow). El vendedor cobra cuando el comprador recibe el producto y lo revisa.' },
   { icon: 'keypad', q: '¿Para qué es el PIN?', a: 'El comprador recibe un PIN de 6 dígitos. Lo da al vendedor solo cuando tiene el producto en la mano. Con 3 intentos fallidos se bloquea.' },
   { icon: 'time', q: '¿Y si el comprador no confirma?', a: w ? `Si nadie reporta un problema, el pago se libera solo ${w} después del envío.` : 'Si nadie reporta un problema, el pago se libera solo al vencer el plazo de liberación automática.' },
   { icon: 'chatbubbles', q: '¿Qué pasa si hay un problema?', a: `${w ? `Repórtalo antes de ${w}.` : 'Repórtalo antes de que se libere el pago.'} El pago queda en pausa mientras revisamos el caso.` },

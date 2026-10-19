@@ -14,7 +14,7 @@ import { useAuth } from '@/lib/cavos';
 import { formatCRC, getPublicOrder, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
 
 const HOW: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'lock-closed', title: 'Pagas protegido', text: 'Tu dinero queda apartado. El vendedor todavía no lo recibe.' },
+  { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu dinero queda apartado en el escrow. El vendedor todavía no lo recibe.' },
   { icon: 'cube', title: 'Recibes y revisas', text: 'Cuando lo tengas en la mano y funcione, le das tu PIN al vendedor.' },
   { icon: 'cash', title: 'El vendedor cobra', text: 'Recién ahí se libera el pago. Si hay un problema, lo revisamos.' },
 ];

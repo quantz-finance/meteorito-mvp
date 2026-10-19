@@ -45,7 +45,7 @@ export default function Inicio() {
   const crc = bal ? Number(bal.usdc ?? 0) * CRC_USDC_RATE : 0;
   const name = displayName(email);
   const actions: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
-    { icon: 'pricetag', label: 'Vender', hint: 'Crea un link de pago seguro', onPress: () => router.push('/vender') },
+    { icon: 'pricetag', label: 'Vender', hint: 'Crea un link de pago en custodia', onPress: () => router.push('/vender') },
     { icon: 'link', label: 'Pagar un link', hint: 'Pega el link del vendedor', onPress: () => setPayOpen(true) },
   ];
 
@@ -61,7 +61,7 @@ export default function Inicio() {
         {!bal && !err ? <Skeleton w="70%" h={48} style={{ marginTop: S.sm }} />
           : <Text style={[T.money, { marginTop: S.sm }]} adjustsFontSizeToFit numberOfLines={1}>{formatCRC(crc)}</Text>}
         {err ? <Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Desliza hacia abajo para reintentar.</Text>
-          : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros protegidos llegan aquí.</Text>}
+          : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros liberados llegan aquí.</Text>}
         {walletMsg ? <Text style={[T.footnote, { color: C.orange }]}>{walletMsg}</Text> : null}
         <LivelyMascot size={104} style={s.mascot} parallax={-0.15} />
       </View></Reveal>

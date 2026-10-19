@@ -286,7 +286,7 @@ export default function Vender() {
         </Card>
         <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'flex-start' }}>
           <Icon name="shield-checkmark" size={20} color={C.success} />
-          <Text style={[T.callout, { flex: 1 }]}>Recibes el monto completo. El comprador paga protegido y tú cobras al entregar.</Text>
+          <Text style={[T.callout, { flex: 1 }]}>Recibes el monto completo. El comprador paga y los fondos quedan en custodia; tú cobras al entregar.</Text>
         </View>
       </>}
 
