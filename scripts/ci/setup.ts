@@ -45,15 +45,16 @@ export const refused = async (f: () => Promise<unknown>): Promise<{ msg: string;
 };
 
 /** Despliega + fondea (+ envía) un escrow de 1 USDC en testnet. */
-export async function makeEscrow(N: Testnet, tag: string, opts: { fund?: boolean; ship?: boolean } = { fund: true, ship: true }) {
+export async function makeEscrow(N: Testnet, tag: string, opts: { fund?: boolean; ship?: boolean; amount?: number } = { fund: true, ship: true }) {
+  const amount = opts.amount ?? 1;
   const tw = await import('../../api/_lib/tw');
   const { Networks, TransactionBuilder } = await import('@stellar/stellar-sdk');
   const seller = Keypair.fromSecret(N.S.TESTNET_SELLER_SECRET);
-  const { contractId, hash } = await tw.deploySingleRelease({ signerSecret: N.S.TESTNET_DEPLOYER_SECRET, engagementId: `ci-${tag}-${Date.now()}`, title: 'Meteorito CI', description: tag, amount: 1,
+  const { contractId, hash } = await tw.deploySingleRelease({ signerSecret: N.S.TESTNET_DEPLOYER_SECRET, engagementId: `ci-${tag}-${Date.now()}`, title: 'Meteorito CI', description: tag, amount,
     roles: { approver: N.pub('TESTNET_APPROVER_SECRET'), serviceProvider: seller.publicKey(), releaseSigner: N.pub('TESTNET_RELEASE_SIGNER_SECRET'), receiver: seller.publicKey(),
       disputeResolver: N.pub('TESTNET_DISPUTE_RESOLVER_SECRET'), platformAddress: N.pub('TESTNET_PLATFORM_SECRET') } });
   const out: Record<string, string> = { contractId, deploy: hash };
-  if (opts.fund) out.fund = (await tw.fundEscrow(contractId, 1, N.S.TESTNET_TREASURY_SECRET)).hash;
+  if (opts.fund) out.fund = (await tw.fundEscrow(contractId, amount, N.S.TESTNET_TREASURY_SECRET)).hash;
   if (opts.ship) {
     const x = await tw.changeMilestoneStatusXdr(contractId, seller.publicKey(), 'Enviado', 'sha256:ci');
     const t = TransactionBuilder.fromXDR(x.unsignedTransaction, Networks.TESTNET); t.sign(seller);

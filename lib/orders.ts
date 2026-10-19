@@ -41,7 +41,7 @@ export async function createOrder(auth: MeteoritoAuth, o: Omit<NewOrder, 'seller
 export interface PublicOrder {
   slug: string; category: string; brand: string; model: string; condition: string; price_crc: number;
   description: string | null; photos: string[]; status: string; identifier_masked: string | null;
-  amount_usdc?: number | null; contract_id?: string | null; funded_tx?: string | null; released_tx?: string | null; auto_release_at?: string | null;
+  amount_usdc?: number | null; contract_id?: string | null; funded_tx?: string | null; shipped_tx?: string | null; released_tx?: string | null; auto_release_at?: string | null;
   checks_summary: CheckResult[]; created_at: string;
   /** Opcionales: solo se muestran si el backend los expone (todavía no en public_orders). */
   seller_name?: string | null; seller_phone_verified?: boolean | null;

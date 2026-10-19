@@ -1,6 +1,6 @@
 import { ensureSellerWalletOnLoad } from '@/lib/wallet';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { RefreshControl, Text, View } from 'react-native';
 import { Card, Chip, ErrorText, Icon, MoneyTimeline, PrimaryButton, Screen, Sheet, SkeletonCard, statusTone } from '@/components/ds';
 import { OrderCard } from '@/components/OrderRow';
@@ -8,7 +8,8 @@ import { Reveal } from '@/components/space';
 import { SellerActions } from '@/components/SellerActions';
 import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
-import { formatCRC, getSellerOrders, orderLink, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
+import { ChainLinks } from '@/components/ChainLinks';
+import { formatCRC, getPublicOrder, getSellerOrders, type PublicOrder, orderLink, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
 
 const NEXT_HINT: Record<string, string> = {
@@ -37,6 +38,15 @@ export default function Pedidos() {
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // Datos públicos del pedido abierto (contrato, hashes, shipped_tx): la RPC seller_orders no los trae.
+  const [detail, setDetail] = useState<PublicOrder | null>(null);
+  useEffect(() => {
+    setDetail(null);
+    if (!openSlug) return;
+    let live = true;
+    getPublicOrder(openSlug).then((d) => { if (live) setDetail(d); }).catch(() => {});
+    return () => { live = false; };
+  }, [openSlug, orders]);
   const open = orders?.find((o) => o.slug === openSlug) ?? null;
 
   return (
@@ -63,13 +73,14 @@ export default function Pedidos() {
             <Chip label={STATUS_LABEL[open.status] ?? open.status} tone={statusTone(open.status)} />
           </View>
           <Card style={{ gap: S.md }}>
-            <MoneyTimeline status={open.status} />
+            <MoneyTimeline status={open.status} shipped={!!detail?.shipped_tx} />
             <Text style={T.callout}>{NEXT_HINT[open.status] ?? ''}</Text>
           </Card>
           <SellerActions slug={open.slug} status={open.status} onChange={load} />
           <View style={{ gap: S.xs }}>
             <Text style={T.caption}>Detalles</Text>
             <Text style={T.footnote} selectable>{orderLink(open.slug)}</Text>
+            <ChainLinks order={detail} />
             {open.identifier_masked ? <Text style={T.footnote}>Identificador: {open.identifier_masked}</Text> : null}
           </View>
         </>}

@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/cavos';
 import { formatCRC, type PublicOrder } from '@/lib/orders';
 import { track, trackError } from '@/lib/analytics';
 import { DEMO_ENABLED } from '@/lib/demo';
+import { ChainLinks } from '@/components/ChainLinks';
 
 export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () => void }) {
   const auth = useAuth();
@@ -60,16 +61,21 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         <Text style={{ fontFamily: Fonts.black, fontSize: 40, letterSpacing: 8, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
       </Card>
       <Text style={[T.callout, { textAlign: 'center' }]}>Dáselo al vendedor solo cuando tengas el producto en la mano y lo hayas revisado.</Text>
+      <ChainLinks order={order} align="center" />
     </Sheet>
     <Sheet visible={sheet === 'released'} onClose={() => setSheet(null)} footer={<PrimaryButton title="Cerrar" onPress={() => setSheet(null)} />}>
       <SuccessCheck celebrate />
       <Text style={[T.title, { textAlign: 'center' }]}>¡Listo! Pago liberado</Text>
       <Text style={[T.callout, { textAlign: 'center' }]}>Gracias por comprar seguro con Meteorito.</Text>
+      <ChainLinks order={order} align="center" />
     </Sheet>
   </>;
 
   let footer: React.ReactNode = null;
-  if (!auth.isAuthenticated) {
+  if (auth.isLoading || (auth.isAuthenticated && !auth.address)) {
+    // Sesión en curso: no mostrar "Entrar" a quien ya inició sesión.
+    footer = <PrimaryButton title="Cargando tu cuenta…" loading disabled onPress={() => {}} />;
+  } else if (!auth.isAuthenticated) {
     footer = <PrimaryButton title="Entrar para pagar seguro" icon="shield-checkmark" onPress={auth.openLogin} />;
   } else if (order.status === 'creado' || (order.status === 'escrow_creado' && !sinpe)) {
     footer = <>
