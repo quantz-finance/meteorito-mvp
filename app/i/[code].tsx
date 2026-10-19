@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform, Share, Text, View } from 'react-native';
 import { Card, Chip, ErrorText, haptic, Icon, PrimaryButton, Screen, SkeletonCard, TestnetPill } from '@/components/ds';
+import { toast } from '@/components/ds';
 import { Freshness } from '@/components/Freshness';
 import { C, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
@@ -54,7 +55,7 @@ export default function Invitacion() {
     }
     await Share.share({ message, url: link });
   }
-  async function copy() { await Clipboard.setStringAsync(link); haptic.success(); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+  async function copy() { await Clipboard.setStringAsync(link); haptic.success(); toast('Link copiado'); setCopied(true); setTimeout(() => setCopied(false), 2000); }
 
   const header = (
     <Card style={{ gap: S.sm }}>

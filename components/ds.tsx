@@ -1,7 +1,7 @@
 // Componentes de UI estilo iOS fintech. Solo presentación: nada de lógica de negocio.
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View,
   type PressableProps, type StyleProp, type ViewStyle,
@@ -11,8 +11,10 @@ import { C, R, S, T, TOUCH, BUTTON_H, shadow } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import Reanimated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { moneyProgress } from '@/lib/progress';
+import { anim, pressTransition } from '@/constants/motion';
 import { MeteorBurst, ScrollCtx, SpaceBackground, type SpaceMode } from '@/components/space';
 
+const WEB = Platform.OS === 'web';
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];
 export const Icon = ({ name, size = 22, color = C.text }: { name: IconName; size?: number; color?: string }) =>
   <Ionicons name={name} size={size} color={color} />;
@@ -46,9 +48,9 @@ export function Screen({ title, subtitle, right, children, footer, scroll = true
     <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
       keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}
       onScroll={onScroll} scrollEventThrottle={16}>
-      {header}{children}
+      <View {...anim('enter')} style={{ gap: S.lg }}>{header}{children}</View>
     </Reanimated.ScrollView>
-  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md }, contentStyle]}>{header}{children}</View>;
+  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md }, contentStyle]}><View {...anim('enter')} style={{ flex: 1, gap: S.lg }}>{header}{children}</View></View>;
   return (
     <ScrollCtx.Provider value={scrollY}>
       <View style={st.screen}>
@@ -69,7 +71,7 @@ export function Card({ children, style, onPress, accessibilityLabel }: { childre
   if (!onPress) return <View style={[st.card, style]}>{children}</View>;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={() => { haptic.tap(); onPress(); }}
-      style={({ pressed }) => [st.card, style, pressed && { opacity: 0.85, transform: [{ scale: 0.99 }] }]}>
+      style={({ pressed }) => [st.card, style, pressTransition, pressed && st.pressed]}>
       {children}
     </Pressable>
   );
@@ -94,7 +96,7 @@ export function PrimaryButton({ title, icon, variant = 'primary', loading, disab
       disabled={disabled || loading}
       onPress={(e) => { haptic.tap(); onPress?.(e); }}
       style={({ pressed }) => [st.btn, variant === 'secondary' && st.btnSecondary, variant === 'ghost' && st.btnGhost,
-        (disabled && !loading) && { opacity: 0.4 }, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+        (disabled && !loading) && { opacity: 0.4 }, pressTransition, pressed && st.pressed]}>
       {loading ? <ActivityIndicator color={fg} /> : <>
         {icon ? <Icon name={icon} size={20} color={fg} /> : null}
         <Text style={[st.btnText, { color: fg }]}>{title}</Text>
@@ -106,18 +108,19 @@ export function PrimaryButton({ title, icon, variant = 'primary', loading, disab
 export function IconButton({ icon, onPress, label }: { icon: IconName; onPress: () => void; label: string }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={() => { haptic.tap(); onPress(); }} hitSlop={8}
-      style={({ pressed }) => [st.iconBtn, pressed && { opacity: 0.7 }]}>
+      style={({ pressed }) => [st.iconBtn, pressTransition, pressed && st.pressed]}>
       <Icon name={icon} size={22} color={C.lilac} />
     </Pressable>
   );
 }
 
 /* ---------- Chips ---------- */
-export function Chip({ label, tone = 'lilac', icon }: { label: string; tone?: 'lilac' | 'success' | 'warn' | 'muted'; icon?: IconName }) {
+/** swap: anima el cambio (usar con key={valor} para que re-anime cuando llega un update). */
+export function Chip({ label, tone = 'lilac', icon, swap }: { label: string; tone?: 'lilac' | 'success' | 'warn' | 'muted'; icon?: IconName; swap?: boolean }) {
   const map = { lilac: [C.lilacBg, C.lilac], success: [C.successBg, C.success], warn: [C.warnBg, C.orange], muted: ['rgba(255,255,255,0.06)', C.textDim] } as const;
   const [bg, fg] = map[tone];
   return (
-    <View style={[st.chip, { backgroundColor: bg }]}>
+    <View {...(swap ? anim('swap') : {})} style={[st.chip, { backgroundColor: bg }]}>
       {icon ? <Icon name={icon} size={12} color={fg} /> : null}
       <Text style={[st.chipText, { color: fg }]} numberOfLines={1}>{label}</Text>
     </View>
@@ -129,6 +132,10 @@ export const TestnetPill = () => <Chip label="Modo prueba" tone="muted" icon="fl
 
 /* ---------- Skeleton ---------- */
 export function Skeleton({ w = '100%', h = 16, r = R.sm, style }: { w?: number | `${number}%`; h?: number; r?: number; style?: StyleProp<ViewStyle> }) {
+  if (Platform.OS === 'web') return <View {...anim('skeleton')} style={[{ width: w, height: h, borderRadius: r, backgroundColor: C.surface2 }, style]} />;
+  return <SkeletonNative w={w} h={h} r={r} style={style} />;
+}
+function SkeletonNative({ w, h, r, style }: { w: number | `${number}%`; h: number; r: number; style?: StyleProp<ViewStyle> }) {
   const o = useRef(new Animated.Value(0.4)).current;
   useEffect(() => {
     const a = Animated.loop(Animated.sequence([
@@ -148,10 +155,10 @@ export function SkeletonCard() {
 export function Sheet({ visible, onClose, title, children, footer }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode }) {
   const insets = useSafeAreaInsets();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <View style={st.sheetWrap}>
+    <Modal visible={visible} transparent animationType={WEB ? 'none' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
+      <View {...anim('fade')} style={st.sheetWrap}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Cerrar" />
-        <View style={[st.sheet, { paddingBottom: Math.max(insets.bottom, S.md) }]}>
+        <View {...anim('sheet')} style={[st.sheet, { paddingBottom: Math.max(insets.bottom, S.md) }]}>
           <View style={st.grabber} />
           {title ? <View style={[st.rowBetween, { marginBottom: S.md }]}>
             <Text style={T.title}>{title}</Text>
@@ -168,19 +175,27 @@ export function Sheet({ visible, onClose, title, children, footer }: { visible: 
 /* ---------- Éxito animado ---------- */
 /** celebrate: meteorito de una pasada. Usar SOLO tras respuesta exitosa de una operación on-chain. */
 export function SuccessCheck({ size = 88, celebrate = false }: { size?: number; celebrate?: boolean }) {
-  const sc = useRef(new Animated.Value(0)).current;
+  const sc = useRef(new Animated.Value(WEB ? 1 : 0)).current;
   useEffect(() => {
     haptic.success();
-    Animated.spring(sc, { toValue: 1, friction: 5, tension: 120, useNativeDriver: Platform.OS !== 'web' }).start();
+    if (!WEB) Animated.spring(sc, { toValue: 1, friction: 5, tension: 120, useNativeDriver: true }).start();
   }, [sc]);
   const check = (
-    <Animated.View style={{ alignSelf: 'center', width: size, height: size, borderRadius: size / 2, backgroundColor: C.success,
+    <Animated.View {...anim('pop')} style={{ alignSelf: 'center', width: size, height: size, borderRadius: size / 2, backgroundColor: C.success,
       alignItems: 'center', justifyContent: 'center', transform: [{ scale: sc }] }}>
-      <Icon name="checkmark" size={size * 0.55} color={C.purpleDark} />
+      <View {...anim('check')}><Icon name="checkmark" size={size * 0.55} color={C.purpleDark} /></View>
     </Animated.View>
   );
   if (!celebrate) return check;
-  return <View style={{ alignSelf: 'stretch', alignItems: 'center' }}><MeteorBurst height={size * 1.6} />{check}</View>;
+  return (
+    <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+      <MeteorBurst height={size * 1.6} />
+      <View style={{ width: size, height: size, alignSelf: 'center' }}>
+        {check}
+        {WEB ? <View {...anim('confetti')} style={StyleSheet.absoluteFill}>{Array.from({ length: 14 }, (_, i) => <View key={i} />)}</View> : null}
+      </View>
+    </View>
+  );
 }
 
 /* ---------- Estado del dinero: 4 pasos ---------- */
@@ -215,11 +230,15 @@ export function MoneyTimeline({ status, compact, shipped }: { status: string; co
         return (
           <View key={s.key} style={{ flex: 1, alignItems: 'center' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%' }}>
-              <View style={[st.tlLine, { backgroundColor: i === 0 ? 'transparent' : i <= done ? C.success : C.surface2 }]} />
-              <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
-                <Icon name={isProblem ? 'alert' : isDone ? 'checkmark' : s.icon} size={dot * 0.5} color={fg} />
+              <TlLine hidden={i === 0} on={i <= done} />
+              <View style={{ width: dot, height: dot }}>
+                {isNext ? <View {...anim('ring')} style={[StyleSheet.absoluteFill, { borderRadius: dot / 2, backgroundColor: C.lilac }]} /> : null}
+                <View key={`${s.key}-${isDone}-${isProblem}`} {...(isDone || isProblem ? anim('pop') : {})}
+                  style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name={isProblem ? 'alert' : isDone ? 'checkmark' : s.icon} size={dot * 0.5} color={fg} />
+                </View>
               </View>
-              <View style={[st.tlLine, { backgroundColor: i === 3 ? 'transparent' : i < done ? C.success : C.surface2 }]} />
+              <TlLine hidden={i === 3} on={i < done} />
             </View>
             <Text style={[st.tlLabel, { color: isDone ? C.text : isNext || isProblem ? (isProblem ? C.orange : C.lilac) : C.textDim }]}
               numberOfLines={1}>{isProblem ? 'En disputa' : s.label}</Text>
@@ -228,6 +247,39 @@ export function MoneyTimeline({ status, compact, shipped }: { status: string; co
       })}
     </View>
     {note}
+    </View>
+  );
+}
+
+/** Segmento del timeline: el relleno verde avanza con scaleX (GPU) cuando el paso se completa. */
+function TlLine({ hidden, on }: { hidden: boolean; on: boolean }) {
+  if (hidden) return <View style={st.tlLine} />;
+  return (
+    <View style={[st.tlLine, { backgroundColor: C.surface2, overflow: 'hidden' }]}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: C.success, transform: [{ scaleX: on ? 1 : 0 }], transformOrigin: 'left' } as ViewStyle,
+        WEB ? ({ transitionProperty: 'transform', transitionDuration: '320ms', transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' } as object) : null]} />
+    </View>
+  );
+}
+
+/* ---------- Toast ---------- */
+type ToastMsg = { id: number; text: string; tone: 'ok' | 'info' };
+let toastListener: ((m: ToastMsg | null) => void) | null = null;
+let toastSeq = 0;
+/** Toast suave (2.4 s). Requiere <ToastHost /> montado en el layout raíz. */
+export function toast(text: string, tone: 'ok' | 'info' = 'ok') { toastListener?.({ id: ++toastSeq, text, tone }); }
+export function ToastHost() {
+  const [m, setM] = useState<ToastMsg | null>(null);
+  const insets = useSafeAreaInsets();
+  useEffect(() => { toastListener = setM; return () => { toastListener = null; }; }, []);
+  useEffect(() => { if (!m) return; const t = setTimeout(() => setM(null), 2400); return () => clearTimeout(t); }, [m]);
+  if (!m) return null;
+  return (
+    <View pointerEvents="none" style={[st.toastWrap, { top: insets.top + S.sm }]}>
+      <View key={m.id} {...anim('toast')} accessibilityLiveRegion="polite" style={st.toast}>
+        <Icon name={m.tone === 'ok' ? 'checkmark-circle' : 'sync'} size={18} color={m.tone === 'ok' ? C.success : C.lilac} />
+        <Text style={[T.footnote, { color: C.text, fontSize: 14 }]}>{m.text}</Text>
+      </View>
     </View>
   );
 }
@@ -243,7 +295,7 @@ export function ListRow({ icon, title, subtitle, right, onPress }: { icon?: Icon
     {right}
   </>;
   if (!onPress) return <View style={st.listRow}>{inner}</View>;
-  return <Pressable onPress={() => { haptic.tap(); onPress(); }} style={({ pressed }) => [st.listRow, pressed && { opacity: 0.7 }]}>{inner}</Pressable>;
+  return <Pressable onPress={() => { haptic.tap(); onPress(); }} style={({ pressed }) => [st.listRow, pressTransition, pressed && st.pressed]}>{inner}</Pressable>;
 }
 
 export const ErrorText = ({ children }: { children: ReactNode }) =>
@@ -268,6 +320,9 @@ export const st = StyleSheet.create({
   sheet: { backgroundColor: C.surface, borderTopLeftRadius: R.lg, borderTopRightRadius: R.lg, paddingHorizontal: S.md, paddingTop: S.sm, width: '100%', maxWidth: 600, alignSelf: 'center', ...shadow },
   grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: C.surface2, marginBottom: S.md },
   tlLine: { flex: 1, height: 3, borderRadius: 2 },
+  pressed: { opacity: 0.9, transform: [{ scale: 0.97 }] },
+  toastWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center', paddingHorizontal: S.md },
+  toast: { flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.surface, borderRadius: R.pill, paddingHorizontal: S.md, paddingVertical: S.sm + 2, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line, maxWidth: 440, ...shadow },
   tlLabel: { fontFamily: Fonts.bold, fontSize: 11, marginTop: S.xs },
   listRow: { flexDirection: 'row', alignItems: 'center', gap: S.md, minHeight: TOUCH + S.md, paddingVertical: S.sm },
   rowIcon: { width: 40, height: 40, borderRadius: R.sm + 4, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
