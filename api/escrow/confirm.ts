@@ -4,18 +4,19 @@
 // El backend approver aprueba el hito y el release signer libera (verificación on-chain previa).
 import { json, fail, orderBySlug, db, logEvent } from '../_lib/db';
 import { requireCavosUser, HttpError } from '../_lib/auth';
+import { requireBuyerIdentity, isBuyerOf } from '../_lib/guest';
 import { approveAndRelease, pinHash } from '../_lib/escrow';
 import { timingSafeEqual } from 'node:crypto';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
-    const user = await requireCavosUser(req);
     const { slug, reason, pin } = req.body ?? {};
     const order = await orderBySlug(slug);
     if (reason === 'buyer_confirm') {
-      if (order.buyer_user_id !== user.sub) throw new HttpError(403, 'no eres el comprador');
+      if (!isBuyerOf(order, await requireBuyerIdentity(req))) throw new HttpError(403, 'no eres el comprador');
     } else if (reason === 'pin') {
+      const user = await requireCavosUser(req);
       if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no eres el vendedor');
       if ((order.pin_attempts ?? 0) >= 3) throw new HttpError(429, 'demasiados intentos de PIN');
       const ok = typeof pin === 'string' && /^\d{6}$/.test(pin) && order.delivery_pin_hash &&

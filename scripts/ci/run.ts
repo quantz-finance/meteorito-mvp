@@ -24,6 +24,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '22', name: 'Modo demo: apagado por defecto, sin puerta en prod, sin red al backend real', file: './t22-demo.test.ts', onchain: false },
   { id: '23', name: 'Redondeo USDC (sin ₡5 de más), stepper por estado real, links Stellar Expert', file: './t23-rounding-links.test.ts', onchain: false },
   { id: '25', name: 'Refresco vendedor: polling solo con pedidos no finales', file: './t25-refresh.test.ts', onchain: false },
+  { id: '26', name: 'Comprador invitado: identidad por llave, ownership, sin login', file: './t26-guest.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },

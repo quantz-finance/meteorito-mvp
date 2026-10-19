@@ -4,6 +4,7 @@
 // (≤ SESSION_GRACE_DAYS, default 7). Reintento único.
 import type { MeteoritoAuth } from './types';
 import { DEMO_ENABLED, demoApi } from './demo';
+import { guestKey } from './guest';
 
 export async function proof(auth: MeteoritoAuth, action: string, ref: string) {
   if (!auth.address) throw new Error('Inicia sesión');
@@ -110,5 +111,18 @@ export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unkn
     if (j.code === 'session_wallet_mismatch') console.error('[api] la sesión (token) es de otra cuenta/billetera que la conectada: requiere volver a iniciar sesión');
     throw Object.assign(new Error(j.error ?? `Error ${r.status}`), { status: r.status, code: j.code ?? `http_${r.status}`, missing: j.missing });
   }
+  return j as T;
+}
+
+/** Acciones del COMPRADOR sin cuenta: se identifica con su llave de invitado (X-Guest-Key), no con login ni wallet.
+ *  Si hay sesión Cavos se adjunta el token solo para que el servidor detecte "el vendedor comprando su propio link"
+ *  (un token vencido o malo se ignora en el servidor cuando hay llave de invitado). */
+export async function guestApi<T = any>(auth: Pick<MeteoritoAuth, 'getAuthToken'>, path: string, body: unknown): Promise<T> {
+  if (DEMO_ENABLED) return (await demoApi(path, body)) as T;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Guest-Key': guestKey() };
+  const token = auth.getAuthToken(); if (token) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(j.error ?? `Error ${r.status}`), { status: r.status, code: j.code ?? `http_${r.status}` });
   return j as T;
 }

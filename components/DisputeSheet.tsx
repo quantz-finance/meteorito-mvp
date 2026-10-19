@@ -6,7 +6,7 @@ import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { ErrorText, haptic, Icon, PrimaryButton, Sheet, type IconName } from '@/components/ds';
 import { ui } from '@/components/ui';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
-import { api } from '@/lib/api';
+import { guestApi } from '@/lib/api';
 import { useAuth } from '@/lib/cavos';
 import { MAX_PHOTOS, newDraftId, uploadPhoto, type PickedPhoto } from '@/lib/photos';
 
@@ -37,7 +37,7 @@ export function DisputeSheet({ visible, onClose, slug, onOpened }: { visible: bo
       const draft = newDraftId();
       const evidence: string[] = [];
       for (const [i, p] of photos.entries()) evidence.push(await uploadPhoto(auth, p, draft, i));
-      await api(auth, '/api/escrow/dispute', { slug, reason, description: text.trim() || null, evidence });
+      await guestApi(auth, '/api/escrow/dispute', { slug, reason, description: text.trim() || null, evidence });
       haptic.success(); onOpened(); onClose();
     } catch (e) { haptic.error(); setErr((e as Error).message); }
     finally { setBusy(false); }
@@ -70,7 +70,7 @@ export function DisputeSheet({ visible, onClose, slug, onOpened }: { visible: bo
             <Image source={{ uri: p.uri }} style={StyleSheet.absoluteFill} />
           </Pressable>
         ))}
-        {photos.length < MAX_PHOTOS && (
+        {auth.isAuthenticated && photos.length < MAX_PHOTOS && (
           <Pressable onPress={pick} style={[s.thumb, s.add]} accessibilityLabel="Agregar foto">
             <Icon name="camera-outline" size={22} color={C.lilac} />
             <Text style={[T.footnote, { color: C.lilac }]}>Fotos ({photos.length}/{MAX_PHOTOS})</Text>
