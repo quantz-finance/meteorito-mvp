@@ -39,7 +39,7 @@ export default function Invitacion() {
   useEffect(() => { if (inv) track('invite_opened', { status: inv.status, as_buyer: inv.mine }); }, [inv?.status, inv?.mine]);
 
   if (err && inv === undefined) return <Msg icon="cloud-offline-outline" title="No se pudo cargar" text={err} />;
-  if (inv === undefined) return <Screen title="Invitación"><SkeletonCard /></Screen>;
+  if (inv === undefined) return <Screen back="/" title="Invitación"><SkeletonCard /></Screen>;
   if (inv === null) return <Msg icon="link-outline" title="Esta invitación no existe" text="Revisa el link o pídelo de nuevo." />;
 
   const link = inviteLink(inv.code);
@@ -70,7 +70,7 @@ export default function Invitacion() {
 
   if (inv.mine) {
     return (
-      <Screen title="Tu invitación" subtitle="Envíale este link al vendedor. Cuando publique el artículo, aquí aparece tu botón para pagar." right={<TestnetPill />}
+      <Screen back="/" title="Tu invitación" subtitle="Envíale este link al vendedor. Cuando publique el artículo, aquí aparece tu botón para pagar." right={<TestnetPill />}
         footer={inv.status === 'aceptada' && inv.order_slug
           ? <PrimaryButton title="Ir a pagar en custodia" icon="shield-checkmark" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug: inv.order_slug! } })} />
           : inv.status === 'abierta' ? <><PrimaryButton title="Enviar link al vendedor" icon="share-outline" onPress={share} />
@@ -92,7 +92,7 @@ export default function Invitacion() {
   // Vista del vendedor.
   const open = inv.status === 'abierta';
   return (
-    <Screen title="Quieren comprarte" subtitle="Alguien te invitó a vender este artículo en custodia." right={<TestnetPill />}
+    <Screen back="/" title="Quieren comprarte" subtitle="Alguien te invitó a vender este artículo en custodia." right={<TestnetPill />}
       footer={open ? <PrimaryButton title={auth.isAuthenticated ? 'Publicar para esta compra' : 'Entrar para publicar'} icon="add-circle-outline"
         loading={auth.isLoading}
         onPress={() => { if (!auth.isAuthenticated) return auth.openLogin(); router.push({ pathname: '/vender', params: { invite: inv.code } }); }} /> : null}>
@@ -108,5 +108,5 @@ export default function Invitacion() {
 }
 
 function Msg({ icon, title, text }: { icon: React.ComponentProps<typeof Icon>['name']; title: string; text: string }) {
-  return <Screen><View style={{ alignItems: 'center', gap: S.md, paddingVertical: S.xl }}><Icon name={icon} size={48} color={C.lilac} /><Text style={[T.title, { textAlign: 'center' }]}>{title}</Text><Text style={[T.callout, { textAlign: 'center' }]}>{text}</Text></View></Screen>;
+  return <Screen back="/"><View style={{ alignItems: 'center', gap: S.md, paddingVertical: S.xl }}><Icon name={icon} size={48} color={C.lilac} /><Text style={[T.title, { textAlign: 'center' }]}>{title}</Text><Text style={[T.callout, { textAlign: 'center' }]}>{text}</Text></View></Screen>;
 }

@@ -32,7 +32,7 @@ export default function Compartir() {
   }
 
   return (
-    <Screen contentStyle={{ flexGrow: 1, justifyContent: 'center' }}
+    <Screen back="/pedidos" contentStyle={{ flexGrow: 1, justifyContent: 'center' }}
       footer={<>
         <PrimaryButton title="Compartir link" icon="share-outline" onPress={share} />
         <View style={{ flexDirection: 'row', gap: S.sm }}>

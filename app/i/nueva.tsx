@@ -34,7 +34,7 @@ export default function NuevaInvitacion() {
   }
 
   return (
-    <Screen title="Invitar a un vendedor" subtitle="Cuéntanos qué quieres comprar. El vendedor confirma publicando el artículo y te envía el link de pago." right={<TestnetPill />}
+    <Screen back="/" title="Invitar a un vendedor" subtitle="Cuéntanos qué quieres comprar. El vendedor confirma publicando el artículo y te envía el link de pago." right={<TestnetPill />}
       footer={<>{err && <ErrorText>{err}</ErrorText>}<PrimaryButton title="Crear invitación" icon="paper-plane-outline" loading={busy} onPress={submit} /></>}>
       <Card style={{ gap: S.sm }}>
         <Text style={T.caption}>Categoría</Text>

@@ -3,7 +3,7 @@
 // Nunca envuelve aserciones: solo errores de red/timeout/5xx/429. Antes de reenviar un submit, verifica si ya entró.
 
 export const retryEnabled = () => process.env.CI_NETWORK_RETRY === '1';
-const delays = () => (process.env.CI_RETRY_DELAYS_MS ?? '2000,4000,8000').split(',').map(Number).filter((n) => n >= 0);
+const delays = () => (process.env.CI_RETRY_DELAYS_MS ?? '2000,4000,8000').split(',').map(Number).filter((n: number) => n >= 0);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** ¿Error transitorio de red? (no lógica de negocio). */
