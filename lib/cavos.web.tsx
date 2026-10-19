@@ -1,54 +1,37 @@
-// Web (Safari / PWA): SDK web de Cavos. Las llaves viven en el vault de Cavos (iframe).
-import './polyfills'; // antes de @cavos/kit
-import { CavosProvider, useCavos } from '@cavos/kit/react';
-import { useEffect, useState, type ReactNode } from 'react';
-import { CAVOS_SECURE_STEP, CAVOS_SOCIAL_RECOVERY, APP_SALT, CAVOS_APP_ID } from './config';
+// Web (Safari / PWA): SDK web de Cavos, cargado BAJO DEMANDA (lib/cavosBridge.tsx = chunk aparte).
+// La app pinta sin esperarlo: sin rastro de sesión ni login pedido, el SDK solo se precarga en idle (o no, en links de pago).
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { DEMO_ENABLED, useDemoAuth } from './demo';
-import { walletInfo, type MeteoritoAuth } from './types';
-import { Brand } from '@/constants/Colors';
+import { authStore, hasCavosTrace, useAuthLoadState, useAuthStore } from './authStore';
+import type { MeteoritoAuth } from './types';
+
+const CavosBridge = lazy(() => import('./cavosBridge'));
+
+// Rutas públicas (link de pago, legales): ahí el SDK NO se carga hasta que haga falta (login explícito o sesión previa).
+const isPublicPath = () => /^\/(p|legal)(\/|$)/.test(window.location.pathname);
 
 export function CavosRoot({ children }: { children: ReactNode }) {
   // El SDK usa window/localStorage: no se monta durante el render estático.
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const { load } = useAuthLoadState();
+  useEffect(() => {
+    setMounted(true);
+    if (DEMO_ENABLED) return;
+    const trace = hasCavosTrace();
+    authStore.setHint(trace);
+    if (trace) { authStore.requestLoad(); return; }
+    if (isPublicPath()) return; // comprador con link: cero SDK de wallet
+    const w = window as any;
+    const id = w.requestIdleCallback ? w.requestIdleCallback(() => authStore.requestLoad(), { timeout: 2500 }) : setTimeout(() => authStore.requestLoad(), 1500);
+    return () => { w.cancelIdleCallback ? w.cancelIdleCallback(id) : clearTimeout(id); };
+  }, []);
   if (!mounted) return null;
-  if (DEMO_ENABLED) return <>{children}</>; // demo: sin proveedor Cavos
-  return (
-    <CavosProvider
-      config={{ appId: CAVOS_APP_ID, chain: 'stellar', network: 'testnet', appSalt: APP_SALT, persistSession: true, socialRecovery: CAVOS_SOCIAL_RECOVERY }}
-      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], emailMode: 'otp', primaryColor: Brand.purple, secureStep: CAVOS_SECURE_STEP }}>
-      {children}
-    </CavosProvider>
-  );
-}
-
-
-function b64(u: Uint8Array) { let s = ''; u.forEach((b) => (s += String.fromCharCode(b))); return btoa(s); }
-function stellarWallet(c: any): any {
-  const w = c.session?.wallet ? c.session.wallet('stellar') : c.session;
-  if (!w) throw new Error('Wallet Cavos no lista');
-  return w;
+  if (DEMO_ENABLED || !load) return <>{children}</>; // demo: sin proveedor Cavos
+  // La app NO espera al SDK ni se re-monta cuando llega: Cavos vive en un chunk hermano y publica la sesión en authStore.
+  return <>{children}<Suspense fallback={null}><CavosBridge /></Suspense></>;
 }
 
 /** Modo demo (build con EXPO_PUBLIC_DEMO_MODE): sesión simulada, sin Cavos. DEMO_ENABLED es constante en el build, el orden de hooks no cambia. */
 export function useAuth(): MeteoritoAuth {
-  return DEMO_ENABLED ? useDemoAuth() : useCavosAuth();
-}
-
-function useCavosAuth(): MeteoritoAuth {
-  const c = useCavos();
-  return {
-    configured: !!CAVOS_APP_ID,
-    isAuthenticated: c.isAuthenticated,
-    isLoading: c.isLoading,
-    email: c.user?.email ?? null,
-    address: c.address,
-    error: c.authError,
-    openLogin: () => { c.clearAuthError(); c.openModal(); },
-    logout: () => c.logout(),
-    getAuthToken: () => { try { return window.sessionStorage.getItem(`cavos-kit:token:${CAVOS_APP_ID}`); } catch { return null; } },
-    signMessage: async (m) => { const r = await stellarWallet(c).signMessage(m); return { publicKey: r.publicKey, signature: b64(r.signature) }; },
-    signXdr: (x) => stellarWallet(c).signXdr(x),
-    wallet: walletInfo(c),
-  };
+  return DEMO_ENABLED ? useDemoAuth() : useAuthStore();
 }

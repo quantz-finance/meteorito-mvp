@@ -16,10 +16,18 @@ import { DemoBadge } from '@/components/DemoBadge';
 import Welcome from '@/components/Welcome';
 import { Brand } from '@/constants/Colors';
 
+/** Quita el splash HTML inline (app/+html.tsx) cuando la app ya pintó. */
+function hideBootSplash() {
+  if (typeof document === 'undefined') return;
+  const el = document.getElementById('boot-splash');
+  if (!el) return;
+  el.style.opacity = '0';
+  setTimeout(() => el.remove(), 250);
+}
+
 export { ErrorBoundary } from 'expo-router';
 export const unstable_settings = { initialRouteName: '(tabs)' };
 
-SplashScreen.preventAutoHideAsync();
 initAnalytics();
 // Nombres de pantalla sin slugs ni datos.
 const screenName = (p: string) => p.replace(/^\/p\/[^/]+/, '/p/:slug').replace(/^\/compartir\/[^/]+/, '/compartir/:slug') || '/';
@@ -30,10 +38,10 @@ const theme = {
 };
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({ Nunito_400Regular, Nunito_700Bold, Nunito_900Black });
-  useEffect(() => { if (error) throw error; }, [error]);
-  useEffect(() => { if (loaded) SplashScreen.hideAsync(); }, [loaded]);
-  if (!loaded) return null;
+  // Las fuentes NO bloquean el primer render: se pinta con la tipografía del sistema y se cambia a Nunito al llegar (swap).
+  const [, error] = useFonts({ Nunito_400Regular, Nunito_700Bold, Nunito_900Black });
+  useEffect(() => { if (error) console.error('[fonts]', error); }, [error]);
+  useEffect(() => { SplashScreen.hideAsync(); hideBootSplash(); }, []);
   return (
     <ThemeProvider value={theme}>
       <StatusBar style="light" />

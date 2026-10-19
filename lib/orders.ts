@@ -1,5 +1,5 @@
 import type { MeteoritoAuth } from './types';
-import { supabase } from './supabase';
+import { restRpc, restSelect } from './supabase';
 import type { CheckResult } from './categories';
 import { DEMO_ENABLED, demoGetPublicOrder, demoGetSellerOrders } from './demo';
 
@@ -50,17 +50,14 @@ export interface PublicOrder {
 }
 export async function getPublicOrder(slug: string): Promise<PublicOrder | null> {
   if (DEMO_ENABLED) return demoGetPublicOrder(slug) as PublicOrder | null;
-  const { data, error } = await supabase().from('public_orders').select('*').eq('slug', slug).maybeSingle();
-  if (error) throw new Error(error.message);
-  return data as PublicOrder | null;
+  const rows = await restSelect<PublicOrder[]>(`public_orders?select=*&slug=eq.${encodeURIComponent(slug)}&limit=1`);
+  return rows[0] ?? null;
 }
 
 export interface SellerOrder { slug: string; category: string; brand: string; model: string; price_crc: number; status: string; identifier_masked: string | null; created_at: string }
 export async function getSellerOrders(addr: string): Promise<SellerOrder[]> {
   if (DEMO_ENABLED) return demoGetSellerOrders(addr);
-  const { data, error } = await supabase().rpc('seller_orders', { p_seller_address: addr });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as SellerOrder[];
+  return (await restRpc<SellerOrder[] | null>('seller_orders', { p_seller_address: addr })) ?? [];
 }
 
 /** "rolando.arguello" -> "Rolando". */

@@ -46,7 +46,7 @@ export async function uploadPhoto(auth: MeteoritoAuth, p: PickedPhoto, draftId: 
 export async function uploadCompressed(auth: MeteoritoAuth, blob: Blob, draftId: string, index: number): Promise<string> {
   if (DEMO_ENABLED) return blobToDataUrl(blob); // demo: sin Storage; la foto queda local como data URL
   const r = await api<{ path: string; token: string; publicUrl: string }>(auth, '/api/photos/upload-url', { draftId, index, mime: 'image/jpeg', size: blob.size });
-  const { error } = await supabase().storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' });
+  const { error } = await (await supabase()).storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' });
   if (error) throw new Error(`No se pudo subir la foto: ${error.message}`);
   return r.publicUrl;
 }
