@@ -25,38 +25,42 @@ export default function Welcome() {
   const busy = isLoading || isAuthenticated; // autenticado pero cargando la cuenta
   // Layout en scroll: nada se superpone. En pantallas altas el espaciador empuja los CTAs abajo;
   // en pantallas bajas (360x640) la página simplemente hace scroll.
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // Todo escala con el alto: en 568–640 px (iPhone SE, Android chicos) caben las tarjetas y los dos CTAs principales sin scroll;
+  // en 812+ px los tamaños quedan como antes.
   const short = height < 700;
-  const mascot = Math.round(Math.max(84, Math.min(128, height * 0.14)));
+  const tiny = height < 660;
+  const mascot = Math.round(Math.max(64, Math.min(128, height * 0.14 - (tiny ? 18 : 0))));
+  const gapY = tiny ? S.md : short ? S.lg : S.xl;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <SpaceBackground mode="full" />
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}
-        contentContainerStyle={[s.scroll, { paddingTop: insets.top + (short ? S.md : S.xl), paddingBottom: insets.bottom + S.lg }]}>
+        contentContainerStyle={[s.scroll, { paddingTop: insets.top + (tiny ? S.lg : short ? S.lg : S.xl), paddingBottom: insets.bottom + S.lg }]}>
         <View style={s.col}>
           <View style={s.hero}>
             <Glow style={[s.glow, { width: mascot * 1.9, height: mascot * 1.9, borderRadius: mascot }]} color="rgba(108,43,217,0.45)" />
             <Reveal i={0}><LivelyMascot size={mascot} parallax={0} /></Reveal>
             <Reveal i={1} style={{ alignItems: 'center' }}>
-              <Text style={[s.title, short && { fontSize: 30, lineHeight: 36 }]}>Meteorito</Text>
-              <Text style={s.subtitle}>Compra y vende celulares, consolas, laptops y más, con los fondos en custodia hasta la entrega.</Text>
+              <Text style={[s.title, short && { fontSize: 30, lineHeight: 36 }, tiny && { fontSize: 26, lineHeight: 32, marginTop: S.sm }]}>Meteorito</Text>
+              <Text style={[s.subtitle, tiny && { fontSize: 14, lineHeight: 19, marginTop: S.xs }]}>Compra y vende celulares, consolas, laptops y más, con los fondos en custodia hasta la entrega.</Text>
             </Reveal>
           </View>
-          <View style={[s.perks, { marginTop: short ? S.lg : S.xl }]}>
+          <View style={[s.perks, { marginTop: gapY }, tiny && { gap: S.sm }]}>
             {PERKS.map((p, i) => (
-              <Reveal key={p.text} i={2 + i}><View style={s.perk}>
+              <Reveal key={p.text} i={2 + i}><View style={[s.perk, tiny && { paddingVertical: S.sm }]}>
                 <View style={s.perkIcon}><Icon name={p.icon} size={18} color={C.lilac} /></View>
-                <Text style={s.perkText}>{p.text}</Text>
+                <Text style={[s.perkText, tiny && { fontSize: 14, lineHeight: 19 }]}>{p.text}</Text>
               </View></Reveal>
             ))}
           </View>
-          <View style={{ flexGrow: 1, minHeight: short ? S.lg : S.xl }} />
-          <View style={s.ctas}>
+          <View style={{ flexGrow: 1, minHeight: gapY }} />
+          <View style={[s.ctas, tiny && { gap: S.sm }]}>
             {!configured && <ErrorText>Falta EXPO_PUBLIC_CAVOS_APP_ID en el .env</ErrorText>}
             {error && <ErrorText>{error}</ErrorText>}
             <PrimaryButton title="Entrar" loading={busy} disabled={!configured} onPress={() => { track('login_started'); openLogin(); }} />
-            <PrimaryButton title="Quiero comprar (sin cuenta)" variant="secondary" icon="paper-plane-outline" onPress={() => { track('invite_start_tapped'); router.push('/i/nueva'); }} />
+            <PrimaryButton title={width < 350 ? 'Comprar sin cuenta' : 'Quiero comprar (sin cuenta)'} variant="secondary" icon="paper-plane-outline" onPress={() => { track('invite_start_tapped'); router.push('/i/nueva'); }} />
             <PrimaryButton title="¿Cómo funciona?" variant="ghost" icon="help-circle-outline" onPress={() => { track('learn_cta_tapped'); setLearn(true); }} />
           </View>
           <View style={s.footer}>
