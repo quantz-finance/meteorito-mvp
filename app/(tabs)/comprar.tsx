@@ -4,7 +4,7 @@ import { C, S, T } from '@/constants/theme';
 
 const STEPS: { icon: IconName; title: string; text: string }[] = [
   { icon: 'link', title: 'Abre el link del vendedor', text: 'Te lo manda por WhatsApp o Messenger.' },
-  { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu dinero queda apartado hasta que recibas el producto.' },
+  { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu pago de prueba queda en custodia hasta que recibas el producto.' },
   { icon: 'keypad', title: 'Revisa y da tu PIN', text: 'Solo cuando lo tengas en la mano y funcione.' },
 ];
 
