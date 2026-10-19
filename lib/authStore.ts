@@ -43,4 +43,5 @@ export function useAuthStore(): MeteoritoAuth {
   if (s.bridged) return s.bridged;
   return s.load && s.hint ? guestLoading : s.wantLogin ? guestLoading : guestIdle;
 }
-export const useAuthLoadState = () => useSyncExternalStore(authStore.subscribe, authStore.get, authStore.get);
+/** Suscripción a UN campo primitivo (evita re-renders y bucles con el puente de Cavos). */
+export const useAuthFlag = (k: 'load' | 'wantLogin' | 'hint') => useSyncExternalStore(authStore.subscribe, () => authStore.get()[k], () => false);

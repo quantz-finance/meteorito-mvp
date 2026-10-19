@@ -2,7 +2,7 @@
 // La app pinta sin esperarlo: sin rastro de sesión ni login pedido, el SDK solo se precarga en idle (o no, en links de pago).
 import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { DEMO_ENABLED, useDemoAuth } from './demo';
-import { authStore, hasCavosTrace, useAuthLoadState, useAuthStore } from './authStore';
+import { authStore, hasCavosTrace, useAuthFlag, useAuthStore } from './authStore';
 import type { MeteoritoAuth } from './types';
 
 const CavosBridge = lazy(() => import('./cavosBridge'));
@@ -13,7 +13,7 @@ const isPublicPath = () => /^\/(p|legal)(\/|$)/.test(window.location.pathname);
 export function CavosRoot({ children }: { children: ReactNode }) {
   // El SDK usa window/localStorage: no se monta durante el render estático.
   const [mounted, setMounted] = useState(false);
-  const { load } = useAuthLoadState();
+  const load = useAuthFlag('load');
   useEffect(() => {
     setMounted(true);
     if (DEMO_ENABLED) return;
