@@ -5,7 +5,7 @@ import { userMessage } from '@/lib/cavosSession';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { ui } from '@/components/ui';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, SuccessCheck, TestnetPill } from '@/components/ds';
 import { Reveal } from '@/components/space';
@@ -50,6 +50,7 @@ export default function Vender() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
+  const short = useWindowDimensions().height < 740; // iPhone SE y similares: menos aire, todo en una pantalla
 
   // Respuesta a una invitación del comprador (?invite=codigo): nombre y precio precargados; el precio acordado no se cambia.
   const { invite: inviteParam } = useLocalSearchParams<{ invite?: string }>();
@@ -124,64 +125,72 @@ export default function Vender() {
   );
 
   if (created) return (
-    <Screen title="Vender" right={right}>
-      <Reveal i={0} style={{ alignItems: 'center' }}><SuccessCheck size={72} celebrate /></Reveal>
-      <Reveal i={1}><Text style={[T.largeTitle, { textAlign: 'center' }]}>¡Tu link está listo!</Text></Reveal>
-      <Reveal i={2}><Card style={{ flexDirection: 'row', gap: S.md, alignItems: 'center' }}>
-        {created.photo ? <Image source={{ uri: created.photo }} style={s.thumb} /> : <View style={s.thumb}><Icon name="pricetag-outline" size={24} color={C.lilac} /></View>}
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={T.headline} numberOfLines={2}>{created.title}</Text>
-          <Text style={[T.title, { fontVariant: ['tabular-nums'] }]}>{formatCRC(created.price)}</Text>
-        </View>
-      </Card></Reveal>
-      <Reveal i={3}><ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} /></Reveal>
-      <Reveal i={4} style={{ gap: S.sm }}>
-        <Text style={[T.callout, { textAlign: 'center' }]}>Mándalo por WhatsApp. El comprador paga sin crear cuenta; tú cobras al entregar.</Text>
-        <PrimaryButton title="Crear otro link" icon="add" variant="secondary" onPress={() => { setCreated(null); setError(null); }} />
-        <PrimaryButton title="Ver mi tienda" icon="storefront-outline" variant="ghost" onPress={() => router.push('/mi-tienda')} />
-      </Reveal>
-      <Text style={[T.footnote, { textAlign: 'center' }]}>Beta en testnet: sin dinero real.</Text>
+    <Screen title="Vender" right={right} scroll={false}
+      footer={<View style={{ flexDirection: 'row', gap: S.sm }}>
+        <View style={{ flex: 1 }}><PrimaryButton title="Otro link" icon="add" variant="secondary" onPress={() => { setCreated(null); setError(null); }} /></View>
+        <View style={{ flex: 1 }}><PrimaryButton title="Mi tienda" icon="storefront-outline" variant="secondary" onPress={() => router.push('/mi-tienda')} /></View>
+      </View>}>
+      <View style={{ flex: 1, gap: S.md, justifyContent: 'center' }}>
+        <Reveal i={0} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
+          <SuccessCheck size={short ? 44 : 56} celebrate />
+          <Text style={[T.title, { flex: 1 }]}>¡Tu link está listo!</Text>
+        </Reveal>
+        <Reveal i={1}><Card style={{ flexDirection: 'row', gap: S.md, alignItems: 'center', padding: S.sm + 4 }}>
+          {created.photo ? <Image source={{ uri: created.photo }} style={s.thumb} /> : <View style={s.thumb}><Icon name="pricetag-outline" size={24} color={C.lilac} /></View>}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={T.headline} numberOfLines={2}>{created.title}</Text>
+            <Text style={[T.title, { fontVariant: ['tabular-nums'] }]}>{formatCRC(created.price)}</Text>
+          </View>
+        </Card></Reveal>
+        <Reveal i={2}><ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} /></Reveal>
+        <Reveal i={3}><Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar. Beta en testnet: sin dinero real.</Text></Reveal>
+      </View>
     </Screen>
   );
 
   return (
-    <Screen title="Vender" subtitle="Nombre, precio y fotos. Nada más." right={right}
+    <Screen title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
       footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={submit} />}>
-      {invite && <Card style={{ gap: S.xs }}><Text style={T.headline}>Respondes a una invitación de compra</Text><Text style={T.callout}>Te piden {invite.brand} {invite.model} por {formatCRC(invite.price_crc)}. Agrega fotos y genera el link: queda reservado para quien te invitó.</Text></Card>}
+      <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
+      {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {invite.brand} {invite.model} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
-      <View style={{ gap: S.sm }}>
+      <View style={{ gap: S.xs }}>
         <Text style={T.caption}>Nombre del producto</Text>
-        <TextInput style={[ui.input, errors.title && s.inputErr]} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim}
+        <TextInput style={[ui.input, s.input, errors.title && s.inputErr]} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim}
           value={title} onChangeText={(v) => { setTitle(v); clearErr('title'); }} maxLength={TITLE_MAX} returnKeyType="next" accessibilityLabel="Nombre del producto" />
         {errors.title ? <ErrorText>{errors.title}</ErrorText> : null}
       </View>
 
-      <View style={{ gap: S.sm }}>
+      <View style={{ gap: S.xs }}>
         <Text style={T.caption}>Precio en colones</Text>
         <View style={[s.priceWrap, errors.price && s.inputErr, invite && { opacity: 0.7 }]}>
           <Text style={s.currency}>₡</Text>
           <TextInput style={s.priceInput} placeholder="0" placeholderTextColor={C.textDim} keyboardType="number-pad" inputMode="numeric"
             value={formatPriceInput(price)} onChangeText={(v) => { setPrice(v); clearErr('price'); }} editable={!invite} accessibilityLabel="Precio en colones" />
         </View>
-        {errors.price ? <ErrorText>{errors.price}</ErrorText> : invite ? <Text style={T.footnote}>Es el precio acordado en la invitación.</Text> : null}
+        {errors.price ? <ErrorText>{errors.price}</ErrorText> : null}
       </View>
 
-      <View style={{ gap: S.sm }}>
-        <Text style={T.caption}>Fotos ({photos.length}/{MAX_PHOTOS})</Text>
+      <View style={{ gap: S.xs }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          <Text style={T.caption}>Fotos ({photos.length}/{MAX_PHOTOS})</Text>
+          {photos.length > 0 && !errors.photos ? <Text style={T.footnote}>Toca una para quitarla</Text> : null}
+        </View>
         <View style={s.grid}>
           {photos.map((p, i) => <PhotoTile key={p.key} photo={p} index={i} total={photos.length} onRemove={busy ? undefined : removePhoto} />)}
           {photos.length < MAX_PHOTOS && (
             <Pressable onPress={pickPhotos} accessibilityRole="button" accessibilityLabel="Agregar fotos" style={({ pressed }) => [s.photo, s.photoAdd, errors.photos && { borderColor: C.orange }, pressed && { opacity: 0.8 }]}>
-              <Icon name="camera" size={26} color={C.lilac} />
+              <Icon name="camera" size={24} color={C.lilac} />
               <Text style={[T.footnote, { color: C.lilac }]}>Agregar</Text>
             </Pressable>
           )}
         </View>
-        {errors.photos ? <ErrorText>{errors.photos}</ErrorText> : <Text style={T.footnote}>De 1 a 4 fotos con buena luz. Toca una para quitarla.</Text>}
+        {errors.photos ? <ErrorText>{errors.photos}</ErrorText> : null}
       </View>
 
       {error && <ErrorText>{error}</ErrorText>}
-      <Text style={T.footnote}>Beta en testnet: sin dinero real.</Text>
+      <Text style={T.footnote}>De 1 a 4 fotos con buena luz. Beta en testnet: sin dinero real.</Text>
+      </View>
     </Screen>
   );
 }
@@ -210,9 +219,10 @@ const s = StyleSheet.create({
   photoAdd: { alignItems: 'center', justifyContent: 'center', gap: 2, borderWidth: 2, borderStyle: 'dashed', borderColor: C.lilac, backgroundColor: 'transparent' },
   photoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(26,11,61,0.6)', alignItems: 'center', justifyContent: 'center', gap: 2 },
   photoX: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
-  priceWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.md, paddingHorizontal: S.md, minHeight: 56, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
-  currency: { fontFamily: Fonts.black, fontSize: 24, color: C.textDim, marginRight: S.xs },
-  priceInput: { flex: 1, minWidth: 0, fontFamily: Fonts.black, fontSize: 24, color: C.text, paddingVertical: S.sm, fontVariant: ['tabular-nums'], outlineStyle: 'none' } as object,
+  input: { minHeight: 46 },
+  priceWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.md, paddingHorizontal: S.md, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
+  currency: { fontFamily: Fonts.black, fontSize: 22, color: C.textDim, marginRight: S.xs },
+  priceInput: { flex: 1, minWidth: 0, fontFamily: Fonts.black, fontSize: 22, color: C.text, paddingVertical: 6, fontVariant: ['tabular-nums'], outlineStyle: 'none' } as object,
   inputErr: { borderColor: C.orange, borderWidth: 1 },
-  thumb: { width: 64, height: 64, borderRadius: R.md, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 56, height: 56, borderRadius: R.md, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
 });

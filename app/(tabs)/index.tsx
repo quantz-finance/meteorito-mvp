@@ -1,7 +1,8 @@
 import { ensureSellerWalletOnLoad, logoutSafely } from '@/lib/wallet';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { GridPager } from '@/components/GridPager';
 import { useAuth } from '@/lib/cavos';
 import { fetchBalances, type Balances } from '@/lib/horizon';
 import { CRC_USDC_RATE, displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
@@ -42,6 +43,7 @@ export default function Inicio() {
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  const short = useWindowDimensions().height < 740;
   const crc = bal ? Number(bal.usdc ?? 0) * CRC_USDC_RATE : 0;
   const name = displayName(email);
   const actions: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
@@ -50,37 +52,37 @@ export default function Inicio() {
   ];
 
   return (
-    <Screen title={name ? `Hola, ${name}` : 'Hola'} right={<IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />}
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.lilac} />}>
+    <Screen title={name ? `Hola, ${name}` : 'Hola'} right={<IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />} scroll={false}>
+      <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
       {/* Tarjeta de saldo */}
-      <Reveal i={0}><View style={[s.balance, shadow]}>
+      <Reveal i={0}><View style={[s.balance, shadow, short && { minHeight: 116, padding: S.md }]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={[T.caption, { color: C.lilac }]}>{TESTNET ? 'Saldo de prueba' : 'Saldo disponible'}</Text>
           <TestnetPill />
         </View>
         {!bal && !err ? <Skeleton w="70%" h={48} style={{ marginTop: S.sm }} />
           : <Text style={[T.money, { marginTop: S.sm }]} adjustsFontSizeToFit numberOfLines={1}>{formatCRC(crc)}</Text>}
-        {err ? <Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Desliza hacia abajo para reintentar.</Text>
+        {err ? <Pressable onPress={load} disabled={loading} hitSlop={8}><Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Toca para reintentar.</Text></Pressable>
           : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros liberados llegan aquí.</Text>}
         {walletMsg ? <Text style={[T.footnote, { color: C.orange }]}>{walletMsg}</Text> : null}
-        <LivelyMascot size={104} style={s.mascot} parallax={-0.15} />
+        <LivelyMascot size={short ? 80 : 104} style={s.mascot} parallax={-0.15} />
       </View></Reveal>
       {/* 2 acciones grandes */}
       <Reveal i={1}><View style={s.grid}>
         {actions.map((a, i) => (
           <Pressable key={a.label} accessibilityRole="button" accessibilityLabel={a.label}
             onPress={() => { haptic.tap(); a.onPress(); }}
-            style={({ pressed }) => [s.action, i === 0 && s.actionPrimary, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
-            <View style={[s.actionIcon, i === 0 && { backgroundColor: C.orange }]}><Icon name={a.icon} size={26} color={i === 0 ? '#fff' : C.purpleDark} /></View>
-            <View style={{ gap: 2 }}>
-              <Text style={s.actionLabel} numberOfLines={1}>{a.label}</Text>
-              <Text style={T.footnote} numberOfLines={2}>{a.hint}</Text>
+            style={({ pressed }) => [s.action, short && s.actionShort, i === 0 && s.actionPrimary, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+            <View style={[s.actionIcon, short && { width: 40, height: 40, borderRadius: 13 }, i === 0 && { backgroundColor: C.orange }]}><Icon name={a.icon} size={short ? 22 : 26} color={i === 0 ? '#fff' : C.purpleDark} /></View>
+            <View style={{ gap: 2, flexShrink: 1 }}>
+              <Text style={s.actionLabel} numberOfLines={short ? 2 : 1}>{a.label}</Text>
+              {short ? null : <Text style={T.footnote} numberOfLines={2}>{a.hint}</Text>}
             </View>
           </Pressable>
         ))}
       </View></Reveal>
 
-      <Reveal i={2}><Section title="Pedidos recientes" action={orders && orders.length > 0
+      <Reveal i={2} style={{ flex: 1 }}><Section style={{ flex: 1 }} title="Pedidos recientes" action={orders && orders.length > 0
         ? <Pressable onPress={() => router.push('/pedidos')} hitSlop={12} style={{ minHeight: TOUCH, justifyContent: 'center' }}><Text style={[T.headline, { color: C.lilac, fontSize: 15 }]}>Ver todos</Text></Pressable> : undefined}>
         {orders === null ? <><SkeletonCard /><SkeletonCard /></>
           : orders.length === 0 ? (
@@ -89,8 +91,10 @@ export default function Inicio() {
               <Text style={[T.callout, { textAlign: 'center' }]}>Todavía no tienes pedidos. Crea tu primer link de venta en un minuto.</Text>
               <PrimaryButton title="Vender algo" icon="add" onPress={() => router.push('/vender')} />
             </Card>
-          ) : orders.slice(0, 3).map((o, i) => <Reveal key={o.slug} i={3 + i}><OrderCard order={o} timeline={false} onPress={() => router.push('/pedidos')} /></Reveal>)}
+          ) : <View style={{ flex: 1 }}><GridPager items={orders.slice(0, 6)} keyOf={(o) => o.slug} minCellW={300} minCellH={66} maxCols={1} label="Página de pedidos"
+              renderItem={(o) => <OrderCard order={o} timeline={false} fill onPress={() => router.push('/pedidos')} />} /></View>}
       </Section></Reveal>
+      </View>
 
       <Sheet visible={payOpen} onClose={() => setPayOpen(false)} title="Pagar un link"
         footer={<PrimaryButton title="Ver producto" icon="arrow-forward" disabled={!linkSlug} onPress={goPay} />}>
@@ -121,6 +125,7 @@ const s = StyleSheet.create({
   mascot: { position: 'absolute', right: -4, bottom: -6 },
   grid: { flexDirection: 'row', gap: S.sm },
   action: { flex: 1, backgroundColor: C.surface, borderRadius: R.lg, padding: S.md, gap: S.md, minHeight: 112, justifyContent: 'space-between', borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
+  actionShort: { minHeight: 64, padding: S.sm + 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: S.sm },
   actionPrimary: { borderColor: C.orange },
   actionIcon: { width: 48, height: 48, borderRadius: 16, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' },
   actionLabel: { ...T.headline },

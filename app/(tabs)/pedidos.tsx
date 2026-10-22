@@ -2,10 +2,10 @@ import { ensureSellerWalletOnLoad } from '@/lib/wallet';
 import { userMessage } from '@/lib/cavosSession';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshControl, Text, View } from 'react-native';
-import { Card, Chip, ErrorText, Icon, MoneyTimeline, PrimaryButton, Screen, Sheet, SkeletonCard, statusTone } from '@/components/ds';
+import { Text, View } from 'react-native';
+import { GridPager } from '@/components/GridPager';
+import { Card, Chip, ErrorText, Icon, IconButton, MoneyTimeline, PrimaryButton, Screen, Sheet, SkeletonCard, statusTone } from '@/components/ds';
 import { OrderCard } from '@/components/OrderRow';
-import { Reveal } from '@/components/space';
 import { SellerActions } from '@/components/SellerActions';
 import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
@@ -62,8 +62,9 @@ export default function Pedidos() {
   const open = orders?.find((o) => o.slug === openSlug) ?? null;
 
   return (
-    <Screen title="Mis pedidos" subtitle="El estado de tu dinero, siempre a la vista."
-      refreshControl={<RefreshControl refreshing={loading} onRefresh={load} tintColor={C.lilac} />}>
+    <Screen title="Mis pedidos" subtitle="El estado de tu dinero, siempre a la vista." scroll={false}
+      right={<IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />}>
+      <View style={{ flex: 1, gap: S.sm }}>
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error && <ErrorText>{error}</ErrorText>}
       {orders && orders.length > 0 && <Freshness at={updatedAt} live={needsPolling(orders)} />}
@@ -75,7 +76,9 @@ export default function Pedidos() {
             <Text style={[T.callout, { textAlign: 'center' }]}>Crea un link de venta y compártelo por WhatsApp o Messenger.</Text>
             <PrimaryButton title="Crear link de venta" icon="add" onPress={() => router.push('/vender')} />
           </Card>
-        ) : orders.map((o, i) => <Reveal key={o.slug} i={i}><OrderCard order={o} onPress={() => setOpenSlug(o.slug)} /></Reveal>)}
+        ) : <GridPager items={orders} keyOf={(o) => o.slug} minCellW={300} minCellH={118} maxCols={2} label="Página de pedidos"
+            renderItem={(o) => <OrderCard order={o} fill onPress={() => setOpenSlug(o.slug)} />} />}
+      </View>
 
       <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? orderTitle(open) : ''}
         footer={open ? <PrimaryButton title="Compartir link" icon="share-outline" variant="secondary"

@@ -1,8 +1,9 @@
-// Mi tienda (vendedor con sesión): ver la tienda, copiar o compartir el link y cambiar el nombre de usuario.
+// Mi tienda (vendedor con sesión): ver la tienda, copiar o compartir el link y cambiar nombre o usuario. Sin scroll.
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
-import { Card, ErrorText, Icon, PrimaryButton, Screen, Skeleton, TestnetPill, toast } from '@/components/ds';
+import { BackButton } from '@/components/BackButton';
+import { Card, ErrorText, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, st, TestnetPill, toast } from '@/components/ds';
 import { ShareLink } from '@/components/ShareLink';
 import { StoreHeader, StoreItems } from '@/components/StoreView';
 import { ui } from '@/components/ui';
@@ -39,7 +40,8 @@ export default function MiTienda() {
   }
 
   return (
-    <Screen title="Mi tienda" back="/vender" right={<TestnetPill />}>
+    <Screen scroll={false}>
+      <View style={st.rowBetween}><BackButton fallback="/vender" /><TestnetPill /></View>
       {error ? (
         <Card style={{ alignItems: 'center', gap: S.sm }}>
           <Icon name="storefront-outline" size={40} color={C.lilac} />
@@ -49,36 +51,32 @@ export default function MiTienda() {
         </Card>
       ) : !store ? (
         <View style={{ gap: S.md }}><Skeleton w="60%" h={28} /><Skeleton h={48} r={R.md} /><Skeleton h={160} r={R.lg} /></View>
-      ) : <>
-        <StoreHeader store={store} />
-        <View style={{ gap: S.sm }}>
-          <Text style={T.caption}>El link de tu tienda</Text>
-          <ShareLink kind="store" link={storeLink(store.store_slug)} message={`Mira lo que vendo en mi tienda de Meteorito:`} />
+      ) : <View style={{ flex: 1, gap: S.md }}>
+        <View style={st.rowBetween}>
+          <View style={{ flex: 1, minWidth: 0, gap: S.xs }}>
+            <Text style={T.caption}>Mi tienda</Text>
+            <StoreHeader store={store} />
+          </View>
+          <IconButton icon="create-outline" label="Editar nombre o usuario" onPress={() => { setSlug(store.store_slug); setName(store.display_name); setSaveErr(null); setEditing(true); }} />
         </View>
-        {editing ? (
-          <Card style={{ gap: S.sm }}>
-            <Text style={T.caption}>Tu nombre</Text>
-            <TextInput style={ui.input} value={name} onChangeText={setName} maxLength={40} placeholder="Ej. Rolando" placeholderTextColor={C.textDim} accessibilityLabel="Tu nombre" />
-            <Text style={T.caption}>Nombre de usuario</Text>
-            <View style={[ui.input, { flexDirection: 'row', alignItems: 'center' }]}>
-              <Text style={[T.body, { color: C.textDim }]}>/t/</Text>
-              <TextInput style={{ flex: 1, minWidth: 0, fontSize: 16, color: C.text, paddingVertical: S.sm, outlineStyle: 'none' } as object} value={slug}
-                onChangeText={(v) => setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))} maxLength={30} autoCapitalize="none" autoCorrect={false} accessibilityLabel="Nombre de usuario" />
-            </View>
-            <Text style={T.footnote}>De 3 a 30 letras, números o guiones. Si lo cambias, el link anterior deja de funcionar.</Text>
-            {saveErr ? <ErrorText>{saveErr}</ErrorText> : null}
-            <View style={{ flexDirection: 'row', gap: S.sm }}>
-              <View style={{ flex: 1 }}><PrimaryButton title="Cancelar" variant="secondary" onPress={() => { setEditing(false); setSaveErr(null); }} /></View>
-              <View style={{ flex: 1 }}><PrimaryButton title="Guardar" loading={saving} onPress={save} /></View>
-            </View>
-          </Card>
-        ) : (
-          <PrimaryButton title="Editar nombre o usuario" icon="create-outline" variant="ghost" onPress={() => { setSlug(store.store_slug); setName(store.display_name); setEditing(true); }} />
-        )}
+        <ShareLink kind="store" link={storeLink(store.store_slug)} message="Mira lo que vendo en mi tienda de Meteorito:" />
         <Text style={T.caption}>Productos disponibles ({store.items.length})</Text>
-        <StoreItems store={store} empty="Todavía no tienes productos disponibles. Crea un link y aparece aquí." />
-        <Text style={[T.footnote, { textAlign: 'center' }]}>Tu tienda muestra tu nombre, tu puntuación y tus productos. Nunca tu correo, teléfono ni billetera.</Text>
-      </>}
+        <StoreItems store={store} minCellW={100} minCellH={140} empty="Todavía no tienes productos disponibles. Crea un link y aparece aquí." />
+      </View>}
+
+      <Sheet visible={editing} onClose={() => setEditing(false)} title="Editar mi tienda"
+        footer={<PrimaryButton title="Guardar" loading={saving} onPress={save} />}>
+        <Text style={T.caption}>Tu nombre</Text>
+        <TextInput style={ui.input} value={name} onChangeText={setName} maxLength={40} placeholder="Ej. Rolando" placeholderTextColor={C.textDim} accessibilityLabel="Tu nombre" />
+        <Text style={T.caption}>Nombre de usuario</Text>
+        <View style={[ui.input, { flexDirection: 'row', alignItems: 'center' }]}>
+          <Text style={[T.body, { color: C.textDim }]}>/t/</Text>
+          <TextInput style={{ flex: 1, minWidth: 0, fontSize: 16, color: C.text, paddingVertical: S.sm, outlineStyle: 'none' } as object} value={slug}
+            onChangeText={(v) => setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))} maxLength={30} autoCapitalize="none" autoCorrect={false} accessibilityLabel="Nombre de usuario" />
+        </View>
+        <Text style={T.footnote}>De 3 a 30 letras, números o guiones. Si lo cambias, el link anterior deja de funcionar. Tu tienda muestra tu nombre, tu puntuación y tus productos; nunca tu correo, teléfono ni billetera.</Text>
+        {saveErr ? <ErrorText>{saveErr}</ErrorText> : null}
+      </Sheet>
     </Screen>
   );
 }
