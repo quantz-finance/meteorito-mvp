@@ -1,4 +1,5 @@
-import { ensureSellerWalletOnLoad, logoutSafely } from '@/lib/wallet';
+import { DEVICE_NOT_AUTHORIZED, ensureSellerWalletOnLoad, logoutSafely } from '@/lib/wallet';
+import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
@@ -72,9 +73,10 @@ export default function Inicio() {
           ))}
         </View>
         <Text style={[T.footnote, { color: C.lilac }]} numberOfLines={2}>Tus cobros llegan a tu cuenta de banco o SINPE.</Text>
-        {walletMsg ? <Text style={[T.footnote, { color: C.orange }]} numberOfLines={2}>{walletMsg}</Text> : null}
+        {walletMsg && walletMsg !== DEVICE_NOT_AUTHORIZED ? <Text style={[T.footnote, { color: C.orange }]} numberOfLines={2}>{walletMsg}</Text> : null}
         <LivelyMascot size={short ? 72 : 96} style={s.mascot} parallax={-0.15} />
       </View></Reveal>
+      {walletMsg === DEVICE_NOT_AUTHORIZED ? <OrphanWalletCard compact /> : null}
       {/* 2 acciones grandes */}
       <Reveal i={1}><View style={s.grid}>
         {actions.map((a, i) => (
