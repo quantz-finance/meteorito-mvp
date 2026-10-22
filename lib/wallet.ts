@@ -63,15 +63,22 @@ export async function ensureSellerWalletOnLoad(auth: MeteoritoAuth, hasOrders: b
 }
 
 /** La cuenta (correo) ya tiene una billetera cuya llave no está en este navegador/dispositivo y no tiene respaldo. */
-export const DEVICE_NOT_AUTHORIZED = 'Este correo ya tiene una billetera creada en otro dispositivo o navegador, y no tiene un respaldo (passkey) para restaurarla aquí. Abre Meteorito en el dispositivo donde la creaste y agrega una passkey, o cierra sesión e inicia con otro correo. Si necesitas ayuda, escríbenos a team@meteorito.app.';
+export const DEVICE_NOT_AUTHORIZED = 'Este correo se usó antes en otro teléfono o navegador y aquí no lo podemos abrir. Para vender, entra con otro correo.';
+export const WALLET_LOADING = 'Tu cuenta todavía se está preparando. Espera unos segundos e intenta de nuevo.';
+/** Cuenta Cavos cuya llave no está en este dispositivo y sin passkey para restaurarla (p. ej. wallet vieja creada en
+ *  otro navegador; en iPhone la PWA de la pantalla de inicio NO comparte almacenamiento con Safari). */
+export const isOrphanWallet = (auth: Pick<MeteoritoAuth, 'wallet'>) => auth.wallet?.state === 'needs-approval' && !auth.wallet.hasPasskey;
+const ORPHAN_RE = /no recovery|not an? (authorized )?signer|needs? device approval|device (is )?not authori[sz]ed|no passkey/i;
 
 /** Aviso genérico para el usuario (sin detalles técnicos). El código real va solo a console/logs. */
 export function walletErrorNotice(e: any): string {
   console.error('[wallet] error', e?.code ?? 'desconocido', e?.message, e?.cause?.message ?? '', e);
   if (e?.code === 'session_relogin_required') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
   if (e?.code === 'session_wallet_mismatch' || e?.code === 'session_expired') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión para continuar.';
-  if (e?.code === 'device_not_authorized') return DEVICE_NOT_AUTHORIZED;
-  return 'No pudimos activar tu cuenta para recibir pagos. Vuelve a abrir esta pantalla para reintentar.';
+  if (e?.code === 'device_not_authorized' || ORPHAN_RE.test(String(e?.message ?? '')) || ORPHAN_RE.test(String(e?.cause?.message ?? ''))) return DEVICE_NOT_AUTHORIZED;
+  if (e?.code === 'wallet_loading') return WALLET_LOADING;
+  if (e?.code === 'device_approved_retry') return 'Listo, confirmamos este dispositivo. Toca el botón de nuevo para continuar.';
+  return 'No pudimos preparar tu cuenta para recibir pagos. Intenta de nuevo en un momento.';
 }
 
 /** Mensaje (español neutro) cuando no se puede cerrar sesión porque la billetera no tiene respaldo. */

@@ -1,4 +1,5 @@
-import { ensureSellerWalletOnLoad } from '@/lib/wallet';
+import { DEVICE_NOT_AUTHORIZED, ensureSellerWalletOnLoad } from '@/lib/wallet';
+import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -66,7 +67,7 @@ export default function Pedidos() {
       right={<IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />}>
       <View style={{ flex: 1, gap: S.sm }}>
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
-      {error && <ErrorText>{error}</ErrorText>}
+      {error === DEVICE_NOT_AUTHORIZED ? <OrphanWalletCard /> : error ? <ErrorText>{error}</ErrorText> : null}
       {orders && orders.length > 0 && <Freshness at={updatedAt} live={needsPolling(orders)} />}
       {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         : orders.length === 0 ? (

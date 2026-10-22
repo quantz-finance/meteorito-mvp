@@ -1,6 +1,7 @@
 // Vender: el link en UNA sola pantalla. Nombre del producto, precio en colones y fotos -> "Generar link".
 // El link aparece aquí mismo con Copiar y Compartir. Categoría, marca, modelo, estado e identificador ya no se piden.
-import { ensureWalletReady, walletErrorNotice } from '@/lib/wallet';
+import { ensureWalletReady, isOrphanWallet, walletErrorNotice, WALLET_LOADING } from '@/lib/wallet';
+import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -49,6 +50,8 @@ export default function Vender() {
   const [errors, setErrors] = useState<ListingErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [orphan, setOrphan] = useState(false);
+  const [waitWallet, setWaitWallet] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
   const short = useWindowDimensions().height < 740; // iPhone SE y similares: menos aire, todo en una pantalla
 
@@ -65,6 +68,13 @@ export default function Vender() {
     return () => { live = false; };
   }, [inviteParam]);
 
+  useEffect(() => { // reanudar "Generar link" cuando Cavos termina de cargar (máx. 20 s)
+    if (!waitWallet) return;
+    if (auth.wallet?.state !== 'loading') { setWaitWallet(false); setBusy(false); submit(); return; }
+    const t = setTimeout(() => { setWaitWallet(false); setBusy(false); setError(WALLET_LOADING); }, 20_000);
+    return () => clearTimeout(t);
+  }, [waitWallet, auth.wallet?.state]);
+  useEffect(() => { if (isOrphanWallet(auth)) setOrphan(true); }, [auth.wallet?.state, auth.wallet?.hasPasskey]);
   const priceNum = parsePrice(price);
   const photosBusy = photos.some((p) => p.status === 'processing');
   useEffect(() => { saveDraft({ owner: address, title, price }); }, [address, title, price]);
@@ -93,10 +103,13 @@ export default function Vender() {
     if (Object.keys(errs).length) { haptic.error(); return; }
     if (!address) return setError('Inicia sesión de nuevo.');
     if (!supabaseConfigured) return setError('Falta configurar Supabase (.env)');
+    if (isOrphanWallet(auth)) { setOrphan(true); haptic.error(); return; }
+    // Cavos todavía cargando la cuenta (p. ej. justo después de entrar): esperar a que termine en vez de fallar.
+    if (auth.wallet?.state === 'loading') { setWaitWallet(true); setBusy(true); return; }
     track('sell_submit_tapped', { step: 0 });
     setBusy(true);
     try {
-      await ensureWalletReady(auth).catch((e) => { throw new Error(walletErrorNotice(e)); }); // primer link: activar la wallet
+      await ensureWalletReady(auth).catch((e) => { const msg = walletErrorNotice(e); if (e?.code === 'device_not_authorized' || isOrphanWallet(auth)) setOrphan(true); throw Object.assign(new Error(msg), { code: e?.code }); }); // primer link: activar la wallet
       const draftId = newDraftId();
       const urls: string[] = [];
       for (const [i, p] of photos.entries()) {
@@ -111,9 +124,9 @@ export default function Vender() {
       setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null });
       setTitle(''); setPrice(''); setPhotos([]); setInvite(null); saveDraft(null);
       if (inviteParam) router.setParams({ invite: undefined });
-    } catch (e) {
+    } catch (e: any) {
       haptic.error(); trackError('create_listing', e);
-      setError(userMessage((e as Error).message));
+      if (e?.code !== 'device_not_authorized') setError(userMessage((e as Error).message));
     } finally { setBusy(false); }
   }
 
@@ -152,6 +165,7 @@ export default function Vender() {
     <Screen title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
       footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={submit} />}>
       <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
+      {orphan ? <OrphanWalletCard compact={short} /> : null}
       {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {invite.brand} {invite.model} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
       <View style={{ gap: S.xs }}>

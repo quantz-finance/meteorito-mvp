@@ -25,7 +25,7 @@ export async function run(t: T, N: Testnet | null) {
     r = await call({ step: 'prepare', proof: pf(kp) });
     t.check('PLATFORM_SECRET de otra cuenta -> 503 platform_mismatch', r.code === 503 && r.body.code === 'platform_mismatch' && !JSON.stringify(r.body).includes(process.env.PLATFORM_SECRET!), JSON.stringify(r.body));
     const n = walletErrorNotice({ code: 'platform_mismatch', message: 'PLATFORM_SECRET no corresponde' });
-    t.check('UI: aviso genérico, sin código ni detalle técnico', !/código|platform|PLATFORM|secret/i.test(n) && /activar tu cuenta/.test(n), n);
+    t.check('UI: aviso genérico, sin código ni detalle técnico', !/código|platform|PLATFORM|secret/i.test(n) && /preparar tu cuenta/.test(n), n);
     process.env.STELLAR_NETWORK = 'public';
     r = await call({ step: 'prepare', proof: pf(kp) });
     t.check('STELLAR_NETWORK != testnet -> rechazado', r.code === 500 && /solo testnet/.test(r.body.error), JSON.stringify(r.body));
