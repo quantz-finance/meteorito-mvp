@@ -4,8 +4,7 @@ import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { GridPager } from '@/components/GridPager';
 import { useAuth } from '@/lib/cavos';
-import { fetchBalances, type Balances } from '@/lib/horizon';
-import { CRC_USDC_RATE, displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
+import { displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Section, Sheet, Skeleton, SkeletonCard, TestnetPill, type IconName } from '@/components/ds';
 import { LivelyMascot, Reveal } from '@/components/space';
@@ -15,13 +14,12 @@ import { ui } from '@/components/ui';
 import { AnalyticsToggle, LegalLinks } from '@/components/LegalLinks';
 import { C, R, S, T, TOUCH, shadow } from '@/constants/theme';
 
-const TESTNET = true; // MVP corre solo en testnet
+const IN_PROGRESS = ['escrow_creado', 'fondeado', 'enviado', 'en_disputa'];
+const DELIVERED = ['entregado', 'liberado', 'resuelto'];
 
 export default function Inicio() {
   const auth = useAuth();
   const { email, address } = auth;
-  const [bal, setBal] = useState<Balances | null>(null);
-  const [err, setErr] = useState<string | null>(null);
   const [walletMsg, setWalletMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
@@ -35,16 +33,21 @@ export default function Inicio() {
 
   const load = useCallback(async () => {
     if (!address) return;
-    setLoading(true); setErr(null);
-    try { setBal(await fetchBalances(address)); } catch (e) { setErr(String((e as Error).message ?? e)); }
+    if (!supabaseConfigured) { setOrders([]); return; }
+    setLoading(true);
+    try { const os = await getSellerOrders(address); setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => setWalletMsg(m)); }
+    catch { setOrders((o) => o ?? []); }
     finally { setLoading(false); }
-    if (supabaseConfigured) getSellerOrders(address).then((os) => { setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => setWalletMsg(m)); }).catch(() => setOrders([]));
-    else setOrders([]);
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const short = useWindowDimensions().height < 740;
-  const crc = bal ? Number(bal.usdc ?? 0) * CRC_USDC_RATE : 0;
+  const count = (sts: string[]) => (orders ?? []).filter((o) => sts.includes(o.status)).length;
+  const stats = [
+    { label: 'Publicados', n: count(['creado']) },
+    { label: 'En curso', n: count(IN_PROGRESS) },
+    { label: 'Entregados', n: count(DELIVERED) },
+  ];
   const name = displayName(email);
   const actions: { icon: IconName; label: string; hint: string; onPress: () => void }[] = [
     { icon: 'pricetag', label: 'Vender', hint: 'Crea un link de pago en custodia', onPress: () => router.push('/vender') },
@@ -54,18 +57,23 @@ export default function Inicio() {
   return (
     <Screen title={name ? `Hola, ${name}` : 'Hola'} right={<IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />} scroll={false}>
       <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
-      {/* Tarjeta de saldo */}
-      <Reveal i={0}><View style={[s.balance, shadow, short && { minHeight: 116, padding: S.md }]}>
+      {/* Resumen de ventas (sin saldo: los cobros van a la cuenta de banco o SINPE del vendedor) */}
+      <Reveal i={0}><View style={[s.summary, shadow, short && { padding: S.md }]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={[T.caption, { color: C.lilac }]}>{TESTNET ? 'Saldo de prueba' : 'Saldo disponible'}</Text>
+          <Text style={[T.caption, { color: C.lilac }]}>Tus ventas</Text>
           <TestnetPill />
         </View>
-        {!bal && !err ? <Skeleton w="70%" h={48} style={{ marginTop: S.sm }} />
-          : <Text style={[T.money, { marginTop: S.sm }]} adjustsFontSizeToFit numberOfLines={1}>{formatCRC(crc)}</Text>}
-        {err ? <Pressable onPress={load} disabled={loading} hitSlop={8}><Text style={[T.footnote, { color: C.orange }]}>No pudimos leer tu saldo. Toca para reintentar.</Text></Pressable>
-          : <Text style={[T.footnote, { color: C.lilac }]}>Tus cobros liberados llegan aquí.</Text>}
-        {walletMsg ? <Text style={[T.footnote, { color: C.orange }]}>{walletMsg}</Text> : null}
-        <LivelyMascot size={short ? 80 : 104} style={s.mascot} parallax={-0.15} />
+        <View style={{ flexDirection: 'row', gap: S.sm, paddingRight: short ? 64 : 84 }}>
+          {stats.map((st) => (
+            <View key={st.label} style={s.stat} accessibilityLabel={`${st.label}: ${st.n}`}>
+              {orders === null ? <Skeleton w={28} h={28} /> : <Text style={s.statN}>{st.n}</Text>}
+              <Text style={T.footnote} numberOfLines={1}>{st.label}</Text>
+            </View>
+          ))}
+        </View>
+        <Text style={[T.footnote, { color: C.lilac }]} numberOfLines={2}>Tus cobros llegan a tu cuenta de banco o SINPE.</Text>
+        {walletMsg ? <Text style={[T.footnote, { color: C.orange }]} numberOfLines={2}>{walletMsg}</Text> : null}
+        <LivelyMascot size={short ? 72 : 96} style={s.mascot} parallax={-0.15} />
       </View></Reveal>
       {/* 2 acciones grandes */}
       <Reveal i={1}><View style={s.grid}>
@@ -108,11 +116,6 @@ export default function Inicio() {
         footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={async () => { const m = await logoutSafely(auth); if (m) { setLogoutMsg(m); return; } setLogoutMsg(null); setAccount(false); }} />}>
         {logoutMsg ? <ErrorText>{logoutMsg}</ErrorText> : null}
         <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{email ?? '—'}</Text></Card>
-        <Card>
-          <Text style={T.caption}>Detalles</Text>
-          <Text style={T.footnote}>ID de cuenta (red de pruebas)</Text>
-          <Text style={[T.footnote, { color: C.text }]} selectable>{address}</Text>
-        </Card>
         <Card><AnalyticsToggle /></Card>
         <LegalLinks onNavigate={() => setAccount(false)} />
       </Sheet>
@@ -121,7 +124,9 @@ export default function Inicio() {
 }
 
 const s = StyleSheet.create({
-  balance: { backgroundColor: C.purple, borderWidth: 1, borderColor: 'rgba(255,138,61,0.35)', borderRadius: R.lg, padding: S.lg, overflow: 'hidden', minHeight: 148, gap: S.xs },
+  summary: { backgroundColor: C.purple, borderWidth: 1, borderColor: 'rgba(255,138,61,0.35)', borderRadius: R.lg, padding: S.lg, overflow: 'hidden', gap: S.sm },
+  stat: { flex: 1, minWidth: 0, gap: 2 },
+  statN: { ...T.title, fontSize: 26, lineHeight: 30, fontVariant: ['tabular-nums'] },
   mascot: { position: 'absolute', right: -4, bottom: -6 },
   grid: { flexDirection: 'row', gap: S.sm },
   action: { flex: 1, backgroundColor: C.surface, borderRadius: R.lg, padding: S.md, gap: S.md, minHeight: 112, justifyContent: 'space-between', borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
