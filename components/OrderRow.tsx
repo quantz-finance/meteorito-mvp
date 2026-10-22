@@ -4,11 +4,11 @@ import { C, S, T } from '@/constants/theme';
 import { categoryIcon } from '@/components/categoryIcons';
 import { formatCRC, orderTitle, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
 
-export function OrderCard({ order, onPress, timeline = true }: { order: SellerOrder; onPress?: () => void; timeline?: boolean }) {
+export function OrderCard({ order, onPress, timeline = true, fill }: { order: SellerOrder; onPress?: () => void; timeline?: boolean; fill?: boolean }) {
   return (
-    <Card onPress={onPress} accessibilityLabel={orderTitle(order)} style={{ gap: S.md }}>
+    <Card onPress={onPress} accessibilityLabel={orderTitle(order)} style={[{ gap: fill ? S.sm : S.md }, fill && { flex: 1, justifyContent: 'center', paddingVertical: S.sm }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
-        <View style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: fill ? 40 : 48, height: fill ? 40 : 48, borderRadius: 14, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' }}>
           <Icon name={categoryIcon(order.category)} size={24} color={C.lilac} />
         </View>
         <View style={{ flex: 1, gap: S.xs }}>

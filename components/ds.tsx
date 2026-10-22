@@ -55,7 +55,7 @@ export function Screen({ title, subtitle, right, children, footer, scroll = true
       onScroll={onScroll} scrollEventThrottle={16}>
       <View {...anim('enter')} style={{ gap: S.lg }}>{backBtn}{header}{children}</View>
     </Reanimated.ScrollView>
-  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md }, contentStyle]}><View {...anim('enter')} style={{ flex: 1, gap: S.lg }}>{backBtn}{header}{children}</View></View>;
+  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md, paddingBottom: S.sm }, contentStyle]}><View {...anim('enter')} style={{ flex: 1, gap: S.lg }}>{backBtn}{header}{children}</View></View>;
   return (
     <ScrollCtx.Provider value={scrollY}>
       <View style={st.screen}>
@@ -82,9 +82,9 @@ export function Card({ children, style, onPress, accessibilityLabel }: { childre
   );
 }
 
-export function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+export function Section({ title, action, children, style }: { title: string; action?: ReactNode; children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
-    <View style={{ gap: S.sm }}>
+    <View style={[{ gap: S.sm }, style]}>
       <View style={st.rowBetween}><Text style={T.caption}>{title}</Text>{action}</View>
       {children}
     </View>
