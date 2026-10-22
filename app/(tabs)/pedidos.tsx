@@ -10,7 +10,7 @@ import { SellerActions } from '@/components/SellerActions';
 import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
-import { formatCRC, getPublicOrder, getSellerOrders, type PublicOrder, orderLink, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
+import { formatCRC, getPublicOrder, getSellerOrders, type PublicOrder, orderLink, orderTitle, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
 import { needsPolling } from '@/lib/refresh';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
@@ -77,7 +77,7 @@ export default function Pedidos() {
           </Card>
         ) : orders.map((o, i) => <Reveal key={o.slug} i={i}><OrderCard order={o} onPress={() => setOpenSlug(o.slug)} /></Reveal>)}
 
-      <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? `${open.brand} ${open.model}` : ''}
+      <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? orderTitle(open) : ''}
         footer={open ? <PrimaryButton title="Compartir link" icon="share-outline" variant="secondary"
           onPress={() => { const slug = open.slug; setOpenSlug(null); router.push({ pathname: '/compartir/[slug]', params: { slug } }); }} /> : null}>
         {open && <>

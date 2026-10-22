@@ -27,9 +27,14 @@ export function randomSlug(len = 6): string {
   return out;
 }
 
+/** Título visible del pedido. Los links en un paso guardan el título en `model` (brand vacío); los viejos, marca + modelo. */
+export const orderTitle = (o: { brand?: string | null; model?: string | null } | null | undefined) =>
+  `${o?.brand ?? ''} ${o?.model ?? ''}`.replace(/\s+/g, ' ').trim() || 'Artículo';
+
+/** Link en un paso: solo título, precio y fotos son obligatorios; el resto es opcional (compatibilidad). */
 export interface NewOrder {
-  seller_address: string; seller_email: string | null; category: string; brand: string; model: string;
-  condition: string; price_crc: number; description: string; identifier: string; photos: string[]; checks: CheckResult[];
+  seller_address: string; seller_email: string | null; title?: string; category?: string; brand?: string; model?: string;
+  condition?: string; price_crc: number; description?: string; identifier?: string; photos: string[]; checks?: CheckResult[];
   /** Código de la invitación de compra que este listing responde (el link queda reservado al comprador que invitó). */
   invite?: string;
 }

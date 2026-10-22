@@ -9,6 +9,10 @@ import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 import { inviteByCode, inviteErr, validCode } from '../_lib/invites';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
+// Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
+// (los clientes viejos los siguen mandando). Sin migración: el título se guarda en `model` y `brand` queda vacío,
+// así public_orders, seller_orders e invitaciones siguen igual. Mismos límites que lib/listing.ts.
+const TITLE_MIN = 3, TITLE_MAX = 80, DEFAULT_CATEGORY = 'otro';
 const slug = () => { const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; let s = ''; while (s.length < 6) { const b = randomBytes(1)[0]; if (b < 252) s += a[b % 36]; } return s; };
 const str = (v: unknown, max: number, req = true) => {
   if (v == null || v === '') { if (req) throw new HttpError(400, 'faltan campos'); return null; }
@@ -22,7 +26,15 @@ export default async function handler(req: any, res: any) {
     const b = req.body ?? {};
     const seller = await requireAddressProof(b.proof, 'create', 'new');
     await bindWalletIfFresh(user, seller);
-    if (!CATS.includes(b.category)) throw new HttpError(400, 'categoría inválida');
+    const category = b.category == null || b.category === '' ? DEFAULT_CATEGORY : b.category;
+    if (!CATS.includes(category)) throw new HttpError(400, 'categoría inválida');
+    // Título: `title` (pantalla única) o, por compatibilidad, marca + modelo.
+    const title = str(b.title, TITLE_MAX, false);
+    const brand = title ? '' : (str(b.brand, 60, false) ?? '');
+    const model = title ?? (str(b.model, 80, false) ?? '');
+    const fullTitle = `${brand} ${model}`.trim();
+    if (!fullTitle) throw new HttpError(400, 'Escribe el título de lo que vendes.');
+    if (fullTitle.length < TITLE_MIN) throw new HttpError(400, `El título necesita al menos ${TITLE_MIN} letras.`);
     const price = Number(b.price_crc);
     if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw new HttpError(400, 'precio inválido');
     // Fotos obligatorias (1-4) y solo de la carpeta del vendedor (subidas por /api/photos/upload-url).
@@ -44,7 +56,7 @@ export default async function handler(req: any, res: any) {
     }
     const row = {
       seller_address: seller, seller_user_id: user.sub, seller_email: user.email ?? null,
-      category: b.category, brand: str(b.brand, 60), model: str(b.model, 80), condition: str(b.condition, 40),
+      category, brand, model, condition: str(b.condition, 40, false) ?? '',
       price_crc: price, description: str(b.description, 2000, false), identifier: str(b.identifier, 40, false),
       photos, checks: Array.isArray(b.checks) ? b.checks.slice(0, 20) : [], status: 'creado',
     };
