@@ -25,10 +25,11 @@ export interface DemoOrder {
   slug: string; category: string; brand: string; model: string; condition: string; price_crc: number;
   description: string | null; photos: string[]; status: string; identifier_masked: string | null;
   amount_usdc: number | null; contract_id: string | null; funded_tx: string | null; released_tx: string | null; auto_release_at: string | null;
+  funded_at?: string | null; shipped_at?: string | null; delivered_at?: string | null; released_at?: string | null; disputed_at?: string | null;
   checks_summary: { id: string; label: string; blocksRelease: boolean; ok: boolean }[]; created_at: string;
   seller_address: string; pin: string | null; pinShown: boolean; shipped_tx: string | null; evidence: unknown; dispute: unknown;
 }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder> }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; store?: { slug: string; name: string }; ratings?: Record<string, number> }
 
 export const DEMO_PIN = '482915';
 const RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510);
@@ -124,8 +125,11 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     const slug = 'demo' + String(++st.seq).padStart(2, '0');
     const price = Number(body.price_crc);
     if (!Number.isInteger(price) || price < 1000) throw err(400, 'bad_price', 'precio inválido');
+    // Igual que el API: link en un paso con `title` (se guarda en model) o, por compatibilidad, marca + modelo.
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    if (!title && !String(body.brand ?? '').trim() && !String(body.model ?? '').trim()) throw err(400, 'bad_title', 'Escribe el título de lo que vendes.');
     st.orders[slug] = {
-      slug, category: body.category, brand: String(body.brand ?? ''), model: String(body.model ?? ''), condition: String(body.condition ?? ''), price_crc: price,
+      slug, category: body.category || 'otro', brand: title ? '' : String(body.brand ?? ''), model: title || String(body.model ?? ''), condition: String(body.condition ?? ''), price_crc: price,
       description: body.description ? String(body.description) : null, photos: Array.isArray(body.photos) ? body.photos.slice(0, 4) : [], status: 'creado',
       identifier_masked: body.identifier ? mask(String(body.identifier)) : null, amount_usdc: null, contract_id: null, funded_tx: null, released_tx: null, auto_release_at: null,
       checks_summary: Array.isArray(body.checks) ? body.checks.slice(0, 20) : [], created_at: now(),
@@ -142,7 +146,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     }
     if (body.step === 'confirm_sinpe') {
       if (o.status !== 'escrow_creado') throw err(409, 'bad_state', 'Primero inicia el pago.');
-      o.status = 'fondeado'; o.funded_tx = demoTxHash('fund:' + o.slug); o.pin = DEMO_PIN; o.pinShown = true;
+      o.status = 'fondeado'; o.funded_tx = demoTxHash('fund:' + o.slug); o.funded_at = now(); o.pin = DEMO_PIN; o.pinShown = true;
       emit(); return { funded: true, fundedTx: o.funded_tx, pin: DEMO_PIN }; // el PIN se devuelve una sola vez
     }
     throw err(400, 'bad_step', 'paso inválido');
@@ -150,7 +154,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   if (p === '/api/escrow/ship') {
     need('seller'); const o = get(String(body.slug));
     if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.');
-    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.evidence = body.evidence ?? null; emit();
+    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.evidence = body.evidence ?? null; emit();
     return { shippedTx: o.shipped_tx, evidenceHash: demoTxHash('ev:' + o.slug) };
   }
   if (p === '/api/escrow/confirm') {
@@ -158,16 +162,45 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     if (o.status !== 'enviado') throw err(409, 'bad_state', 'Este pedido no está enviado.');
     if (body.reason === 'pin') { need('seller'); if (String(body.pin) !== o.pin) throw err(400, 'bad_pin', 'PIN incorrecto'); }
     else { need('buyer'); }
-    o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); emit(); return { released: true, releasedTx: o.released_tx };
+    o.delivered_at = now(); o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = now(); emit(); return { released: true, releasedTx: o.released_tx };
   }
   if (p === '/api/escrow/dispute') {
     need('buyer'); const o = get(String(body.slug));
     if (!['fondeado', 'enviado', 'entregado'].includes(o.status) || o.released_tx) throw err(409, 'bad_state', 'Ya no se puede reportar un problema.');
-    o.status = 'en_disputa'; o.dispute = { reason: body.reason, description: body.description ?? null, at: now() }; emit(); return { disputed: true };
+    o.status = 'en_disputa'; o.disputed_at = now(); o.dispute = { reason: body.reason, description: body.description ?? null, at: now() }; emit(); return { disputed: true };
+  }
+  if (p === '/api/store') {
+    if (body.action === 'rate') {
+      need('buyer'); const o = get(String(body.slug)); const stars = Number(body.stars);
+      if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw err(400, 'bad_stars', 'Elige de 1 a 5 estrellas.');
+      if (!['entregado', 'liberado'].includes(o.status)) throw err(409, 'not_ratable', 'Puedes calificar cuando el pedido esté entregado.');
+      st.ratings ??= {}; if (st.ratings[o.slug]) throw err(409, 'already_rated', 'Ya calificaste este pedido.');
+      st.ratings[o.slug] = stars; emit(); return { rated: true, stars };
+    }
+    need('seller');
+    st.store ??= { slug: 'valeria', name: 'Valeria' };
+    if (body.action === 'update') {
+      if (body.store_slug != null) { const s2 = String(body.store_slug).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, ''); if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(s2)) throw err(400, 'bad_store_slug', 'Usa de 3 a 30 letras o números (sin espacios).'); st.store.slug = s2; }
+      if (body.display_name != null && String(body.display_name).trim()) st.store.name = String(body.display_name).trim().slice(0, 40);
+      emit();
+    }
+    return demoGetStore(st.store.slug);
   }
   throw err(404, 'demo_no_endpoint', `Modo demo: ${p} no está simulado`);
 }
 
+/** Tienda pública simulada (misma forma que GET /api/store). */
+export function demoGetStore(slug: string) {
+  const st = S(); const store = st.store ?? { slug: 'valeria', name: 'Valeria' };
+  if (slug !== store.slug) return null;
+  const r = Object.values(st.ratings ?? {});
+  return {
+    store_slug: store.slug, display_name: store.name,
+    rating_avg: r.length ? Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100) / 100 : null, rating_count: r.length,
+    items: Object.values(st.orders).filter((o) => o.status === 'creado').reverse()
+      .map((o) => ({ slug: o.slug, title: `${o.brand} ${o.model}`.trim() || 'Artículo', price_crc: o.price_crc, photo: o.photos[0] ?? null })),
+  };
+}
 export const demoGetPublicOrder = (slug: string) => { const o = S().orders[slug]; return o ? pub(o) : null; };
 export const demoGetSellerOrders = (addr: string) =>
   Object.values(S().orders).filter((o) => o.seller_address === addr).sort((a, b) => b.created_at.localeCompare(a.created_at))
@@ -178,10 +211,11 @@ export function demoBalances(addr: string) {
   return { funded: true, xlm: '9.5000000', usdc };
 }
 /** Pedido de ejemplo ya en un estado dado (para grabar solo un tramo del flujo). Devuelve el slug. */
-export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado'): Promise<string> {
+export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado', opts: { title?: string; price_crc?: number; photos?: string[] } = {}): Promise<string> {
   const prev = S().role; const set = (r: DemoRole) => { S().role = r; };
   set('seller');
-  const { slug } = await demoApi('/api/orders/create', { category: 'celular', brand: 'Samsung', model: 'Galaxy S23', condition: 'Muy bueno', price_crc: 185000, description: 'Con cargador original y funda. Batería al 91%.', identifier: '350000000000123', photos: [], checks: [] });
+  // Igual que la pantalla única de vender: solo título, precio y fotos.
+  const { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [] });
   if (upTo !== 'creado') { set('buyer'); await demoApi('/api/escrow/pay', { slug, step: 'start' }); await demoApi('/api/escrow/pay', { slug, step: 'confirm_sinpe' }); }
   if (upTo === 'enviado') { set('seller'); await demoApi('/api/escrow/ship', { slug, evidence: { note: 'Entrega en persona, Escazú', at: new Date().toISOString() } }); }
   set(prev); emit(); return slug;

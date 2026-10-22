@@ -58,7 +58,7 @@ function Gate() {
   const auth = useAuth();
   const segments = useSegments();
   const pathname = usePathname();
-  const isPublic = segments[0] === 'p' || segments[0] === 'i' || segments[0] === 'legal'; // link de pago, invitaciones de compra y legales: visibles sin login
+  const isPublic = segments[0] === 'p' || segments[0] === 't' || segments[0] === 'i' || segments[0] === 'legal'; // link de pago, tienda, invitaciones de compra y legales: visibles sin login
   const authed = auth.isAuthenticated && !!auth.address;
   useEffect(() => { screen(authed || isPublic ? screenName(pathname) : 'welcome'); }, [pathname, authed]);
   useEffect(() => {
@@ -76,6 +76,8 @@ function Gate() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="p/[slug]" />
+      <Stack.Screen name="t/[store]" />
+      <Stack.Screen name="mi-tienda" />
       <Stack.Screen name="i/nueva" />
       <Stack.Screen name="i/[code]" />
       <Stack.Screen name="compartir/[slug]" options={{ presentation: 'modal' }} />

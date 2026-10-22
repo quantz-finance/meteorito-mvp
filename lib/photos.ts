@@ -5,7 +5,7 @@ import { DEMO_ENABLED } from './demo';
 import { supabase } from './supabase';
 import type { MeteoritoAuth } from './types';
 
-export const MAX_PHOTOS = 4;
+export { MAX_PHOTOS } from './listing';
 const MAX_SIDE = 1280;
 const TARGET_BYTES = 300 * 1024;
 

@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Image, ScrollView as RNScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, ScrollView as RNScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { LivelyMascot, Reveal, ScrollCtx, SpaceBackground } from '@/components/space';
@@ -13,7 +13,10 @@ import { categoryIcon } from '@/components/categoryIcons';
 import { C, R, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
-import { formatCRC, getPublicOrder, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
+import { formatCRC, getPublicOrder, orderTitle, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
+import { isBuyerDevice } from '@/lib/guest';
+import { haptic } from '@/components/ds';
+import { rateOrder, ratedStars, rememberRated } from '@/lib/store';
 
 const HOW: { icon: IconName; title: string; text: string }[] = [
   { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu pago de prueba queda en custodia (escrow). El vendedor todavía no lo recibe.' },
@@ -98,11 +101,11 @@ export default function LinkDeVenta() {
             )}
             <View style={{ padding: S.md, gap: S.sm }}>
               <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
-                <Chip label={cat?.label ?? order.category} icon={categoryIcon(order.category)} />
-                <Chip label={order.condition} tone="muted" />
+                {order.category && order.category !== 'otro' ? <Chip label={cat?.label ?? order.category} icon={categoryIcon(order.category)} /> : null}
+                {order.condition?.trim() ? <Chip label={order.condition} tone="muted" /> : null}
                 <Chip key={order.status} swap label={STATUS_LABEL[order.status] ?? order.status} tone={statusTone(order.status)} />
               </View>
-              <Text style={T.title}>{order.brand} {order.model}</Text>
+              <Text style={T.title}>{orderTitle(order)}</Text>
               <TrustBlock order={order} />
               <Text style={T.money}>{formatCRC(order.price_crc)}</Text>
               {order.description ? <Text style={T.callout}>{order.description}</Text> : null}
@@ -132,7 +135,9 @@ export default function LinkDeVenta() {
             </Card>
           )}
 
-          <Card>
+          {RATABLE.includes(order.status) && isBuyerDevice(order.slug) ? <RateCard slug={order.slug} /> : null}
+
+          {order.identifier_masked || (order.checks_summary ?? []).length > 0 ? <Card>
             <Text style={T.caption}>Lo que declara el vendedor</Text>
             {order.identifier_masked && <Text style={T.body}>Identificador: {order.identifier_masked}</Text>}
             {(order.checks_summary ?? []).map((c) => (
@@ -142,7 +147,7 @@ export default function LinkDeVenta() {
               </View>
             ))}
             <Text style={T.footnote}>Son datos que declara el vendedor; Meteorito no los verifica (por ahora no hay verificación de IMEI ni de iCloud). Revisa el equipo cuando lo recibas, antes de darle tu PIN al vendedor.</Text>
-          </Card>
+          </Card> : null}
 
           {chainLinks(order).length > 0 && (
             <View style={{ gap: S.xs }}>
@@ -162,6 +167,40 @@ export default function LinkDeVenta() {
   );
 }
 
+const RATABLE = ['entregado', 'liberado'];
+/** Calificación del comprador (1-5), una sola vez por pedido. El servidor valida la llave de invitado/sesión y el estado. */
+function RateCard({ slug }: { slug: string }) {
+  const auth = useAuth();
+  const [done, setDone] = useState<number | null>(() => ratedStars(slug));
+  const [pick, setPick] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function send(stars: number) {
+    setPick(stars); setErr(null); setBusy(true);
+    try { await rateOrder(auth, slug, stars); rememberRated(slug, stars); setDone(stars); haptic.success(); }
+    catch (e: any) {
+      if (e?.code === 'already_rated') { rememberRated(slug, stars); setDone(stars); }
+      else { setErr(e?.message ?? 'No pudimos guardar tu calificación.'); setPick(0); }
+    } finally { setBusy(false); }
+  }
+  const shown = done ?? pick;
+  return (
+    <Card style={{ gap: S.sm, alignItems: 'center' }}>
+      <Text style={T.headline}>{done ? '¡Gracias por calificar!' : '¿Cómo te fue con el vendedor?'}</Text>
+      <View style={{ flexDirection: 'row', gap: S.xs }}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} estrella${n === 1 ? '' : 's'}`} disabled={!!done || busy}
+            onPress={() => send(n)} hitSlop={4} style={({ pressed }) => [{ padding: 6 }, pressed && { transform: [{ scale: 0.9 }] }]}>
+            <Icon name={n <= shown ? 'star' : 'star-outline'} size={34} color={n <= shown ? '#FFD84D' : C.textDim} />
+          </Pressable>
+        ))}
+      </View>
+      {err ? <Text style={[T.footnote, { color: C.orange, textAlign: 'center' }]}>{err}</Text>
+        : <Text style={[T.footnote, { textAlign: 'center' }]}>{done ? 'Tu calificación ayuda a otros compradores.' : 'Toca de 1 a 5 estrellas. Solo puedes calificar una vez.'}</Text>}
+    </Card>
+  );
+}
+
 function TrustBlock({ order }: { order: PublicOrder }) {
   return (
     <View style={{ gap: S.sm }}>
@@ -173,9 +212,9 @@ function TrustBlock({ order }: { order: PublicOrder }) {
           </Text>
         </View>
       ) : null}
-      <View style={{ flexDirection: 'row' }}>
-        <Chip label={order.identifier_masked ? 'Identificador declarado por el vendedor' : 'El vendedor no declaró identificador'} tone="muted" icon="information-circle-outline" />
-      </View>
+      {order.identifier_masked ? <View style={{ flexDirection: 'row' }}>
+        <Chip label="Identificador declarado por el vendedor" tone="muted" icon="information-circle-outline" />
+      </View> : null}
     </View>
   );
 }

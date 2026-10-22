@@ -9,6 +9,10 @@
       "destination": "/p/[slug].html"
     },
     {
+      "source": "/t/:store",
+      "destination": "/t/[store].html"
+    },
+    {
       "source": "/i/nueva",
       "destination": "/i/nueva.html"
     },

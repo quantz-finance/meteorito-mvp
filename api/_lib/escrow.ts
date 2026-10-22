@@ -33,7 +33,7 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
     signerSecret: env.deployerSecret(),
     engagementId: order.id,
     title: `Meteorito ${order.slug}`,
-    description: `${order.brand} ${order.model}`.slice(0, 200),
+    description: (`${order.brand ?? ''} ${order.model ?? ''}`.trim() || `Pedido ${order.slug}`).slice(0, 200),
     amount,
     roles: {
       approver: pub(env.approverSecret()),
