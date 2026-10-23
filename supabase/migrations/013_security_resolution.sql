@@ -24,3 +24,10 @@ select slug, category, brand, model, condition, price_crc, description, photos, 
        resolution
 from public.orders;
 grant select on public.public_orders to anon, authenticated;
+
+-- 3) seller_orders / seller_orders_v2: sin ejecución pública (aplicado en producción; anon/authenticated sin privilegios).
+--    Solo el backend (service_role) las llama.
+revoke execute on function public.seller_orders(text) from public;
+revoke execute on function public.seller_orders_v2(text) from public;
+grant execute on function public.seller_orders(text) to service_role;
+grant execute on function public.seller_orders_v2(text) to service_role;
