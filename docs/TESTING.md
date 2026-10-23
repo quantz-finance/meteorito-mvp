@@ -17,7 +17,7 @@ Atajos:
 - `npx playwright test --project=webkit-iphone-se -g "ESC-01"`: un caso en un perfil.
 - `npx playwright show-report`: reporte HTML con traza y captura de cada falla.
 
-En CI: `.github/workflows/ci.yml` (typecheck, export web, check:cjs, unit + testnet) y `.github/workflows/e2e.yml` (Playwright, sin secretos).
+En CI: `.github/workflows/ci.yml` (typecheck, export web, check:cjs, unit + testnet) y `.github/workflows/e2e.yml` (Playwright, sin secretos; 4 shards en paralelo con `--shard`, navegadores y `node_modules` en caché; el check final se llama `e2e` y falla si falla cualquier shard).
 
 ## Estructura E2E (`e2e/`)
 
