@@ -11,6 +11,14 @@ try { execSync(`npx tsc -p ${join(root, 'scripts/ci/tsconfig.cjs.json')}`, { cwd
 catch (e) { if (!existsSync(join(out, 'api'))) { console.error(String(e.stdout ?? e)); process.exit(1); } }
 if (!existsSync(join(out, 'node_modules'))) symlinkSync(join(root, 'node_modules'), join(out, 'node_modules'), 'dir');
 
+// import() de un archivo relativo: Vercel no lo empaqueta y en runtime falla con ERR_MODULE_NOT_FOUND (bug de "comprar
+// sin cuenta": /api/escrow/pay -> 500 "Cannot find module api/_lib/push"). Solo se permiten import() de paquetes.
+import { readFileSync } from 'node:fs';
+const relDyn = [];
+const scan = (d) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) scan(p); else if (/\.ts$/.test(f)) { const src = readFileSync(p, 'utf8'); for (const m of src.matchAll(/(?<!\/\/.*)\bimport\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)/g)) relDyn.push(`${p.slice(root.length + 1)}: import('${m[1]}')`); } } };
+scan(join(root, 'api'));
+if (relDyn.length) { console.log('FAIL  import() relativo en api/ (Vercel no lo empaqueta):\n' + relDyn.join('\n')); process.exit(1); }
+
 const entries = [];
 const walk = (d) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) { if (f !== '_lib') walk(p); } else if (f.endsWith('.js')) entries.push(p); } };
 walk(join(out, 'api'));

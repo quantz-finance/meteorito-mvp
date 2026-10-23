@@ -38,6 +38,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '37', name: 'Misma cuenta en N dispositivos: passkey restaura y crea link con la misma dirección', file: './t37-multi-device.test.ts', onchain: false },
   { id: '38', name: 'Productos permanentes: dos compradores -> dos escrows, el producto sigue disponible', file: './t38-listings.test.ts', onchain: false },
   { id: '39', name: 'Teclado iOS: alto estable + encabezado compartido', file: './t39-keyboard-layout.test.ts', onchain: false },
+  { id: '40', name: 'Regresión: pagar sin cuenta (push empaquetado; cambios de estado no dependen del push)', file: './t40-guest-pay-bundle.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },
