@@ -17,6 +17,8 @@ import { formatCRC, getPublicOrder, orderTitle, STATUS_LABEL, type PublicOrder }
 import { isBuyerDevice } from '@/lib/guest';
 import { haptic } from '@/components/ds';
 import { rateOrder, ratedStars, rememberRated } from '@/lib/store';
+import { useStamp } from '@/lib/freshness';
+import { keepIfSame } from '@/lib/refresh';
 
 const HOW: { icon: IconName; title: string; text: string }[] = [
   { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu pago de prueba queda en custodia (escrow). El vendedor todavía no lo recibe.' },
@@ -36,14 +38,14 @@ export default function LinkDeVenta() {
   const { width } = useWindowDimensions();
   const [order, setOrder] = useState<PublicOrder | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
   const [learn, setLearn] = useState(false);
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
 
-  const load = () => { if (slug) getPublicOrder(String(slug)).then((o) => { setOrder(o); setError(null); setUpdatedAt(Date.now()); }).catch((e) => setError((e as Error).message)); };
+  const load = () => { if (slug) getPublicOrder(String(slug)).then((o) => { setOrder(o); setError(null); stamp.set(Date.now()); }).catch((e) => setError((e as Error).message)); };
   // Sincronización con el servidor: si el vendedor envía o el comprador paga, esta pantalla lo refleja sola (cada POLL_MS y al volver el foco).
-  const silent = async () => { if (!slug) return; try { const o = await getPublicOrder(String(slug)); setOrder(o); setUpdatedAt(Date.now()); } catch { /* reintenta en el siguiente ciclo */ } };
+  const silent = async () => { if (!slug) return; try { const o = await getPublicOrder(String(slug)); setOrder((prev) => keepIfSame(prev, o)); stamp.set(Date.now()); } catch { /* reintenta en el siguiente ciclo */ } };
   useOrdersRefresh(silent, order ? [order] : null);
   // Respaldo del pg_cron: si el plazo de liberación (AUTO_RELEASE_MINUTES) ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
   useEffect(() => {
@@ -157,7 +159,7 @@ export default function LinkDeVenta() {
           )}
           <PrimaryButton title="¿Qué es la custodia en blockchain?" variant="ghost" icon="help-circle-outline" onPress={() => setLearn(true)} />
           <LearnSheet visible={learn} onClose={() => setLearn(false)} />
-          <Freshness at={updatedAt} live={!['liberado', 'resuelto', 'cancelado'].includes(order.status)} align="center" />
+          <Freshness stamp={stamp} live={!['liberado', 'resuelto', 'cancelado'].includes(order.status)} align="center" />
           {isAuthenticated && <Text style={[T.footnote, { textAlign: 'center' }]}>Sesión iniciada como {email}</Text>}
         </>}
       </Animated.ScrollView>

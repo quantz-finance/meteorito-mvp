@@ -1,10 +1,12 @@
+import { memo } from 'react';
 import { Text, View } from 'react-native';
 import { Card, Chip, Icon, MoneyTimeline, statusTone } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 import { categoryIcon } from '@/components/categoryIcons';
 import { formatCRC, orderTitle, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
 
-export function OrderCard({ order, onPress, timeline = true, fill }: { order: SellerOrder; onPress?: () => void; timeline?: boolean; fill?: boolean }) {
+/** memo: el polling conserva la referencia del pedido si no cambió; onPress se ignora (solo depende del slug). */
+export const OrderCard = memo(function OrderCard({ order, onPress, timeline = true, fill }: { order: SellerOrder; onPress?: () => void; timeline?: boolean; fill?: boolean }) {
   return (
     <Card onPress={onPress} accessibilityLabel={orderTitle(order)} style={[{ gap: fill ? S.sm : S.md }, fill && { flex: 1, justifyContent: 'center', paddingVertical: S.sm }]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
@@ -20,4 +22,4 @@ export function OrderCard({ order, onPress, timeline = true, fill }: { order: Se
       {timeline ? <MoneyTimeline status={order.status} compact /> : null}
     </Card>
   );
-}
+}, (a, b) => a.order === b.order && a.timeline === b.timeline && a.fill === b.fill);

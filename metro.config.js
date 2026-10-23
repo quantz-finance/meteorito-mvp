@@ -4,6 +4,8 @@ const { getDefaultConfig } = require('expo/metro-config');
 const path = require('path');
 
 const config = getDefaultConfig(__dirname);
+// Fuentes web woff2 (assets/fonts, generadas por scripts/build/subset-fonts.py).
+if (!config.resolver.assetExts.includes('woff2')) config.resolver.assetExts.push('woff2');
 const shim = path.join(__dirname, 'lib/shims/phosphor-icons.ts');
 const upstream = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {

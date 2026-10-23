@@ -13,9 +13,10 @@ import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
 import { formatCRC, getPublicOrder, getSellerOrders, type PublicOrder, orderLink, orderTitle, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
-import { needsPolling } from '@/lib/refresh';
+import { keepIfSame, needsPolling } from '@/lib/refresh';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { Freshness } from '@/components/Freshness';
+import { useStamp } from '@/lib/freshness';
 
 const NEXT_HINT: Record<string, string> = {
   creado: 'Comparte el link. Cuando el comprador pague, te avisamos acá.',
@@ -34,12 +35,12 @@ export default function Pedidos() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [openSlug, setOpenSlug] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
 
   const load = useCallback(async () => {
     if (!address || !supabaseConfigured) { setOrders([]); return; }
     setLoading(true); setError(null);
-    try { const os = await getSellerOrders(address); setOrders(os); setUpdatedAt(Date.now()); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError(userMessage((e as Error).message)); setOrders((o) => o ?? []); }
+    try { const os = await getSellerOrders(address); setOrders(os); stamp.set(Date.now()); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError(userMessage((e as Error).message)); setOrders((o) => o ?? []); }
     finally { setLoading(false); }
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -47,7 +48,7 @@ export default function Pedidos() {
   // Refresco silencioso (sin spinner ni borrar errores): el vendedor ve 'Pago liberado' sin recargar.
   const silentRefresh = useCallback(async () => {
     if (!address || !supabaseConfigured) return;
-    try { setOrders(await getSellerOrders(address)); setUpdatedAt(Date.now()); } catch { /* se reintenta en el siguiente ciclo */ }
+    try { const os = await getSellerOrders(address); setOrders((prev) => keepIfSame(prev, os)); stamp.set(Date.now()); } catch { /* se reintenta en el siguiente ciclo */ }
   }, [address]);
   useOrdersRefresh(silentRefresh, orders);
 
@@ -68,7 +69,7 @@ export default function Pedidos() {
       <View style={{ flex: 1, gap: S.sm }}>
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED ? <OrphanWalletCard /> : error ? <ErrorText>{error}</ErrorText> : null}
-      {orders && orders.length > 0 && <Freshness at={updatedAt} live={needsPolling(orders)} />}
+      {orders && orders.length > 0 && <Freshness stamp={stamp} live={needsPolling(orders)} />}
       {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         : orders.length === 0 ? (
           <Card style={{ alignItems: 'center', paddingVertical: S.xl, gap: S.md }}>

@@ -16,6 +16,8 @@ import { cancelInvite, getInvite, inviteLink, type Invite } from '@/lib/invites'
 import { formatCRC } from '@/lib/orders';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { track } from '@/lib/analytics';
+import { useStamp } from '@/lib/freshness';
+import { keepIfSame } from '@/lib/refresh';
 
 const STATUS: Record<Invite['status'], { label: string; tone: 'warn' | 'success' | 'muted' }> = {
   abierta: { label: 'Esperando al vendedor', tone: 'warn' }, aceptada: { label: 'El vendedor ya publicó', tone: 'success' }, cancelada: { label: 'Cancelada', tone: 'muted' },
@@ -26,13 +28,13 @@ export default function Invitacion() {
   const auth = useAuth();
   const [inv, setInv] = useState<Invite | null | undefined>(undefined);
   const [err, setErr] = useState<string | null>(null);
-  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!code) return;
-    try { const i = await getInvite(String(code)); setInv(i); setErr(null); setUpdatedAt(Date.now()); } catch (e) { setErr((e as Error).message); }
+    try { const i = await getInvite(String(code)); setInv((prev) => keepIfSame(prev, i)); setErr(null); stamp.set(Date.now()); } catch (e) { setErr((e as Error).message); }
   }, [code]);
   useEffect(() => { load(); }, [load]);
   // Sincronización: el comprador ve al instante cuando el vendedor publica (y viceversa si la cancelan).
@@ -80,7 +82,7 @@ export default function Invitacion() {
         <Card style={{ gap: S.sm }}>
           <Text style={T.caption}>Cómo sigue</Text>
           <Text style={T.callout}>1. El vendedor abre el link, publica el artículo con fotos y su cuenta.{'\n'}2. Tú recibes aquí el botón de pago (este link queda reservado para ti, en este navegador).{'\n'}3. Pagas en custodia y le das tu PIN solo cuando tengas el producto.</Text>
-          <Freshness at={updatedAt} live={inv.status === 'abierta'} />
+          <Freshness stamp={stamp} live={inv.status === 'abierta'} />
         </Card>
         {inv.status === 'abierta' && (
           <PrimaryButton title="Cancelar invitación" variant="ghost" loading={busy} onPress={async () => { setBusy(true); try { await cancelInvite(auth, inv.code); await load(); } catch (e) { setErr(userMessage((e as Error).message)); } finally { setBusy(false); } }} />
@@ -103,7 +105,7 @@ export default function Invitacion() {
         <Text style={T.caption}>Qué haces</Text>
         <Text style={T.callout}>Publicas el artículo (fotos, estado) al precio acordado. Te damos un link de pago que solo puede usar quien te invitó. El dinero queda en custodia hasta que entregues y el comprador confirme con su PIN.</Text>
       </Card>}
-      <Freshness at={updatedAt} live={open} />
+      <Freshness stamp={stamp} live={open} />
     </Screen>
   );
 }
