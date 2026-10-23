@@ -50,6 +50,15 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
 (async () => {
   const N = process.env.TESTNET === 'skip' ? null : testnet();
   if (!N && process.env.CI && process.env.TESTNET !== 'skip') { console.error(`Faltan secretos testnet: ${SECRET_NAMES.join(', ')}`); process.exit(1); }
+  if (N) { // Preflight (solo claves públicas): saldo de la tesorería testnet que fondea los escrows de prueba
+    const pub = N.pub('TESTNET_TREASURY_SECRET');
+    try {
+      const j: any = await (await fetch(`https://horizon-testnet.stellar.org/accounts/${pub}`)).json();
+      const usdc = Number((j.balances ?? []).find((x: any) => x.asset_code === 'USDC')?.balance ?? 0);
+      console.log(`[preflight] tesorería testnet ${pub} USDC=${usdc}`);
+      if (usdc < 20) console.log(`[preflight] AVISO: la tesorería necesita USDC testnet (≥20) para los tests on-chain: envía USDC testnet a ${pub}`);
+    } catch (e: any) { console.log(`[preflight] no se pudo leer el saldo de ${pub}: ${e?.message ?? e}`); }
+  }
   const summary: string[] = []; let failed = 0;
   for (const tc of TESTS) {
     if (tc.onchain && !N) { summary.push(`SKIP  (${tc.id}) ${tc.name} — sin secretos testnet`); continue; }
