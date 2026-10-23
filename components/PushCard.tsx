@@ -5,6 +5,8 @@ import { ErrorText, haptic, Icon, IconButton, PrimaryButton, toast } from '@/com
 import { anim } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
+import { isSessionError, sellerPushVisible } from '@/lib/authUx';
+import { userMessage } from '@/lib/cavosSession';
 import { dismissPush, enablePush, isDismissed, pushStatus, type PushRole, type PushStatus } from '@/lib/push';
 
 const COPY: Record<PushRole, { title: string; body: string }> = {
@@ -12,7 +14,8 @@ const COPY: Record<PushRole, { title: string; body: string }> = {
   buyer: { title: 'Sigue tu compra al instante', body: 'Te avisamos cuando el vendedor envíe y cuando se complete la compra.' },
 };
 
-export default function PushCard({ role }: { role: PushRole }) {
+/** onSessionError: el error de sesión lo muestra la pantalla (una sola vez); la tarjeta se oculta en vez de repetirlo. */
+export default function PushCard({ role, onSessionError }: { role: PushRole; onSessionError?: (msg: string) => void }) {
   const auth = useAuth();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [hidden, setHidden] = useState(true);
@@ -20,13 +23,18 @@ export default function PushCard({ role }: { role: PushRole }) {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { setStatus(pushStatus(role)); setHidden(isDismissed(role)); }, [role]);
   if (hidden || !status || status === 'enabled' || status === 'unsupported') return null;
+  // Vendedor: la suscripción se guarda con su sesión. Sin sesión válida, la tarjeta no se ofrece.
+  if (role === 'seller' && !sellerPushVisible({ authed: auth.isAuthenticated, hasToken: !!auth.getAuthToken?.(), sessionError: false })) return null;
   const c = COPY[role];
   const ios = status === 'ios_install';
   const onEnable = () => {
     setBusy(true); setErr(null); haptic.tap();
     enablePush(auth, role) // sin await antes: el permiso se pide dentro del toque (requisito de iOS)
       .then(() => { haptic.success(); toast('Notificaciones activadas'); setStatus('enabled'); })
-      .catch((e) => { setErr((e as Error).message); setStatus(pushStatus(role)); })
+      .catch((e) => {
+        if (isSessionError(e) && onSessionError) { onSessionError(userMessage((e as Error).message)); setHidden(true); return; }
+        setErr(userMessage((e as Error).message)); setStatus(pushStatus(role));
+      })
       .finally(() => setBusy(false));
   };
   return (

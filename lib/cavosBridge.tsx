@@ -7,12 +7,18 @@ import { CAVOS_SECURE_STEP, CAVOS_SOCIAL_RECOVERY, APP_SALT, CAVOS_APP_ID } from
 import { authStore, useAuthFlag } from './authStore';
 import { walletInfo, type MeteoritoAuth } from './types';
 import { Brand } from '@/constants/Colors';
+import { authErrorText, otpFill } from './authUx';
 import { clearCavosToken, currentCavosToken, friendlyCavosError, persistCavosToken, rehydrateCavosToken, RELOGIN_MESSAGE, sessionExpiredOnOpen, hadSessionOnOpen, markSessionSettled, userMessage } from './cavosSession';
 
 // Se ejecuta al cargar este chunk, ANTES de que CavosProvider lea sessionStorage (PWA iOS: ver lib/cavosSession.ts).
 const rehydrated = typeof window !== 'undefined' ? rehydrateCavosToken() : 'none';
 if (rehydrated !== 'none' && rehydrated !== 'present') console.info('[cavos] token', rehydrated);
 const hadSessionOnOpenAtStart = typeof window !== 'undefined' && hadSessionOnOpen();
+// Modal del kit (parche en scripts/patch-cavos-kit.mjs): errores amables y autofill del código por correo.
+if (typeof window !== 'undefined') {
+  (globalThis as any).__meteoritoAuthError = authErrorText;
+  (globalThis as any).__meteoritoOtpFill = otpFill;
+}
 
 function b64(u: Uint8Array) { let s = ''; u.forEach((b) => (s += String.fromCharCode(b))); return btoa(s); }
 function stellarWallet(c: any): any {

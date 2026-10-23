@@ -11,9 +11,11 @@ type KeyGetter = Parameters<typeof jwtVerify>[1];
 let testKeys: KeyGetter | null = null;
 /** Solo tests (CI): verificar contra un JWKS local en vez de Cavos/Google/Apple. Nunca se llama en runtime. */
 export const __setJwksForTests = (k: KeyGetter | null) => { testKeys = k; };
+const GOOGLE_ISS = ['https://accounts.google.com', 'accounts.google.com'];
+const APPLE_ISS = 'https://appleid.apple.com';
 function jwksFor(iss: string): any {
   if (testKeys) return testKeys;
-  const url = iss === 'https://accounts.google.com' ? 'https://www.googleapis.com/oauth2/v3/certs'
+  const url = GOOGLE_ISS.includes(iss) ? 'https://www.googleapis.com/oauth2/v3/certs'
     : iss === 'https://appleid.apple.com' ? 'https://appleid.apple.com/auth/keys'
     : env.cavosJwks();
   return (JWKS[url] ??= createRemoteJWKSet(new URL(url)));
@@ -27,6 +29,10 @@ export const SESSION_OTHER_WALLET = 'Tu sesión pertenece a otra cuenta o billet
 export const SESSION_RELOGIN = 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
 export const AUTH_INVALID = 'No pudimos verificar tu sesión. Vuelve a cargar la página.';
 const coded = (status: number, code: string, msg: string) => Object.assign(new HttpError(status, msg), { code });
+/** auth_invalid con motivo (issuer/aud/signature/...) e issuer (host) para diagnosticar sin token ni sub. */
+const invalid = (reason: string, iss = '') => Object.assign(coded(401, 'auth_invalid', AUTH_INVALID), { reason, issHost: issHost(iss) });
+const issHost = (iss: string) => { try { return new URL(/^https?:/.test(iss) ? iss : `https://${iss}`).host.slice(0, 60); } catch { return ''; } };
+const joseReason = (e: any) => { const c = String(e?.code ?? ''); return c === 'ERR_JWS_SIGNATURE_VERIFICATION_FAILED' || c === 'ERR_JWKS_NO_MATCHING_KEY' ? 'signature' : c === 'ERR_JWT_CLAIM_VALIDATION_FAILED' ? (/^[a-z]{2,10}$/.test(String(e?.claim)) ? String(e.claim) : 'claim') : 'token'; };
 /** ref de la prueba de sesión (sin ':' para no romper el formato del mensaje). Igual en cliente (lib/api.ts). */
 export const sessionRef = (sub: string) => sub.replace(/[^A-Za-z0-9_-]/g, '_');
 const graceS = () => { const d = Number(process.env.SESSION_GRACE_DAYS ?? '7'); return (Number.isFinite(d) && d >= 0 && d <= 30 ? d : 7) * 86400; };
@@ -78,13 +84,18 @@ export async function bindWalletIfFresh(user: CavosUser, address: string): Promi
 /** Verifica firma/iss/aud. Si solo está vencido (≤ SESSION_GRACE_DAYS) devuelve expired:true. */
 async function verifyToken(token: string): Promise<{ payload: JWTPayload; iss: string; expired: boolean; exp: number }> {
   let claims: { iss?: unknown; aud?: unknown; exp?: unknown };
-  try { claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()); } catch { throw coded(401, 'auth_invalid', AUTH_INVALID); }
+  try { claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString()); } catch { throw invalid('malformed'); }
   const iss = typeof claims.iss === 'string' ? claims.iss : '';
-  if (!env.cavosIssuers().includes(iss)) {
+  const allowed = env.cavosIssuers();
+  const isGoogle = GOOGLE_ISS.includes(iss) && allowed.some((a) => GOOGLE_ISS.includes(a)); // Google emite con y sin https
+  if (!allowed.includes(iss) && !isGoogle) {
     console.warn('[auth] issuer rechazado', JSON.stringify({ iss, aud: claims.aud }));
-    throw coded(401, 'auth_invalid', AUTH_INVALID);
+    throw invalid('issuer', iss);
   }
-  const audiences = env.cavosAudiences();
+  // aud por issuer: app id de Cavos (CAVOS_JWT_AUDIENCE) + el cliente OAuth de Cavos SOLO para tokens de Google/Apple.
+  // Sin esto, entrar con Google/Apple (p. ej. cuenta existente en un dispositivo nuevo) fallaba con auth_invalid.
+  const base = env.cavosAudiences();
+  const audiences = !base.length ? base : isGoogle ? [...base, ...env.googleAudiences()] : iss === APPLE_ISS ? [...base, ...env.appleAudiences()] : base;
   const logOnly = env.cavosAudienceLogOnly();
   if (!audiences.length && !logOnly && env.isProduction()) {
     console.error('[auth] CAVOS_JWT_AUDIENCE no configurado en producción; rechazando', JSON.stringify({ iss, aud: claims.aud }));
@@ -97,10 +108,10 @@ async function verifyToken(token: string): Promise<{ payload: JWTPayload; iss: s
   try { ({ payload } = await jwtVerify(token, jwksFor(iss), opts)); }
   catch (e: any) {
     console.warn('[auth] token rechazado', JSON.stringify({ code: e.code ?? e.message, iss, aud: claims.aud, expected: audiences }));
-    if (e.code !== 'ERR_JWT_EXPIRED') throw coded(401, 'auth_invalid', AUTH_INVALID);
+    if (e.code !== 'ERR_JWT_EXPIRED') throw invalid(joseReason(e), iss);
     if (!exp || Date.now() / 1000 - exp > graceS()) throw coded(401, 'session_expired', SESSION_EXPIRED);
     try { ({ payload } = await jwtVerify(token, jwksFor(iss), { ...opts, currentDate: new Date((exp - 5) * 1000) })); }
-    catch { throw coded(401, 'auth_invalid', AUTH_INVALID); }
+    catch (e2: any) { throw invalid(joseReason(e2), iss); }
     expired = true;
   }
   if (!enforce) {
@@ -119,7 +130,7 @@ export async function issueSessionNonce(req: any): Promise<string> {
   if (!token) throw coded(401, 'auth_missing', 'Inicia sesión para continuar.');
   const v = await verifyToken(token);
   const sub = subOf(v.payload);
-  if (!sub) throw coded(401, 'auth_invalid', AUTH_INVALID);
+  if (!sub) throw invalid('no_sub', v.iss);
   if (v.expired) await requireBoundForExpired(sub);
   return sessionStore().issueNonce(sub);
 }
@@ -157,7 +168,7 @@ export async function requireCavosUser(req: any): Promise<CavosUser> {
   // Solo NOMBRES de claims (nunca valores ni token), 1 vez por request.
   console.log('[auth] claims', JSON.stringify(Object.keys(v.payload).sort()));
   const sub = subOf(v.payload);
-  if (!sub) throw coded(401, 'auth_invalid', AUTH_INVALID);
+  if (!sub) throw invalid('no_sub', v.iss);
   // El kit Cavos 0.3.0 NO renueva el id_token (~1 h) y su modal no permite re-login sin logout (que borra la llave).
   if (v.expired) await renewExpired(req, sub, v.exp);
   return { sub, email: (v.payload as any).email, iss: v.iss, renewed: v.expired };
