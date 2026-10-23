@@ -3,6 +3,7 @@ import { api } from './api';
 import { DEMO_ENABLED } from './demo';
 import { supabase } from './supabase';
 import type { MeteoritoAuth } from './types';
+import { tagPhotoError } from './photoError';
 
 export { MAX_PHOTOS } from './listing';
 const MAX_SIDE = 1280;
@@ -39,16 +40,22 @@ export function newDraftId(): string {
 }
 
 /** Comprime y sube una foto. index 0..3 dentro del borrador. Devuelve la URL pública. */
-export async function uploadPhoto(auth: MeteoritoAuth, p: PickedPhoto, draftId: string, index: number): Promise<string> {
-  return uploadCompressed(auth, await compressPhoto(p), draftId, index);
+export async function uploadPhoto(auth: MeteoritoAuth, p: PickedPhoto & { mime?: string }, draftId: string, index: number): Promise<string> {
+  let blob: Blob;
+  try { blob = await compressPhoto(p); } catch (e) { throw Object.assign(tagPhotoError('compress', e), { photoMime: p.mime ?? null }); }
+  return uploadCompressed(auth, blob, draftId, index);
 }
 
 /** Sube un JPEG ya comprimido (p. ej. comprimido al elegir la foto). */
 export async function uploadCompressed(auth: MeteoritoAuth, blob: Blob, draftId: string, index: number): Promise<string> {
   if (DEMO_ENABLED) return blobToDataUrl(blob); // demo: sin Storage; la foto queda local como data URL
-  const r = await api<{ path: string; token: string; publicUrl: string }>(auth, '/api/photos/upload-url', { draftId, index, mime: 'image/jpeg', size: blob.size });
-  const { error } = await (await supabase()).storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' });
-  if (error) throw new Error(`No se pudo subir la foto: ${error.message}`);
+  let r: { path: string; token: string; publicUrl: string };
+  try { r = await api(auth, '/api/photos/upload-url', { draftId, index, mime: 'image/jpeg', size: blob.size }); }
+  catch (e) { throw tagPhotoError('sign', e); }
+  let error: any;
+  try { ({ error } = await (await supabase()).storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' })); }
+  catch (e) { throw tagPhotoError('storage', e); }
+  if (error) throw Object.assign(tagPhotoError('storage', new Error(`No se pudo subir la foto: ${error.message}`)), { code: 'storage_' + String(error.statusCode ?? error.name ?? 'error'), status: Number(error.statusCode) || undefined });
   return r.publicUrl;
 }
 
