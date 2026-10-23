@@ -1,4 +1,4 @@
-// (44) Importar de Facebook Marketplace: validación del link (SSRF), parser de OG con HTML real guardado
+// (45) Importar de Facebook Marketplace: validación del link (SSRF), parser de OG con HTML real guardado
 // (scripts/ci/fixtures/facebook, capturado el 2026-10-23), precio a colones y endpoint con fetch simulado. Sin red.
 import type { T } from './setup';
 import { readFileSync } from 'node:fs';

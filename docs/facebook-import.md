@@ -43,5 +43,5 @@ vehículos o propiedades con otro formato. En esos casos el resultado es `partia
   dueño, con el mismo dato que FB publica para vistas previas de links (OG), sin login y con límite de frecuencia.
   Revisarlo con legal antes de promocionarlo mucho.
 
-Tests: `scripts/ci/t44-facebook-import.test.ts` (fixtures reales en `scripts/ci/fixtures/facebook/`),
+Tests: `scripts/ci/t45-facebook-import.test.ts` (fixtures reales en `scripts/ci/fixtures/facebook/`),
 `e2e/api-contract.spec.ts` (API-FB), `e2e/seller.spec.ts` (VEN-07, VEN-08).
