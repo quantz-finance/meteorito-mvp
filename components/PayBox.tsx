@@ -2,13 +2,15 @@ import { timeLeft, useAutoReleaseWindow } from '@/lib/autorelease';
 import { friendlyPayError } from '@/lib/wallet';
 // Comprador: Pagar en custodia -> SINPE simulado -> "Ya pagué" -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
 import { DisputeSheet } from '@/components/DisputeSheet';
 import { Text, View } from 'react-native';
 import { Card, ErrorText, Icon, PrimaryButton, Sheet, SuccessCheck } from '@/components/ds';
 import { Fonts } from '@/constants/Colors';
 import { C, S, T } from '@/constants/theme';
 import { guestApi } from '@/lib/api';
+import { myListingOrder, rememberListingOrder } from '@/lib/listings';
 import { loadPin, savePin } from '@/lib/guest';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, type PublicOrder } from '@/lib/orders';
@@ -27,6 +29,18 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [sheet, setSheet] = useState<'sinpe' | 'pin' | 'released' | 'dispute' | null>(null);
 
   const win = useAutoReleaseWindow();
+  // Producto permanente: cada comprador tiene su propio pedido (/p/<pedido>). Al llegar con ?pay=1 se abre el SINPE directo.
+  const { pay } = useLocalSearchParams<{ pay?: string }>();
+  const mine = order.kind === 'listing' ? myListingOrder(order.slug) : null;
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (pay !== '1' || resumed.current || order.status !== 'escrow_creado' || sinpe) return;
+    resumed.current = true;
+    run(async () => {
+      const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'start' });
+      setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference }); setSheet('sinpe');
+    });
+  }, [pay, order.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const run = async (f: () => Promise<void>) => { setBusy(true); setErr(null); try { await f(); } catch (e) { trackError('paybox', e); setErr(friendlyPayError((e as Error).message)); } finally { setBusy(false); } };
 
   const sheets = <>
@@ -72,9 +86,14 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   if (order.status === 'creado' || (order.status === 'escrow_creado' && !sinpe)) {
     footer = <>
       {err && !sheet && <ErrorText>{err}</ErrorText>}
+      {mine ? <PrimaryButton title="Ver mi pedido" icon="receipt-outline" variant="ghost" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug: mine } })} /> : null}
       <PrimaryButton title={busy ? 'Preparando…' : `Pagar en custodia ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
         onPress={() => run(async () => {
           const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'start' });
+          if (r.slug && r.slug !== order.slug) { // producto permanente: seguir en el pedido propio de este comprador
+            rememberListingOrder(order.slug, r.slug); track('listing_order_started');
+            router.replace({ pathname: '/p/[slug]', params: { slug: r.slug, pay: '1' } }); return;
+          }
           setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference });
           setSheet('sinpe');
           onChange(); // refresca el pedido (escrow_creado) para que se abra la hoja SINPE (antes solo en demo: bug)

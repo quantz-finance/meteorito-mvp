@@ -4,16 +4,17 @@ import * as Haptics from 'expo-haptics';
 import { useHoldUpdate } from '@/lib/updater';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  ActivityIndicator, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View,
+  ActivityIndicator, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View,
   type PressableProps, type StyleProp, type ViewStyle,
 } from 'react-native';
+import { useStableWindow } from '@/lib/viewport';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, R, S, T, TOUCH, BUTTON_H, shadow } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import Reanimated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { moneyProgress } from '@/lib/progress';
 import { anim, pressTransition } from '@/constants/motion';
-import { BackButton } from '@/components/BackButton';
+import { BackButton, goBack } from '@/components/BackButton';
 import type { Href } from 'expo-router';
 import { MeteorBurst, ScrollCtx, SpaceBackground, type SpaceMode } from '@/components/space';
 
@@ -40,16 +41,10 @@ export function Screen({ title, subtitle, right, children, footer, scroll = true
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
-  const backBtn = back ? <BackButton fallback={back} /> : null;
-  const header = title ? (
-    <View style={st.header}>
-      <View style={{ flex: 1 }}>
-        <Text style={T.largeTitle} accessibilityRole="header">{title}</Text>
-        {subtitle ? <Text style={[T.callout, { marginTop: S.xs }]}>{subtitle}</Text> : null}
-      </View>
-      {right}
-    </View>
-  ) : null;
+  // Con título, Volver va a la derecha (icono): el título empieza SIEMPRE en el mismo punto (arriba/izquierda) en todas
+  // las pantallas, con o sin botones, y nada salta al cambiar de pestaña. Sin título, Volver queda arriba a la izquierda.
+  const backBtn = back && !title ? <BackButton fallback={back} /> : null;
+  const header = title ? <ScreenHeader title={title} subtitle={subtitle} right={right} back={back} /> : null;
   const body = scroll ? (
     <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
       keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}
@@ -65,6 +60,19 @@ export function Screen({ title, subtitle, right, children, footer, scroll = true
         {footer ? <StickyFooter>{footer}</StickyFooter> : null}
       </View>
     </ScrollCtx.Provider>
+  );
+}
+
+/** Encabezado compartido: fila de alto fijo (TOUCH) con el título arriba a la izquierda y acciones a la derecha. */
+export function ScreenHeader({ title, subtitle, right, back }: { title: string; subtitle?: string; right?: ReactNode; back?: Href }) {
+  return (
+    <View style={{ gap: S.xs }}>
+      <View style={st.header}>
+        <Text style={[T.largeTitle, st.headerTitle]} numberOfLines={2} accessibilityRole="header" testID="screen-title">{title}</Text>
+        {right || back ? <View style={st.headerRight}>{right}{back ? <IconButton icon="close" label="Volver" onPress={() => goBack(back)} /> : null}</View> : null}
+      </View>
+      {subtitle ? <Text style={T.callout}>{subtitle}</Text> : null}
+    </View>
   );
 }
 
@@ -158,11 +166,25 @@ export function SkeletonCard() {
 }
 
 /* ---------- Bottom sheet ---------- */
-export function Sheet({ visible, onClose, title, children, footer }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode }) {
+export function Sheet({ visible, onClose, title, children, footer, page }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode; /** Pantalla completa con el mismo encabezado que Screen (p. ej. Mi cuenta). */ page?: boolean }) {
   useHoldUpdate(visible); // con una hoja abierta (formulario, pago, disputa) la app no se recarga por actualización
   const insets = useSafeAreaInsets();
+  if (page) return (
+    <Modal visible={visible} transparent animationType={WEB ? 'none' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
+      <View {...anim('fade')} style={st.screen}>
+        <SpaceBackground mode="calm" />
+        <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md, paddingBottom: S.sm }]}>
+          <View style={{ flex: 1, gap: S.lg }}>
+            <ScreenHeader title={title ?? ''} right={<IconButton icon="close" label="Cerrar" onPress={onClose} />} />
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: S.md, paddingBottom: S.md }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>{children}</ScrollView>
+          </View>
+        </View>
+        {footer ? <StickyFooter>{footer}</StickyFooter> : null}
+      </View>
+    </Modal>
+  );
   // La hoja nunca supera la pantalla (iPhone SE 568 px): título y botón cerrar siempre visibles, el contenido hace scroll.
-  const { height } = useWindowDimensions();
+  const { height } = useStableWindow();
   const maxH = Math.min(height - insets.top - S.md, 760);
   return (
     <Modal visible={visible} transparent animationType={WEB ? 'none' : 'slide'} onRequestClose={onClose} statusBarTranslucent>
@@ -314,7 +336,9 @@ export const ErrorText = ({ children }: { children: ReactNode }) =>
 export const st = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   content: { paddingHorizontal: S.md, paddingBottom: S.xxxl, gap: S.lg, width: '100%', maxWidth: 560, alignSelf: 'center' },
-  header: { flexDirection: 'row', alignItems: 'flex-end', gap: S.sm, marginBottom: S.xs },
+  header: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, minHeight: TOUCH },
+  headerTitle: { flex: 1, paddingTop: (TOUCH - 34) / 2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: S.sm, height: TOUCH },
   footer: { paddingHorizontal: S.md, paddingTop: S.md, backgroundColor: C.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line, gap: S.sm },
   card: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.md, gap: S.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },

@@ -4,12 +4,16 @@
 // sin upsert), solo imágenes, ≤1 MB (el cliente comprime a <300 KB). Lectura pública sigue igual.
 import { db, json, fail } from '../_lib/db';
 import { requireCavosUser, HttpError } from '../_lib/auth';
+import { guestSubFromReq } from '../_lib/guest';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, PHOTO_MIME, publicPrefix, userDir } from '../_lib/photos';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
-    const user = await requireCavosUser(req);
+    // as:'guest' -> fotos opcionales de la invitación del comprador (sin cuenta, su llave de invitado). Si no, vendedor Cavos.
+    const guest = req.body?.as === 'guest' ? guestSubFromReq(req) : null;
+    if (req.body?.as === 'guest' && !guest) throw Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir la página.'), { code: 'guest_key_missing' });
+    const user = guest ? { sub: guest } : await requireCavosUser(req);
     const { draftId, index, mime, size } = req.body ?? {};
     if (typeof draftId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(draftId)) throw new HttpError(400, 'draftId inválido');
     if (!Number.isInteger(index) || index < 0 || index >= MAX_PHOTOS) throw new HttpError(400, `máximo ${MAX_PHOTOS} fotos`);

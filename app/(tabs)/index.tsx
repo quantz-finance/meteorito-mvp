@@ -2,7 +2,8 @@ import { DEVICE_NOT_AUTHORIZED, ensureSellerWalletOnLoad, logoutSafely } from '@
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { router, useFocusEffect } from 'expo-router';
 import { lazy, Suspense, useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useStableWindow } from '@/lib/viewport';
 import { GridPager } from '@/components/GridPager';
 import { useAuth } from '@/lib/cavos';
 import { displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
@@ -43,7 +44,7 @@ export default function Inicio() {
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  const short = useWindowDimensions().height < 740;
+  const short = useStableWindow().height < 740;
   const count = (sts: string[]) => (orders ?? []).filter((o) => sts.includes(o.status)).length;
   const stats = [
     { label: 'Publicados', n: count(['creado']) },
@@ -115,7 +116,7 @@ export default function Inicio() {
         {link.trim() && !linkSlug ? <ErrorText>Ese link no parece de Meteorito.</ErrorText> : null}
       </Sheet>
       <HelpSheet visible={help} onClose={() => setHelp(false)} />
-      <Sheet visible={account} onClose={() => setAccount(false)} title="Mi cuenta"
+      <Sheet page visible={account} onClose={() => setAccount(false)} title="Mi cuenta"
         footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={async () => { const m = await logoutSafely(auth); if (m) { setLogoutMsg(m); return; } setLogoutMsg(null); setAccount(false); }} />}>
         {logoutMsg ? <ErrorText>{logoutMsg}</ErrorText> : null}
         {account ? <Suspense fallback={<SkeletonCard />}><ProfileCard products={(orders ?? []).length} /></Suspense> : null}

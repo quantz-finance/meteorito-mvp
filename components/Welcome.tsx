@@ -1,4 +1,5 @@
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { useStableWindow } from '@/lib/viewport';
 import { Glow, LivelyMascot, Reveal, SpaceBackground } from '@/components/space';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/cavos';
@@ -19,7 +20,7 @@ export default function Welcome() {
   const relogin = needsRelogin(error); // sesión vencida/sin token: pantalla clara "Entrar de nuevo", nunca el error del SDK
   // Sin scroll: todo cabe en una pantalla, incluso con la barra de Safari visible (~620 px útiles). La mascota y los
   // espacios escalan con el alto real; los botones quedan siempre abajo.
-  const { height, width } = useWindowDimensions();
+  const { height, width } = useStableWindow();
   const insets = useSafeAreaInsets();
   const short = height < 720;
   const tiny = height < 640;

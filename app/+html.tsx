@@ -40,7 +40,7 @@ export default function Root({ children }: { children: ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover, interactive-widget=resizes-visual" />
         <title>Meteorito</title>
         <meta name="theme-color" content="#1A0B3D" />
         <link rel="manifest" href="/manifest.json" />
@@ -57,7 +57,7 @@ export default function Root({ children }: { children: ReactNode }) {
         {STARTUP.map(([w, h, r]) => <link key={w} rel="apple-touch-startup-image" href={`/splash/startup-${w}x${h}.png`}
           media={`(device-width: ${w / r}px) and (device-height: ${h / r}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait)`} />)}
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body,#root{height:100%;height:100dvh;}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS + MOTION_CSS }} />
+        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body{height:100%;height:100dvh;}#root{height:100%;height:var(--app-h,100dvh);}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS + MOTION_CSS }} />
       </head>
       <body>
         {/* Splash inline: pinta en el primer frame (antes del JS) y la app lo desvanece al montar. */}

@@ -1,7 +1,8 @@
 // Fondo espacial de Meteorito (portado de meteorito.app): capas de imagen, no cientos de nodos.
 // Solo anima transform/opacity con Reanimated (hilo UI). Respeta "Reducir movimiento".
 import { createContext, memo, useContext, useEffect, type ReactNode } from 'react';
-import { Image, Platform, StyleSheet, useWindowDimensions, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, Platform, StyleSheet, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
+import { useStableWindow } from '@/lib/viewport';
 import Animated, {
   cancelAnimation, Easing, FadeIn, FadeInDown, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue,
   withDelay, withRepeat, withSequence, withTiming, type SharedValue,
@@ -32,7 +33,7 @@ export type SpaceMode = 'full' | 'calm' | 'none';
  */
 export const SpaceBackground = memo(function SpaceBackground({ mode = 'full', scrollY }: { mode?: SpaceMode; scrollY?: SharedValue<number> | null }) {
   const reduce = useReducedMotion();
-  const { width, height } = useWindowDimensions();
+  const { width, height } = useStableWindow();
   const live = mode === 'full' && !reduce && !WEB;
   const tw = useSharedValue(0.75);
   const drift = useSharedValue(0);
@@ -218,7 +219,7 @@ export function Glow({ style, color = 'rgba(255,138,61,0.35)' }: { style?: Style
  */
 export function MeteorBurst({ height = 120 }: { height?: number }) {
   const reduce = useReducedMotion();
-  const { width } = useWindowDimensions();
+  const { width } = useStableWindow();
   const v = useSharedValue(0);
   useEffect(() => { if (!reduce) v.value = withTiming(1, { duration: 1200, easing: Easing.out(Easing.cubic) }); }, [reduce]);
   const a = useAnimatedStyle(() => ({

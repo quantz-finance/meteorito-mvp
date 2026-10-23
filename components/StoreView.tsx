@@ -24,7 +24,7 @@ export function StoreHeader({ store }: { store: Store }) {
   );
 }
 
-export function StoreItems({ store, empty, minCellW = 150, minCellH = 168 }: { store: Store; empty: string; minCellW?: number; minCellH?: number }) {
+export function StoreItems({ store, empty, minCellW = 150, minCellH = 168, onItemPress }: { store: Store; empty: string; minCellW?: number; minCellH?: number; /** Mi tienda: gestionar (pausar/archivar) en vez de abrir. */ onItemPress?: (it: Store['items'][number]) => void }) {
   if (!store.items.length) return (
     <View style={s.empty}><Icon name="pricetags-outline" size={32} color={C.lilac} /><Text style={[T.callout, { textAlign: 'center' }]}>{empty}</Text></View>
   );
@@ -32,12 +32,12 @@ export function StoreItems({ store, empty, minCellW = 150, minCellH = 168 }: { s
     <GridPager items={store.items} keyOf={(it) => it.slug} minCellW={minCellW} minCellH={minCellH} label="Página de productos"
       renderItem={(it) => (
         <Pressable accessibilityRole="link" accessibilityLabel={`${it.title}, ${formatCRC(it.price_crc)}`}
-          onPress={() => router.push({ pathname: '/p/[slug]', params: { slug: it.slug } })}
+          onPress={() => (onItemPress ? onItemPress(it) : router.push({ pathname: '/p/[slug]', params: { slug: it.slug } }))}
           style={({ pressed }) => [s.item, pressTransition, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
           {it.photo ? <Image source={{ uri: it.photo }} style={s.photo} resizeMode="cover" />
             : <View style={[s.photo, s.noPhoto]}><Icon name="image-outline" size={28} color={C.lilac} /></View>}
           <View style={s.meta}>
-            <Text style={[T.footnote, { color: C.text }]} numberOfLines={1}>{it.title}</Text>
+            <Text style={[T.footnote, { color: C.text }]} numberOfLines={1}>{it.listing_status === 'pausada' ? 'En pausa · ' : ''}{it.title}</Text>
             <Text style={[T.headline, { fontVariant: ['tabular-nums'] }]} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
           </View>
         </Pressable>

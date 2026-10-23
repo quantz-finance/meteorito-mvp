@@ -4,6 +4,7 @@ import '@/lib/polyfills';
 import * as Font from 'expo-font';
 import { toast, ToastHost } from '@/components/ds';
 import { consumeUpdatedFlag, startUpdater } from '@/lib/updater';
+import { installViewport } from '@/lib/viewport';
 import { DarkTheme, Stack, ThemeProvider, usePathname, useSegments } from 'expo-router';
 import { identify, initAnalytics, resetAnalytics, screen, track } from '@/lib/analytics';
 import * as SplashScreen from 'expo-splash-screen';
@@ -59,6 +60,7 @@ export default function RootLayout() {
     SplashScreen.hideAsync();
     if (Platform.OS !== 'web') return;
     startUpdater(); // PWA: se actualiza sola en un momento seguro
+    installViewport(); // alto estable: el teclado de iPhone no comprime ni mueve la pantalla
     if (consumeUpdatedFlag()) setTimeout(() => toast('Actualizado', 'info'), 600);
   }, []);
   return (
