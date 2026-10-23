@@ -184,6 +184,20 @@ test.describe('PIN, liberación automática y disputas', () => {
     await expect(page.getByText(/se libera solo en (10|9) min/)).toBeVisible();
   });
 
+  test('DIS-07 la disputa con fotos de evidencia guarda las fotos', async ({ page }) => {
+    await open(page, '/', 'seller', true);
+    const slug = await seed(page, 'enviado');
+    await open(page, `/p/${slug}`, 'buyer');
+    await page.getByText('Tengo un problema').first().click();
+    await page.getByText('No funciona', { exact: true }).click();
+    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByLabel('Agregar foto').click()]);
+    await fc.setFiles(PHOTO);
+    await expect(page.getByText('Fotos (1/4)')).toBeVisible();
+    await page.getByText('Reportar problema', { exact: true }).click();
+    await expect.poll(() => orderStatus(page, slug)).toBe('en_disputa');
+    expect((await st(page)).orders[slug].dispute?.evidence).toHaveLength(1);
+  });
+
   test('DIS-06 la lista del vendedor pasa a "En disputa" sola (sin recargar) cuando el comprador reporta', async ({ page }) => {
     await open(page, '/', 'seller', true);
     const slug = await seed(page, 'enviado');

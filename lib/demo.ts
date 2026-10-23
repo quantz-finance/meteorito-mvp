@@ -226,7 +226,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     need('buyer'); const o = get(String(body.slug));
     if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo el comprador puede reportar un problema.');
     if (!['fondeado', 'enviado', 'entregado'].includes(o.status) || o.released_tx) throw err(409, 'bad_state', 'Ya no se puede reportar un problema.');
-    o.status = 'en_disputa'; o.disputed_at = now(); o.dispute = { reason: body.reason, description: body.description ?? null, at: now() }; emit(); return { disputed: true };
+    o.status = 'en_disputa'; o.disputed_at = now(); o.dispute = { reason: body.reason, description: body.description ?? null, evidence: Array.isArray(body.evidence) ? body.evidence.slice(0, 4) : [], at: now() }; emit(); return { disputed: true };
   }
   if (p === '/api/store') {
     if (body.action === 'rate') {
