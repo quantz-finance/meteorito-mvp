@@ -16,6 +16,14 @@ async function titleAt16(page: Page, title: string) {
   expect(Math.round(box!.x)).toBe(16);
   expect(Math.abs(box!.y - 16)).toBeLessThanOrEqual(6);
 }
+/** Foto de la invitación: miniatura junto al nombre y el precio (no una foto grande). */
+async function expectCompactPhoto(page: Page) {
+  const box = (await page.getByTestId('invite-photo').filter({ visible: true }).first().boundingBox())!;
+  expect(box.height, `foto de ${box.height}px`).toBeLessThanOrEqual(72);
+  expect(box.width).toBeLessThanOrEqual(72);
+  const name = (await page.getByText('Bicicleta de montaña aro 29', { exact: true }).filter({ visible: true }).first().boundingBox())!;
+  expect(name.x).toBeGreaterThan(box.x + box.width - 1); // al lado, no encima
+}
 /** navigator.share simulado: guarda lo que se compartiría (Messenger, WhatsApp…). */
 const captureShare = (page: Page) => page.addInitScript(() => {
   (window as any).__shared = [];
@@ -66,6 +74,8 @@ test.describe('Comprar: invitar desde Facebook', () => {
     expect(s.invites[code].price_crc).toBe(185000);
     await expect(page.getByText('Bicicleta de montaña aro 29')).toBeVisible();
     await expect(page.getByRole('link', { name: /Ver anuncio en Facebook/ })).toBeVisible();
+    await expectCompactPhoto(page);
+    await expectNoScroll(page);
     await shot(page, info, '4-invitacion-lista');
     await page.getByRole('button', { name: /Enviar link al vendedor/ }).click();
     const shared = await page.evaluate(() => (window as any).__shared);
@@ -83,6 +93,8 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await expect(page.getByText('Bicicleta de montaña aro 29')).toBeVisible();
     await expect(page.getByText('₡185 000').first()).toBeVisible();
     await expect(page.getByTestId('invite-photo')).toBeVisible();
+    await expectCompactPhoto(page);
+    await expectNoScroll(page);
     await expect(page.getByText('Otro', { exact: true })).toHaveCount(0); // categoría genérica: sin chip
     await expect(page.getByText('Esperando al vendedor')).toBeVisible();
     await expect(page.getByRole('link', { name: /Ver anuncio en Facebook/ })).toBeVisible();

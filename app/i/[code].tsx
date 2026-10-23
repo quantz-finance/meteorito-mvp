@@ -70,7 +70,7 @@ export default function Invitacion() {
         {showCategoryChip(inv.category) ? <Chip label={cat?.label ?? inv.category} /> : null}<Chip label={st.label} tone={st.tone} />
       </View>
       <View style={{ flexDirection: 'row', gap: S.sm + 4, alignItems: 'center' }}>
-        {inv.photos?.length ? <Image testID="invite-photo" accessibilityLabel={`Foto de ${name}`} source={{ uri: inv.photos[0] }} style={{ width: 88, height: 88, borderRadius: 14, backgroundColor: C.lilacBg }} resizeMode="cover" /> : null}
+        {inv.photos?.length ? <Image testID="invite-photo" accessibilityLabel={`Foto de ${name}`} source={{ uri: inv.photos[0] }} style={{ width: 64, height: 64, borderRadius: 12, backgroundColor: C.lilacBg }} resizeMode="cover" /> : null}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <Text style={T.title} numberOfLines={3}>{name}</Text>
           <Text style={T.money}>{formatCRC(inv.price_crc)}</Text>
