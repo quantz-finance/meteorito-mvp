@@ -1,5 +1,4 @@
 // Fotos: compresión en el dispositivo + subida por URL firmada (/api/photos/upload-url). El bucket no acepta anon.
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { api } from './api';
 import { DEMO_ENABLED } from './demo';
 import { supabase } from './supabase';
@@ -15,6 +14,8 @@ export interface PickedPhoto { uri: string; width?: number; height?: number }
 export async function compressPhoto(p: PickedPhoto): Promise<Blob> {
   const long = Math.max(p.width ?? 0, p.height ?? 0);
   const resize = long > MAX_SIDE ? ((p.width ?? 0) >= (p.height ?? 0) ? { width: MAX_SIDE } : { height: MAX_SIDE }) : null;
+  // Carga diferida: el manipulador solo hace falta al publicar con fotos (no en la bienvenida ni en /p/).
+  const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
   let last: Blob | null = null;
   for (const compress of [0.7, 0.55, 0.4]) {
     const ctx = ImageManipulator.manipulate(p.uri);

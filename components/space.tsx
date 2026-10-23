@@ -7,6 +7,7 @@ import Animated, {
   withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { C } from '@/constants/theme';
+import { anim } from '@/constants/motion';
 
 /** En web (Safari iOS) Reanimated corre en el hilo JS: cada nodo animado cuesta frames.
  *  Ahí dejamos solo lo esencial (mascota + llamas) y el fondo quieto. */
@@ -88,7 +89,7 @@ export const Reveal = memo(function Reveal({ i = 0, children, style }: { i?: num
  * sobre un eje en (62%, 60%) rotado 216°. Los gradientes CSS van horneados en PNG.
  * Un solo reloj de 4 s maneja todo (todas las duraciones del landing dividen 4 s). Solo transform/opacity. */
 const TRAIL = {
-  f1: require('../assets/images/space/trail-f1.png'), f2: require('../assets/images/space/trail-f2.png'), f3: require('../assets/images/space/trail-f3.png'),
+  f1: require('../assets/images/space/trail-f1.webp'), f2: require('../assets/images/space/trail-f2.webp'), f3: require('../assets/images/space/trail-f3.webp'),
   line: require('../assets/images/space/trail-line.png'), ember: require('../assets/images/space/trail-ember.png'), emberP: require('../assets/images/space/trail-ember-purple.png'),
   mascot: require('../assets/images/space/mascot.webp'),
 };
@@ -117,6 +118,13 @@ function pingEase(ph: number) {
   return 0.5 - 0.5 * Math.cos(Math.PI * k); // ease-in-out por tramo
 }
 
+/** Web: llama en CSS (compositor, sin JS por frame); keyframes m-f1..m-f3 en constants/motion.ts. */
+function FlameCss({ f, cq, live }: { f: (typeof FLAMES)[number]; cq: number; live: boolean }) {
+  return <View {...(live ? anim(f.img) : {})}
+    style={{ position: 'absolute', left: 20 * cq, top: f.mt * cq, width: f.w * cq, height: f.h * cq, transformOrigin: 'left center' }}>
+    <Image source={TRAIL[f.img]} resizeMode="stretch" style={{ width: f.w * cq, height: f.h * cq }} />
+  </View>;
+}
 function Flame({ f, t, cq, live }: { f: (typeof FLAMES)[number]; t: SharedValue<number>; cq: number; live: boolean }) {
   const a = useAnimatedStyle(() => {
     const e = live ? pingEase(phase(t.value, f.dur, f.delay)) : 0;
@@ -157,28 +165,30 @@ export function LivelyMascot({ size = 96, style, parallax = 0.35, variant = 'big
   const reduce = useReducedMotion();
   const scrollY = useScreenScroll();
   const live = !reduce && variant === 'big';
+  // En web el ciclo corre en CSS (transform en el compositor): Reanimated web lo haría en el hilo JS a 60 fps.
+  const jsLive = live && !WEB;
   const t = useSharedValue(0);
   useEffect(() => {
-    if (!live) return;
+    if (!jsLive) return;
     t.value = 0;
     t.value = withRepeat(withTiming(1, { duration: 4000, easing: Easing.linear }), -1, false);
     return () => cancelAnimation(t);
-  }, [live]);
+  }, [jsLive]);
   const w = size, h = size * MASCOT_AR, cq = w / 100;
   const outer = useAnimatedStyle(() => {
     const sy = !reduce && scrollY ? scrollY.value : 0;
     return { transform: [{ translateY: sy * parallax }, { scale: interpolate(sy, [-120, 0, 200], [1.12, 1, 0.85], 'clamp') }] };
   });
   const dive = useAnimatedStyle(() => {
-    const e = live ? pingEase(t.value) : 0; // mtDive 4s ease-in-out
+    const e = jsLive ? pingEase(t.value) : 0; // mtDive 4s ease-in-out
     return { transform: [{ translateX: 0.025 * w * e }, { translateY: 0.03 * h * e }, { rotate: `${3 * e}deg` }] };
   });
   return (
     <Animated.View pointerEvents="none" style={[{ width: w, height: h }, style, outer]}>
-      <Animated.View style={[{ width: w, height: h }, dive]}>
+      <Animated.View {...(WEB && live ? anim('dive') : {})} style={[{ width: w, height: h }, WEB ? null : dive]}>
         <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, opacity: variant === 'mini' ? 0.55 : reduce ? 0.8 : 1 }}>
           <View style={{ position: 'absolute', left: 0.62 * w, top: 0.6 * h, width: 0, height: 0, transform: [{ rotate: '216deg' }] }}>
-            {FLAMES.map((f) => <Flame key={f.img} f={f} t={t} cq={cq} live={live} />)}
+            {FLAMES.map((f) => WEB ? <FlameCss key={f.img} f={f} cq={cq} live={live} /> : <Flame key={f.img} f={f} t={t} cq={cq} live={jsLive} />)}
             {live && !WEB && LINES.map((l, i) => <Line key={i} l={l} t={t} cq={cq} />)}
             {live && !WEB && EMBERS.map((m, i) => <Ember key={i} m={m} t={t} cq={cq} />)}
           </View>

@@ -33,6 +33,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '32', name: 'Link en un paso: pedido sin categoría/marca/modelo/estado + validación de la pantalla', file: './t32-link-1-paso.test.ts', onchain: false },
   { id: '33', name: 'Tienda del vendedor + calificaciones (1-5, solo comprador, una vez, Entregado/Liberado)', file: './t33-ratings.test.ts', onchain: false },
   { id: '34', name: 'Vendedor nuevo activa sin fallas; cuenta cargando; wallet huérfana con salida clara', file: './t34-wallet-new-seller.test.ts', onchain: false },
+  { id: '35', name: 'Performance: fuente de iconos recortada completa, polling sin re-render, splash con mascota', file: './t35-perf-assets.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },

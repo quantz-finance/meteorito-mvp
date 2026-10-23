@@ -38,6 +38,15 @@ export const MOTION_CSS = `
 [data-anim="ring"]{animation:m-ring 900ms ease-out 2;pointer-events:none}
 [data-anim="skeleton"]{animation:m-pulse 1400ms ease-in-out infinite}
 [data-anim="toast"]{animation:m-toast 260ms ${EASE_OUT} both}
+@keyframes m-dive{0%,100%{transform:none}50%{transform:translate(2.5%,3%) rotate(3deg)}}
+@keyframes m-f1{0%,100%{transform:none}50%{transform:scaleX(1.08) scaleY(.9) translateY(3.75%)}}
+@keyframes m-f2{0%,100%{transform:none}50%{transform:scaleX(1.15) scaleY(1.1) translateY(-7.7%)}}
+@keyframes m-f3{0%,100%{transform:none}50%{transform:scaleX(.9) scaleY(1.12) translateY(8.3%)}}
+[data-anim="dive"]{animation:m-dive 4s ease-in-out infinite}
+[data-anim="f1"]{animation:m-f1 .8s ease-in-out infinite}
+[data-anim="f2"]{animation:m-f2 1s ease-in-out infinite}
+[data-anim="f3"]{animation:m-f3 .8s ease-in-out -.4s infinite}
+html.bg-hidden [data-anim]{animation-play-state:paused}
 [data-anim="confetti"]{pointer-events:none}
 [data-anim="confetti"]>div{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:2px;opacity:0;animation:m-confetti 900ms ${EASE_OUT} forwards}
 ${confetti}

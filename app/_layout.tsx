@@ -1,16 +1,18 @@
 // Primero: Buffer global para el SDK Cavos/Stellar (web).
 import '@/lib/polyfills';
 
-import { Nunito_400Regular, Nunito_700Bold, Nunito_900Black, useFonts } from '@expo-google-fonts/nunito';
+import * as Font from 'expo-font';
 import { ToastHost } from '@/components/ds';
 import { DarkTheme, Stack, ThemeProvider, usePathname, useSegments } from 'expo-router';
 import { identify, initAnalytics, resetAnalytics, screen, track } from '@/lib/analytics';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 
 import { CavosRoot, useAuth } from '@/lib/cavos';
+import { hasCavosTrace } from '@/lib/authStore';
 import { bindWalletOnLogin } from '@/lib/wallet';
 import { setReloginHandler } from '@/lib/api';
 import { DemoBadge } from '@/components/DemoBadge';
@@ -22,14 +24,24 @@ function hideBootSplash() {
   if (typeof document === 'undefined') return;
   const el = document.getElementById('boot-splash');
   if (!el) return;
-  el.style.opacity = '0';
-  setTimeout(() => el.remove(), 250);
+  el.classList.add('bs-out');
+  setTimeout(() => el.remove(), 380);
 }
 
 export { ErrorBoundary } from 'expo-router';
 export const unstable_settings = { initialRouteName: '(tabs)' };
 
 initAnalytics();
+// Fuentes web livianas (woff2 con subset, scripts/build/subset-fonts.py) con font-display: swap: se pinta con la del sistema
+// y cambia a Nunito al llegar. Mismo nombre de familia que usan los estilos. "ionicons" se registra antes del primer
+// <Icon> para que @expo/vector-icons reutilice esta carga (11 KB) en vez de bajar el TTF completo (380 KB).
+const woff = (m: number) => ({ uri: m, display: Font.FontDisplay.SWAP });
+const FONTS = {
+  Nunito_400Regular: woff(require('../assets/fonts/nunito-400.woff2')),
+  Nunito_700Bold: woff(require('../assets/fonts/nunito-700.woff2')),
+  Nunito_900Black: woff(require('../assets/fonts/nunito-900.woff2')),
+};
+if (Platform.OS === 'web' && typeof document !== 'undefined') Font.loadAsync({ ionicons: woff(require('../assets/fonts/ionicons-app.woff2')) }).catch(() => {});
 // Nombres de pantalla sin slugs ni datos.
 const screenName = (p: string) => p.replace(/^\/p\/[^/]+/, '/p/:slug').replace(/^\/compartir\/[^/]+/, '/compartir/:slug').replace(/^\/i\/(?!nueva$)[^/]+/, '/i/:code') || '/';
 
@@ -40,9 +52,9 @@ const theme = {
 
 export default function RootLayout() {
   // Las fuentes NO bloquean el primer render: se pinta con la tipografía del sistema y se cambia a Nunito al llegar (swap).
-  const [, error] = useFonts({ Nunito_400Regular, Nunito_700Bold, Nunito_900Black });
+  const [, error] = Font.useFonts(Platform.OS === 'web' ? FONTS : { Nunito_400Regular: require('@expo-google-fonts/nunito/400Regular/Nunito_400Regular.ttf'), Nunito_700Bold: require('@expo-google-fonts/nunito/700Bold/Nunito_700Bold.ttf'), Nunito_900Black: require('@expo-google-fonts/nunito/900Black/Nunito_900Black.ttf') });
   useEffect(() => { if (error) console.error('[fonts]', error); }, [error]);
-  useEffect(() => { SplashScreen.hideAsync(); hideBootSplash(); }, []);
+  useEffect(() => { SplashScreen.hideAsync(); }, []);
   return (
     <ThemeProvider value={theme}>
       <StatusBar style="light" />
@@ -70,6 +82,16 @@ function Gate() {
   useEffect(() => { if (authed) bindWalletOnLogin(auth); }, [authed, auth.wallet.state, tok]);
   // session_relogin_required: abrir el login de Cavos SIN logout (la llave se queda en este dispositivo).
   useEffect(() => { setReloginHandler((a) => a.openLogin()); return () => setReloginHandler(null); }, []);
+  // Con sesión previa en este dispositivo, el splash (mascota) sigue hasta que Cavos termina de cargar la cuenta:
+  // así no parpadea la bienvenida antes de entrar. Sin sesión, o en links públicos, se quita al primer render.
+  const [trace] = useState(() => Platform.OS === 'web' && !isPublic && hasCavosTrace());
+  const loading = auth.isLoading || (auth.isAuthenticated && !auth.address);
+  const [started, setStarted] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => { if (loading) setStarted(true); }, [loading]);
+  useEffect(() => { if (!trace) return; const id = setTimeout(() => setTimedOut(true), 12000); return () => clearTimeout(id); }, [trace]);
+  const waitingCavos = trace && !authed && !isPublic && (!started || loading) && !timedOut;
+  useEffect(() => { if (!waitingCavos) hideBootSplash(); }, [waitingCavos]);
   if (!isPublic && (!auth.isAuthenticated || !auth.address)) return <Welcome />;
   return (
     <>
