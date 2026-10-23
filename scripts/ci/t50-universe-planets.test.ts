@@ -1,4 +1,4 @@
-// (48) Universo v2: estrellas que titilan de verdad (ritmos distintos, destellos en cruz) + planetas discretos.
+// (50) Universo v2: estrellas que titilan de verdad (ritmos distintos, destellos en cruz) + planetas discretos.
 // Ligero en iPhone: solo transform/opacity (t47), pocos nodos, sin eventos, estático con reducir movimiento.
 import type { T } from './setup';
 import { PLANETS, SPARKS, STAR_GROUPS, UNIVERSE_HTML, UNIVERSE_KEYFRAMES, universeCss } from '../../constants/universe';

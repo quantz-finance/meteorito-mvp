@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { open, seed, expectNoScroll, expectInputs16, expectTitleAt16, BANNED, VOSEO } from './helpers';
+import { open, seed, settle, expectNoScroll, expectInputs16, expectTitleAt16, BANNED, VOSEO } from './helpers';
 
 const SCREENS: { path: string; role: 'seller' | 'buyer'; title?: string }[] = [
   { path: '/', role: 'seller' },
@@ -35,6 +35,32 @@ test.describe('Layout y copy', () => {
     const text = await page.locator('body').innerText();
     expect(text).not.toMatch(BANNED);
     expect(text).not.toMatch(/saldo|USDC|wallet|billetera/i);
+  });
+  test('LAY /vender: "Generar link" sin fondo morado detrás (se ve el universo)', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    await settle(page);
+    const btn = page.getByRole('button', { name: 'Generar link' });
+    await expect(btn).toBeVisible();
+    // Colores morados del tema (bg, surface, surface2, purple) y el lila translúcido (lilacBg / line).
+    const r = await btn.evaluate((el) => {
+      const PURPLES = ['rgb(26, 11, 61)', 'rgb(45, 20, 102)', 'rgb(58, 29, 122)', 'rgb(108, 43, 217)'];
+      const isPurple = (c: string) => PURPLES.includes(c) || /^rgba\(201, 182, 255/.test(c);
+      const own = getComputedStyle(el);
+      const bad: string[] = [];
+      if (isPurple(own.backgroundColor) || /108, 43, 217|26, 11, 61/.test(own.backgroundImage)) bad.push(`botón bg=${own.backgroundColor}`);
+      // Contenedores entre el botón y #root: transparentes, sin borde ni sombra moradas.
+      for (let e = el.parentElement; e && e.id !== 'root'; e = e.parentElement) {
+        const cs = getComputedStyle(e);
+        const alpha = cs.backgroundColor.startsWith('rgba') ? parseFloat(cs.backgroundColor.split(',')[3]) : 1;
+        if (alpha > 0) bad.push(`contenedor bg=${cs.backgroundColor}`);
+        if (cs.backgroundImage !== 'none') bad.push(`contenedor img=${cs.backgroundImage}`);
+        if (parseFloat(cs.borderTopWidth) > 0 && isPurple(cs.borderTopColor)) bad.push(`contenedor borde=${cs.borderTopColor}`);
+        if (/108, 43, 217|26, 11, 61|201, 182, 255/.test(cs.boxShadow)) bad.push(`contenedor sombra=${cs.boxShadow}`);
+      }
+      return bad;
+    });
+    expect(r, 'fondos morados detrás de "Generar link"').toEqual([]);
+    await expectNoScroll(page);
   });
   test('LAY el título no se mueve entre pestañas', async ({ page }) => {
     const ys: number[] = [];
