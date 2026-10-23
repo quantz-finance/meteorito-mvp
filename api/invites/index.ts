@@ -1,10 +1,13 @@
 // /api/invites  (una sola función serverless; límite de funciones del plan de Vercel)
 //  GET  ?code=xxxxxxxx                          -> invitación pública (+ mine:true si X-Guest-Key es del comprador). Sin login.
-//  POST { op:'create', category, brand, model, price_crc, note? }   (X-Guest-Key del comprador, sin cuenta)
+//  POST { op:'create', title, price_crc, photos?, note? }          (X-Guest-Key del comprador, sin cuenta)
+//       (compatible: { category, brand, model, ... } sigue funcionando; category es opcional, por defecto 'otro')
 //  POST { op:'cancel', code }                                       (solo el comprador, solo si sigue abierta)
 import { db, json, fail } from '../_lib/db';
 import { HttpError } from '../_lib/auth';
 import { guestSubFromReq } from '../_lib/guest';
+import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
+import { missingColumn } from '../_lib/listings';
 import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCode } from '../_lib/invites';
 
 const str = (v: unknown, max: number, req = true) => {
@@ -28,13 +31,22 @@ export default async function handler(req: any, res: any) {
     const guest = guestSubFromReq(req);
     if (!guest) throw Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.'), { code: 'guest_key_missing' });
     if (b.op === 'create') {
-      if (!INVITE_CATS.includes(b.category)) throw new HttpError(400, 'categoría inválida');
+      const category = b.category == null || b.category === '' ? 'otro' : b.category;
+      if (!INVITE_CATS.includes(category)) throw new HttpError(400, 'categoría inválida');
       const price = Number(b.price_crc);
       if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw new HttpError(400, 'precio inválido');
-      const row = { buyer_user_id: guest, category: b.category, brand: str(b.brand, 60), model: str(b.model, 80), price_crc: price, note: str(b.note, 500, false), status: 'abierta' };
+      // Mismos campos que el vendedor: nombre (title) + precio + fotos opcionales. Por compatibilidad, marca + modelo.
+      const title = str(b.title, 80, false);
+      const brand = title ? '' : str(b.brand, 60);
+      const model = title ?? str(b.model, 80);
+      if (!`${brand ?? ''} ${model ?? ''}`.trim() || (title != null && title.length < 3)) throw new HttpError(400, 'Escribe el nombre de lo que quieres comprar.');
+      const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
+      if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(publicPrefix(guest)))) throw new HttpError(400, 'fotos inválidas');
+      const row: Record<string, unknown> = { buyer_user_id: guest, category, brand, model, price_crc: price, note: str(b.note, 500, false), status: 'abierta', ...(photos.length ? { photos } : {}) };
       for (let i = 0; i < 5; i++) {
         const code = inviteCode();
-        const { error } = await db().from('invitations').insert({ ...row, code });
+        let { error } = await db().from('invitations').insert({ ...row, code });
+        if (error && row.photos && missingColumn(error)) { delete row.photos; ({ error } = await db().from('invitations').insert({ ...row, code })); } // sin 012: sin fotos
         if (!error) return json(res, 200, { code });
         if (error.code !== '23505') inviteErr(error);
       }

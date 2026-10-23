@@ -1,6 +1,7 @@
 import type { MeteoritoAuth } from './types';
 import { restRpc, restSelect } from './supabase';
 import type { CheckResult } from './categories';
+import { visibleSellerOrders } from './listings';
 import { DEMO_ENABLED, demoGetPublicOrder, demoGetSellerOrders } from './demo';
 
 export const PUBLIC_BASE_URL = 'https://pago.meteorito.app';
@@ -50,6 +51,8 @@ export interface PublicOrder {
   description: string | null; photos: string[]; status: string; identifier_masked: string | null;
   amount_usdc?: number | null; contract_id?: string | null; funded_tx?: string | null; shipped_tx?: string | null; released_tx?: string | null; auto_release_at?: string | null;
   checks_summary: CheckResult[]; created_at: string;
+  /** Migración 012: 'listing' = producto permanente (cada comprador tiene su pedido); listing_slug = producto del pedido. */
+  kind?: 'single' | 'listing' | null; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada' | null;
   /** Opcionales: solo se muestran si el backend los expone (todavía no en public_orders). */
   seller_name?: string | null; seller_phone_verified?: boolean | null;
   /** true solo si Meteorito verificó el IMEI (no la declaración del vendedor). */
@@ -61,11 +64,21 @@ export async function getPublicOrder(slug: string): Promise<PublicOrder | null> 
   return rows[0] ?? null;
 }
 
-export interface SellerOrder { slug: string; category: string; brand: string; model: string; price_crc: number; status: string; identifier_masked: string | null; created_at: string }
+export interface SellerOrder {
+  slug: string; category: string; brand: string; model: string; price_crc: number; status: string; identifier_masked: string | null; created_at: string;
+  /** Migración 012 (seller_orders_v2). Sin ella: undefined = link de un uso. */
+  kind?: 'single' | 'listing'; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada';
+}
+let v2 = true; // seller_orders_v2 (012); si no existe, se usa la v1 de ahí en adelante
 export async function getSellerOrders(addr: string): Promise<SellerOrder[]> {
   if (DEMO_ENABLED) return demoGetSellerOrders(addr);
+  if (v2) {
+    try { return visibleSellerOrders((await restRpc<SellerOrder[] | null>('seller_orders_v2', { p_seller_address: addr })) ?? []); }
+    catch (e) { if (!/404|PGRST202|not find|does not exist/i.test(String((e as Error)?.message))) throw e; v2 = false; }
+  }
   return (await restRpc<SellerOrder[] | null>('seller_orders', { p_seller_address: addr })) ?? [];
 }
+export { visibleSellerOrders } from './listings';
 
 /** "rolando.arguello" -> "Rolando". */
 export function displayName(email: string | null | undefined): string | null {

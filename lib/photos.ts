@@ -55,3 +55,13 @@ export async function uploadCompressed(auth: MeteoritoAuth, blob: Blob, draftId:
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(blob); });
 }
+
+/** Comprador invitado (sin cuenta): fotos opcionales de su invitación, con su llave de invitado. */
+export async function uploadGuestPhoto(auth: Pick<MeteoritoAuth, 'getAuthToken'>, blob: Blob, draftId: string, index: number): Promise<string> {
+  if (DEMO_ENABLED) return blobToDataUrl(blob);
+  const { guestApi } = await import('./api');
+  const r = await guestApi<{ path: string; token: string; publicUrl: string }>(auth, '/api/photos/upload-url', { as: 'guest', draftId, index, mime: 'image/jpeg', size: blob.size });
+  const { error } = await (await supabase()).storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' });
+  if (error) throw new Error(`No se pudo subir la foto: ${error.message}`);
+  return r.publicUrl;
+}

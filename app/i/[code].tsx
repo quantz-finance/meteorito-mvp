@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { userMessage } from '@/lib/cavosSession';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Platform, Share, Text, View } from 'react-native';
+import { Image, Platform, Share, Text, View } from 'react-native';
 import { Card, Chip, ErrorText, haptic, Icon, PrimaryButton, Screen, SkeletonCard, TestnetPill } from '@/components/ds';
 import { toast } from '@/components/ds';
 import { Freshness } from '@/components/Freshness';
@@ -48,7 +48,7 @@ export default function Invitacion() {
   const link = inviteLink(inv.code);
   const cat = getCategory(inv.category);
   const st = STATUS[inv.status];
-  const message = `Quiero comprarte ${inv.brand} ${inv.model} por ${formatCRC(inv.price_crc)}. Publica el artículo en Meteorito para que te pague en custodia: ${link}`;
+  const message = `Quiero comprarte ${`${inv.brand} ${inv.model}`.trim()} por ${formatCRC(inv.price_crc)}. Publica el artículo en Meteorito para que te pague en custodia: ${link}`;
 
   async function share() {
     if (Platform.OS === 'web') {
@@ -65,7 +65,8 @@ export default function Invitacion() {
       <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
         <Chip label={cat?.label ?? inv.category} /><Chip label={st.label} tone={st.tone} />
       </View>
-      <Text style={T.title}>{inv.brand} {inv.model}</Text>
+      <Text style={T.title}>{`${inv.brand} ${inv.model}`.trim()}</Text>
+      {inv.photos?.length ? <View style={{ flexDirection: 'row', gap: S.sm }}>{inv.photos.map((u) => <Image key={u} source={{ uri: u }} style={{ width: 56, height: 56, borderRadius: 10 }} />)}</View> : null}
       <Text style={T.money}>{formatCRC(inv.price_crc)}</Text>
       {inv.note ? <Text style={T.callout}>“{inv.note}”</Text> : null}
     </Card>

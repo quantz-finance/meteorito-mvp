@@ -6,7 +6,7 @@ import { PUBLIC_BASE_URL } from './orders';
 import type { MeteoritoAuth } from './types';
 
 export interface Invite {
-  code: string; category: string; brand: string; model: string; price_crc: number; note: string | null;
+  code: string; category: string; brand: string; model: string; title?: string; photos?: string[]; price_crc: number; note: string | null;
   status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; mine: boolean;
 }
 export const inviteLink = (code: string) => `${PUBLIC_BASE_URL}/i/${code}`;
@@ -24,7 +24,7 @@ export async function getInvite(code: string): Promise<Invite | null> {
   return j as Invite;
 }
 
-export async function createInvite(auth: Pick<MeteoritoAuth, 'getAuthToken'>, i: { category: string; brand: string; model: string; price_crc: number; note?: string }): Promise<string> {
+export async function createInvite(auth: Pick<MeteoritoAuth, 'getAuthToken'>, i: { title: string; price_crc: number; photos?: string[]; note?: string } | { category: string; brand: string; model: string; price_crc: number; note?: string }): Promise<string> {
   if (DEMO_ENABLED) throw new Error('Las invitaciones no están disponibles en el modo demo.');
   const r = await guestApi<{ code: string }>(auth, '/api/invites', { op: 'create', ...i });
   remember(r.code);

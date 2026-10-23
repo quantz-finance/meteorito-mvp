@@ -1,4 +1,5 @@
-import { Text, useWindowDimensions, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { useStableWindow } from '@/lib/viewport';
 import { router } from 'expo-router';
 import { Card, Chip, Icon, PrimaryButton, Screen, type IconName } from '@/components/ds';
 import { Reveal } from '@/components/space';
@@ -11,7 +12,7 @@ const STEPS: { icon: IconName; title: string; text: string }[] = [
 ];
 
 export default function Comprar() {
-  const short = useWindowDimensions().height < 740;
+  const short = useStableWindow().height < 740;
   return (
     <Screen title="Comprar" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}>
       <View style={{ flex: 1, gap: S.md }}>

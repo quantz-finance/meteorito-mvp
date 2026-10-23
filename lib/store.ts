@@ -5,7 +5,7 @@ import { PUBLIC_BASE_URL } from './orders';
 import type { MeteoritoAuth } from './types';
 export { ratingLabel } from './rating';
 
-export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null }
+export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
 export interface Store { store_slug: string; display_name: string; rating_avg: number | null; rating_count: number; items: StoreItem[] }
 
 export const storeLink = (slug: string) => `${PUBLIC_BASE_URL}/t/${slug}`;
@@ -41,3 +41,9 @@ async function friendly<T>(f: () => Promise<T>): Promise<T> {
 const RATED = (slug: string) => `meteorito:rated:${slug}`;
 export function ratedStars(slug: string): number | null { try { const v = window.localStorage.getItem(RATED(slug)); return v ? Number(v) : null; } catch { return null; } }
 export function rememberRated(slug: string, stars: number) { try { window.localStorage.setItem(RATED(slug), String(stars)); } catch { /* sin storage */ } }
+
+/** Mi tienda: pausar, reactivar o archivar un producto permanente (migración 012). */
+export async function setListingStatus(auth: MeteoritoAuth, slug: string, status: 'activa' | 'pausada' | 'archivada'): Promise<Store> {
+  const { api } = await import('./api');
+  return api<Store>(auth, '/api/store', { action: 'listing_set', slug, status });
+}

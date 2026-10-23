@@ -7,7 +7,8 @@ import { userMessage } from '@/lib/cavosSession';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useStableWindow } from '@/lib/viewport';
 import { ui } from '@/components/ui';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, SuccessCheck } from '@/components/ds';
 import { Reveal } from '@/components/space';
@@ -54,7 +55,7 @@ export default function Vender() {
   const [orphan, setOrphan] = useState(false);
   const [waitWallet, setWaitWallet] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
-  const short = useWindowDimensions().height < 740; // iPhone SE y similares: menos aire, todo en una pantalla
+  const short = useStableWindow().height < 740; // iPhone SE y similares: menos aire, todo en una pantalla
 
   // Respuesta a una invitación del comprador (?invite=codigo): nombre y precio precargados; el precio acordado no se cambia.
   const { invite: inviteParam } = useLocalSearchParams<{ invite?: string }>();
@@ -171,7 +172,7 @@ export default function Vender() {
       footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={() => submit()} />}>
       <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
       {orphan ? <OrphanWalletCard compact={short} onRestored={(r) => { setOrphan(false); if (title.trim() && photos.length) submit(r); }} /> : null}
-      {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {invite.brand} {invite.model} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
+      {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {`${invite.brand} ${invite.model}`.trim()} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
       <View style={{ gap: S.xs }}>
         <Text style={T.caption}>Nombre del producto</Text>

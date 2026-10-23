@@ -1,7 +1,8 @@
 // Cuadrícula paginada sin scroll: mide el espacio real disponible y decide cuántas columnas y filas caben.
 // Si no caben todos, pagina con flechas y puntos (sin scroll vertical). Cambio de página con un fundido suave.
 import { useEffect, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useStableWindow } from '@/lib/viewport';
 import { haptic, Icon } from '@/components/ds';
 import { anim, pressTransition } from '@/constants/motion';
 import { C, S, T, TOUCH } from '@/constants/theme';
@@ -25,7 +26,7 @@ export function GridPager<T>({ items, keyOf, renderItem, minCellW, minCellH, gap
   items: T[]; keyOf: (t: T) => string; renderItem: (t: T, size: { width: number; height: number }) => ReactNode;
   minCellW: number; minCellH: number; gap?: number; maxCols?: number; maxRows?: number; label?: string;
 }) {
-  const win = useWindowDimensions();
+  const win = useStableWindow();
   const [box, setBox] = useState({ w: Math.min(win.width, 560) - S.md * 2, h: Math.max(minCellH, win.height * 0.35) });
   const [page, setPage] = useState(0);
   const L = gridLayout({ w: box.w, h: box.h, n: items.length, minCellW, minCellH, gap, maxCols, maxRows });

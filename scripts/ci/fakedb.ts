@@ -33,6 +33,7 @@ export function fakeDb() {
       is: (c: string, v: any) => { filters.push((r) => (r[c] ?? null) === v); return q; },
       lte: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] <= v); return q; },
       gt: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] > v); return q; },
+      in: (c: string, vs: any[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       or: () => q, order: () => q, limit: () => q,
       single: async () => { const r = exec(); const d = r.data?.[0] ?? null; return { data: d, error: d ? null : { message: 'no rows' } }; },
       maybeSingle: async () => { const r = exec(); return { data: r.data?.[0] ?? null, error: r.error }; },

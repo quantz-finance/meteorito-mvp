@@ -14,6 +14,7 @@ import { HttpError, requireCavosUser } from '../_lib/auth';
 import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
 import { crIbanError, cleanHolder, normalizeIban, normalizeSinpe, payoutView } from '../_lib/payout';
 import { deleteSubscription, isMissingTable, parseSubscription, saveSubscription, vapid } from '../_lib/push';
+import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
 import { baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -47,6 +48,18 @@ async function myProfile(sub: string, email?: string) {
     if (again) return again; // carrera: otra pestaña la creó
   }
   throw new HttpError(500, 'No pudimos crear tu tienda. Intenta de nuevo.');
+}
+
+/** Mi tienda (dueño): productos activos y en pausa (012). Sin la migración: lo mismo que la tienda pública. */
+async function ownerStore(sub: string, p: { store_slug: string; display_name: string }) {
+  const pub = (await publicStore(p.store_slug)) ?? { store_slug: p.store_slug, display_name: p.display_name, rating_avg: null, rating_count: 0, items: [] as any[] };
+  const { data, error } = await db().from('orders').select('slug, brand, model, price_crc, photos, listing_status, created_at')
+    .eq('seller_user_id', sub).eq('kind', 'listing').eq('status', 'creado').in('listing_status', ['activa', 'pausada'])
+    .order('created_at', { ascending: false }).limit(60);
+  if (error) { if (missingColumn(error)) return pub; throw error; }
+  const listings = (data ?? []).map((o: any) => ({ slug: o.slug, title: `${o.brand ?? ''} ${o.model ?? ''}`.trim() || 'Artículo', price_crc: Number(o.price_crc), photo: o.photos?.[0] ?? null, listing_status: o.listing_status }));
+  const seen = new Set(listings.map((i: { slug: string }) => i.slug));
+  return { ...pub, items: [...listings, ...pub.items.filter((i: any) => !seen.has(i.slug))] };
 }
 
 export default async function handler(req: any, res: any) {
@@ -115,7 +128,17 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'me') {
       const p = await myProfile(user.sub, user.email);
-      return json(res, 200, (await publicStore(p.store_slug)) ?? { store_slug: p.store_slug, display_name: p.display_name, rating_avg: null, rating_count: 0, items: [] });
+      return json(res, 200, await ownerStore(user.sub, p));
+    }
+    if (b.action === 'listing_set') {
+      if (!LISTING_STATUSES.includes(b.status)) throw new HttpError(400, 'Estado inválido.');
+      if (typeof b.slug !== 'string' || !/^[a-z0-9]{6}$/.test(b.slug)) throw new HttpError(400, 'slug inválido');
+      const { data, error } = await db().from('orders').update({ listing_status: b.status }).eq('slug', b.slug).eq('seller_user_id', user.sub).eq('kind', 'listing').select('slug');
+      if (error && missingColumn(error)) throw Object.assign(new HttpError(503, 'Todavía no puedes pausar productos. Intenta más tarde.'), { code: 'listings_unavailable' });
+      if (error) throw error;
+      if (!data?.length) throw Object.assign(new HttpError(404, 'Este link es de un solo uso: no se puede pausar.'), { code: 'not_listing' });
+      const p = await myProfile(user.sub, user.email);
+      return json(res, 200, await ownerStore(user.sub, p));
     }
     if (b.action === 'update') {
       const cur = await myProfile(user.sub, user.email);

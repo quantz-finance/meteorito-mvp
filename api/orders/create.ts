@@ -7,6 +7,7 @@ import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } f
 import { walletState } from '../_lib/wallet';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 import { inviteByCode, inviteErr, validCode } from '../_lib/invites';
+import { missingColumn } from '../_lib/listings';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 // Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
@@ -62,9 +63,13 @@ export default async function handler(req: any, res: any) {
       price_crc: price, description: str(b.description, 2000, false), identifier: str(b.identifier, 40, false),
       photos, checks: Array.isArray(b.checks) ? b.checks.slice(0, 20) : [], status: 'creado',
     };
+    // Producto permanente (se vende muchas veces, un escrow por comprador), salvo respuesta a invitación: ese link queda
+    // reservado para quien invitó. Sin la migración 012 la columna no existe: link de un uso, como antes.
+    let kind: 'listing' | 'single' | null = invite || b.single === true ? 'single' : 'listing';
     for (let i = 0; i < 5; i++) {
       const s = slug();
-      const { error } = await db().from('orders').insert({ ...row, slug: s });
+      let { error } = await db().from('orders').insert({ ...row, slug: s, ...(kind ? { kind } : {}) });
+      if (error && kind && missingColumn(error)) { kind = null; ({ error } = await db().from('orders').insert({ ...row, slug: s })); }
       if (!error) {
         if (invite) { // aceptar la invitación (condicionado a que siga abierta: una sola publicación por invitación)
           const { data: ok, error: e2 } = await db().from('invitations').update({ status: 'aceptada', order_slug: s, seller_user_id: user.sub, accepted_at: new Date().toISOString() }).eq('code', invite.code).eq('status', 'abierta').select('code');
@@ -72,7 +77,7 @@ export default async function handler(req: any, res: any) {
           if (!ok?.length) { await db().from('orders').update({ status: 'cancelado' }).eq('slug', s).eq('status', 'creado'); throw Object.assign(new HttpError(409, 'Esta invitación ya fue aceptada por otra publicación.'), { code: 'invite_not_open' }); }
         }
         await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price, from_invite: !!invite });
-        return json(res, 200, { slug: s });
+        return json(res, 200, { slug: s, kind: kind ?? 'single' });
       }
       if (error.code !== '23505') throw error;
     }
