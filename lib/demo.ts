@@ -19,6 +19,7 @@ export function demoEnabled(flag: string | undefined, host?: string | null): boo
 export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeof window !== 'undefined' ? window.location?.hostname : null);
 
 import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe } from '../api/_lib/payout'; // pura y chica (~1 KB)
+import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
 
@@ -247,6 +248,13 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       const sp = normalizeSinpe(body.sinpe_phone); if (sp === 'invalid') throw err(400, 'bad_sinpe', 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).');
       st.payout = { iban_last4: normalizeIban(body.iban).slice(-4), holder_name: holder, sinpe_last4: sp ? sp.slice(-4) : null, updated_at: now() }; emit();
       return { payout: st.payout };
+    }
+    if (body.action === 'import_facebook') { // misma forma que el API real; sin red (foto propia del demo)
+      if (!checkFacebookUrl(body.url).ok) throw err(400, 'fb_url_invalid', FB_URL_INVALID);
+      await new Promise((r) => setTimeout(r, 400));
+      if (/\/item\/1\/|login/.test(String(body.url))) return { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: FB_IMPORT_FAILED };
+      return { result: 'success', title: 'Bicicleta de montaña aro 29', price_crc: 185000, price_source: { amount: 185000, currency: 'CRC' }, converted: false,
+        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], missing: [] };
     }
     st.store ??= { slug: 'valeria', name: 'Valeria' };
     if (body.action === 'orders') return { orders: demoGetSellerOrders(DEMO_SELLER.address) };

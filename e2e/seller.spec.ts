@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { open, PHOTO, expectNoScroll } from './helpers';
+import { open, PHOTO, expectNoScroll, expectInputs16, expectTitleAt16 } from './helpers';
 
 test.describe('Vendedor (demo)', () => {
   test('VEN-01 crea un link con título, precio y foto', async ({ page }) => {
@@ -71,5 +71,65 @@ test.describe('Vendedor (demo)', () => {
     await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1')!).payout?.iban_last4)).toBe('4066');
     await expect(page.getByText(/4066/).first()).toBeVisible();
     await expect(page.getByText('CR05015202001026284066')).toHaveCount(0); // siempre enmascarada
+  });
+
+  // Importar de Facebook: el API simulado del demo responde como /api/store {action:'import_facebook'} (sin red).
+  test('VEN-07 importar de Facebook: botón, pegar link, formulario precargado, generar link', async ({ page }, info) => {
+    await open(page, '/vender', 'seller', true);
+    const btn = page.getByRole('button', { name: 'Importar de Facebook' });
+    await expect(btn).toBeVisible();
+    await expectNoScroll(page);
+    await expectTitleAt16(page, 'Vender');
+    if (info.project.name === 'webkit-iphone-se') await page.screenshot({ path: 'test-results/fb-import-1-boton.png' });
+    await btn.click();
+    const input = page.getByLabel('Link del anuncio de Facebook');
+    await expect(input).toBeVisible();
+    await expectInputs16(page);
+    await input.fill('https://www.facebook.com/share/18HroUrSak/?mibextid=wwXIfr');
+    await page.waitForTimeout(600); // animación de la hoja
+    if (info.project.name === 'webkit-iphone-se') await page.screenshot({ path: 'test-results/fb-import-2-pegar.png' });
+    await expect(page.getByRole('button', { name: /Importar$/ })).toBeInViewport();
+    await page.getByRole('button', { name: /Importar$/ }).click();
+    await expect(page.getByText('Listo, revisa los datos')).toBeVisible();
+    await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('Bicicleta de montaña aro 29');
+    await expect(page.getByPlaceholder('0')).toHaveValue('185 000');
+    await expect(page.getByText('FOTOS (1/4)', { exact: false })).toBeVisible();
+    await expect(page.getByText(/Incluye la descripción del anuncio/)).toBeVisible();
+    await expect(page.getByText('Modo prueba', { exact: false })).toHaveCount(0);
+    await page.waitForTimeout(400); // la foto termina de comprimirse
+    await expectNoScroll(page);
+    await expectInputs16(page);
+    await expectTitleAt16(page, 'Vender');
+    if (info.project.name === 'webkit-iphone-se') await page.screenshot({ path: 'test-results/fb-import-3-precargado.png' });
+    await page.getByText('Generar link').click();
+    await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
+    const o = await page.evaluate(() => { const s = JSON.parse(sessionStorage.getItem('meteorito:demo:v1')!); return Object.values(s.orders as Record<string, any>).pop(); });
+    expect(o.model).toBe('Bicicleta de montaña aro 29');
+    expect(o.price_crc).toBe(185000);
+    expect(o.photos).toHaveLength(1);
+    expect(String(o.description)).toContain('frenos de disco');
+    expect(JSON.stringify(o)).not.toContain('facebook.com'); // el link de FB no queda en el producto
+  });
+
+  test('VEN-08 importar de Facebook: link ajeno se rechaza; anuncio ilegible -> completar a mano', async ({ page }, info) => {
+    await open(page, '/vender', 'seller', true);
+    await page.getByRole('button', { name: 'Importar de Facebook' }).click();
+    await page.getByLabel('Link del anuncio de Facebook').fill('https://evil.com/?u=facebook.com');
+    await page.getByRole('button', { name: /Importar$/ }).click();
+    await expect(page.getByText('Pega el link de un anuncio de Facebook Marketplace.')).toBeVisible();
+    await page.getByLabel('Link del anuncio de Facebook').fill('https://www.facebook.com/marketplace/item/1/');
+    await page.getByRole('button', { name: /Importar$/ }).click();
+    await expect(page.getByText('No pudimos leer ese anuncio, completa los datos.')).toBeVisible();
+    await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('');
+    await expect(page.getByText('FOTOS (0/4)', { exact: false })).toBeVisible();
+    await expectNoScroll(page);
+    if (info.project.name === 'webkit-iphone-se') { await page.waitForTimeout(400); await page.screenshot({ path: 'test-results/fb-import-4-no-se-pudo.png' }); }
+    // Sigue funcionando a mano
+    await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Silla de oficina');
+    await page.getByPlaceholder('0').fill('45000');
+    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Agregar', { exact: true }).click()]);
+    await fc.setFiles(PHOTO);
+    await page.getByText('Generar link').click();
+    await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
   });
 });
