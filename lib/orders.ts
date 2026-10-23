@@ -1,5 +1,5 @@
 import type { MeteoritoAuth } from './types';
-import { restRpc, restSelect } from './supabase';
+import { restSelect } from './supabase';
 import type { CheckResult } from './categories';
 import { visibleSellerOrders } from './listings';
 import { DEMO_ENABLED, demoGetPublicOrder, demoGetSellerOrders } from './demo';
@@ -53,6 +53,8 @@ export interface PublicOrder {
   checks_summary: CheckResult[]; created_at: string;
   /** Migración 012: 'listing' = producto permanente (cada comprador tiene su pedido); listing_slug = producto del pedido. */
   kind?: 'single' | 'listing' | null; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada' | null;
+  /** Migración 013: resultado de la disputa (porcentaje devuelto al comprador). */
+  resolution?: { buyerPct?: number | null } | null;
   /** Opcionales: solo se muestran si el backend los expone (todavía no en public_orders). */
   seller_name?: string | null; seller_phone_verified?: boolean | null;
   /** true solo si Meteorito verificó el IMEI (no la declaración del vendedor). */
@@ -69,14 +71,11 @@ export interface SellerOrder {
   /** Migración 012 (seller_orders_v2). Sin ella: undefined = link de un uso. */
   kind?: 'single' | 'listing'; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada';
 }
-let v2 = true; // seller_orders_v2 (012); si no existe, se usa la v1 de ahí en adelante
-export async function getSellerOrders(addr: string): Promise<SellerOrder[]> {
-  if (DEMO_ENABLED) return demoGetSellerOrders(addr);
-  if (v2) {
-    try { return visibleSellerOrders((await restRpc<SellerOrder[] | null>('seller_orders_v2', { p_seller_address: addr })) ?? []); }
-    catch (e) { if (!/404|PGRST202|not find|does not exist/i.test(String((e as Error)?.message))) throw e; v2 = false; }
-  }
-  return (await restRpc<SellerOrder[] | null>('seller_orders', { p_seller_address: addr })) ?? [];
+/** Pedidos del vendedor: por la API con su sesión (solo los suyos). La RPC pública seller_orders se revoca en la 013. */
+export async function getSellerOrders(auth: MeteoritoAuth): Promise<SellerOrder[]> {
+  if (DEMO_ENABLED) return demoGetSellerOrders(auth.address ?? '');
+  const { api } = await import('./api');
+  return visibleSellerOrders((await api<{ orders: SellerOrder[] }>(auth, '/api/store', { action: 'orders' })).orders ?? []);
 }
 export { visibleSellerOrders } from './listings';
 

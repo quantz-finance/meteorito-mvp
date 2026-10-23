@@ -38,7 +38,7 @@ export default function Inicio() {
     if (!address) return;
     if (!supabaseConfigured) { setOrders([]); return; }
     setLoading(true);
-    try { const os = await getSellerOrders(address); setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => setWalletMsg(m)); }
+    try { const os = await getSellerOrders(auth); setOrders(os); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => setWalletMsg(m)); }
     catch { setOrders((o) => o ?? []); }
     finally { setLoading(false); }
   }, [address, auth.wallet.state]);

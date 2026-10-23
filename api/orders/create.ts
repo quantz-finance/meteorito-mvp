@@ -8,6 +8,7 @@ import { walletState } from '../_lib/wallet';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 import { inviteByCode, inviteErr, validCode } from '../_lib/invites';
 import { missingColumn } from '../_lib/listings';
+import { guestSubFromReq } from '../_lib/guest';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 // Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
@@ -54,7 +55,9 @@ export default async function handler(req: any, res: any) {
       invite = await inviteByCode(b.invite);
       if (!invite) throw new HttpError(404, 'La invitación no existe.');
       if (invite.status !== 'abierta') throw Object.assign(new HttpError(409, 'Esta invitación ya fue aceptada o cancelada.'), { code: 'invite_not_open' });
-      if (invite.buyer_user_id === user.sub) throw new HttpError(400, 'No puedes aceptar tu propia invitación.');
+      // El comprador invita como INVITADO (guest:<hash de su llave>), así que comparar con el sub de Cavos nunca coincidía.
+      const myGuest = guestSubFromReq(req);
+      if (invite.buyer_user_id === user.sub || (myGuest && invite.buyer_user_id === myGuest)) throw new HttpError(400, 'No puedes aceptar tu propia invitación.');
       if (price !== invite.price_crc) throw Object.assign(new HttpError(409, `El precio acordado en la invitación es ₡${invite.price_crc}.`), { code: 'invite_price_mismatch' });
     }
     const row = {

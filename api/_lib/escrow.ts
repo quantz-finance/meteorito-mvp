@@ -116,6 +116,8 @@ export type ApproveReason = 'buyer_confirm' | 'pin' | 'timeout';
 /** Backend approver aprueba + release signer libera, verificando on-chain antes. */
 export async function approveAndRelease(order: any, reason: ApproveReason) {
   if (order.status !== 'enviado' && order.status !== 'entregado') throw new HttpError(409, `status ${order.status}`);
+  // PIN bloqueado (3 intentos fallidos del vendedor): el plazo NO libera solo; queda para revisión o confirmación del comprador.
+  if (reason === 'timeout' && (order.pin_attempts ?? 0) >= 3) throw Object.assign(new HttpError(423, 'PIN bloqueado: el pago no se libera solo; lo revisamos.'), { code: 'pin_locked' });
   if (order.dispute_tx || order.disputed_at) throw new HttpError(409, 'pedido en disputa');
   // Verificación ON-CHAIN (contrato directo, no indexador de TW) antes de aprobar y antes de liberar.
   const assertOpen = async () => {
