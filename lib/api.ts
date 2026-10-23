@@ -9,6 +9,8 @@ import { holdUpdate } from './updater';
 
 export async function proof(auth: MeteoritoAuth, action: string, ref: string) {
   if (!auth.address) throw new Error('Inicia sesión');
+  // Segundo dispositivo sin la llave todavía: no llamar a Cavos (fallaría con "not an authorized signer").
+  if (auth.wallet?.state === 'needs-approval') throw Object.assign(new Error('este dispositivo todavía no tiene la llave: confirmar con passkey'), { code: 'device_needs_passkey' });
   const ts = Math.floor(Date.now() / 1000);
   const message = `meteorito:${action}:${ref}:${auth.address}:${ts}`;
   const { publicKey, signature } = await auth.signMessage(message);

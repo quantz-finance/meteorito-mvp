@@ -173,11 +173,11 @@ function prefixed(msg: string): Buffer {
 
 /** Verifica que quien llama controla `address` (Cavos G… classic multisig: el control key es signer). */
 export async function requireAddressProof(p: AddressProof | undefined, action: string, ref: string): Promise<string> {
-  if (!p?.address || !p.publicKey || !p.signature || !p.message) throw new HttpError(401, 'falta prueba de dirección');
+  if (!p?.address || !p.publicKey || !p.signature || !p.message) throw Object.assign(new HttpError(401, 'falta prueba de dirección'), { code: 'proof_missing' });
   const parts = p.message.split(':');
   const ts = Number(parts[4]);
-  if (p.message !== proofMessage(action, ref, p.address, ts)) throw new HttpError(401, 'mensaje de prueba no coincide');
-  if (!ts || Math.abs(Date.now() / 1000 - ts) > 300) throw new HttpError(401, 'prueba vencida');
+  if (p.message !== proofMessage(action, ref, p.address, ts)) throw Object.assign(new HttpError(401, 'mensaje de prueba no coincide'), { code: 'proof_mismatch' });
+  if (!ts || Math.abs(Date.now() / 1000 - ts) > 300) throw Object.assign(new HttpError(401, 'prueba vencida'), { code: 'proof_expired' });
   await verifySignedBy(p.address, p.publicKey, p.message, p.signature);
   return p.address;
 }
@@ -186,12 +186,12 @@ export async function requireAddressProof(p: AddressProof | undefined, action: s
 async function verifySignedBy(address: string, publicKey: string, message: string, signature: string) {
   const sig = Buffer.from(signature, 'base64');
   let kp: Keypair;
-  try { kp = Keypair.fromPublicKey(publicKey); } catch { throw new HttpError(401, 'firma inválida'); }
+  try { kp = Keypair.fromPublicKey(publicKey); } catch { throw Object.assign(new HttpError(401, 'firma inválida'), { code: 'proof_bad_key' }); }
   // El SDK firma los bytes del mensaje con prefijo Cavos; aceptamos también sin prefijo por si cambia.
-  if (!kp.verify(prefixed(message), sig) && !kp.verify(Buffer.from(message), sig)) throw new HttpError(401, 'firma inválida');
+  if (!kp.verify(prefixed(message), sig) && !kp.verify(Buffer.from(message), sig)) throw Object.assign(new HttpError(401, 'firma inválida'), { code: 'proof_bad_signature' });
   if (publicKey !== address) {
     const acct = await new Horizon.Server(env.horizon()).loadAccount(address).catch(() => null);
     const s = acct?.signers.find((x) => x.key === publicKey);
-    if (!acct || !s || s.weight < acct.thresholds.med_threshold) throw new HttpError(401, 'el control key no es signer de la cuenta');
+    if (!acct || !s || s.weight < acct.thresholds.med_threshold) throw Object.assign(new HttpError(401, 'el control key no es signer de la cuenta'), { code: 'proof_not_signer' });
   }
 }
