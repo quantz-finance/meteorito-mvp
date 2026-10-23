@@ -3,6 +3,7 @@
 // Sin autocapture de inputs, sin grabación de sesión, con opt-out persistente.
 import { Platform } from 'react-native';
 import { DEMO_ENABLED } from './demo';
+import { captureFirstTouch, identifyWithAttribution, registerAttribution, superProps, type Attribution } from './attribution';
 
 export const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY ?? '';
 export const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com';
@@ -18,6 +19,8 @@ let anonId = 'anon_' + Math.random().toString(36).slice(2) + Date.now().toString
 let optedOut = false;
 let started = false;
 const queue: [string, Props][] = [];
+let attr: Attribution | null = null; // first-touch del landing (lib/attribution.ts)
+let attrNew = false;
 
 function readOpt(): boolean { try { return web && window.localStorage.getItem(OPT_KEY) === '1'; } catch { return false; } }
 export function isOptedOut() { return optedOut; }
@@ -49,6 +52,12 @@ export function initAnalytics() {
   optedOut = readOpt();
   if (DEMO_ENABLED) return; // demo: sin analítica
   if (!POSTHOG_KEY || !web) return; // nativo: envío HTTP directo (send())
+  // UTMs del landing: se leen YA (al cargar el módulo, antes de que el router redirija y borre el query).
+  // Con opt-out no se guarda nada.
+  if (!optedOut) {
+    let store: Storage | null = null; try { store = window.localStorage; } catch { /* modo privado estricto */ }
+    ({ attr, isNew: attrNew } = captureFirstTouch(store, window.location.href, document.referrer));
+  }
   import('posthog-js').then(({ default: posthog }) => {
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST, person_profiles: 'identified_only',
@@ -58,9 +67,11 @@ export function initAnalytics() {
       sanitize_properties: (p: any) => { delete p.$ip; if (typeof p.$current_url === 'string') p.$current_url = scrub(p.$current_url); return p; },
     } as any);
     ph = posthog;
-    if (distinctId) posthog.identify(distinctId);
+    registerAttribution(posthog, attr); // super propiedades: van en cada evento
+    if (distinctId) identifyWithAttribution(posthog, distinctId, attr);
     for (const [e, p] of queue.splice(0)) posthog.capture(e, p);
   }).catch(() => {});
+  track('app_opened', { ...superProps(attr), first_touch: attrNew }); // primer evento de la carga (va a la cola hasta que cargue posthog)
 }
 // Quita query strings (tokens de login, etc.) de las URLs.
 const scrub = (u: string) => u.split('?')[0].split('#')[0];
@@ -87,9 +98,9 @@ export async function identify(token: string | null) {
   const id = await hashSub(sub);
   if (id === distinctId) return;
   distinctId = id;
-  if (ph && !optedOut) ph.identify(id);
+  if (ph && !optedOut) identifyWithAttribution(ph, id, attr); // $set_once initial_utm_*
 }
-export function resetAnalytics() { distinctId = null; if (ph) ph.reset(); }
+export function resetAnalytics() { distinctId = null; if (ph) { ph.reset(); registerAttribution(ph, attr); } } // reset borra las super propiedades
 /** Error genérico sin mensaje crudo (puede tener datos): solo código/área. */
 export const trackError = (area: string, e: unknown) =>
   track('error_shown', { area, code: String((e as any)?.message ?? e).slice(0, 60).replace(/[0-9A-Z]{20,}/g, '…') });
