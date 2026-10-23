@@ -1,7 +1,7 @@
 // Invitaciones de compra (comprador -> vendedor). API: /api/invites (docs/buyer-invites.md).
 import { guestApi } from './api';
 import { guestKey } from './guest';
-import { DEMO_ENABLED } from './demo';
+import { DEMO_ENABLED, demoGetInvite } from './demo';
 import { PUBLIC_BASE_URL } from './orders';
 import type { MeteoritoAuth } from './types';
 
@@ -16,7 +16,7 @@ export function myInviteCodes(): string[] { try { return JSON.parse(window.local
 function remember(code: string) { try { window.localStorage.setItem(MINE, JSON.stringify([code, ...myInviteCodes().filter((c) => c !== code)].slice(0, 20))); } catch { /* sin storage */ } }
 
 export async function getInvite(code: string): Promise<Invite | null> {
-  if (DEMO_ENABLED) return null;
+  if (DEMO_ENABLED) return demoGetInvite(code) as Invite | null;
   const r = await fetch(`/api/invites?code=${encodeURIComponent(code)}`, { headers: { 'X-Guest-Key': guestKey() }, cache: 'no-store' });
   if (r.status === 404) return null;
   const j: any = await r.json().catch(() => ({}));
@@ -25,7 +25,6 @@ export async function getInvite(code: string): Promise<Invite | null> {
 }
 
 export async function createInvite(auth: Pick<MeteoritoAuth, 'getAuthToken'>, i: { title: string; price_crc: number; photos?: string[]; note?: string } | { category: string; brand: string; model: string; price_crc: number; note?: string }): Promise<string> {
-  if (DEMO_ENABLED) throw new Error('Las invitaciones no están disponibles en el modo demo.');
   const r = await guestApi<{ code: string }>(auth, '/api/invites', { op: 'create', ...i });
   remember(r.code);
   return r.code;

@@ -15,6 +15,20 @@ test.describe('Vendedor (demo)', () => {
     await expectNoScroll(page);
   });
 
+  test('VEN-06 fotos: hasta 4, se puede quitar una', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    for (let i = 1; i <= 4; i++) {
+      const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByLabel('Agregar fotos').click()]);
+      await fc.setFiles(PHOTO);
+      await expect(page.getByText(`FOTOS (${i}/4)`, { exact: false })).toBeVisible();
+    }
+    await expect(page.getByLabel('Agregar fotos')).toHaveCount(0); // no deja más de 4
+    await page.getByLabel('Quitar foto').first().click();
+    await expect(page.getByText('FOTOS (3/4)', { exact: false })).toBeVisible();
+    await expect(page.getByLabel('Agregar fotos')).toBeVisible();
+    await expectNoScroll(page);
+  });
+
   test('VEN-02 sin foto no genera link', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici');

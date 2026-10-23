@@ -19,11 +19,12 @@ const out: Record<string, unknown> = {};
   const mk = (role: 'seller' | 'buyer') => { demo.setDemoRole(role); return { address: role === 'seller' ? demo.DEMO_SELLER.address : demo.DEMO_BUYER.address, getAuthToken: () => 'demo-token', signMessage: async () => ({ publicKey: 'x', signature: 'y' }) } as any; };
   const seller = mk('seller');
   await ensureWalletReady(seller);
-  const slug = await createOrder(seller, { category: 'celular', brand: 'Apple', model: 'iPhone 13', condition: 'Como nuevo', price_crc: 255000, description: '', identifier: '356938035643809', photos: [], checks: [] });
+  let slug = await createOrder(seller, { category: 'celular', brand: 'Apple', model: 'iPhone 13', condition: 'Como nuevo', price_crc: 255000, description: '', identifier: '356938035643809', photos: [], checks: [] });
   out.slug = slug;
   out.afterCreate = (await getPublicOrder(slug))?.status;
   const buyer = mk('buyer');
   const start = await api(buyer, '/api/escrow/pay', { slug, step: 'start' });
+  slug = start.slug ?? slug; // producto permanente: el comprador sigue en su propio pedido (igual que PayBox)
   out.amount = start.amountUsdc;
   const funded = await api(buyer, '/api/escrow/pay', { slug, step: 'confirm_sinpe' });
   out.pinLen = String(funded.pin).length;

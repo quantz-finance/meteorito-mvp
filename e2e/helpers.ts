@@ -40,3 +40,15 @@ export async function expectTitleAt16(page: Page, title: string) {
 const word = (alts: string) => new RegExp(`(?<![\p{L}])(${alts})(?![\p{L}])`, 'iu');
 export const BANNED = word('seguro|segura|protegido|protegida|garantía|garantia|garantizado|pronto|regulado');
 export const VOSEO = word('tenés|podés|querés|sabés|pagás|confirmá|tocá|escribí|recordá|mirá|fijate');
+/** Abre la fila del vendedor con ese estado y espera a que la hoja muestre `ready` (reintenta si la lista se reordenó al cargar). */
+export async function openSellerRow(page: Page, statusText: string | RegExp, ready: string | RegExp) {
+  await expect(async () => {
+    await open(page, '/pedidos', 'seller');
+    // Cada fila trae la línea de tiempo (Pagado/Enviado/…): se excluye el producto publicado («Disponible»)
+    const row = page.getByRole('button').filter({ hasText: statusText }).filter({ hasNotText: 'Disponible' }).first();
+    await expect(row).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(250);
+    await row.click({ timeout: 5000 });
+    await expect(typeof ready === 'string' ? page.getByPlaceholder(ready) : page.getByText(ready).last()).toBeVisible({ timeout: 4000 });
+  }).toPass({ timeout: 35000 });
+}
