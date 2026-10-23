@@ -12,6 +12,7 @@ function resolveFile(path) {
   const clean = decodeURIComponent(path.split('?')[0]).replace(/\.\./g, '');
   if (/^\/p\/[^/]+$/.test(clean)) return join(root, 'p/[slug].html');
   if (/^\/t\/[^/]+$/.test(clean)) return join(root, 't/[store].html');
+  if (/^\/i\/[^/]+$/.test(clean) && clean !== '/i/nueva') return join(root, 'i/[code].html');
   if (/^\/compartir\/[^/]+$/.test(clean)) return join(root, 'compartir/[slug].html');
   const direct = join(root, clean);
   if (existsSync(direct) && statSync(direct).isFile()) return direct;
