@@ -36,7 +36,7 @@ const out: Record<string, unknown> = {};
   await api(seller, '/api/escrow/confirm', { slug, reason: 'pin', pin: funded.pin });
   const rel: any = await getPublicOrder(slug); out.status4 = rel.status; out.releasedTxLen = String(rel.released_tx).length;
   out.balance = (await fetchBalances(seller.address)).usdc;
-  out.sellerOrders = (await getSellerOrders(demo.DEMO_SELLER.address)).length;
+  out.sellerOrders = (await getSellerOrders(seller)).length;
   // Disputa en otro pedido
   const s2 = await demo.demoSeed('enviado'); mk('buyer');
   await api(buyer, '/api/escrow/dispute', { slug: s2, reason: 'no_llego', description: null, evidence: [] });

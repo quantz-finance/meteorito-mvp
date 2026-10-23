@@ -14,6 +14,7 @@ import { myListingOrder, rememberListingOrder } from '@/lib/listings';
 import { loadPin, savePin } from '@/lib/guest';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, type PublicOrder } from '@/lib/orders';
+import { resolvedLabel } from '@/lib/status';
 import { track, trackError } from '@/lib/analytics';
 import { DEMO_ENABLED } from '@/lib/demo';
 import { ChainLinks } from '@/components/ChainLinks';
@@ -117,7 +118,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       : <Text style={[T.callout, { textAlign: 'center' }]}>Pago en custodia. Esperando que el vendedor lo envíe.</Text>;
   } else if (order.status === 'liberado' || order.status === 'resuelto' || order.status === 'entregado') {
     footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
-      <Icon name="checkmark-circle" size={22} color={C.success} /><Text style={[T.headline, { color: C.success }]}>{order.status === 'entregado' ? 'Entregado' : 'Pago liberado'}</Text>
+      <Icon name="checkmark-circle" size={22} color={C.success} /><Text style={[T.headline, { color: C.success }]}>{resolvedLabel(order)}</Text>
     </View>;
   } else if (order.status === 'en_disputa') {
     footer = <Text style={[T.callout, { textAlign: 'center', color: C.orange }]}>En disputa: lo estamos revisando, respondemos en 24-48 h. El pago está en pausa.</Text>;

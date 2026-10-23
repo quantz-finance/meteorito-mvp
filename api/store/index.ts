@@ -126,6 +126,17 @@ export default async function handler(req: any, res: any) {
       if (error) missing(error);
       return json(res, 200, { payout: payoutView(row) });
     }
+    if (b.action === 'orders') {
+      // Pedidos del vendedor CON sesión (antes: RPC pública seller_orders con cualquier dirección -> fuga de datos).
+      const cols = 'slug, category, brand, model, price_crc, status, identifier, created_at, kind, listing_slug, listing_status';
+      let q = await db().from('orders').select(cols).eq('seller_user_id', user.sub).order('created_at', { ascending: false }).limit(200);
+      if (q.error && missingColumn(q.error)) q = await db().from('orders').select('slug, category, brand, model, price_crc, status, identifier, created_at').eq('seller_user_id', user.sub).order('created_at', { ascending: false }).limit(200);
+      if (q.error) throw q.error;
+      const orders = (q.data ?? []).map(({ identifier, ...o }: any) => ({ ...o, price_crc: Number(o.price_crc), identifier_masked: identifier ? '••••' + String(identifier).slice(-4) : null }))
+        .filter((o: any) => !(o.listing_slug && o.status === 'creado'));
+      res.setHeader?.('Cache-Control', 'no-store');
+      return json(res, 200, { orders });
+    }
     if (b.action === 'me') {
       const p = await myProfile(user.sub, user.email);
       return json(res, 200, await ownerStore(user.sub, p));

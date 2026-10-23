@@ -102,6 +102,8 @@ async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown): Pr
   await ensureBound(auth); // token fresco nuevo (login / re-login): bind primero
   const send = async (withProof: boolean) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    // Crear link: también la llave de invitado, para que el servidor detecte si respondes a tu propia invitación.
+    if (path === '/api/orders/create') headers['X-Guest-Key'] = guestKey();
     if (withProof) headers['X-Meteorito-Proof'] = await sessionProofHeader(auth, token, 'POST', path.split('?')[0]);
     const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
     return { r, j: await r.json().catch(() => ({})) as any };

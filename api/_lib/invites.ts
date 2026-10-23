@@ -20,7 +20,13 @@ export async function inviteByCode(code: string): Promise<any | null> {
 }
 /** Invitación ligada a un link de pago (reserva el link a quien invitó). Nunca rompe el pago si la tabla no existe. */
 export async function inviteForOrder(slug: string): Promise<any | null> {
-  try { const { data, error } = await db().from('invitations').select('*').eq('order_slug', slug).maybeSingle(); return error ? null : data ?? null; } catch { return null; }
+  // Fail-closed: si no se puede verificar la reserva (error de base o red), NO se deja pagar. Solo sin la tabla
+  // (migración 009 sin aplicar) no hay reservas posibles.
+  const closed = () => Object.assign(new HttpError(503, 'No pudimos verificar este link. Intenta de nuevo en un momento.'), { code: 'invite_check_failed' });
+  let r: { data: any; error: any };
+  try { r = await db().from('invitations').select('*').eq('order_slug', slug).maybeSingle(); } catch { throw closed(); }
+  if (r.error) { if (tableMissing(r.error)) return null; throw closed(); }
+  return r.data ?? null;
 }
 /** Vista pública: nunca expone buyer_user_id / seller_user_id. */
 export const publicInvite = (i: any, mine: boolean) => ({
