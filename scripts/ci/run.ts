@@ -43,6 +43,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '42', name: 'UTMs del landing: first-touch, super propiedades, initial_utm_* y app_opened', file: './t42-landing-utm.test.ts', onchain: false },
   { id: '43', name: 'photo_upload_failed con etapa (compress/sign/storage) y código', file: './t43-photo-failure-diagnostics.test.ts', onchain: false },
   { id: '44', name: 'Login: Google/Apple cuenta existente, código por correo, sesión inválida una vez', file: './t44-login-errors.test.ts', onchain: false },
+  { id: '46', name: 'Foto de la tienda (solo el dueño, solo imagen propia) + 3 pestañas', file: './t46-store-photo-nav.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

@@ -54,7 +54,7 @@ export default function NuevaInvitacion() {
   }
 
   return (
-    <Screen back="/" title="Invitar a un vendedor" subtitle={short ? undefined : 'Dile qué quieres y a qué precio; él publica y te manda el link.'} scroll={false}
+    <Screen back="/comprar" title="Invitar a un vendedor" subtitle={short ? undefined : 'Dile qué quieres y a qué precio; él publica y te manda el link.'} scroll={false}
       footer={<>{err && <ErrorText>{err}</ErrorText>}<PrimaryButton title="Crear invitación" icon="paper-plane-outline" loading={busy} onPress={submit} /></>}>
       <View style={{ flex: 1, gap: S.sm }}>
         <Text style={T.caption}>Nombre del producto</Text>

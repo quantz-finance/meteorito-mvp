@@ -62,7 +62,7 @@ export default function MiTienda() {
       ) : <View style={{ flex: 1, gap: S.md }}>
         <View style={st.rowBetween}>
           <View style={{ flex: 1, minWidth: 0, gap: S.xs }}>
-            <StoreHeader store={store} />
+            <StoreHeader store={store} editable onChange={setStore} />
           </View>
           <IconButton icon="create-outline" label="Editar nombre o usuario" onPress={() => { setSlug(store.store_slug); setName(store.display_name); setSaveErr(null); setEditing(true); }} />
         </View>

@@ -8,6 +8,7 @@ import { pressTransition } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { getMyStore, type Store } from '@/lib/store';
+import { StoreAvatar } from '@/components/StoreAvatar';
 import { crIbanError, formatIban, getPayout, maskIban, maskPhone, normalizeIban, normalizeSinpe, profilePct, profileSteps, savePayout, type PayoutView } from '@/lib/payout';
 import { userMessage } from '@/lib/cavosSession';
 
@@ -25,7 +26,7 @@ function useProfile() {
     getPayout(auth).then((p) => live && setPayout(p)).catch((e) => { if (live) { setPayout(null); setPayoutErr(userMessage((e as Error).message)); } });
     return () => { live = false; };
   }, [auth.address]);
-  return { store, payout, setPayout, payoutErr };
+  return { store, setStore, payout, setPayout, payoutErr };
 }
 
 /** Barra de progreso: solo transform (scaleX) con transición suave. */
@@ -39,19 +40,22 @@ function Progress({ pct }: { pct: number }) {
 
 /** Tarjeta completa para Mi cuenta: % del perfil, pasos y la cuenta para cobrar. */
 export function ProfileCard({ products = 0 }: { products?: number }) {
-  const { store, payout, setPayout, payoutErr } = useProfile();
+  const { store, setStore, payout, setPayout, payoutErr } = useProfile();
   const [open, setOpen] = useState(false);
+  const [photoErr, setPhotoErr] = useState<string | null>(null);
   const steps = profileSteps({ name: store?.display_name, storeSlug: store?.store_slug, payout: !!payout, products: Math.max(products, store?.items.length ?? 0) });
   const pct = profilePct(steps);
   return (
     <View style={s.card}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-        <View style={s.badge}><Icon name="rocket-outline" size={20} color="#fff" /></View>
+        {store ? <StoreAvatar store={store} size={40} editable onChange={setStore} onError={setPhotoErr} />
+          : <View style={s.badge}><Icon name="rocket-outline" size={20} color="#fff" /></View>}
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={T.caption}>Arma un gran perfil</Text>
           <Text style={T.headline}>{pct === 100 ? '¡Tu perfil está completo!' : `Tu perfil está al ${pct}%`}</Text>
         </View>
       </View>
+      {photoErr ? <ErrorText>{photoErr}</ErrorText> : null}
       <Progress pct={pct} />
       <View style={s.steps}>
         {steps.map((st) => (

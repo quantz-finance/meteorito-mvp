@@ -24,7 +24,7 @@ export default function Tienda() {
 
   return (
     <Screen space="calm" scroll={false}>
-      <View style={st.rowBetween}><BackButton fallback="/" /></View>
+      <View style={st.rowBetween}><BackButton fallback="/comprar" /></View>
       {error ? <Notice icon="cloud-offline-outline" title="No pudimos abrir esta tienda" text={error} />
         : store === null ? <Notice icon="storefront-outline" title="Esta tienda no existe" text="Revisa el link o pídele al vendedor que te lo mande de nuevo." />
         : store === undefined ? (

@@ -6,7 +6,7 @@ import type { MeteoritoAuth } from './types';
 export { ratingLabel } from './rating';
 
 export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
-export interface Store { store_slug: string; display_name: string; rating_avg: number | null; rating_count: number; items: StoreItem[] }
+export interface Store { store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null; rating_avg: number | null; rating_count: number; items: StoreItem[] }
 
 export const storeLink = (slug: string) => `${PUBLIC_BASE_URL}/t/${slug}`;
 export const STORE_UNAVAILABLE = 'La tienda todavía no está disponible. Tus links de venta funcionan igual.';
@@ -25,7 +25,7 @@ export async function getStore(slug: string): Promise<Store | null> {
 export async function getMyStore(auth: MeteoritoAuth): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'me' }));
 }
-export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string }): Promise<Store> {
+export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null }): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'update', ...patch }));
 }
 /** Calificación del comprador (llave de invitado o sesión), una vez por pedido. */
@@ -35,7 +35,7 @@ export async function rateOrder(auth: Pick<MeteoritoAuth, 'getAuthToken'>, slug:
 }
 async function friendly<T>(f: () => Promise<T>): Promise<T> {
   try { return await f(); }
-  catch (e: any) { if (e?.code === 'store_unavailable' || e?.status === 503 || e?.status === 404 && e?.code === 'http_404') throw Object.assign(new Error(STORE_UNAVAILABLE), { code: 'store_unavailable' }); throw e; }
+  catch (e: any) { if (e?.code === 'avatar_unavailable' || e?.code === 'bad_avatar') throw e; if (e?.code === 'store_unavailable' || e?.status === 503 || e?.status === 404 && e?.code === 'http_404') throw Object.assign(new Error(STORE_UNAVAILABLE), { code: 'store_unavailable' }); throw e; }
 }
 
 const RATED = (slug: string) => `meteorito:rated:${slug}`;
@@ -46,4 +46,27 @@ export function rememberRated(slug: string, stars: number) { try { window.localS
 export async function setListingStatus(auth: MeteoritoAuth, slug: string, status: 'activa' | 'pausada' | 'archivada'): Promise<Store> {
   const { api } = await import('./api');
   return api<Store>(auth, '/api/store', { action: 'listing_set', slug, status });
+}
+
+export const AVATAR_ERROR = 'No pudimos cambiar la foto. Prueba con otra imagen o intenta de nuevo.';
+const AVATAR_SIDE = 512;
+/** Foto de la tienda: recorte cuadrado centrado (512 px) + compressPhoto + la misma subida firmada de las fotos de productos. */
+export async function uploadStoreAvatar(auth: MeteoritoAuth, p: { uri: string; width?: number; height?: number }): Promise<Store> {
+  const { compressPhoto, newDraftId, uploadCompressed } = await import('./photos');
+  let square: { uri: string; width: number; height: number };
+  try {
+    const { ImageManipulator, SaveFormat } = await import('expo-image-manipulator');
+    let w = p.width ?? 0, h = p.height ?? 0;
+    if (!w || !h) { const probe = await ImageManipulator.manipulate(p.uri).renderAsync(); w = probe.width; h = probe.height; }
+    const side = Math.min(w, h);
+    const ctx = ImageManipulator.manipulate(p.uri).crop({ originX: Math.floor((w - side) / 2), originY: Math.floor((h - side) / 2), width: side, height: side });
+    if (side > AVATAR_SIDE) ctx.resize({ width: AVATAR_SIDE, height: AVATAR_SIDE });
+    const img = await ctx.renderAsync();
+    const out = await img.saveAsync({ compress: 0.9, format: SaveFormat.JPEG });
+    square = { uri: out.uri, width: out.width, height: out.height };
+  } catch { throw new Error(AVATAR_ERROR); }
+  const blob = await compressPhoto(square).catch(() => { throw new Error(AVATAR_ERROR); });
+  const url = await uploadCompressed(auth, blob, newDraftId(), 0).catch(() => { throw new Error(AVATAR_ERROR); });
+  try { return await updateMyStore(auth, { avatar_url: url }); }
+  catch (e: any) { throw new Error(e?.code === 'avatar_unavailable' || e?.code === 'store_unavailable' ? 'Todavía no puedes poner foto a tu tienda. Intenta más tarde.' : AVATAR_ERROR); }
 }

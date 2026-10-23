@@ -16,7 +16,6 @@ const GREEN = '#3DDC97';
 type IconP = { color: string; fill: string };
 const P = { strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' };
 export const TAB_ICONS: Record<string, (p: IconP) => React.ReactElement> = {
-  index: ({ color, fill }) => <><Path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z" stroke={color} {...P} fill={fill} /></>,
   vender: ({ color, fill }) => <><Path d="M12.6 2.6a2 2 0 0 0-1.4-.6H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z" stroke={color} {...P} fill={fill} /><Circle cx="7.5" cy="7.5" r="1.4" fill={color} /></>,
   pedidos: ({ color, fill }) => <><Path d="M11 21.7a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7z" stroke={color} {...P} fill={fill} /><Path d="M3.3 7 12 12l8.7-5M12 22V12" stroke={color} {...P} /></>,
   comprar: ({ color, fill }) => <><Path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" stroke={color} {...P} fill={fill} /><Path d="M3 6h18M16 10a4 4 0 0 1-8 0" stroke={color} {...P} /></>,
@@ -51,7 +50,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             if (!focused && !ev.defaultPrevented) { haptic.tap(); navigation.navigate(route.name, route.params); }
           };
           return (
-            <Pressable key={route.key} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: focused }} accessibilityLabel={label}
+            <Pressable key={route.key} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: focused }} aria-selected={focused} accessibilityLabel={label}
               onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })} style={s.tab} hitSlop={4}>
               <TabIcon focused={focused} reduce={reduce}>{Ico?.({ color: focused ? C.white : C.textDim, fill: focused ? 'rgba(201,182,255,0.28)' : 'none' })}</TabIcon>
               <Text style={[s.label, { color: focused ? C.white : C.textDim }]} numberOfLines={1}>{label}</Text>

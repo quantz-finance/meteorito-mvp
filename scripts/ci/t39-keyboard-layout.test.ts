@@ -19,7 +19,7 @@ export async function run(t: T) {
   const ds = readFileSync(new URL('../../components/ds.tsx', import.meta.url), 'utf8');
   t.check('ds: Screen y Sheet usan el alto estable, no useWindowDimensions', !/useWindowDimensions\(\)/.test(ds) && /useStableWindow\(\)/.test(ds));
   t.check('ds: ScreenHeader compartido con fila de alto fijo', /export function ScreenHeader/.test(ds) && /header: \{[^}]*minHeight: TOUCH/.test(ds));
-  for (const f of ['app/(tabs)/index.tsx', 'app/(tabs)/vender.tsx', 'app/(tabs)/comprar.tsx', 'app/i/nueva.tsx', 'components/GridPager.tsx', 'components/Welcome.tsx']) {
+  for (const f of ['app/(tabs)/pedidos.tsx', 'app/(tabs)/vender.tsx', 'app/(tabs)/comprar.tsx', 'app/i/nueva.tsx', 'components/GridPager.tsx', 'components/Welcome.tsx']) {
     const src = readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');
     t.check(`${f}: sin useWindowDimensions (alto con teclado)`, !/useWindowDimensions/.test(src));
   }

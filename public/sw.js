@@ -32,12 +32,12 @@ self.addEventListener('push', (e) => {
   try { d = e.data ? e.data.json() : {}; } catch { d = { body: e.data && e.data.text() }; }
   const title = d.title || 'Meteorito';
   e.waitUntil(self.registration.showNotification(title, {
-    body: d.body || '', tag: d.tag, renotify: !!d.tag, icon: '/icon-192.png', badge: '/icon-192.png', data: { url: d.url || '/' },
+    body: d.body || '', tag: d.tag, renotify: !!d.tag, icon: '/icon-192.png', badge: '/icon-192.png', data: { url: d.url || '/pedidos' },
   }));
 });
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const url = new URL((e.notification.data && e.notification.data.url) || '/', self.location.origin).href;
+  const url = new URL((e.notification.data && e.notification.data.url) || '/pedidos', self.location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
     const same = cs.find((c) => c.url === url) || cs[0];
     if (same) return same.focus().then((c) => (c && c.url !== url && 'navigate' in c ? c.navigate(url) : c));
