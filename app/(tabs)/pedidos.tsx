@@ -74,7 +74,7 @@ export default function Pedidos() {
   const open = orders?.find((o) => o.slug === openSlug) ?? null;
 
   return (
-    <Screen title="Mis pedidos" subtitle={short ? undefined : 'El estado de tu dinero, siempre a la vista.'} scroll={false}
+    <Screen title="Home" subtitle={short ? undefined : 'El estado de tu dinero, siempre a la vista.'} scroll={false}
       right={<>
         <IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />
         <IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />

@@ -1,5 +1,5 @@
 // Compat: estilos y Button heredados, ahora sobre el design system (constants/theme + components/ds).
-import { StyleSheet, type PressableProps } from 'react-native';
+import { Platform, StyleSheet, type PressableProps } from 'react-native';
 import { Fonts } from '@/constants/Colors';
 import { C, R, S, TOUCH } from '@/constants/theme';
 import { PrimaryButton } from './ds';
@@ -9,7 +9,7 @@ export function Button({ title, variant = 'primary', ...p }: Omit<PressableProps
 }
 
 export const ui = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.bg },
+  screen: { flex: 1, backgroundColor: Platform.OS === 'web' ? 'transparent' : C.bg },
   content: { padding: S.md, gap: S.md, paddingBottom: S.xxxl },
   h1: { fontFamily: Fonts.black, fontSize: 24, color: C.text },
   label: { fontFamily: Fonts.bold, fontSize: 12, color: C.textDim, textTransform: 'uppercase', letterSpacing: 0.6 },

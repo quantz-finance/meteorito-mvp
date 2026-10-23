@@ -2,6 +2,7 @@ import { ScrollViewStyleReset } from 'expo-router/html';
 import { MOTION_CSS } from '@/constants/motion';
 import type { ReactNode } from 'react';
 import { SPLASH_IMG } from '@/constants/splashImages';
+import { UNIVERSE_HTML, universeCss } from '@/constants/universe';
 
 const SUPABASE_ORIGIN = (() => { try { return new URL(process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').origin; } catch { return ''; } })();
 // Splash de arranque: la mascota con su estela (mismas capas y geometría que LivelyMascot en 140 px), pintada
@@ -12,6 +13,12 @@ const APP_IMG = [
   require('../assets/images/space/mascot.webp'), require('../assets/images/space/trail-f1.webp'),
   require('../assets/images/space/trail-f2.webp'), require('../assets/images/space/trail-f3.webp'),
 ].map(assetUrl).filter(Boolean);
+// Universo animado de fondo (fijo, fuera de React): ver constants/universe.ts.
+const UNIVERSE_CSS = universeCss({
+  far: assetUrl(require('../assets/images/space/stars-far.webp')),
+  near: assetUrl(require('../assets/images/space/stars-near.webp')),
+  nebula: assetUrl(require('../assets/images/space/nebula.webp')),
+});
 const SPLASH_CSS = '#boot-splash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:#1A0B3D;transition:opacity .35s cubic-bezier(.22,1,.36,1),transform .35s cubic-bezier(.22,1,.36,1)}'
   + '#boot-splash.bs-out{opacity:0;transform:scale(1.04);pointer-events:none}'
   + '.bs-stage{position:relative;width:140px;height:132px}'
@@ -57,10 +64,11 @@ export default function Root({ children }: { children: ReactNode }) {
         {STARTUP.map(([w, h, r]) => <link key={w} rel="apple-touch-startup-image" href={`/splash/startup-${w}x${h}.png`}
           media={`(device-width: ${w / r}px) and (device-height: ${h / r}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait)`} />)}
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body{height:100%;height:100dvh;}#root{height:100%;height:var(--app-h,100dvh);}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS + MOTION_CSS }} />
+        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body{height:100%;height:100dvh;}#root{height:100%;height:var(--app-h,100dvh);}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS + MOTION_CSS + UNIVERSE_CSS }} />
       </head>
       <body>
         {/* Splash inline: pinta en el primer frame (antes del JS) y la app lo desvanece al montar. */}
+        <div id="u" aria-hidden="true" data-testid="universe" dangerouslySetInnerHTML={{ __html: UNIVERSE_HTML }} />
         <div id="boot-splash" aria-label="Cargando Meteorito" role="img" dangerouslySetInnerHTML={{ __html: SPLASH_HTML }} />
         <script dangerouslySetInnerHTML={{ __html: VIS_JS }} />
         {children}

@@ -4,7 +4,7 @@ import { open, seed, expectNoScroll, expectInputs16, expectTitleAt16, BANNED, VO
 const SCREENS: { path: string; role: 'seller' | 'buyer'; title?: string }[] = [
   { path: '/', role: 'seller' },
   { path: '/vender', role: 'seller', title: 'Vender' },
-  { path: '/pedidos', role: 'seller', title: 'Mis pedidos' },
+  { path: '/pedidos', role: 'seller', title: 'Home' },
   { path: '/comprar', role: 'buyer' },
   { path: '/mi-tienda', role: 'seller', title: 'Mi tienda' },
   { path: '/i/nueva', role: 'buyer', title: 'Invitar a un vendedor' },
@@ -38,7 +38,7 @@ test.describe('Layout y copy', () => {
   });
   test('LAY el título no se mueve entre pestañas', async ({ page }) => {
     const ys: number[] = [];
-    for (const [p, t] of [['/vender', 'Vender'], ['/pedidos', 'Mis pedidos'], ['/mi-tienda', 'Mi tienda']] as const) {
+    for (const [p, t] of [['/vender', 'Vender'], ['/pedidos', 'Home'], ['/mi-tienda', 'Mi tienda']] as const) {
       await open(page, p, 'seller'); await page.waitForTimeout(400);
       ys.push(Math.round((await page.getByText(t, { exact: true }).first().boundingBox())!.y));
     }

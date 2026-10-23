@@ -333,7 +333,7 @@ export const ErrorText = ({ children }: { children: ReactNode }) =>
   <View style={st.errorBox}><Icon name="alert-circle" size={18} color={C.orange} /><Text style={[T.footnote, { color: C.orange, flex: 1 }]}>{children}</Text></View>;
 
 export const st = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.bg },
+  screen: { flex: 1, backgroundColor: WEB ? 'transparent' : C.bg }, // web: se ve el universo fijo (constants/universe.ts)
   content: { paddingHorizontal: S.md, paddingBottom: S.xxxl, gap: S.lg, width: '100%', maxWidth: 560, alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, minHeight: TOUCH },
   headerTitle: { flex: 1, paddingTop: (TOUCH - 34) / 2 },

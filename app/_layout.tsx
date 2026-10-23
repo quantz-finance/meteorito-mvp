@@ -49,7 +49,8 @@ const screenName = (p: string) => p.replace(/^\/p\/[^/]+/, '/p/:slug').replace(/
 
 const theme = {
   ...DarkTheme,
-  colors: { ...DarkTheme.colors, background: Brand.purpleDark, card: Brand.purpleMid, primary: Brand.lilac, text: Brand.white, border: Brand.purpleMid },
+  colors: { ...DarkTheme.colors, background: Platform.OS === 'web' ? 'transparent' : Brand.purpleDark, // web: universo fijo detrás
+    card: Brand.purpleMid, primary: Brand.lilac, text: Brand.white, border: Brand.purpleMid },
 };
 
 export default function RootLayout() {

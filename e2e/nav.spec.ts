@@ -1,13 +1,13 @@
 // Navegación de 3 pestañas (Vender, Comprar, Pedidos) + foto de la tienda. Proyectos: iPhone SE, iPhone 13, Pixel 7 (demo).
 import { expect, test } from '@playwright/test';
-import { expectNoScroll, open, PHOTO } from './helpers';
+import { expectNoScroll, open, PHOTO, settle } from './helpers';
 
 test.describe('Navegación', () => {
-  test('NAV-01 la barra tiene exactamente Vender, Comprar, Pedidos (en ese orden)', async ({ page }) => {
+  test('NAV-01 la barra tiene exactamente Vender, Comprar, Home (en ese orden)', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     const tabs = page.getByRole('tab');
     await expect(tabs).toHaveCount(3);
-    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Vender', 'Comprar', 'Pedidos']);
+    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Vender', 'Comprar', 'Home']);
     await expect(page.getByRole('tab', { name: 'Inicio' })).toHaveCount(0);
   });
 
@@ -21,14 +21,16 @@ test.describe('Navegación', () => {
     expect(manifest.start_url).toBe('/vender');
   });
 
-  test('NAV-03 Pedidos: Tus ventas + Mi cuenta junto a Actualizar, sin scroll', async ({ page }) => {
+  test('NAV-03 Home: Tus ventas + Mi cuenta junto a Actualizar, sin scroll', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     await page.evaluate(() => (window as any).__meteoritoDemo.seed('fondeado', { title: 'Bici', price_crc: 150000 }));
     await open(page, '/pedidos', 'seller');
     await expect(page.getByText('Tus ventas', { exact: true })).toBeVisible();
     await expect(page.getByLabel('En curso: 1')).toBeVisible();
-    const acct = await page.getByRole('button', { name: 'Mi cuenta' }).boundingBox();
-    const refresh = await page.getByRole('button', { name: 'Actualizar' }).boundingBox();
+    await settle(page); // las dos medidas en el mismo cuadro, ya sin la animación de entrada
+    const [acct, refresh] = await page.evaluate(() => ['Mi cuenta', 'Actualizar'].map((l) => {
+      const r = document.querySelector(`[aria-label="${l}"]`)!.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height };
+    }));
     expect(acct && refresh).toBeTruthy();
     expect(Math.abs(acct!.y - refresh!.y)).toBeLessThanOrEqual(1); // misma fila
     expect(Math.abs(acct!.width - refresh!.width)).toBeLessThanOrEqual(1); // mismo tamaño
