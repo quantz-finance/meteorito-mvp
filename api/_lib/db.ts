@@ -24,9 +24,14 @@ export async function orderBySlug(slug: unknown): Promise<any> {
 }
 /** Update condicionado al status actual (evita carreras). */
 export async function advance(id: string, from: string, patch: Record<string, unknown>) {
-  const { data, error } = await db().from('orders').update(patch).eq('id', id).eq('status', from).select('id');
+  const { data, error } = await db().from('orders').update(patch).eq('id', id).eq('status', from).select('id, slug, status, seller_user_id, buyer_user_id, brand, model');
   if (error) throw error;
   if (!data?.length) throw new HttpError(409, `el pedido ya no está en ${from}`);
+  // Aviso push a las dos partes (pagado, enviado, entregado, liberado, disputa…). Best-effort, sin VAPID no hace nada.
+  if (patch.status && patch.status !== from) {
+    const { notifyOrder } = await import('./push');
+    await notifyOrder(data[0] as any);
+  }
 }
 /** Bitácora best-effort: nunca debe tapar el resultado real (p. ej. un release rechazado). */
 export async function logEvent(order_id: string, kind: string, detail: Record<string, unknown> = {}) {

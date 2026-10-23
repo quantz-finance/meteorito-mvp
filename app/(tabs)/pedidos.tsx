@@ -17,6 +17,8 @@ import { keepIfSame, needsPolling } from '@/lib/refresh';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { Freshness } from '@/components/Freshness';
 import { useStamp } from '@/lib/freshness';
+import { lazy, Suspense } from 'react';
+const PushCard = lazy(() => import('@/components/PushCard')); // diferido
 
 const NEXT_HINT: Record<string, string> = {
   creado: 'Comparte el link. Cuando el comprador pague, te avisamos acá.',
@@ -69,6 +71,7 @@ export default function Pedidos() {
       <View style={{ flex: 1, gap: S.sm }}>
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED ? <OrphanWalletCard /> : error ? <ErrorText>{error}</ErrorText> : null}
+      {orders !== null && <Suspense fallback={null}><PushCard role="seller" /></Suspense>}
       {orders && orders.length > 0 && <Freshness stamp={stamp} live={needsPolling(orders)} />}
       {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         : orders.length === 0 ? (

@@ -1,6 +1,7 @@
 // Componentes de UI estilo iOS fintech. Solo presentación: nada de lógica de negocio.
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Haptics from 'expo-haptics';
+import { useHoldUpdate } from '@/lib/updater';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator, Animated, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View,
@@ -158,6 +159,7 @@ export function SkeletonCard() {
 
 /* ---------- Bottom sheet ---------- */
 export function Sheet({ visible, onClose, title, children, footer }: { visible: boolean; onClose: () => void; title?: string; children: ReactNode; footer?: ReactNode }) {
+  useHoldUpdate(visible); // con una hoja abierta (formulario, pago, disputa) la app no se recarga por actualización
   const insets = useSafeAreaInsets();
   // La hoja nunca supera la pantalla (iPhone SE 568 px): título y botón cerrar siempre visibles, el contenido hace scroll.
   const { height } = useWindowDimensions();

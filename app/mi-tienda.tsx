@@ -1,6 +1,6 @@
 // Mi tienda (vendedor con sesión): ver la tienda, copiar o compartir el link y cambiar nombre o usuario. Sin scroll.
 import { router } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { BackButton } from '@/components/BackButton';
 import { Card, ErrorText, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, st, TestnetPill, toast } from '@/components/ds';
@@ -11,6 +11,7 @@ import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { getMyStore, storeLink, updateMyStore, type Store } from '@/lib/store';
 import { userMessage } from '@/lib/cavosSession';
+const PayoutEntry = lazy(() => import('@/components/Payout').then((m) => ({ default: m.PayoutEntry }))); // diferido
 
 export default function MiTienda() {
   const auth = useAuth();
@@ -60,6 +61,7 @@ export default function MiTienda() {
           <IconButton icon="create-outline" label="Editar nombre o usuario" onPress={() => { setSlug(store.store_slug); setName(store.display_name); setSaveErr(null); setEditing(true); }} />
         </View>
         <ShareLink kind="store" link={storeLink(store.store_slug)} message="Mira lo que vendo en mi tienda de Meteorito:" />
+        <Suspense fallback={<Skeleton h={56} r={R.md} />}><PayoutEntry /></Suspense>
         <Text style={T.caption}>Productos disponibles ({store.items.length})</Text>
         <StoreItems store={store} minCellW={100} minCellH={140} empty="Todavía no tienes productos disponibles. Crea un link y aparece aquí." />
       </View>}

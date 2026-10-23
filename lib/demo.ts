@@ -18,6 +18,7 @@ export function demoEnabled(flag: string | undefined, host?: string | null): boo
 // Expo inlinea EXPO_PUBLIC_* solo con acceso estático process.env.X.
 export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeof window !== 'undefined' ? window.location?.hostname : null);
 
+import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe } from '../api/_lib/payout'; // pura y chica (~1 KB)
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
 
@@ -29,7 +30,7 @@ export interface DemoOrder {
   checks_summary: { id: string; label: string; blocksRelease: boolean; ok: boolean }[]; created_at: string;
   seller_address: string; pin: string | null; pinShown: boolean; shipped_tx: string | null; evidence: unknown; dispute: unknown;
 }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; store?: { slug: string; name: string }; ratings?: Record<string, number> }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; store?: { slug: string; name: string }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
 const RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510);
@@ -177,7 +178,16 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       st.ratings ??= {}; if (st.ratings[o.slug]) throw err(409, 'already_rated', 'Ya calificaste este pedido.');
       st.ratings[o.slug] = stars; emit(); return { rated: true, stars };
     }
+    if (body.action === 'push_subscribe' || body.action === 'push_unsubscribe') return { ok: true };
     need('seller');
+    if (body.action === 'payout_get') return { payout: st.payout ?? null };
+    if (body.action === 'payout_set') {
+      const e = crIbanError(body.iban); if (e) throw err(400, 'bad_iban', e);
+      const holder = cleanHolder(body.holder_name); if (holder.length < 3) throw err(400, 'bad_holder', 'Escribe el nombre del titular como aparece en el banco.');
+      const sp = normalizeSinpe(body.sinpe_phone); if (sp === 'invalid') throw err(400, 'bad_sinpe', 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).');
+      st.payout = { iban_last4: normalizeIban(body.iban).slice(-4), holder_name: holder, sinpe_last4: sp ? sp.slice(-4) : null, updated_at: now() }; emit();
+      return { payout: st.payout };
+    }
     st.store ??= { slug: 'valeria', name: 'Valeria' };
     if (body.action === 'update') {
       if (body.store_slug != null) { const s2 = String(body.store_slug).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, ''); if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(s2)) throw err(400, 'bad_store_slug', 'Usa de 3 a 30 letras o números (sin espacios).'); st.store.slug = s2; }
