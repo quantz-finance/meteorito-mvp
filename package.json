@@ -61,7 +61,8 @@
     "check:cjs": "node scripts/ci/check-cjs.mjs",
     "demo:build": "node scripts/demo/build.mjs",
     "demo:serve": "node scripts/demo/serve.mjs dist-demo 8081",
-    "demo:record": "tsx scripts/demo/record.ts"
+    "demo:record": "tsx scripts/demo/record.ts",
+    "test:e2e:prod": "playwright test -c playwright.prod.config.ts"
   },
   "private": true,
   "engines": {
