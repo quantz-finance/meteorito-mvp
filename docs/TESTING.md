@@ -8,10 +8,11 @@ Regla: **ningún bug se arregla sin un test que primero falle**. Ningún feature
 |---|---|---|---|
 | Unit + handlers | `TESTNET=skip npm run test:ci` | Lógica pura y handlers reales de `api/*` con base falsa (`scripts/ci/fakedb.ts`) y JWT de prueba (`scripts/ci/jwt.ts`) | No |
 | On-chain | `npm run test:ci` (con `.ci-secrets.env` o secretos de GitHub) | Escrow real en Stellar **testnet** (fondeo, release, disputa, montos) | Testnet. Se salta con `TESTNET=skip` |
-| E2E (Playwright) | `npm run test:e2e` | La app web real (build en modo demo) en WebKit iPhone SE (375×667), WebKit iPhone 13 (390×844) y Chromium (Pixel 7), más el contrato del API | No |
+| E2E (Playwright) | `npm run test:e2e` | La app web real (build en modo demo) en WebKit iPhone SE (375×667), WebKit iPhone 13 (390×844) y Chromium (Pixel 7); el build real contra un API simulado (`mock-*`); y el contrato del API | No |
+| Smoke de producción | `npm run test:e2e:prod` (`PROD_BUY=1` para la compra) | https://pago.meteorito.app: health, splash, `/p/` y `/t/` públicos, sin scroll, `seller_orders` denegado con anon key, `/api/store` sin token → 401; con `PROD_BUY=1`, compra de invitado con "Ya pagué" (SINPE simulado, escrow en testnet) | Producción (testnet). Sin secretos |
 
 Atajos:
-- `npm run test:e2e:fast`: corre Playwright sin reconstruir `dist-demo` (úsalo solo si no cambiaste la app).
+- `npm run test:e2e:fast`: corre Playwright sin reconstruir `dist-demo` ni `dist-e2e` (úsalo solo si no cambiaste la app).
 - `npm run test:all`: typecheck + check:cjs + unit + E2E. Córrelo antes de abrir un PR.
 - `npx playwright test --project=webkit-iphone-se -g "ESC-01"`: un caso en un perfil.
 - `npx playwright show-report`: reporte HTML con traza y captura de cada falla.
@@ -25,13 +26,18 @@ En CI: `.github/workflows/ci.yml` (typecheck, export web, check:cjs, unit + test
 - `buyer-escrow.spec.ts` (COM-*, ESC-*, DIS-*): comprador sin cuenta, "Ya pagué", recarga a mitad del pago, ciclo completo con PIN, PIN incorrecto, confirmación del comprador, disputa.
 - `invite.spec.ts` (INV-*): `/i/nueva` y `/i/<código>`.
 - `layout.spec.ts` (LAY-*): sin scroll, inputs ≥16 px, título en 16,16, título fijo entre pestañas, copy permitido (sin saldo/wallet, sin "de prueba").
+- `flows.spec.ts` (PER-*, INV-05..07, PIN-*, ESC-04/05, DIS-05/06, CAL-*, PSH-02): productos permanentes con 2 compradores, pausa/archivo, invitación completa, PIN bloqueado, liberación automática, resolución de disputas, calificaciones.
+- `mock-guest.spec.ts` + `mock.ts` (MCK-*): build **real** (no demo) servido por `scripts/e2e/mock-server.mjs` (puerto 8084) con API y Supabase simulados. Cubre lo que necesita APIs reales del navegador: push (Notification/PushManager simulados), actualización del service worker, sin conexión, doble toque, botón atrás, error 500 y reintento, liberación automática por cron, PIN bloqueado, resoluciones y calificación. Control: `POST /__mock/reset|patch|fail`, `GET /__mock/state`.
+- `prod/smoke.spec.ts` (PROD-*): smoke de producción (config aparte: `playwright.prod.config.ts`). La compra (PROD-07) usa una llave de invitado fija `sha256("meteorito-e2e-prod-smoke")` para marcar los pedidos de prueba y anota los slugs en `e2e-prod-orders.txt` (o `PROD_ORDERS_LOG`).
 - `api-contract.spec.ts` (API-*): proyecto `api`, sin navegador. Handlers reales: 401 sin sesión, 405, ownership, invitado por `X-Guest-Key`, PIN bloqueado, cron, invitaciones, productos permanentes.
 
 Los IDs (VEN-01, ESC-01…) son los mismos del plan de pruebas (página "Plan de pruebas"): al agregar un caso, usa el siguiente ID y márcalo ahí.
 
 ### Modo demo (cómo el E2E evita Cavos y la red)
-`npm run demo:build` exporta la web con `EXPO_PUBLIC_DEMO_MODE=1` a `dist-demo/`. En ese modo no hay login real ni llamadas al backend: `lib/demo.ts` simula los endpoints con la misma forma de respuesta y guarda el estado en `sessionStorage`. Parámetros de URL: `role=seller|buyer`, `demo_reset=1`, `badge=0`. `window.__meteoritoDemo.seed('creado'|'fondeado'|'enviado')` deja un pedido en ese estado.
-**El demo no cubre**: invitaciones, productos permanentes, push, passkeys ni el SINPE real. Eso se prueba en `api-contract.spec.ts`, en `scripts/ci/t27`, `t38` y `t41`, y a mano en iPhone (ver el plan).
+`npm run demo:build` exporta la web con `EXPO_PUBLIC_DEMO_MODE=1` a `dist-demo/`. En ese modo no hay login real ni llamadas al backend: `lib/demo.ts` simula los endpoints con la misma forma de respuesta y guarda el estado en `sessionStorage`. El demo imita producción: los links nuevos son productos permanentes (cada compra crea su propio pedido hijo), con invitaciones, pausa/archivo, PIN bloqueado a los 3 intentos y liberación automática a los 10 min.
+Parámetros de URL: `role=seller|buyer`, `buyer=<id>` (identidad del comprador invitado; por defecto `A`), `demo_reset=1`, `badge=0`.
+`window.__meteoritoDemo`: `seed('creado'|'fondeado'|'enviado', {single?})`, `setBuyer(id)`, `advance(ms)` (adelanta el reloj simulado), `cron()` (libera los vencidos), `resolve(slug, pctComprador)` (resuelve una disputa), `state()`.
+**Solo a mano en iPhone**: passkey/Face ID real, entrega real de push en iOS, teclado de iOS y splash en frío.
 
 ## El ciclo TDD
 
@@ -51,5 +57,5 @@ Los IDs (VEN-01, ESC-01…) son los mismos del plan de pruebas (página "Plan de
 - Migraciones: solo aditivas; nunca `DROP TABLE` ni `DROP COLUMN` (t41 lo revisa en la 013).
 
 ### Datos y dinero
-- Nunca uses producción para tests automáticos. El E2E corre contra `dist-demo` local; los handlers, contra `fakeDb`.
+- El E2E corre contra `dist-demo` y `dist-e2e` locales; los handlers, contra `fakeDb`. El único test contra producción es el smoke (`test:e2e:prod`): lectura, más una compra de invitado opcional en testnet. Nunca borra datos.
 - On-chain solo en **testnet**, con wallets de CI dedicadas (`.ci-secrets.env`, gitignored).

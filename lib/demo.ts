@@ -29,10 +29,16 @@ export interface DemoOrder {
   funded_at?: string | null; shipped_at?: string | null; delivered_at?: string | null; released_at?: string | null; disputed_at?: string | null;
   checks_summary: { id: string; label: string; blocksRelease: boolean; ok: boolean }[]; created_at: string;
   seller_address: string; pin: string | null; pinShown: boolean; shipped_tx: string | null; evidence: unknown; dispute: unknown;
+  // Igual que producción (012/013): producto permanente vs pedido de un comprador, comprador invitado, PIN, resolución.
+  kind?: 'single' | 'listing'; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada'; stock?: number | null;
+  buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; store?: { slug: string; name: string }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
+/** Igual que producción (/api/health -> autoReleaseMinutes). */
+export const DEMO_AUTO_RELEASE_MINUTES = 10;
 const RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510);
 const STORE_KEY = 'meteorito:demo:v1';
 const START_BALANCE_USDC = 120;
@@ -73,6 +79,7 @@ function init(): DemoState {
       const q = new URLSearchParams(window.location.search);
       if (q.get('demo_reset') === '1') st = fresh();
       const role = q.get('role'); if (role === 'seller' || role === 'buyer') st.role = role;
+      const buyer = q.get('buyer'); if (buyer && /^[A-Za-z0-9]{1,8}$/.test(buyer)) st.buyer = buyer;
       const badge = q.get('badge'); if (badge === '0' || badge === 'false') st.badge = false; else if (badge === '1' || badge === 'true') st.badge = true;
     } catch { /* ignorar */ }
   }
@@ -92,6 +99,10 @@ export function useDemoState(): { role: DemoRole; badge: boolean } {
   return snap;
 }
 
+/** Identidad del comprador invitado en este navegador (= guest:<hash de su llave> en producción). */
+const me = () => 'guest:' + (S().buyer ?? 'A');
+const nowMs = () => Date.now() + (S().clock ?? 0); // reloj simulable (liberación automática)
+const iso = (ms = nowMs()) => new Date(ms).toISOString();
 const ident = (role: DemoRole) => (role === 'seller' ? DEMO_SELLER : DEMO_BUYER);
 
 export function useDemoAuth(): MeteoritoAuth {
@@ -110,7 +121,8 @@ export function useDemoAuth(): MeteoritoAuth {
 const err = (status: number, code: string, msg: string) => Object.assign(new Error(msg), { status, code });
 const mask = (id: string) => (id ? '••••' + id.slice(-4) : null);
 const pub = (o: DemoOrder) => {
-  const { seller_address, pin, pinShown, shipped_tx, evidence, dispute, ...rest } = o; void seller_address; void pin; void pinShown; void shipped_tx; void evidence; void dispute;
+  const { seller_address, pin, pinShown, shipped_tx, evidence, dispute, buyer, pin_attempts, invite_code, stock, ...rest } = o;
+  void seller_address; void pin; void pinShown; void shipped_tx; void evidence; void dispute; void buyer; void pin_attempts; void invite_code; void stock;
   return rest;
 };
 
@@ -121,11 +133,38 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   const get = (slug: string) => { const o = st.orders[slug]; if (!o) throw err(404, 'not_found', 'Pedido no encontrado'); return o; };
   const now = () => new Date().toISOString();
 
+  const newSlug = () => 'demo' + String(++st.seq).padStart(2, '0');
+  if (p === '/api/invites') {
+    st.invites ??= {};
+    if (body.op === 'create') {
+      const price = Number(body.price_crc); const title = String(body.title ?? '').trim();
+      if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw err(400, 'bad_price', 'precio inválido');
+      if (title.length < 3) throw err(400, 'bad_title', 'Escribe el nombre de lo que quieres comprar.');
+      const code = 'inv' + String(++st.seq).padStart(5, '0');
+      st.invites[code] = { code, category: 'otro', brand: '', model: title, title, photos: Array.isArray(body.photos) ? body.photos.slice(0, 4) : [], price_crc: price, note: body.note ? String(body.note) : null, status: 'abierta', order_slug: null, created_at: now(), buyer: me() };
+      emit(); return { code };
+    }
+    if (body.op === 'cancel') {
+      const inv = st.invites[String(body.code)]; if (!inv) throw err(404, 'not_found', 'invitación no existe');
+      if (inv.buyer !== me()) throw err(403, 'forbidden', 'no eres quien creó esta invitación');
+      if (inv.status !== 'abierta') throw err(409, 'invite_not_open', `la invitación ya está ${inv.status}`);
+      inv.status = 'cancelada'; emit(); return { ok: true };
+    }
+    throw err(400, 'bad_op', 'op inválida');
+  }
   if (p === '/api/orders/create') {
     need('seller');
-    const slug = 'demo' + String(++st.seq).padStart(2, '0');
     const price = Number(body.price_crc);
     if (!Number.isInteger(price) || price < 1000) throw err(400, 'bad_price', 'precio inválido');
+    let inv: DemoInvite | null = null;
+    if (body.invite) {
+      inv = st.invites?.[String(body.invite)] ?? null;
+      if (!inv) throw err(404, 'invite_not_found', 'La invitación no existe.');
+      if (inv.buyer === me()) throw err(400, 'self_invite', 'No puedes aceptar tu propia invitación.');
+      if (inv.status !== 'abierta') throw err(409, 'invite_not_open', 'Esta invitación ya no está abierta.');
+      if (inv.price_crc !== price) throw err(409, 'invite_price_mismatch', 'El precio tiene que ser el acordado en la invitación.');
+    }
+    const slug = newSlug();
     // Igual que el API: link en un paso con `title` (se guarda en model) o, por compatibilidad, marca + modelo.
     const title = typeof body.title === 'string' ? body.title.trim() : '';
     if (!title && !String(body.brand ?? '').trim() && !String(body.model ?? '').trim()) throw err(400, 'bad_title', 'Escribe el título de lo que vendes.');
@@ -135,17 +174,32 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       identifier_masked: body.identifier ? mask(String(body.identifier)) : null, amount_usdc: null, contract_id: null, funded_tx: null, released_tx: null, auto_release_at: null,
       checks_summary: Array.isArray(body.checks) ? body.checks.slice(0, 20) : [], created_at: now(),
       seller_address: DEMO_SELLER.address, pin: null, pinShown: false, shipped_tx: null, evidence: null, dispute: null,
+      // Como producción: link nuevo = producto permanente; de invitación (o single:true) = un solo uso, reservado.
+      kind: inv || body.single === true ? 'single' : 'listing', listing_status: 'activa', listing_slug: null, buyer: null, pin_attempts: 0, resolution: null, invite_code: inv?.code ?? null,
     };
-    emit(); return { slug };
+    if (inv) { inv.status = 'aceptada'; inv.order_slug = slug; }
+    emit(); return { slug, kind: st.orders[slug].kind };
   }
   if (p === '/api/escrow/pay') {
-    need('buyer'); const o = get(String(body.slug));
+    need('buyer'); let o = get(String(body.slug));
     if (body.step === 'start') {
+      if (o.invite_code) { const inv = st.invites?.[o.invite_code]; if (inv && inv.buyer !== me()) throw err(403, 'invite_reserved', 'Este link de pago está reservado para quien inició la compra. Abre el link desde el mismo navegador donde creaste la invitación.'); }
+      if (o.kind === 'listing') {
+        if (o.listing_status !== 'activa') throw err(409, 'listing_paused', 'El vendedor pausó este producto por ahora.');
+        if (o.stock === 0) throw err(409, 'listing_sold_out', 'Este producto se agotó.');
+        const parent = o;
+        const mine = Object.values(st.orders).find((c) => c.listing_slug === parent.slug && c.buyer === me() && (c.status === 'creado' || c.status === 'escrow_creado'));
+        if (mine) o = mine;
+        else { const cs = newSlug(); o = st.orders[cs] = { ...parent, slug: cs, kind: 'single', listing_slug: parent.slug, status: 'creado', buyer: me(), created_at: now(), contract_id: null, amount_usdc: null, pin: null, pinShown: false, pin_attempts: 0, resolution: null }; }
+      }
+      if (o.buyer && o.buyer !== me()) throw err(403, 'taken', 'este pedido ya tiene comprador');
       if (o.status !== 'creado' && o.status !== 'escrow_creado') throw err(409, 'bad_state', 'Este pedido ya no está disponible.');
+      o.buyer = me();
       o.status = 'escrow_creado'; o.amount_usdc = Math.round((o.price_crc / RATE) * 100) / 100; o.contract_id = demoContractId(o.slug);
-      emit(); return { contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` } };
+      emit(); return { slug: o.slug, contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` } };
     }
     if (body.step === 'confirm_sinpe') {
+      if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador de este pedido');
       if (o.status !== 'escrow_creado') throw err(409, 'bad_state', 'Primero inicia el pago.');
       o.status = 'fondeado'; o.funded_tx = demoTxHash('fund:' + o.slug); o.funded_at = now(); o.pin = DEMO_PIN; o.pinShown = true;
       emit(); return { funded: true, fundedTx: o.funded_tx, pin: DEMO_PIN }; // el PIN se devuelve una sola vez
@@ -155,24 +209,30 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   if (p === '/api/escrow/ship') {
     need('seller'); const o = get(String(body.slug));
     if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.');
-    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.evidence = body.evidence ?? null; emit();
+    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.auto_release_at = iso(nowMs() + DEMO_AUTO_RELEASE_MINUTES * 60_000); o.evidence = body.evidence ?? null; emit();
     return { shippedTx: o.shipped_tx, evidenceHash: demoTxHash('ev:' + o.slug) };
   }
   if (p === '/api/escrow/confirm') {
     const o = get(String(body.slug));
     if (o.status !== 'enviado') throw err(409, 'bad_state', 'Este pedido no está enviado.');
-    if (body.reason === 'pin') { need('seller'); if (String(body.pin) !== o.pin) throw err(400, 'bad_pin', 'PIN incorrecto'); }
-    else { need('buyer'); }
+    if (body.reason === 'pin') {
+      need('seller');
+      if ((o.pin_attempts ?? 0) >= 3) throw err(429, 'pin_locked', 'demasiados intentos de PIN');
+      if (String(body.pin) !== o.pin) { o.pin_attempts = (o.pin_attempts ?? 0) + 1; emit(); throw err(401, 'bad_pin', 'PIN incorrecto'); }
+    } else { need('buyer'); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador'); }
     o.delivered_at = now(); o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = now(); emit(); return { released: true, releasedTx: o.released_tx };
   }
   if (p === '/api/escrow/dispute') {
     need('buyer'); const o = get(String(body.slug));
+    if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo el comprador puede reportar un problema.');
     if (!['fondeado', 'enviado', 'entregado'].includes(o.status) || o.released_tx) throw err(409, 'bad_state', 'Ya no se puede reportar un problema.');
     o.status = 'en_disputa'; o.disputed_at = now(); o.dispute = { reason: body.reason, description: body.description ?? null, at: now() }; emit(); return { disputed: true };
   }
   if (p === '/api/store') {
     if (body.action === 'rate') {
-      need('buyer'); const o = get(String(body.slug)); const stars = Number(body.stars);
+      need('buyer'); const o = get(String(body.slug));
+      if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo el comprador puede calificar.');
+      const stars = Number(body.stars);
       if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw err(400, 'bad_stars', 'Elige de 1 a 5 estrellas.');
       if (!['entregado', 'liberado'].includes(o.status)) throw err(409, 'not_ratable', 'Puedes calificar cuando el pedido esté entregado.');
       st.ratings ??= {}; if (st.ratings[o.slug]) throw err(409, 'already_rated', 'Ya calificaste este pedido.');
@@ -189,51 +249,85 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       return { payout: st.payout };
     }
     st.store ??= { slug: 'valeria', name: 'Valeria' };
+    if (body.action === 'orders') return { orders: demoGetSellerOrders(DEMO_SELLER.address) };
+    if (body.action === 'listing_set') {
+      if (!['activa', 'pausada', 'archivada'].includes(body.status)) throw err(400, 'bad_status', 'Estado inválido.');
+      const o = st.orders[String(body.slug)];
+      if (!o || o.kind !== 'listing') throw err(404, 'not_listing', 'Este link es de un solo uso: no se puede pausar.');
+      o.listing_status = body.status; emit(); return demoGetStore(st.store.slug, true);
+    }
+    if (body.action === 'me') return demoGetStore(st.store.slug, true);
     if (body.action === 'update') {
       if (body.store_slug != null) { const s2 = String(body.store_slug).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, ''); if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(s2)) throw err(400, 'bad_store_slug', 'Usa de 3 a 30 letras o números (sin espacios).'); st.store.slug = s2; }
       if (body.display_name != null && String(body.display_name).trim()) st.store.name = String(body.display_name).trim().slice(0, 40);
       emit();
     }
-    return demoGetStore(st.store.slug);
+    return demoGetStore(st.store.slug, true);
   }
   throw err(404, 'demo_no_endpoint', `Modo demo: ${p} no está simulado`);
 }
 
 /** Tienda pública simulada (misma forma que GET /api/store). */
-export function demoGetStore(slug: string) {
+export function demoGetStore(slug: string, owner = false) {
   const st = S(); const store = st.store ?? { slug: 'valeria', name: 'Valeria' };
   if (slug !== store.slug) return null;
   const r = Object.values(st.ratings ?? {});
   return {
     store_slug: store.slug, display_name: store.name,
     rating_avg: r.length ? Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100) / 100 : null, rating_count: r.length,
-    items: Object.values(st.orders).filter((o) => o.status === 'creado').reverse()
-      .map((o) => ({ slug: o.slug, title: `${o.brand} ${o.model}`.trim() || 'Artículo', price_crc: o.price_crc, photo: o.photos[0] ?? null })),
+    // Igual que public_store_items: productos activos sin comprador (Mi tienda también ve los pausados).
+    items: Object.values(st.orders).filter((o) => o.status === 'creado' && !o.listing_slug && !o.invite_code
+        && (o.listing_status ?? 'activa') !== 'archivada' && (owner || (o.listing_status ?? 'activa') === 'activa')).reverse()
+      .map((o) => ({ slug: o.slug, title: `${o.brand} ${o.model}`.trim() || 'Artículo', price_crc: o.price_crc, photo: o.photos[0] ?? null, ...(owner ? { listing_status: (o.listing_status === 'pausada' ? 'pausada' : 'activa') as 'activa' | 'pausada' } : {}) })),
   };
 }
 export const demoGetPublicOrder = (slug: string) => { const o = S().orders[slug]; return o ? pub(o) : null; };
 export const demoGetSellerOrders = (addr: string) =>
-  Object.values(S().orders).filter((o) => o.seller_address === addr).sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((o) => ({ slug: o.slug, category: o.category, brand: o.brand, model: o.model, price_crc: o.price_crc, status: o.status, identifier_masked: o.identifier_masked, created_at: o.created_at }));
+  Object.values(S().orders).filter((o) => o.seller_address === addr && !(o.listing_slug && o.status === 'creado')).sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map((o) => ({ slug: o.slug, category: o.category, brand: o.brand, model: o.model, price_crc: o.price_crc, status: o.status, identifier_masked: o.identifier_masked, created_at: o.created_at, kind: o.kind, listing_slug: o.listing_slug ?? null, listing_status: o.listing_status }));
+/** Invitación pública simulada (misma forma que GET /api/invites). */
+export function demoGetInvite(code: string) {
+  const inv = S().invites?.[code]; if (!inv) return null;
+  const { buyer, ...rest } = inv; return { ...rest, mine: buyer === me() };
+}
+/** Cron simulado (api/escrow/cron.ts): libera 'enviado' vencidos, salvo PIN bloqueado (423 pin_locked en producción). */
+export function demoRunCron(): string[] {
+  const st = S(); const out: string[] = [];
+  for (const o of Object.values(st.orders)) {
+    if (o.status !== 'enviado' || !o.auto_release_at || new Date(o.auto_release_at).getTime() > nowMs()) continue;
+    if ((o.pin_attempts ?? 0) >= 3) continue;
+    o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = iso(); out.push(o.slug);
+  }
+  emit(); return out;
+}
+/** Resolución de disputa (la hace el equipo en producción): % devuelto al comprador. */
+export function demoResolve(slug: string, buyerPct: number) {
+  const o = S().orders[slug]; if (!o || o.status !== 'en_disputa') throw err(409, 'bad_state', 'no está en disputa');
+  o.status = 'resuelto'; o.resolution = { buyerPct }; o.released_at = iso(); emit();
+}
 export function demoBalances(addr: string) {
   const earned = Object.values(S().orders).filter((o) => o.seller_address === addr && o.status === 'liberado').reduce((a, o) => a + (o.amount_usdc ?? 0) * 0.997, 0);
   const usdc = (addr === DEMO_SELLER.address ? START_BALANCE_USDC + earned : 80).toFixed(7);
   return { funded: true, xlm: '9.5000000', usdc };
 }
 /** Pedido de ejemplo ya en un estado dado (para grabar solo un tramo del flujo). Devuelve el slug. */
-export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado', opts: { title?: string; price_crc?: number; photos?: string[] } = {}): Promise<string> {
+export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado', opts: { title?: string; price_crc?: number; photos?: string[]; single?: boolean } = {}): Promise<string> {
   const prev = S().role; const set = (r: DemoRole) => { S().role = r; };
   set('seller');
-  // Igual que la pantalla única de vender: solo título, precio y fotos.
-  const { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [] });
-  if (upTo !== 'creado') { set('buyer'); await demoApi('/api/escrow/pay', { slug, step: 'start' }); await demoApi('/api/escrow/pay', { slug, step: 'confirm_sinpe' }); }
+  // Igual que la pantalla única de vender: solo título, precio y fotos. Devuelve el producto (creado) o el pedido del comprador.
+  let { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [], ...(opts.single ? { single: true } : {}) });
+  if (upTo !== 'creado') { set('buyer'); slug = (await demoApi('/api/escrow/pay', { slug, step: 'start' })).slug; await demoApi('/api/escrow/pay', { slug, step: 'confirm_sinpe' }); }
   if (upTo === 'enviado') { set('seller'); await demoApi('/api/escrow/ship', { slug, evidence: { note: 'Entrega en persona, Escazú', at: new Date().toISOString() } }); }
   set(prev); emit(); return slug;
 }
 
 if (DEMO_ENABLED && hasWindow()) {
   // Utilidad para los guiones de grabación (Playwright). Solo existe con el modo demo activo.
-  (window as any).__meteoritoDemo = { setRole: setDemoRole, getRole: getDemoRole, reset: resetDemo, seed: demoSeed, setBadge: setDemoBadge, DEMO_PIN };
+  (window as any).__meteoritoDemo = {
+    setRole: setDemoRole, getRole: getDemoRole, reset: resetDemo, seed: demoSeed, setBadge: setDemoBadge, DEMO_PIN,
+    setBuyer: (b: string) => { S().buyer = b; emit(); }, advance: (ms: number) => { S().clock = (S().clock ?? 0) + ms; emit(); },
+    cron: demoRunCron, resolve: demoResolve, state: () => S(),
+  };
 }
 
 /** Slug del pedido más reciente (para saltar de vista vendedor a vista comprador). */

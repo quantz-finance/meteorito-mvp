@@ -55,7 +55,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p api",
     "test:ci": "tsx scripts/ci/run.ts",
-    "test:e2e": "npm run -s demo:build && playwright test",
+    "test:e2e": "npm run -s demo:build && node scripts/e2e/build-mock.mjs && playwright test",
     "test:e2e:fast": "playwright test",
     "test:all": "npm run -s typecheck && npm run -s check:cjs && TESTNET=skip npm run -s test:ci && npm run -s test:e2e",
     "check:cjs": "node scripts/ci/check-cjs.mjs",
