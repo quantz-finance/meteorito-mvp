@@ -1,7 +1,7 @@
 // POST /api/orders/create  (Bearer JWT Cavos + proof{action:'create', ref:'new'})
 // Reemplaza el insert directo desde el cliente. anon ya no inserta (migración 003).
 import { randomBytes } from 'node:crypto';
-import { trackServer } from '../_lib/analytics';
+import { trackServer, trackApiError } from '../_lib/analytics';
 import { db, json, fail } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
 import { walletState } from '../_lib/wallet';
@@ -25,7 +25,9 @@ export default async function handler(req: any, res: any) {
     const user = await requireCavosUser(req);
     const b = req.body ?? {};
     const seller = await requireAddressProof(b.proof, 'create', 'new');
-    await bindWalletIfFresh(user, seller);
+    const bind = await bindWalletIfFresh(user, seller);
+    // Otra dirección ligada a esta cuenta: no se bloquea aquí (relink explícito), pero queda el código para diagnosticar.
+    if (bind === 'other_wallet') await trackApiError('create', { code: 'wallet_other_bound', status: 200 });
     const category = b.category == null || b.category === '' ? DEFAULT_CATEGORY : b.category;
     if (!CATS.includes(category)) throw new HttpError(400, 'categoría inválida');
     // Título: `title` (pantalla única) o, por compatibilidad, marca + modelo.
@@ -75,5 +77,5 @@ export default async function handler(req: any, res: any) {
       if (error.code !== '23505') throw error;
     }
     throw new Error('no se pudo generar slug');
-  } catch (e) { return fail(res, e); }
+  } catch (e: any) { await trackApiError('create', e); return fail(res, e); }
 }

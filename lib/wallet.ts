@@ -4,32 +4,62 @@ import type { MeteoritoAuth } from './types';
 import { userMessage } from './cavosSession';
 import { fetchBalances } from './horizon';
 import { DEMO_ENABLED } from './demo';
+import { authStore } from './authStore';
 import { api, proof, ensureBound, __resetBindForTests as resetApiBind } from './api';
 export { relinkMessage, bindMessage } from './api';
 
 const coded = (code: string, msg: string) => Object.assign(new Error(msg), { code });
 
-/** Antes de pedir firmas a Cavos: la llave debe estar en este dispositivo. */
+/** La versión más reciente del puente Cavos (web): tras restaurar, el `auth` del handler queda viejo (su sesión no tiene llave). */
+export function freshAuth(auth: MeteoritoAuth): MeteoritoAuth { return authStore.get().bridged ?? auth; }
+const canSign = (a: MeteoritoAuth) => a.wallet?.state === 'ready' || a.wallet?.state === 'undeployed';
+
+/** Antes de pedir firmas a Cavos: la llave debe estar en este dispositivo. En un segundo dispositivo (needs-approval) NO se
+ *  intenta nada aquí: la passkey (WebAuthn) necesita un toque directo del usuario en iPhone, así que la UI muestra el paso
+ *  "Confirma que eres tú" (components/OrphanWallet.tsx → restoreDevice). */
 export async function assertDeviceCanSign(auth: MeteoritoAuth): Promise<void> {
   const w = auth.wallet;
   if (!w || w.state === 'ready' || w.state === 'undeployed') return;
   if (w.state === 'loading') throw coded('wallet_loading', 'wallet Cavos cargando');
-  // needs-approval: la llave de esta wallet no está aquí (logout borra la llave del vault Cavos).
-  if (w.hasPasskey) { await w.approveDevice(); throw coded('device_approved_retry', 'dispositivo aprobado con passkey; reintentar'); }
-  // Sin passkey: probar la vía de Cavos (recuperación social/enclave, si la cuenta la tiene). Si no hay respaldo, Cavos lanza
-  // "This wallet has no recovery set up..." y esa es la causa real: la llave solo vive en el navegador/dispositivo original.
-  if (w.authorize) {
-    try { await w.authorize(); if (auth.wallet?.state === 'ready') return; }
-    catch (e: any) { console.error('[wallet] authorizeDevice falló (causa real):', e?.message, e); throw Object.assign(coded('device_not_authorized', `Cavos: ${e?.message ?? 'dispositivo no autorizado'}`), { cause: e }); }
+  throw coded('device_needs_passkey', 'este dispositivo todavía no tiene la llave: confirmar con passkey');
+}
+
+/** Segundo (o N-ésimo) dispositivo: la cuenta Cavos (Stellar, DEK nativa) se abre aquí con la passkey del usuario; la
+ *  dirección es la misma en todos los dispositivos (se deriva de la misma DEK). Llamar desde un toque del usuario.
+ *  Devuelve el `auth` fresco ya listo para firmar. */
+export async function restoreDevice(auth: MeteoritoAuth, opts: { fresh?: (a: MeteoritoAuth) => MeteoritoAuth; timeoutMs?: number } = {}): Promise<MeteoritoAuth> {
+  const fresh = opts.fresh ?? freshAuth;
+  const w = auth.wallet;
+  if (!w || canSign(auth)) return auth;
+  try {
+    await w.approveDevice(); // Stellar DEK nativa: reconecta con { passkey: true } → el vault pide la passkey y descifra la DEK
+  } catch (e: any) {
+    const m = String(e?.name ?? '') + ' ' + String(e?.message ?? '');
+    const code = /NotAllowed|cancel|abort|timed? ?out/i.test(m) ? 'device_restore_cancelled' : 'device_restore_failed';
+    console.error('[wallet] restoreDevice', code, e?.name, e?.message);
+    throw Object.assign(coded(code, 'no se pudo abrir la cuenta en este dispositivo'), { cause: e });
   }
-  throw coded('device_not_authorized', 'kit/stellar: este dispositivo no es firmante de la wallet y no hay passkey/recuperación');
+  const until = Date.now() + (opts.timeoutMs ?? 15000);
+  for (;;) {
+    const a = fresh(auth);
+    if (canSign(a)) return a;
+    if (Date.now() > until) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  // La passkey respondió pero la cuenta sigue sin llave aquí: no existe respaldo con passkey para este correo.
+  if (w.authorize) {
+    try { await w.authorize(); const a = fresh(auth); if (canSign(a)) return a; } catch (e: any) { console.error('[wallet] authorizeDevice', e?.message); }
+  }
+  throw coded('device_restore_no_backup', 'la cuenta no tiene passkey de respaldo para abrirla aquí');
 }
 
 export async function ensureWalletReady(auth: MeteoritoAuth): Promise<void> {
   if (DEMO_ENABLED) return; // demo: wallet simulada, lista
+  // Primero la llave en ESTE dispositivo: aunque la cuenta ya esté activa on-chain (activada desde el dispositivo 1), aquí
+  // después hay que firmar (prueba de create). Antes se saltaba y el create fallaba en el dispositivo 2.
+  await assertDeviceCanSign(auth);
   // Ya lista on-chain (cuenta + trustline USDC): nada que hacer, sin llamar al API ni pedir firmas.
   if (auth.address) { const b = await fetchBalances(auth.address).catch(() => null); if (b?.funded && b.usdc !== null) return; }
-  await assertDeviceCanSign(auth);
   const p = await api<{ ready: boolean; unsignedXdr?: string }>(auth, '/api/wallet/activate', { step: 'prepare', proof: await proof(auth, 'wallet', 'activate') });
   if (p.ready) return;
   if (!p.unsignedXdr) throw new Error('No pudimos activar tu cuenta para recibir pagos. Intenta de nuevo.');
@@ -53,6 +83,7 @@ const tried = new Set<string>();
 export async function ensureSellerWalletOnLoad(auth: MeteoritoAuth, hasOrders: boolean): Promise<string | null> {
   if (!hasOrders || !auth.address || tried.has(auth.address)) return null;
   if (auth.wallet?.state === 'loading') return null; // reintenta cuando Cavos termine de cargar
+  if (auth.wallet?.state === 'needs-approval') return null; // segundo dispositivo: lo resuelve la tarjeta "Confirma que eres tú"
   tried.add(auth.address);
   try { await ensureWalletReady(auth); return null; }
   catch (e: any) {
@@ -63,6 +94,13 @@ export async function ensureSellerWalletOnLoad(auth: MeteoritoAuth, hasOrders: b
 }
 
 /** La cuenta (correo) ya tiene una billetera cuya llave no está en este navegador/dispositivo y no tiene respaldo. */
+/** Segundo dispositivo: paso guiado (tuteo, sin jerga). */
+export const DEVICE_STEP_TITLE = 'Confirma que eres tú';
+export const DEVICE_STEP = 'Entraste desde otro teléfono o navegador. Usa tu passkey (Face ID, Touch ID o el PIN de tu teléfono) para vender aquí también.';
+export const DEVICE_STEP_HELP = 'En iPhone tu passkey está en el Llavero de iCloud. Si la creaste en otro teléfono, elige "Otro dispositivo" y escanea el QR con ese teléfono.';
+export const DEVICE_STEP_CANCELLED = 'No se completó. Toca "Usar mi passkey" otra vez.';
+/** Necesita el paso de passkey (código propio o error del kit "not an authorized signer"). */
+export const needsDeviceStep = (e: any) => e?.code === 'device_needs_passkey' || (!e?.code && /not an? (authorized )?signer|needs? device approval/i.test(String(e?.message ?? '')));
 export const DEVICE_NOT_AUTHORIZED = 'Este correo se usó antes en otro teléfono o navegador y aquí no lo podemos abrir. Para vender, entra con otro correo.';
 export const WALLET_LOADING = 'Tu cuenta todavía se está preparando. Espera unos segundos e intenta de nuevo.';
 /** Cuenta Cavos cuya llave no está en este dispositivo y sin passkey para restaurarla (p. ej. wallet vieja creada en
@@ -75,9 +113,10 @@ export function walletErrorNotice(e: any): string {
   console.error('[wallet] error', e?.code ?? 'desconocido', e?.message, e?.cause?.message ?? '', e);
   if (e?.code === 'session_relogin_required') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
   if (e?.code === 'session_wallet_mismatch' || e?.code === 'session_expired') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión para continuar.';
-  if (e?.code === 'device_not_authorized' || ORPHAN_RE.test(String(e?.message ?? '')) || ORPHAN_RE.test(String(e?.cause?.message ?? ''))) return DEVICE_NOT_AUTHORIZED;
+  if (needsDeviceStep(e)) return DEVICE_STEP;
+  if (e?.code === 'device_restore_cancelled') return DEVICE_STEP_CANCELLED;
+  if (e?.code === 'device_not_authorized' || e?.code === 'device_restore_no_backup' || e?.code === 'device_restore_failed' || ORPHAN_RE.test(String(e?.message ?? '')) || ORPHAN_RE.test(String(e?.cause?.message ?? ''))) return DEVICE_NOT_AUTHORIZED;
   if (e?.code === 'wallet_loading') return WALLET_LOADING;
-  if (e?.code === 'device_approved_retry') return 'Listo, confirmamos este dispositivo. Toca el botón de nuevo para continuar.';
   return 'No pudimos preparar tu cuenta para recibir pagos. Intenta de nuevo en un momento.';
 }
 

@@ -1,7 +1,7 @@
 // (34) Vendedor nuevo (correo nuevo, dispositivo nuevo) activa su cuenta sin fallas; cuenta cargando no falla con error
 // genérico; correo con wallet huérfana (sin llave aquí ni passkey) -> aviso simple en tuteo + salida "otro correo". Sin red.
 import type { T } from './setup';
-import { DEVICE_NOT_AUTHORIZED, ensureWalletReady, isOrphanWallet, walletErrorNotice, WALLET_LOADING, __resetBindForTests } from '../../lib/wallet';
+import { DEVICE_NOT_AUTHORIZED, DEVICE_STEP, ensureWalletReady, isOrphanWallet, walletErrorNotice, WALLET_LOADING, __resetBindForTests } from '../../lib/wallet';
 import type { MeteoritoAuth, WalletInfo } from '../../lib/types';
 
 const b64 = (o: any) => Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -40,8 +40,8 @@ export async function run(t: T) {
     const orphan = mk({ state: 'needs-approval', hasPasskey: false, recoveryProtected: false }, calls);
     t.check('isOrphanWallet: needs-approval sin passkey', isOrphanWallet(orphan) && !isOrphanWallet(mk({ state: 'needs-approval', hasPasskey: true }, [])) && !isOrphanWallet(mk({ state: 'ready' }, [])));
     const e4 = await ensureWalletReady(orphan).then(() => null, (x) => x);
-    t.check('wallet huérfana -> device_not_authorized sin firmar ni API', e4?.code === 'device_not_authorized' && steps.length === 0 && !calls.some((c) => c.startsWith('sign')), `${e4?.code} ${calls}`);
-    t.check('aviso huérfana: corto, en tuteo, sin jerga (billetera/passkey/llave)', walletErrorNotice(e4) === DEVICE_NOT_AUTHORIZED && !/billetera|passkey|llave|wallet|respaldo/i.test(DEVICE_NOT_AUTHORIZED) && /entra con otro correo/i.test(DEVICE_NOT_AUTHORIZED) && DEVICE_NOT_AUTHORIZED.length < 140);
+    t.check('cuenta sin llave aquí -> paso passkey (device_needs_passkey) sin firmar ni API', e4?.code === 'device_needs_passkey' && steps.length === 0 && !calls.some((c) => c.startsWith('sign')), `${e4?.code} ${calls}`);
+    t.check('aviso: primero el paso passkey; huérfana corto, en tuteo, sin jerga', walletErrorNotice(e4) === DEVICE_STEP && !/billetera|passkey|llave|wallet|respaldo/i.test(DEVICE_NOT_AUTHORIZED) && /entra con otro correo/i.test(DEVICE_NOT_AUTHORIZED) && DEVICE_NOT_AUTHORIZED.length < 140);
     t.check('error del kit "no recovery set up" sin código -> aviso huérfana', walletErrorNotice(new Error('This wallet has no recovery set up for this device')) === DEVICE_NOT_AUTHORIZED);
   } finally { globalThis.fetch = realFetch; console.error = err; }
 }

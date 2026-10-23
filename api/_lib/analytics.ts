@@ -23,3 +23,19 @@ export async function trackServer(orderId: string, kind: string, detail: Record<
   try { c.capture({ distinctId: orderKey(orderId), event: `srv_${kind}`, properties }); await c.flush(); }
   catch (e: any) { console.warn('[analytics] falló', kind, e?.message); }
 }
+
+/** Código de error exacto de create/activate (sin sub, wallet, email ni mensaje crudo): diagnosticar fallas por dispositivo. */
+export function errorCode(e: any): string {
+  if (typeof e?.code === 'string' && /^[a-z0-9_]{2,40}$/.test(e.code)) return e.code;
+  const st = Number(e?.status);
+  return st ? `http_${st}` : 'internal';
+}
+export async function trackApiError(area: 'create' | 'activate', e: any, extra: Record<string, string | number | boolean> = {}) {
+  const code = errorCode(e);
+  const status = Number(e?.status) || 500;
+  console.error(`[${area}] error`, JSON.stringify({ code, status, ...extra }));
+  const c = client();
+  if (!c) return;
+  try { c.capture({ distinctId: `srv_${area}`, event: 'srv_api_error', properties: { $process_person_profile: false, network: 'testnet', source: 'server', area, code, status, ...extra } }); await c.flush(); }
+  catch (x: any) { console.warn('[analytics] falló', area, x?.message); }
+}

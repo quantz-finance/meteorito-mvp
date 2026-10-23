@@ -1,6 +1,7 @@
 // Vender: el link en UNA sola pantalla. Nombre del producto, precio en colones y fotos -> "Generar link".
 // El link aparece aquí mismo con Copiar y Compartir. Categoría, marca, modelo, estado e identificador ya no se piden.
-import { ensureWalletReady, isOrphanWallet, walletErrorNotice, WALLET_LOADING } from '@/lib/wallet';
+import { ensureWalletReady, freshAuth, needsDeviceStep, walletErrorNotice, WALLET_LOADING } from '@/lib/wallet';
+import type { MeteoritoAuth } from '@/lib/types';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
 import * as ImagePicker from 'expo-image-picker';
@@ -74,7 +75,8 @@ export default function Vender() {
     const t = setTimeout(() => { setWaitWallet(false); setBusy(false); setError(WALLET_LOADING); }, 20_000);
     return () => clearTimeout(t);
   }, [waitWallet, auth.wallet?.state]);
-  useEffect(() => { if (isOrphanWallet(auth)) setOrphan(true); }, [auth.wallet?.state, auth.wallet?.hasPasskey]);
+  // Segundo dispositivo (cuenta creada en otro): paso "Confirma que eres tú" con la passkey, antes de intentar publicar.
+  useEffect(() => { if (auth.wallet?.state === 'needs-approval') setOrphan(true); }, [auth.wallet?.state]);
   const priceNum = parsePrice(price);
   const photosBusy = photos.some((p) => p.status === 'processing');
   useEffect(() => { saveDraft({ owner: address, title, price }); }, [address, title, price]);
@@ -96,29 +98,30 @@ export default function Vender() {
   }
   const removePhoto = useCallback((key: string) => { haptic.tap(); setPhotos((ps) => ps.filter((p) => p.key !== key)); }, []);
 
-  async function submit() {
+  async function submit(restored?: MeteoritoAuth) {
+    const a = restored ?? freshAuth(auth);
     setError(null);
     const errs = validateListing({ title, price: priceNum, photos: photos.length, photosBusy });
     setErrors(errs);
     if (Object.keys(errs).length) { haptic.error(); return; }
     if (!address) return setError('Inicia sesión de nuevo.');
     if (!supabaseConfigured) return setError('Falta configurar Supabase (.env)');
-    if (isOrphanWallet(auth)) { setOrphan(true); haptic.error(); return; }
+    if (a.wallet?.state === 'needs-approval') { setOrphan(true); haptic.error(); track('create_failed', { code: 'device_needs_passkey', wallet_state: 'needs-approval', has_passkey: !!a.wallet.hasPasskey }); return; }
     // Cavos todavía cargando la cuenta (p. ej. justo después de entrar): esperar a que termine en vez de fallar.
-    if (auth.wallet?.state === 'loading') { setWaitWallet(true); setBusy(true); return; }
+    if (a.wallet?.state === 'loading') { setWaitWallet(true); setBusy(true); return; }
     track('sell_submit_tapped', { step: 0 });
     setBusy(true);
     try {
-      await ensureWalletReady(auth).catch((e) => { const msg = walletErrorNotice(e); if (e?.code === 'device_not_authorized' || isOrphanWallet(auth)) setOrphan(true); throw Object.assign(new Error(msg), { code: e?.code }); }); // primer link: activar la wallet
+      await ensureWalletReady(a).catch((e) => { const msg = walletErrorNotice(e); if (e?.code === 'device_not_authorized' || needsDeviceStep(e)) setOrphan(true); throw Object.assign(new Error(msg), { code: e?.code }); }); // primer link: activar la wallet
       const draftId = newDraftId();
       const urls: string[] = [];
       for (const [i, p] of photos.entries()) {
         setPhoto(p.key, { status: 'uploading' });
-        try { urls.push(p.blob ? await uploadCompressed(auth, p.blob, draftId, i) : await uploadPhoto(auth, p, draftId, i)); setPhoto(p.key, { status: 'done' }); }
+        try { urls.push(p.blob ? await uploadCompressed(a, p.blob, draftId, i) : await uploadPhoto(a, p, draftId, i)); setPhoto(p.key, { status: 'done' }); }
         catch (e) { setPhoto(p.key, { status: 'error' }); track('photo_upload_failed', { context: 'listing', index: i }); throw e; }
       }
       const t = title.trim();
-      const slug = await createOrder(auth, { title: t, price_crc: priceNum, photos: urls, ...(invite ? { invite: invite.code } : {}) });
+      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, ...(invite ? { invite: invite.code } : {}) });
       track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite });
       haptic.success();
       setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null });
@@ -126,7 +129,10 @@ export default function Vender() {
       if (inviteParam) router.setParams({ invite: undefined });
     } catch (e: any) {
       haptic.error(); trackError('create_listing', e);
-      if (e?.code !== 'device_not_authorized') setError(userMessage((e as Error).message));
+      // Código exacto (sin datos personales) para diagnosticar fallas de create/activate por dispositivo.
+      track('create_failed', { code: String(e?.code ?? 'unknown').slice(0, 40), wallet_state: freshAuth(auth).wallet?.state ?? 'none', has_passkey: !!freshAuth(auth).wallet?.hasPasskey });
+      if (needsDeviceStep(e)) setOrphan(true);
+      else if (e?.code !== 'device_not_authorized') setError(userMessage((e as Error).message));
     } finally { setBusy(false); }
   }
 
@@ -162,9 +168,9 @@ export default function Vender() {
 
   return (
     <Screen title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
-      footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={submit} />}>
+      footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={() => submit()} />}>
       <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
-      {orphan ? <OrphanWalletCard compact={short} /> : null}
+      {orphan ? <OrphanWalletCard compact={short} onRestored={(r) => { setOrphan(false); if (title.trim() && photos.length) submit(r); }} /> : null}
       {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {invite.brand} {invite.model} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
       <View style={{ gap: S.xs }}>

@@ -77,7 +77,7 @@ export default function Inicio() {
         {walletMsg && walletMsg !== DEVICE_NOT_AUTHORIZED ? <Text style={[T.footnote, { color: C.orange }]} numberOfLines={2}>{walletMsg}</Text> : null}
         <LivelyMascot size={short ? 72 : 96} style={s.mascot} parallax={-0.15} />
       </View></Reveal>
-      {walletMsg === DEVICE_NOT_AUTHORIZED ? <OrphanWalletCard compact /> : null}
+      {walletMsg === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : null}
       {/* 2 acciones grandes */}
       <Reveal i={1}><View style={s.grid}>
         {actions.map((a, i) => (

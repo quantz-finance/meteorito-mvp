@@ -20,12 +20,12 @@ export async function run(t: T) {
   try {
     let calls: string[] = [];
     const e1 = await ensureWalletReady(mk({ state: 'needs-approval' }, calls)).then(() => null, (e) => e);
-    t.check('needs-approval sin passkey -> device_not_authorized, sin firmar ni API', e1?.code === 'device_not_authorized' && calls.length === 0 && fetched === 0, `${e1?.code} ${calls}`);
+    t.check('needs-approval sin passkey -> paso passkey (device_needs_passkey), sin firmar ni API', e1?.code === 'device_needs_passkey' && calls.length === 0 && fetched === 0, `${e1?.code} ${calls}`);
     const n = walletErrorNotice(e1);
     t.check('aviso genérico (sin texto del kit ni código)', !/kit|signer|código|device/i.test(n), n);
     calls = [];
     const e2 = await ensureWalletReady(mk({ state: 'needs-approval', hasPasskey: true }, calls)).then(() => null, (e) => e);
-    t.check('needs-approval con passkey -> aprueba dispositivo y pide reintento', e2?.code === 'device_approved_retry' && calls.join() === 'approve', `${e2?.code} ${calls}`);
+    t.check('needs-approval con passkey -> no llama a la passkey sin toque del usuario (la UI la pide)', e2?.code === 'device_needs_passkey' && calls.length === 0, `${e2?.code} ${calls}`);
     calls = [];
     t.check('wallet cargando -> no intenta ni avisa', (await ensureSellerWalletOnLoad(mk({ state: 'loading' }, calls), true)) === null && calls.length === 0);
     // Logout: la kit logout() hace vault.forget (borra la llave). Sin respaldo NUNCA se llama.

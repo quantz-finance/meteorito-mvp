@@ -2,6 +2,7 @@
 // Deja la wallet Cavos del vendedor lista para recibir USDC (cuenta + trustline) con reservas patrocinadas por la platform.
 // prepare: devuelve XDR sin firmar (o ready). submit: valida forma exacta + firma del vendedor, firma la platform y envía.
 import { json, fail } from '../_lib/db';
+import { trackApiError } from '../_lib/analytics';
 import { env } from '../_lib/env';
 import { requireCavosUser, requireAddressProof, HttpError, issueSessionNonce, bindWalletIfFresh, requireBindProof } from '../_lib/auth';
 import { relinkWallet, cancelUnfundedListing } from '../_lib/relink';
@@ -36,5 +37,5 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { ready: (await walletState(address)) === 'ready', hash });
     }
     throw new HttpError(400, 'step inválido');
-  } catch (e: any) { console.error('[wallet/activate]', e?.code ?? 'error', e?.message); return fail(res, e); }
+  } catch (e: any) { await trackApiError('activate', e, { step: typeof req.body?.step === 'string' ? req.body.step.slice(0, 16) : 'none' }); return fail(res, e); }
 }

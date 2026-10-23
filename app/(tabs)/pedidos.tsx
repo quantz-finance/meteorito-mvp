@@ -70,7 +70,7 @@ export default function Pedidos() {
       right={<IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />}>
       <View style={{ flex: 1, gap: S.sm }}>
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
-      {error === DEVICE_NOT_AUTHORIZED ? <OrphanWalletCard /> : error ? <ErrorText>{error}</ErrorText> : null}
+      {error === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : error ? <ErrorText>{error}</ErrorText> : null}
       {orders !== null && <Suspense fallback={null}><PushCard role="seller" /></Suspense>}
       {orders && orders.length > 0 && <Freshness stamp={stamp} live={needsPolling(orders)} />}
       {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>

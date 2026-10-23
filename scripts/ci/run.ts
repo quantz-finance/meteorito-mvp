@@ -35,6 +35,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '34', name: 'Vendedor nuevo activa sin fallas; cuenta cargando; wallet huérfana con salida clara', file: './t34-wallet-new-seller.test.ts', onchain: false },
   { id: '35', name: 'Performance: fuente de iconos recortada completa, polling sin re-render, splash con mascota', file: './t35-perf-assets.test.ts', onchain: false },
   { id: '36', name: 'Cuenta IBAN (mod-97, enmascarada) + perfil + push por estado + actualización segura', file: './t36-iban-push.test.ts', onchain: false },
+  { id: '37', name: 'Misma cuenta en N dispositivos: passkey restaura y crea link con la misma dirección', file: './t37-multi-device.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },
