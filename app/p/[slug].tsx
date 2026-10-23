@@ -19,6 +19,8 @@ import { haptic } from '@/components/ds';
 import { rateOrder, ratedStars, rememberRated } from '@/lib/store';
 import { useStamp } from '@/lib/freshness';
 import { keepIfSame } from '@/lib/refresh';
+import { lazy, Suspense } from 'react';
+const PushCard = lazy(() => import('@/components/PushCard')); // diferido: solo tras pagar
 
 const HOW: { icon: IconName; title: string; text: string }[] = [
   { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu pago de prueba queda en custodia (escrow). El vendedor todavía no lo recibe.' },
@@ -138,6 +140,8 @@ export default function LinkDeVenta() {
           )}
 
           {RATABLE.includes(order.status) && isBuyerDevice(order.slug) ? <RateCard slug={order.slug} /> : null}
+          {['fondeado', 'enviado', 'en_disputa'].includes(order.status) && isBuyerDevice(order.slug)
+            ? <Suspense fallback={null}><PushCard role="buyer" /></Suspense> : null}
 
           {order.identifier_masked || (order.checks_summary ?? []).length > 0 ? <Card>
             <Text style={T.caption}>Lo que declara el vendedor</Text>

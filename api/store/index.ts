@@ -4,9 +4,16 @@
 //  POST { action:'update', store_slug?, display_name? } (Bearer Cavos) -> cambiar usuario o nombre
 //  POST { action:'rate', slug, stars }           (X-Guest-Key o Bearer del comprador) -> 1-5 estrellas, una vez por pedido,
 //                                                 solo con el pedido Entregado o Liberado
+//  POST { action:'payout_get' } / { action:'payout_set', iban, holder_name, sinpe_phone? } (Bearer Cavos)
+//                                                 -> cuenta IBAN para cobrar (migración 011). Solo sale enmascarada.
+//  GET  ?push=key                                 -> llave pública VAPID (o null si no hay push configurado)
+//  POST { action:'push_subscribe'|'push_unsubscribe', subscription } (Bearer Cavos y/o X-Guest-Key)
+//                                                 -> avisos push de los pedidos de esa identidad (migración 011)
 import { db, fail, json, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
+import { crIbanError, cleanHolder, normalizeIban, normalizeSinpe, payoutView } from '../_lib/payout';
+import { deleteSubscription, isMissingTable, parseSubscription, saveSubscription, vapid } from '../_lib/push';
 import { baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -44,6 +51,10 @@ async function myProfile(sub: string, email?: string) {
 
 export default async function handler(req: any, res: any) {
   try {
+    if (req.method === 'GET' && req.query?.push === 'key') {
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300');
+      return json(res, 200, { key: vapid()?.publicKey ?? null });
+    }
     if (req.method === 'GET') {
       const slug = normalizeStoreSlug(req.query?.store);
       if (!validStoreSlug(slug)) throw new HttpError(404, 'Esta tienda no existe.');
@@ -69,7 +80,39 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { rated: true, stars });
     }
 
+    if (b.action === 'push_subscribe' || b.action === 'push_unsubscribe') {
+      const sub = parseSubscription(b.subscription);
+      if (!sub) throw new HttpError(400, 'Suscripción inválida.');
+      const who = await requireBuyerIdentity(req); // sesión Cavos (vendedor o comprador) y/o llave de invitado
+      try {
+        if (b.action === 'push_subscribe') await saveSubscription(who.ids, sub, String(req.headers?.['user-agent'] ?? ''));
+        else await deleteSubscription(who.ids, sub.endpoint);
+      } catch (e: any) {
+        if (isMissingTable(e)) throw Object.assign(new HttpError(503, 'Las notificaciones todavía no están disponibles.'), { code: 'push_unavailable' });
+        throw e;
+      }
+      return json(res, 200, { ok: true });
+    }
+
     const user = await requireCavosUser(req);
+    if (b.action === 'payout_get' || b.action === 'payout_set') {
+      const missing = (e: any) => { if (isMissingTable(e)) throw Object.assign(new HttpError(503, 'Todavía no puedes registrar tu cuenta. Intenta más tarde.'), { code: 'payout_unavailable' }); throw e; };
+      if (b.action === 'payout_get') {
+        const { data, error } = await db().from('seller_payout').select('iban, holder_name, sinpe_phone, updated_at').eq('sub', user.sub).maybeSingle();
+        if (error) missing(error);
+        return json(res, 200, { payout: data ? payoutView(data) : null });
+      }
+      const err = crIbanError(b.iban);
+      if (err) throw Object.assign(new HttpError(400, err), { code: 'bad_iban' });
+      const holder_name = cleanHolder(b.holder_name);
+      if (holder_name.length < 3) throw Object.assign(new HttpError(400, 'Escribe el nombre del titular como aparece en el banco.'), { code: 'bad_holder' });
+      const sinpe = normalizeSinpe(b.sinpe_phone);
+      if (sinpe === 'invalid') throw Object.assign(new HttpError(400, 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).'), { code: 'bad_sinpe' });
+      const row = { sub: user.sub, iban: normalizeIban(b.iban), holder_name, sinpe_phone: sinpe, updated_at: new Date().toISOString() };
+      const { error } = await db().from('seller_payout').upsert(row, { onConflict: 'sub' });
+      if (error) missing(error);
+      return json(res, 200, { payout: payoutView(row) });
+    }
     if (b.action === 'me') {
       const p = await myProfile(user.sub, user.email);
       return json(res, 200, (await publicStore(p.store_slug)) ?? { store_slug: p.store_slug, display_name: p.display_name, rating_avg: null, rating_count: 0, items: [] });

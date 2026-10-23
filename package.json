@@ -36,11 +36,13 @@
     "react-native-svg": "15.15.4",
     "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
     "@types/react": "~19.2.2",
+    "@types/web-push": "^3.6.4",
     "playwright": "^1.64.1",
     "tsx": "4.23.15",
     "typescript": "~6.0.3"

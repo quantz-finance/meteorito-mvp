@@ -5,6 +5,7 @@
 import type { MeteoritoAuth } from './types';
 import { DEMO_ENABLED, demoApi } from './demo';
 import { guestKey } from './guest';
+import { holdUpdate } from './updater';
 
 export async function proof(auth: MeteoritoAuth, action: string, ref: string) {
   if (!auth.address) throw new Error('Inicia sesión');
@@ -88,6 +89,10 @@ export async function ensureBound(auth: MeteoritoAuth): Promise<boolean> {
 }
 
 export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unknown): Promise<T> {
+  const release = holdUpdate(); // sin recarga por actualización mientras haya un pago/firma/llamada en curso
+  try { return await apiInner<T>(auth, path, body); } finally { release(); }
+}
+async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown): Promise<T> {
   if (DEMO_ENABLED) return (await demoApi(path, body)) as T; // modo demo: backend simulado, nunca llega a /api real
   const token = auth.getAuthToken();
   // Sin token (sesión fuera de la gracia o borrada): pedir volver a entrar, nunca "recarga la página".
@@ -120,6 +125,10 @@ export async function api<T = any>(auth: MeteoritoAuth, path: string, body: unkn
  *  Si hay sesión Cavos se adjunta el token solo para que el servidor detecte "el vendedor comprando su propio link"
  *  (un token vencido o malo se ignora en el servidor cuando hay llave de invitado). */
 export async function guestApi<T = any>(auth: Pick<MeteoritoAuth, 'getAuthToken'>, path: string, body: unknown): Promise<T> {
+  const release = holdUpdate();
+  try { return await guestApiInner<T>(auth, path, body); } finally { release(); }
+}
+async function guestApiInner<T>(auth: Pick<MeteoritoAuth, 'getAuthToken'>, path: string, body: unknown): Promise<T> {
   if (DEMO_ENABLED) return (await demoApi(path, body)) as T;
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Guest-Key': guestKey() };
   const token = auth.getAuthToken(); if (token) headers.Authorization = `Bearer ${token}`;

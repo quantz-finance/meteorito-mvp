@@ -56,8 +56,7 @@ for (const f of files.filter((f) => f.endsWith('.html'))) {
     h = h.replace('<script src="/_expo/static/js/web/__expo-metro-runtime-', deferTag + '<script src="/_expo/static/js/web/__expo-metro-runtime-');
   }
   h = h.replace('</head>', `${fontTagsFor(h)}<meta name="postbuild" data-postbuild="1"></head>`);
-  // Registro del SW cuando la página ya cargó y está ociosa (no compite con el arranque). Solo en el build exportado.
-  h = h.replace('</body>', `<script>if('serviceWorker'in navigator)addEventListener('load',function(){(self.requestIdleCallback||setTimeout)(function(){navigator.serviceWorker.register('/sw.js').catch(function(){})})})</script></body>`);
+  // El registro del SW y las actualizaciones automáticas los hace la app (lib/updater.ts) al ver esta <meta>.
   writeFileSync(f, h); n++;
 }
 

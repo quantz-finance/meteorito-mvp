@@ -8,7 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { ui } from '@/components/ui';
-import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, SuccessCheck, TestnetPill } from '@/components/ds';
+import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, SuccessCheck } from '@/components/ds';
 import { Reveal } from '@/components/space';
 import { ShareLink } from '@/components/ShareLink';
 import { Fonts } from '@/constants/Colors';
@@ -132,7 +132,6 @@ export default function Vender() {
 
   const right = (
     <View style={{ alignItems: 'flex-end', gap: S.sm }}>
-      <TestnetPill />
       <IconButton icon="storefront-outline" label="Mi tienda" onPress={() => router.push('/mi-tienda')} />
     </View>
   );

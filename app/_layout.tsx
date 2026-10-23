@@ -2,7 +2,8 @@
 import '@/lib/polyfills';
 
 import * as Font from 'expo-font';
-import { ToastHost } from '@/components/ds';
+import { toast, ToastHost } from '@/components/ds';
+import { consumeUpdatedFlag, startUpdater } from '@/lib/updater';
 import { DarkTheme, Stack, ThemeProvider, usePathname, useSegments } from 'expo-router';
 import { identify, initAnalytics, resetAnalytics, screen, track } from '@/lib/analytics';
 import * as SplashScreen from 'expo-splash-screen';
@@ -54,7 +55,12 @@ export default function RootLayout() {
   // Las fuentes NO bloquean el primer render: se pinta con la tipografía del sistema y se cambia a Nunito al llegar (swap).
   const [, error] = Font.useFonts(Platform.OS === 'web' ? FONTS : { Nunito_400Regular: require('@expo-google-fonts/nunito/400Regular/Nunito_400Regular.ttf'), Nunito_700Bold: require('@expo-google-fonts/nunito/700Bold/Nunito_700Bold.ttf'), Nunito_900Black: require('@expo-google-fonts/nunito/900Black/Nunito_900Black.ttf') });
   useEffect(() => { if (error) console.error('[fonts]', error); }, [error]);
-  useEffect(() => { SplashScreen.hideAsync(); }, []);
+  useEffect(() => {
+    SplashScreen.hideAsync();
+    if (Platform.OS !== 'web') return;
+    startUpdater(); // PWA: se actualiza sola en un momento seguro
+    if (consumeUpdatedFlag()) setTimeout(() => toast('Actualizado', 'info'), 600);
+  }, []);
   return (
     <ThemeProvider value={theme}>
       <StatusBar style="light" />

@@ -1,7 +1,7 @@
 import { DEVICE_NOT_AUTHORIZED, ensureSellerWalletOnLoad, logoutSafely } from '@/lib/wallet';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { lazy, Suspense, useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { GridPager } from '@/components/GridPager';
 import { useAuth } from '@/lib/cavos';
@@ -14,6 +14,7 @@ import { OrderCard } from '@/components/OrderRow';
 import { ui } from '@/components/ui';
 import { AnalyticsToggle, LegalLinks } from '@/components/LegalLinks';
 import { C, R, S, T, TOUCH, shadow } from '@/constants/theme';
+const ProfileCard = lazy(() => import('@/components/Payout').then((m) => ({ default: m.ProfileCard }))); // diferido: solo al abrir Mi cuenta
 
 const IN_PROGRESS = ['escrow_creado', 'fondeado', 'enviado', 'en_disputa'];
 const DELIVERED = ['entregado', 'liberado', 'resuelto'];
@@ -117,6 +118,7 @@ export default function Inicio() {
       <Sheet visible={account} onClose={() => setAccount(false)} title="Mi cuenta"
         footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={async () => { const m = await logoutSafely(auth); if (m) { setLogoutMsg(m); return; } setLogoutMsg(null); setAccount(false); }} />}>
         {logoutMsg ? <ErrorText>{logoutMsg}</ErrorText> : null}
+        {account ? <Suspense fallback={<SkeletonCard />}><ProfileCard products={(orders ?? []).length} /></Suspense> : null}
         <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{email ?? '—'}</Text></Card>
         <Card><AnalyticsToggle /></Card>
         <LegalLinks onNavigate={() => setAccount(false)} />
