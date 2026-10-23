@@ -212,3 +212,60 @@ test('MCK-PWA-01 versión nueva del service worker: recarga sola y avisa "Actual
     expect(await page.evaluate(() => (window as any).__noReload === true)).toBe(true);
   } finally { writeFileSync(sw, orig); }
 });
+
+// ── UTMs del landing (PostHog simulado en mock-server: S.ph). Aquí y no en otro archivo: el backend simulado es único y va en serie.
+const LANDING_Q = '?utm_source=landing&utm_medium=cta&utm_content=hero';
+// posthog-js descarta eventos de navegadores automatizados (navigator.webdriver, marca HeadlessChrome): el test se presenta como un navegador normal.
+const asRealBrowser = (page: Page) => page.addInitScript(() => {
+  Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false });
+  Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined });
+});
+const phEvents = async (request: any, name?: string) => ((await state(request)).ph as any[]).filter((e) => !name || e.event === name);
+
+test('MCK-UTM-01 entra desde el landing con UTMs: app_opened y cada evento llevan las UTMs, también después de navegar', async ({ page, request }) => {
+  await reset(request, [listing]);
+  await asRealBrowser(page);
+  await page.goto('/' + LANDING_Q);
+  await expect.poll(async () => (await phEvents(request, 'app_opened')).length, { timeout: 20_000 }).toBe(1);
+  const [opened] = await phEvents(request, 'app_opened');
+  expect(opened.properties).toMatchObject({ utm_source: 'landing', utm_medium: 'cta', utm_content: 'hero', first_touch: true });
+  expect(String(opened.properties.$current_url ?? '')).not.toContain('?'); // la URL sigue sin query
+  expect(opened.properties.$ip).toBeUndefined();
+  // Primer evento de la carga
+  const all = await phEvents(request);
+  expect(all.findIndex((e) => e.event === 'app_opened')).toBe(0);
+  // Guardado como first-touch
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('meteorito:first-touch:v1')!).utm_content)).toBe('hero');
+  // Navegar (el router ya borró el query): los eventos siguientes siguen con las UTMs (super propiedades)
+  await page.getByText(/Quiero comprar|Comprar sin cuenta/).first().click();
+  await expect(page).toHaveURL(/\/i\/nueva/);
+  await page.goto('/p/prod01'); // otra carga sin UTMs
+  await expect.poll(async () => (await phEvents(request, 'payment_link_opened')).length, { timeout: 20_000 }).toBeGreaterThan(0);
+  const linkOpened = (await phEvents(request, 'payment_link_opened'))[0];
+  expect(linkOpened.properties).toMatchObject({ utm_source: 'landing', utm_content: 'hero' });
+  const screens = (await phEvents(request, 'screen_viewed')).filter((e) => e.properties.screen === '/i/nueva');
+  expect(screens.length).toBeGreaterThan(0);
+  expect(screens[0].properties.utm_source).toBe('landing');
+});
+
+test('MCK-UTM-02 visita posterior con otras UTMs no pisa el first-touch', async ({ page, request }) => {
+  await reset(request, [listing]);
+  await asRealBrowser(page);
+  await page.goto('/' + LANDING_Q);
+  await expect.poll(async () => (await phEvents(request, 'app_opened')).length, { timeout: 20_000 }).toBe(1);
+  await page.goto('/?utm_source=landing&utm_medium=cta&utm_content=gracias');
+  await expect.poll(async () => (await phEvents(request, 'app_opened')).length, { timeout: 20_000 }).toBe(2);
+  const second = (await phEvents(request, 'app_opened'))[1];
+  expect(second.properties).toMatchObject({ utm_content: 'hero', first_touch: false });
+});
+
+test('MCK-UTM-03 con opt-out no se guarda ni se envía nada', async ({ page, request }) => {
+  await reset(request, [listing]);
+  await asRealBrowser(page);
+  await page.addInitScript(() => localStorage.setItem('meteorito:analytics-optout', '1'));
+  await page.goto('/' + LANDING_Q);
+  await expect(page.locator('#root')).not.toBeEmpty();
+  await page.waitForTimeout(4000);
+  expect(await phEvents(request)).toEqual([]);
+  expect(await page.evaluate(() => localStorage.getItem('meteorito:first-touch:v1'))).toBeNull();
+});

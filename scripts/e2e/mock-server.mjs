@@ -4,6 +4,7 @@
 import { createServer } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 const root = resolve(process.argv[2] ?? 'dist-e2e');
 const port = Number(process.argv[3] ?? 8084);
@@ -13,7 +14,7 @@ const PIN = '135790';
 const VAPID = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString('base64url');
 
 let S;
-const fresh = (orders = []) => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], subs: [], ratings: {}, fail: [], seq: 0 });
+const fresh = (orders = []) => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], ph: [], subs: [], ratings: {}, fail: [], seq: 0 });
 const base = (o) => ({ kind: 'single', listing_slug: null, listing_status: 'activa', status: 'creado', category: 'otro', brand: '', model: 'Bici de montaña', condition: '', price_crc: 150000,
   description: null, photos: [], identifier_masked: null, checks_summary: [], created_at: new Date().toISOString(), amount_usdc: null, contract_id: null, funded_tx: null, shipped_tx: null,
   released_tx: null, approval_reason: null, auto_release_at: null, disputed_at: null, dispute_tx: null, resolved_tx: null, resolution: null, buyer: null, pin_attempts: 0, ...o });
@@ -33,6 +34,21 @@ function staticFile(path) {
   return join(root, 'index.html');
 }
 const body = (req) => new Promise((ok) => { let b = ''; req.on('data', (c) => { b += c; }); req.on('end', () => { try { ok(b ? JSON.parse(b) : {}); } catch { ok({}); } }); });
+// PostHog simulado (EXPO_PUBLIC_POSTHOG_HOST=http://localhost:8084/ph): guarda los eventos en S.ph.
+const raw = (req) => new Promise((ok) => { const c = []; req.on('data', (x) => c.push(x)); req.on('end', () => ok(Buffer.concat(c))); });
+function decodePh(buf, q, type = '') {
+  try {
+    let txt;
+    if (q.get('compression') === 'gzip-js' || (buf[0] === 0x1f && buf[1] === 0x8b)) txt = gunzipSync(buf).toString('utf8');
+    else {
+      txt = buf.toString('utf8');
+      if (type.includes('form') || txt.startsWith('data=')) { const d = new URLSearchParams(txt).get('data') ?? ''; txt = Buffer.from(d, 'base64').toString('utf8'); }
+      else if (q.get('compression') === 'base64') txt = Buffer.from(txt, 'base64').toString('utf8');
+    }
+    const j = JSON.parse(txt);
+    return Array.isArray(j) ? j : Array.isArray(j.batch) ? j.batch : [j];
+  } catch { return []; }
+}
 const send = (res, code, j) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }); res.end(JSON.stringify(j)); };
 const E = (status, error, code) => Object.assign(new Error(error), { status, code });
 
@@ -105,6 +121,14 @@ createServer(async (req, res) => {
     if (u.pathname === '/__mock/state') return send(res, 200, S);
     if (u.pathname === '/__mock/patch') { Object.assign(S.orders[b.slug], b.set); return send(res, 200, S.orders[b.slug]); }
     if (u.pathname === '/__mock/fail') { S.fail.push(b); return send(res, 200, { ok: true }); }
+  }
+  if (u.pathname.startsWith('/ph/')) {
+    if (req.method === 'POST') {
+      const evs = decodePh(await raw(req), u.searchParams, String(req.headers['content-type'] ?? ''));
+      for (const e of evs) if (e?.event) S.ph.push({ event: e.event, distinct_id: e.distinct_id, properties: e.properties ?? {}, $set_once: e.$set_once ?? e.properties?.$set_once });
+    }
+    if (u.pathname.includes('/flags') || u.pathname.includes('/decide')) return send(res, 200, { featureFlags: {}, featureFlagPayloads: {}, sessionRecording: false, supportedCompression: [] });
+    return send(res, 200, { status: 1 });
   }
   if (u.pathname.startsWith('/sb/rest/v1/public_orders')) {
     const slug = (u.searchParams.get('slug') ?? '').replace(/^eq\./, '');

@@ -12,6 +12,7 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 ## Eventos de cliente
 | Evento | Dónde | Props |
 |---|---|---|
+| `app_opened` | primer evento de cada carga de la app (web) | `first_touch` (true si esta carga guardó la atribución) + las UTMs first-touch |
 | `screen_viewed` | cada cambio de ruta | `screen` (`/`, `/vender`, `/p/:slug`, `welcome`…) |
 | `login_started` | Welcome → Entrar | – |
 | `signed_in` | sesión activa (tras identify) | – |
@@ -28,6 +29,14 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 | `legal_opened` | links legales | `doc` |
 | `analytics_opted_out` | antes de apagar | – |
 Todos llevan `platform`, `network: testnet`, `app`.
+
+### Atribución del landing (first-touch)
+El landing enlaza a `https://pago.meteorito.app/?utm_source=landing&utm_medium=cta&utm_content=<nav|hero|demo_section|que_hace|gracias>`.
+`lib/attribution.ts` lee `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` y el dominio del referrer externo al cargar (antes de que el router redirija), y los guarda **una sola vez** en `localStorage` (`meteorito:first-touch:v1`); las visitas posteriores no los pisan.
+- Super propiedades (en todos los eventos): `utm_source`, `utm_medium`, `utm_campaign`, `utm_content`, `utm_term`, `initial_referring_domain`, `initial_landing_path` (ruta sin slug).
+- Persona, al identificar: `$set_once` `initial_utm_*`, `initial_referring_domain`, `initial_landing_path`.
+- `$current_url` sigue sin query (el query puede traer tokens). Con opt-out no se guarda ni se envía nada; en modo demo no hay analítica. IP desactivada y sin grabación de sesión, igual que antes.
+- Pruebas: `scripts/ci/t42` (unit) y `MCK-UTM-01..03` (E2E con PostHog simulado en `scripts/e2e/mock-server.mjs`).
 
 ## Eventos server (fuente de verdad del dinero)
 `srv_order_created` (`category`, `price_crc`), `srv_escrow_deployed`, `srv_funded` (`amount_usdc`, `ramp`), `srv_shipped`, `srv_approved` (`reason`: pin/received/auto), `srv_released` (`reason`, `hours_to_release`), `srv_release_refused`, `srv_pin_failed`, `srv_dispute_opened` (`reason`), `srv_dispute_resolved`. Props comunes: `order_key`, `network`, `source: server`.
