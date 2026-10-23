@@ -1,6 +1,7 @@
 import { DEVICE_NOT_AUTHORIZED, ensureSellerWalletOnLoad } from '@/lib/wallet';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
+import { isSessionError } from '@/lib/authUx';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -36,13 +37,15 @@ export default function Pedidos() {
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Error de sesión (token rechazado/vencido): se muestra UNA vez arriba y la tarjeta de notificaciones se oculta.
+  const [sessionError, setSessionError] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null);
   const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
 
   const load = useCallback(async () => {
     if (!address || !supabaseConfigured) { setOrders([]); return; }
-    setLoading(true); setError(null);
-    try { const os = await getSellerOrders(auth); setOrders(os); stamp.set(Date.now()); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError(userMessage((e as Error).message)); setOrders((o) => o ?? []); }
+    setLoading(true); setError(null); setSessionError(false);
+    try { const os = await getSellerOrders(auth); setOrders(os); stamp.set(Date.now()); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError(userMessage((e as Error).message)); setSessionError(isSessionError(e)); setOrders((o) => o ?? []); }
     finally { setLoading(false); }
   }, [address, auth.wallet.state]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -71,7 +74,7 @@ export default function Pedidos() {
       <View style={{ flex: 1, gap: S.sm }}>
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : error ? <ErrorText>{error}</ErrorText> : null}
-      {orders !== null && <Suspense fallback={null}><PushCard role="seller" /></Suspense>}
+      {orders !== null && !sessionError && <Suspense fallback={null}><PushCard role="seller" onSessionError={(m) => { setError(m); setSessionError(true); }} /></Suspense>}
       {orders && orders.length > 0 && <Freshness stamp={stamp} live={needsPolling(orders)} />}
       {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         : orders.length === 0 ? (
