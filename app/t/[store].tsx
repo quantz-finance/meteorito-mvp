@@ -2,7 +2,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Icon, Screen, Skeleton, st, TestnetPill } from '@/components/ds';
+import { Icon, Screen, Skeleton, st } from '@/components/ds';
 import { BackButton } from '@/components/BackButton';
 import { StoreHeader, StoreItems } from '@/components/StoreView';
 import { C, R, S, T } from '@/constants/theme';
@@ -24,7 +24,7 @@ export default function Tienda() {
 
   return (
     <Screen space="calm" scroll={false}>
-      <View style={st.rowBetween}><BackButton fallback="/" /><TestnetPill /></View>
+      <View style={st.rowBetween}><BackButton fallback="/" /></View>
       {error ? <Notice icon="cloud-offline-outline" title="No pudimos abrir esta tienda" text={error} />
         : store === null ? <Notice icon="storefront-outline" title="Esta tienda no existe" text="Revisa el link o pídele al vendedor que te lo mande de nuevo." />
         : store === undefined ? (
@@ -36,7 +36,7 @@ export default function Tienda() {
           <StoreHeader store={store} />
           <Text style={T.caption}>Productos disponibles ({store.items.length})</Text>
           <StoreItems store={store} empty="Este vendedor no tiene productos disponibles en este momento." />
-          <Text style={[T.footnote, { textAlign: 'center' }]}>Compras sin crear cuenta. Beta en testnet: sin dinero real.</Text>
+          <Text style={[T.footnote, { textAlign: 'center' }]}>Compras sin crear cuenta.</Text>
         </View>}
     </Screen>
   );

@@ -57,14 +57,14 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.money}>{formatCRC(sinpe.priceCrc)}</Text>
           <Text style={T.footnote}>Referencia {sinpe.reference}</Text>
         </Card>
-        <Row icon="lock-closed" text="Tu pago de prueba queda en custodia. El vendedor cobra cuando recibes el producto." />
-        <Row icon="flask-outline" text='Modo prueba: no se mueve dinero real. Toca "Ya pagué" para simular el pago.' />
+        <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
+        <Row icon="information-circle-outline" text='No envíes dinero: toca "Ya pagué" para continuar.' />
       </>}
     </Sheet>
     <Sheet visible={sheet === 'pin' && !!pin} onClose={() => setSheet(null)}
       footer={<PrimaryButton title="Listo, lo guardé" onPress={() => setSheet(null)} />}>
       <SuccessCheck />
-      <Text style={[T.title, { textAlign: 'center' }]}>Pago de prueba en custodia</Text>
+      <Text style={[T.title, { textAlign: 'center' }]}>Pago en custodia</Text>
       <Card style={{ alignItems: 'center' }}>
         <Text style={T.caption}>Tu PIN de entrega</Text>
         <Text style={{ fontFamily: Fonts.black, fontSize: 40, letterSpacing: 8, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
@@ -114,7 +114,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     </>;
   } else if (order.status === 'fondeado') {
     footer = pin ? <PrimaryButton title="Ver mi PIN de entrega" icon="keypad" variant="secondary" onPress={() => setSheet('pin')} />
-      : <Text style={[T.callout, { textAlign: 'center' }]}>Pago de prueba en custodia. Esperando que el vendedor lo envíe.</Text>;
+      : <Text style={[T.callout, { textAlign: 'center' }]}>Pago en custodia. Esperando que el vendedor lo envíe.</Text>;
   } else if (order.status === 'liberado' || order.status === 'resuelto' || order.status === 'entregado') {
     footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
       <Icon name="checkmark-circle" size={22} color={C.success} /><Text style={[T.headline, { color: C.success }]}>{order.status === 'entregado' ? 'Entregado' : 'Pago liberado'}</Text>

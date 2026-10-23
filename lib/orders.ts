@@ -10,7 +10,7 @@ export const CRC_USDC_RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510
 export const TW_FEE = 0.003; // Trustless Work cobra 0.3%
 
 export const formatCRC = (n: number) => '₡' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-export const formatUSD = (crc: number) => `≈ ${(crc / CRC_USDC_RATE).toFixed(2)} USDC (testnet)`;
+export const formatUSD = (crc: number) => `≈ ${(crc / CRC_USDC_RATE).toFixed(2)} USDC`;
 export const formatUSDC = (n: number) => `${n.toFixed(2)} USDC`;
 
 export const STATUS_LABEL: Record<string, string> = {

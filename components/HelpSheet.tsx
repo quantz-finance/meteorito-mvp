@@ -27,7 +27,7 @@ export function HelpSheet({ visible, onClose }: { visible: boolean; onClose: () 
           </View>
         </View>
       ))}
-      <PrimaryButton title="Cuenta Cavos, custodia y testnet" variant="secondary" icon="book-outline" onPress={() => setLearn(true)} />
+      <PrimaryButton title="Cuenta Cavos y custodia" variant="secondary" icon="book-outline" onPress={() => setLearn(true)} />
       <LearnSheet visible={learn} onClose={() => setLearn(false)} />
     </Sheet>
   );

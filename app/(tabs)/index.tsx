@@ -8,7 +8,7 @@ import { GridPager } from '@/components/GridPager';
 import { useAuth } from '@/lib/cavos';
 import { displayName, formatCRC, getSellerOrders, parseSlug, type SellerOrder } from '@/lib/orders';
 import { supabaseConfigured } from '@/lib/supabase';
-import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Section, Sheet, Skeleton, SkeletonCard, TestnetPill, type IconName } from '@/components/ds';
+import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Section, Sheet, Skeleton, SkeletonCard, type IconName } from '@/components/ds';
 import { LivelyMascot, Reveal } from '@/components/space';
 import { HelpSheet } from '@/components/HelpSheet';
 import { OrderCard } from '@/components/OrderRow';
@@ -62,9 +62,8 @@ export default function Inicio() {
       <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
       {/* Resumen de ventas (sin saldo: los cobros van a la cuenta de banco o SINPE del vendedor) */}
       <Reveal i={0}><View style={[s.summary, shadow, short && { padding: S.md }]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 24 /* mismo alto que antes (sin la etiqueta) */ }}>
           <Text style={[T.caption, { color: C.lilac }]}>Tus ventas</Text>
-          <TestnetPill />
         </View>
         <View style={{ flexDirection: 'row', gap: S.sm, paddingRight: short ? 64 : 84 }}>
           {stats.map((st) => (

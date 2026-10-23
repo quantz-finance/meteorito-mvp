@@ -139,7 +139,7 @@ export function PayoutSheet({ visible, onClose, payout, onSaved }: { visible: bo
       </View>
       {sinpeN === 'invalid' && sinpe.replace(/\D/g, '').length >= 8 ? <ErrorText>El SINPE Móvil son 8 dígitos (ej. 8888 1234).</ErrorText> : null}
       {err ? <ErrorText>{err}</ErrorText> : null}
-      <Text style={T.footnote}>Beta: por ahora solo registras la cuenta; todavía no enviamos dinero real. Solo tú la ves, y siempre enmascarada. Tu tienda pública nunca la muestra.</Text>
+      <Text style={T.footnote}>Por ahora solo registras la cuenta. Solo tú la ves, y siempre enmascarada. Tu tienda pública nunca la muestra.</Text>
     </Sheet>
   );
 }
