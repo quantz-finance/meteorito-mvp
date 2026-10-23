@@ -21,6 +21,9 @@ import invites from '../api/invites/index';
 import upload from '../api/photos/upload-url';
 import activate from '../api/wallet/activate';
 import submit from '../api/tx/submit';
+import { __setFbFetchForTests } from '../api/_lib/fbimport';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 const KEY_A = 'a'.repeat(64), KEY_B = 'b'.repeat(64);
 let db: ReturnType<typeof fakeDb>;
@@ -58,6 +61,7 @@ const WRITES: [string, any, any][] = [
   ['store (update)', store, { action: 'update', display_name: 'X' }],
   ['store (orders)', store, { action: 'orders' }],
   ['store (payout_set)', store, { action: 'payout_set', iban: 'CR05015202001026284066', holder_name: 'Ana' }],
+  ['store (import_facebook)', store, { action: 'import_facebook', url: 'https://www.facebook.com/marketplace/item/443277198670299/' }],
   ['photos/upload-url', upload, { count: 1 }],
   ['wallet/activate', activate, {}],
 ];
@@ -180,4 +184,30 @@ test('API-LST el vendedor no puede comprar su propio producto con su llave de in
   expect(r.code).toBe(409);
   expect(r.body.code).toBe('self_purchase');
   expect(db.tables.orders.length).toBe(1); // no dejó pedido hijo huérfano
+});
+
+test('API-FB importar de Facebook: solo links de FB, nunca pide fuera de FB, devuelve datos para precargar (sin crear nada)', async () => {
+  const html = readFileSync(resolve(__dirname, '../scripts/ci/fixtures/facebook/og-crc-mobile.html'), 'utf8');
+  const seen: string[] = [];
+  __setFbFetchForTests(async (url) => {
+    seen.push(url);
+    if (url.includes('fbcdn.net')) return new Response(Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
+  });
+  try {
+    const tok = await token({ sub: 'seller-fb' });
+    const bad = await call(store, { tok, body: { action: 'import_facebook', url: 'http://169.254.169.254/latest/meta-data/' } });
+    expect(bad.code).toBe(400); expect(bad.body.code).toBe('fb_url_invalid'); expect(seen).toEqual([]);
+    const before = db.tables.orders.length;
+    const r = await call(store, { tok, body: { action: 'import_facebook', url: 'https://www.facebook.com/marketplace/item/443277198670299/' } });
+    expect(r.code).toBe(200);
+    expect(r.body.result).toBe('success');
+    expect(r.body.price_crc).toBe(18000);
+    expect(r.body.photos[0]).toMatch(/^data:image\/jpeg;base64,/);
+    expect(db.tables.orders.length).toBe(before); // precarga: no crea producto
+    expect(seen.every((u) => /^https:\/\/([a-z0-9-]+\.)*(facebook\.com|fbcdn\.net)\//.test(u))).toBe(true);
+    for (let i = 0; i < 10; i++) await call(store, { tok, body: { action: 'import_facebook', url: 'https://www.facebook.com/marketplace/item/443277198670299/' } });
+    const limited = await call(store, { tok, body: { action: 'import_facebook', url: 'https://www.facebook.com/marketplace/item/443277198670299/' } });
+    expect(limited.code).toBe(429);
+  } finally { __setFbFetchForTests(null); }
 });
