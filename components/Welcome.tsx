@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useStableWindow } from '@/lib/viewport';
 import { Glow, LivelyMascot, Reveal, SpaceBackground } from '@/components/space';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,7 +26,7 @@ export default function Welcome() {
   const tiny = height < 640;
   const mascot = Math.round(Math.max(56, Math.min(128, height * 0.15 - (relogin || error ? 24 : 0))));
   return (
-    <View style={{ flex: 1, backgroundColor: C.bg }}>
+    <View style={{ flex: 1, backgroundColor: Platform.OS === 'web' ? 'transparent' : C.bg }}>
       <SpaceBackground mode="full" />
       <View style={[s.col, { paddingTop: insets.top + (tiny ? S.md : S.lg), paddingBottom: insets.bottom + S.sm }]}>
         <View style={s.hero}>

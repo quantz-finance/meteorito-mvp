@@ -43,6 +43,8 @@ export const MOTION_CSS = `
 @keyframes m-f2{0%,100%{transform:none}50%{transform:scaleX(1.15) scaleY(1.1) translateY(-7.7%)}}
 @keyframes m-f3{0%,100%{transform:none}50%{transform:scaleX(.9) scaleY(1.12) translateY(8.3%)}}
 [data-anim="dive"]{animation:m-dive 4s ease-in-out infinite}
+@keyframes m-bob{0%,100%{transform:translate3d(0,0,0) rotate(-3deg)}50%{transform:translate3d(0,-5px,0) rotate(2deg)}}
+[data-anim="bob"]{animation:m-bob 3.6s ease-in-out infinite}
 [data-anim="f1"]{animation:m-f1 .8s ease-in-out infinite}
 [data-anim="f2"]{animation:m-f2 1s ease-in-out infinite}
 [data-anim="f3"]{animation:m-f3 .8s ease-in-out -.4s infinite}

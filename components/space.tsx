@@ -65,6 +65,8 @@ export const SpaceBackground = memo(function SpaceBackground({ mode = 'full', sc
   }));
 
   if (mode === 'none') return null;
+  // Web: el universo animado vive fijo en el HTML (constants/universe.ts); la pantalla queda transparente encima.
+  if (WEB && mode === 'full') return null;
   const tall = height * 1.4; // margen para parallax
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: C.bg, overflow: 'hidden' }]}>

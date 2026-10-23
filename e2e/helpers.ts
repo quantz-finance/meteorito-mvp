@@ -19,7 +19,16 @@ export async function orderStatus(page: Page, slug: string): Promise<string> {
   return page.evaluate((s) => JSON.parse(sessionStorage.getItem('meteorito:demo:v1') || '{}').orders?.[s]?.status, slug);
 }
 /** La página no tiene scroll vertical a nivel de documento. */
+/** Espera a que terminen las animaciones de entrada (finitas): mide el layout final, no un cuadro a mitad del deslizamiento.
+ *  Ignora las infinitas (universo de fondo, mascota). */
+export async function settle(page: Page) {
+  await page.waitForFunction(() => document.getAnimations().every((a) => {
+    const it = (a.effect as KeyframeEffect | null)?.getTiming().iterations;
+    return it === Infinity || a.playState !== 'running';
+  }), undefined, { timeout: 5000 }).catch(() => {});
+}
 export async function expectNoScroll(page: Page) {
+  await settle(page);
   const m = await page.evaluate(() => ({ sh: document.scrollingElement!.scrollHeight, ih: window.innerHeight }));
   expect(m.sh, `scrollHeight ${m.sh} > innerHeight ${m.ih}`).toBeLessThanOrEqual(m.ih + 1);
 }

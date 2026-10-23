@@ -17,7 +17,8 @@ type IconP = { color: string; fill: string };
 const P = { strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, fill: 'none' };
 export const TAB_ICONS: Record<string, (p: IconP) => React.ReactElement> = {
   vender: ({ color, fill }) => <><Path d="M12.6 2.6a2 2 0 0 0-1.4-.6H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z" stroke={color} {...P} fill={fill} /><Circle cx="7.5" cy="7.5" r="1.4" fill={color} /></>,
-  pedidos: ({ color, fill }) => <><Path d="M11 21.7a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7z" stroke={color} {...P} fill={fill} /><Path d="M3.3 7 12 12l8.7-5M12 22V12" stroke={color} {...P} /></>,
+  // Home (ruta /pedidos): casa, mismo trazo lucide que las otras
+  pedidos: ({ color, fill }) => <><Path d="M3 10a2 2 0 0 1 .7-1.5l7-6a2 2 0 0 1 2.6 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" stroke={color} {...P} fill={fill} /><Path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" stroke={color} {...P} /></>,
   comprar: ({ color, fill }) => <><Path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" stroke={color} {...P} fill={fill} /><Path d="M3 6h18M16 10a4 4 0 0 1-8 0" stroke={color} {...P} /></>,
 };
 
@@ -78,7 +79,7 @@ const glass: any = Platform.OS === 'web'
   : { backgroundColor: 'rgba(29,12,64,0.94)' };
 
 const s = StyleSheet.create({
-  wrap: { backgroundColor: C.bg, paddingTop: 8, alignItems: 'center', paddingHorizontal: 16 },
+  wrap: { backgroundColor: Platform.OS === 'web' ? 'transparent' : C.bg, paddingTop: 8, alignItems: 'center', paddingHorizontal: 16 },
   bar: {
     ...glass, flexDirection: 'row', width: '100%', maxWidth: 440, height: BAR_H, padding: PAD, borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(201,182,255,0.28)',

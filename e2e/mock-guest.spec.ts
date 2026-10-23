@@ -147,10 +147,7 @@ test('MCK-DIS-01 + CAL: el comprador disputa un pedido; otro pedido lo confirma 
   await page.getByText('Reportar problema', { exact: true }).click();
   await expect.poll(async () => (await state(request)).orders[slug].status).toBe('en_disputa');
   // Segundo pedido: confirma recibido y califica
-  await page.goto('/p/prod01');
-  await page.getByText(/Pagar en custodia/).last().click();
-  await page.getByText('Ya pagué', { exact: true }).click();
-  const slug2 = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
+  const slug2 = await payAsGuest(page); // espera el PIN: si navegamos antes, este navegador no queda como comprador
   await patch(request, slug2, { status: 'enviado', auto_release_at: new Date(Date.now() + 600_000).toISOString() });
   await page.goto(`/p/${slug2}`);
   await page.getByText('Recibí y está bien', { exact: true }).click();
