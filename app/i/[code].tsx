@@ -13,7 +13,7 @@ import { C, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { cancelInvite, getInvite, inviteLink, type Invite } from '@/lib/invites';
-import { inviteShareMessage } from '@/lib/inviteShare';
+import { inviteShareMessage, showCategoryChip } from '@/lib/inviteShare';
 import { formatCRC } from '@/lib/orders';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { track } from '@/lib/analytics';
@@ -67,7 +67,7 @@ export default function Invitacion() {
   const header = (
     <Card style={{ gap: S.sm }}>
       <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
-        <Chip label={cat?.label ?? inv.category} /><Chip label={st.label} tone={st.tone} />
+        {showCategoryChip(inv.category) ? <Chip label={cat?.label ?? inv.category} /> : null}<Chip label={st.label} tone={st.tone} />
       </View>
       <View style={{ flexDirection: 'row', gap: S.sm + 4, alignItems: 'center' }}>
         {inv.photos?.length ? <Image testID="invite-photo" accessibilityLabel={`Foto de ${name}`} source={{ uri: inv.photos[0] }} style={{ width: 88, height: 88, borderRadius: 14, backgroundColor: C.lilacBg }} resizeMode="cover" /> : null}

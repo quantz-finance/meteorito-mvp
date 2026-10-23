@@ -6,3 +6,6 @@ export function inviteShareMessage(inv: { title: string; price_crc: number; sour
     : `Hola, quiero comprarte ${inv.title} por ${crc(inv.price_crc)}.`;
   return `${what} Te pago con Meteorito: el dinero queda en custodia y te llega cuando me entregues. Acepta la compra aquí: ${link}`;
 }
+
+/** El chip de categoría solo aporta si es una categoría real ("otro" o vacío no dicen nada al vendedor). */
+export const showCategoryChip = (category: string | null | undefined) => !!category && category.trim().toLowerCase() !== 'otro';

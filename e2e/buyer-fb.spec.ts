@@ -28,6 +28,12 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await open(page, '/comprar?buyer=A', 'buyer', true);
     const entry = page.getByRole('button', { name: 'Importar de Facebook' });
     await expect(entry).toBeVisible();
+    // Facebook es el caso más común: botón principal (blanco); invitar a mano queda secundario, debajo.
+    const manual = page.getByRole('button', { name: 'Invitar a un vendedor' });
+    const bg = (l: typeof entry) => l.evaluate((e) => getComputedStyle(e).backgroundColor);
+    expect(await bg(entry)).toBe('rgb(255, 255, 255)');
+    expect(await bg(manual)).not.toBe('rgb(255, 255, 255)');
+    expect((await entry.boundingBox())!.y).toBeLessThan((await manual.boundingBox())!.y);
     await expectNoScroll(page);
     await shot(page, info, '1-comprar');
     await entry.click();
@@ -77,6 +83,8 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await expect(page.getByText('Bicicleta de montaña aro 29')).toBeVisible();
     await expect(page.getByText('₡185 000').first()).toBeVisible();
     await expect(page.getByTestId('invite-photo')).toBeVisible();
+    await expect(page.getByText('Otro', { exact: true })).toHaveCount(0); // categoría genérica: sin chip
+    await expect(page.getByText('Esperando al vendedor')).toBeVisible();
     await expect(page.getByRole('link', { name: /Ver anuncio en Facebook/ })).toBeVisible();
     await shot(page, info, '5-vendedor-ve-invitacion');
     await page.getByText('Publicar para esta compra').click();
@@ -116,7 +124,7 @@ test.describe('Comprar: invitar desde Facebook', () => {
     test.skip(info.project.name !== 'webkit-iphone-se', 'solo pantalla chica');
     await open(page, '/i/nueva?buyer=A', 'buyer', true);
     await settle(page);
-    // Posiciones respecto del documento (el campo enfocado puede desplazarse a la vista, pero nada se comprime).
+    // Altos y separaciones de los campos (el teclado no debe comprimir el formulario).
     const layout = () => page.evaluate(() => {
       const q = (sel: string) => { const r = document.querySelector(sel)!.getBoundingClientRect(); return { top: Math.round(r.top + window.scrollY), h: Math.round(r.height) }; };
       return { fb: q('[aria-label="Importar de Facebook"]'), name: q('input[aria-label="Nombre del producto"]'), price: q('input[aria-label="Precio acordado"]'), root: Math.round(document.getElementById('root')!.getBoundingClientRect().height) };
@@ -126,6 +134,8 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await page.setViewportSize({ width: 375, height: 667 - 260 }); // teclado de iOS
     await page.waitForTimeout(300);
     const after = await layout();
-    expect(after).toEqual(before);
+    // Puede desplazarse en bloque (el campo enfocado se trae a la vista), pero nada cambia de alto ni de separación.
+    const rel = (l: typeof before) => ({ fbH: l.fb.h, nameH: l.name.h, priceH: l.price.h, gap1: l.name.top - l.fb.top, gap2: l.price.top - l.name.top, root: l.root });
+    expect(rel(after)).toEqual(rel(before));
   });
 });

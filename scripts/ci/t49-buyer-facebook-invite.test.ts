@@ -16,7 +16,7 @@ import { fakeDb } from './fakedb';
 import store from '../../api/store/index';
 import invites from '../../api/invites/index';
 import create from '../../api/orders/create';
-import { inviteShareMessage } from '../../lib/inviteShare';
+import { inviteShareMessage, showCategoryChip } from '../../lib/inviteShare';
 
 const fx = (f: string) => readFileSync(new URL(`./fixtures/facebook/${f}`, import.meta.url), 'utf8');
 const ITEM = 'https://www.facebook.com/marketplace/item/443277198670299/';
@@ -113,4 +113,7 @@ export async function run(t: T) {
   t.check('mensaje: explica la custodia en tuteo, sin voseo ni promesas prohibidas', /custodia/.test(msg) && !/(pod|ten|quer)és|tocá|aceptá|mirá|vos\b/i.test(msg) && !/segur|garant|protegid/i.test(msg), msg);
   const plain = inviteShareMessage({ title: 'Silla', price_crc: 5000, source_url: null }, 'https://pago.meteorito.app/i/x');
   t.check('sin link de FB: no menciona Facebook', !/Facebook/.test(plain) && plain.includes('Silla') && plain.includes('₡5 000'), plain);
+
+  // --- vista del vendedor: el chip de categoría solo si dice algo
+  t.check('chip de categoría oculto para "otro" / vacío; visible para una categoría real', !showCategoryChip('otro') && !showCategoryChip('Otro') && !showCategoryChip('') && !showCategoryChip(null) && showCategoryChip('celular'));
 }
