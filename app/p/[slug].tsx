@@ -1,14 +1,13 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, ScrollView as RNScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
-import { LivelyMascot, Reveal, ScrollCtx, SpaceBackground } from '@/components/space';
+import { Reveal } from '@/components/space';
 import { PayBox } from '@/components/PayBox';
 import { BackButton } from '@/components/BackButton';
-import { PrimaryButton } from '@/components/ds';
+import { PrimaryButton, Screen } from '@/components/ds';
 import { ChainLinks, chainLinks } from '@/components/ChainLinks';
-import { toast, Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, type IconName } from '@/components/ds';
+import { toast, Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, st, statusTone, type IconName } from '@/components/ds';
 import { categoryIcon } from '@/components/categoryIcons';
 import { C, R, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
@@ -36,14 +35,10 @@ import { DEMO_ENABLED } from '@/lib/demo';
 export default function LinkDeVenta() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { isAuthenticated, email } = useAuth();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const [order, setOrder] = useState<PublicOrder | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
   const [learn, setLearn] = useState(false);
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
 
   const load = () => { if (slug) getPublicOrder(String(slug)).then((o) => { setOrder(o); setError(null); stamp.set(Date.now()); }).catch((e) => setError((e as Error).message)); };
   // Sincronización con el servidor: si el vendedor envía o el comprador paga, esta pantalla lo refleja sola (cada POLL_MS y al volver el foco).
@@ -64,111 +59,96 @@ export default function LinkDeVenta() {
   }, [order?.status]);
   useEffect(() => { if (order) track('payment_link_opened', { status: order.status, logged_in: isAuthenticated, category: (order as any).category ?? null }); else if (order === null) track('payment_link_not_found'); }, [order === undefined ? 0 : order === null ? 1 : order.slug]);
 
-  const contentW = Math.min(width, 560) - S.md * 2;
-
   if (error) return <Center icon="cloud-offline-outline" title="No se pudo cargar" text={error} />;
   if (order === null) return <Center icon="link-outline" title="Este link no existe" text="Pídele al vendedor que te mande el link de nuevo." />;
 
-  const cat = order ? getCategory(order.category) : undefined;
+  // Mismo encabezado y tarjeta que la invitación (/i/<code>): título grande, miniatura junto al nombre y el precio.
+  const unpaid = !order || order.status === 'creado' || order.status === 'escrow_creado';
+  const title = unpaid ? 'Link de pago' : 'Tu compra';
+  const subtitle = unpaid ? 'Pagas sin crear cuenta. El vendedor cobra cuando recibes.' : 'Aquí ves cada paso hasta que recibas. Se actualiza sola.';
+  if (order === undefined) return (
+    <Screen back="/pedidos" title={title} space="calm">
+      <Skeleton h={120} r={R.lg} /><Skeleton h={160} r={R.lg} />
+    </Screen>
+  );
+
+  const cat = getCategory(order.category);
+  const name = orderTitle(order);
   return (
-    <ScrollCtx.Provider value={order?.status === 'creado' ? scrollY : null}>
-    <View style={st.screen}>
-      {/* Pantalla de pago: fondo tranquilo, sin efectos detrás del monto y el botón. */}
-      <SpaceBackground mode="calm" />
-      <Animated.ScrollView contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }]} showsVerticalScrollIndicator={false}
-        onScroll={onScroll} scrollEventThrottle={16}>
-        <View style={st.rowBetween}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-            <BackButton fallback="/pedidos" />
-            <LivelyMascot size={40} parallax={0.3} variant="mini" />
-            <Text style={T.headline}>Meteorito</Text>
-          </View>
-          <View style={{ alignItems: 'flex-end', gap: S.xs }}>
-            {isAuthenticated && email ? <Text style={T.footnote} numberOfLines={1}>{email}</Text> : null}
+    <Screen back="/pedidos" title={title} subtitle={subtitle} space="calm" footer={<PayBox order={order} onChange={load} />}>
+      {/* Tarjeta de producto */}
+      <Reveal i={0}><Card style={{ gap: S.sm }}>
+        <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
+          {order.category && order.category !== 'otro' ? <Chip label={cat?.label ?? order.category} icon={categoryIcon(order.category)} /> : null}
+          {order.condition?.trim() ? <Chip label={order.condition} tone="muted" /> : null}
+          <Chip key={order.status} swap label={STATUS_LABEL[order.status] ?? order.status} tone={statusTone(order.status)} />
+        </View>
+        <View style={{ flexDirection: 'row', gap: S.sm + 4, alignItems: 'center' }}>
+          {order.photos.length > 0
+            ? <Image testID="order-photo" accessibilityLabel={`Foto de ${name}`} source={{ uri: order.photos[0] }} style={s.thumb} resizeMode="cover" />
+            : <View style={[s.thumb, s.noPhoto]}><Icon name={categoryIcon(order.category)} size={28} color={C.lilac} /></View>}
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Text style={T.title} numberOfLines={3}>{name}</Text>
+            <Text style={T.money}>{formatCRC(order.price_crc)}</Text>
           </View>
         </View>
+        {order.photos.length > 1 ? <View style={{ flexDirection: 'row', gap: S.sm }}>
+          {order.photos.slice(1).map((u, i) => <Image key={`${u}-${i}`} testID="order-photo-extra" source={{ uri: u }} style={s.extra} resizeMode="cover" />)}
+        </View> : null}
+        <TrustBlock order={order} />
+        {order.description ? <Text style={T.callout}>{order.description}</Text> : null}
+      </Card></Reveal>
 
-        {order === undefined ? (
-          <View style={{ gap: S.md }}>
-            <Skeleton h={contentW} r={R.lg} /><Skeleton w="70%" h={28} /><Skeleton w="40%" h={40} /><Skeleton h={120} r={R.lg} />
+      {moneyProgress(order.status) > 0 || order.status === 'en_disputa' ? (
+        <Card style={{ gap: S.md }}>
+          <Text style={T.caption}>Estado de tu pago</Text>
+          <MoneyTimeline status={order.status} shipped={!!(order as any).shipped_tx} />
+        </Card>
+      ) : (
+        <Card style={{ gap: S.md }}>
+          <Text style={T.caption}>Cómo funciona</Text>
+          {HOW.map((h, i) => (
+            <View key={h.title} style={{ flexDirection: 'row', gap: S.md }}>
+              <View style={{ alignItems: 'center' }}>
+                <View style={s.stepDot}><Icon name={h.icon} size={18} color={C.purpleDark} /></View>
+                {i < HOW.length - 1 && <View style={s.stepLine} />}
+              </View>
+              <View style={{ flex: 1, paddingBottom: i < HOW.length - 1 ? S.md : 0 }}>
+                <Text style={T.headline}>{h.title}</Text>
+                <Text style={T.callout}>{h.text}</Text>
+              </View>
+            </View>
+          ))}
+        </Card>
+      )}
+
+      {RATABLE.includes(order.status) && isBuyerDevice(order.slug) ? <RateCard slug={order.slug} /> : null}
+      {['fondeado', 'enviado', 'en_disputa'].includes(order.status) && isBuyerDevice(order.slug)
+        ? <Suspense fallback={null}><PushCard role="buyer" /></Suspense> : null}
+
+      {order.identifier_masked || (order.checks_summary ?? []).length > 0 ? <Card>
+        <Text style={T.caption}>Lo que declara el vendedor</Text>
+        {order.identifier_masked && <Text style={T.body}>Identificador: {order.identifier_masked}</Text>}
+        {(order.checks_summary ?? []).map((c) => (
+          <View key={c.id} style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
+            <Icon name={c.ok ? 'checkmark-circle' : 'close-circle'} size={20} color={c.ok ? C.success : C.orange} />
+            <Text style={[T.body, { flex: 1 }, !c.ok && { color: C.orange }]}>{c.label}</Text>
           </View>
-        ) : <>
-          {/* Tarjeta de producto */}
-          <Reveal i={0}><Card style={{ padding: 0, overflow: 'hidden', gap: 0 }}>
-            {order.photos.length > 0 ? (
-              <RNScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
-                {order.photos.map((u) => <Image key={u} source={{ uri: u }} style={{ width: contentW, height: contentW }} resizeMode="cover" />)}
-              </RNScrollView>
-            ) : (
-              <View style={[s.noPhoto, { height: contentW * 0.6 }]}><Icon name={categoryIcon(order.category)} size={64} color={C.lilac} /></View>
-            )}
-            <View style={{ padding: S.md, gap: S.sm }}>
-              <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
-                {order.category && order.category !== 'otro' ? <Chip label={cat?.label ?? order.category} icon={categoryIcon(order.category)} /> : null}
-                {order.condition?.trim() ? <Chip label={order.condition} tone="muted" /> : null}
-                <Chip key={order.status} swap label={STATUS_LABEL[order.status] ?? order.status} tone={statusTone(order.status)} />
-              </View>
-              <Text style={T.title}>{orderTitle(order)}</Text>
-              <TrustBlock order={order} />
-              <Text style={T.money}>{formatCRC(order.price_crc)}</Text>
-              {order.description ? <Text style={T.callout}>{order.description}</Text> : null}
-            </View>
-          </Card></Reveal>
+        ))}
+        <Text style={T.footnote}>Son datos que declara el vendedor; Meteorito no los verifica (por ahora no hay verificación de IMEI ni de iCloud). Revisa el equipo cuando lo recibas, antes de darle tu PIN al vendedor.</Text>
+      </Card> : null}
 
-          {moneyProgress(order.status) > 0 || order.status === 'en_disputa' ? (
-            <Card style={{ gap: S.md }}>
-              <Text style={T.caption}>Estado de tu pago</Text>
-              <MoneyTimeline status={order.status} shipped={!!(order as any).shipped_tx} />
-            </Card>
-          ) : (
-            <Card style={{ gap: S.md }}>
-              <Text style={T.caption}>Cómo funciona</Text>
-              {HOW.map((h, i) => (
-                <View key={h.title} style={{ flexDirection: 'row', gap: S.md }}>
-                  <View style={{ alignItems: 'center' }}>
-                    <View style={s.stepDot}><Icon name={h.icon} size={18} color={C.purpleDark} /></View>
-                    {i < HOW.length - 1 && <View style={s.stepLine} />}
-                  </View>
-                  <View style={{ flex: 1, paddingBottom: i < HOW.length - 1 ? S.md : 0 }}>
-                    <Text style={T.headline}>{h.title}</Text>
-                    <Text style={T.callout}>{h.text}</Text>
-                  </View>
-                </View>
-              ))}
-            </Card>
-          )}
-
-          {RATABLE.includes(order.status) && isBuyerDevice(order.slug) ? <RateCard slug={order.slug} /> : null}
-          {['fondeado', 'enviado', 'en_disputa'].includes(order.status) && isBuyerDevice(order.slug)
-            ? <Suspense fallback={null}><PushCard role="buyer" /></Suspense> : null}
-
-          {order.identifier_masked || (order.checks_summary ?? []).length > 0 ? <Card>
-            <Text style={T.caption}>Lo que declara el vendedor</Text>
-            {order.identifier_masked && <Text style={T.body}>Identificador: {order.identifier_masked}</Text>}
-            {(order.checks_summary ?? []).map((c) => (
-              <View key={c.id} style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
-                <Icon name={c.ok ? 'checkmark-circle' : 'close-circle'} size={20} color={c.ok ? C.success : C.orange} />
-                <Text style={[T.body, { flex: 1 }, !c.ok && { color: C.orange }]}>{c.label}</Text>
-              </View>
-            ))}
-            <Text style={T.footnote}>Son datos que declara el vendedor; Meteorito no los verifica (por ahora no hay verificación de IMEI ni de iCloud). Revisa el equipo cuando lo recibas, antes de darle tu PIN al vendedor.</Text>
-          </Card> : null}
-
-          {chainLinks(order).length > 0 && (
-            <View style={{ gap: S.xs }}>
-              <Text style={T.caption}>Evidencia en la blockchain</Text>
-              <ChainLinks order={order} />
-            </View>
-          )}
-          <PrimaryButton title="¿Qué es la custodia en blockchain?" variant="ghost" icon="help-circle-outline" onPress={() => setLearn(true)} />
-          <LearnSheet visible={learn} onClose={() => setLearn(false)} />
-          <Freshness stamp={stamp} live={!['liberado', 'resuelto', 'cancelado'].includes(order.status)} align="center" />
-          {isAuthenticated && <Text style={[T.footnote, { textAlign: 'center' }]}>Sesión iniciada como {email}</Text>}
-        </>}
-      </Animated.ScrollView>
-      {order ? <StickyFooter><PayBox order={order} onChange={load} /></StickyFooter> : null}
-    </View>
-    </ScrollCtx.Provider>
+      {chainLinks(order).length > 0 && (
+        <View style={{ gap: S.xs }}>
+          <Text style={T.caption}>Evidencia en la blockchain</Text>
+          <ChainLinks order={order} />
+        </View>
+      )}
+      <PrimaryButton title="¿Qué es la custodia en blockchain?" variant="ghost" icon="help-circle-outline" onPress={() => setLearn(true)} />
+      <LearnSheet visible={learn} onClose={() => setLearn(false)} />
+      <Freshness stamp={stamp} live={!['liberado', 'resuelto', 'cancelado'].includes(order.status)} align="center" />
+      {isAuthenticated && <Text style={[T.footnote, { textAlign: 'center' }]}>Sesión iniciada como {email}</Text>}
+    </Screen>
   );
 }
 
@@ -239,6 +219,8 @@ function Center({ icon, title, text }: { icon: IconName; title: string; text: st
 const s = StyleSheet.create({
   avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' },
   noPhoto: { backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
+  thumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: C.lilacBg },
+  extra: { width: 48, height: 48, borderRadius: 10, backgroundColor: C.lilacBg },
   stepDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' },
   stepLine: { flex: 1, width: 2, backgroundColor: C.surface2, marginTop: S.xs },
 });

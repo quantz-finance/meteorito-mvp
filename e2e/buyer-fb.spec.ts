@@ -135,6 +135,7 @@ test.describe('Comprar: invitar desde Facebook', () => {
   test('CMP-FB-03 con el teclado abierto el formulario no se aplasta (iPhone SE)', async ({ page }, info) => {
     test.skip(info.project.name !== 'webkit-iphone-se', 'solo pantalla chica');
     await open(page, '/i/nueva?buyer=A', 'buyer', true);
+    await expect(page.getByLabel('Precio acordado')).toBeVisible();
     await settle(page);
     // Altos y separaciones de los campos (el teclado no debe comprimir el formulario).
     const layout = () => page.evaluate(() => {
