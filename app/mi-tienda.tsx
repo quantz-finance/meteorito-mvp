@@ -2,7 +2,7 @@
 import { router } from 'expo-router';
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
-import { Card, ErrorText, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, st, TestnetPill, toast } from '@/components/ds';
+import { Card, ErrorText, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, st, toast } from '@/components/ds';
 import { ShareLink } from '@/components/ShareLink';
 import { StoreHeader, StoreItems } from '@/components/StoreView';
 import { ui } from '@/components/ui';
@@ -49,7 +49,7 @@ export default function MiTienda() {
   }
 
   return (
-    <Screen title="Mi tienda" back="/vender" right={<TestnetPill />} scroll={false}>
+    <Screen title="Mi tienda" back="/vender" scroll={false}>
       {error ? (
         <Card style={{ alignItems: 'center', gap: S.sm }}>
           <Icon name="storefront-outline" size={40} color={C.lilac} />

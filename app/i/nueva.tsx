@@ -6,7 +6,7 @@ import { userMessage } from '@/lib/cavosSession';
 import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useStableWindow } from '@/lib/viewport';
-import { ErrorText, Icon, PrimaryButton, Screen, TestnetPill } from '@/components/ds';
+import { ErrorText, Icon, PrimaryButton, Screen } from '@/components/ds';
 import { ui } from '@/components/ui';
 import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
@@ -54,7 +54,7 @@ export default function NuevaInvitacion() {
   }
 
   return (
-    <Screen back="/" title="Invitar a un vendedor" subtitle={short ? undefined : 'Dile qué quieres y a qué precio; él publica y te manda el link.'} right={<TestnetPill />} scroll={false}
+    <Screen back="/" title="Invitar a un vendedor" subtitle={short ? undefined : 'Dile qué quieres y a qué precio; él publica y te manda el link.'} scroll={false}
       footer={<>{err && <ErrorText>{err}</ErrorText>}<PrimaryButton title="Crear invitación" icon="paper-plane-outline" loading={busy} onPress={submit} /></>}>
       <View style={{ flex: 1, gap: S.sm }}>
         <Text style={T.caption}>Nombre del producto</Text>
@@ -77,7 +77,7 @@ export default function NuevaInvitacion() {
             </Pressable>
           ) : null}
         </View>
-        <View style={{ flexDirection: 'row', gap: S.sm, marginTop: S.xs }}><Icon name="information-circle-outline" size={18} color={C.lilac} /><Text style={[T.footnote, { flex: 1 }]}>No necesitas cuenta: tu navegador guarda una llave para que solo tú pagues el link. Beta en testnet: sin dinero real.</Text></View>
+        <View style={{ flexDirection: 'row', gap: S.sm, marginTop: S.xs }}><Icon name="information-circle-outline" size={18} color={C.lilac} /><Text style={[T.footnote, { flex: 1 }]}>No necesitas cuenta: tu navegador guarda una llave para que solo tú pagues el link.</Text></View>
       </View>
     </Screen>
   );

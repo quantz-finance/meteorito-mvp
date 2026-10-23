@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { Icon, Sheet, type IconName } from '@/components/ds';
 import { C, R, S, T } from '@/constants/theme';
-import { BETA_NOTE, LEARN } from '@/lib/learn';
+import { LEARN } from '@/lib/learn';
 import { track } from '@/lib/analytics';
 
 /** Explicación breve de Cavos, quién controla qué, custodia y testnet. Acordeón: toca un tema para leer más. */
@@ -10,7 +10,6 @@ export function LearnSheet({ visible, onClose }: { visible: boolean; onClose: ()
   const [open, setOpen] = useState<string | null>('cavos');
   return (
     <Sheet visible={visible} onClose={onClose} title="Cómo funciona">
-      <Text style={T.callout}>{BETA_NOTE}</Text>
       {LEARN.map((l) => {
         const on = open === l.id;
         return (

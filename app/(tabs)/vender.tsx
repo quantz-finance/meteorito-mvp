@@ -162,7 +162,7 @@ export default function Vender() {
           </View>
         </Card></Reveal>
         <Reveal i={2}><ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} /></Reveal>
-        <Reveal i={3}><Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar. Beta en testnet: sin dinero real.</Text></Reveal>
+        <Reveal i={3}><Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar.</Text></Reveal>
       </View>
     </Screen>
   );
@@ -209,7 +209,7 @@ export default function Vender() {
       </View>
 
       {error && <ErrorText>{error}</ErrorText>}
-      <Text style={T.footnote}>De 1 a 4 fotos con buena luz. Beta en testnet: sin dinero real.</Text>
+      <Text style={T.footnote}>De 1 a 4 fotos con buena luz.</Text>
       </View>
     </Screen>
   );

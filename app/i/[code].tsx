@@ -6,7 +6,7 @@ import { userMessage } from '@/lib/cavosSession';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Platform, Share, Text, View } from 'react-native';
-import { Card, Chip, ErrorText, haptic, Icon, PrimaryButton, Screen, SkeletonCard, TestnetPill } from '@/components/ds';
+import { Card, Chip, ErrorText, haptic, Icon, PrimaryButton, Screen, SkeletonCard } from '@/components/ds';
 import { toast } from '@/components/ds';
 import { Freshness } from '@/components/Freshness';
 import { C, S, T } from '@/constants/theme';
@@ -74,7 +74,7 @@ export default function Invitacion() {
 
   if (inv.mine) {
     return (
-      <Screen back="/" title="Tu invitación" subtitle="Envíale este link al vendedor. Cuando publique el artículo, aquí aparece tu botón para pagar." right={<TestnetPill />}
+      <Screen back="/" title="Tu invitación" subtitle="Envíale este link al vendedor. Cuando publique el artículo, aquí aparece tu botón para pagar."
         footer={inv.status === 'aceptada' && inv.order_slug
           ? <PrimaryButton title="Ir a pagar en custodia" icon="shield-checkmark" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug: inv.order_slug! } })} />
           : inv.status === 'abierta' ? <><PrimaryButton title="Enviar link al vendedor" icon="share-outline" onPress={share} />
@@ -96,7 +96,7 @@ export default function Invitacion() {
   // Vista del vendedor.
   const open = inv.status === 'abierta';
   return (
-    <Screen back="/" title="Quieren comprarte" subtitle="Alguien te invitó a vender este artículo en custodia." right={<TestnetPill />}
+    <Screen back="/" title="Quieren comprarte" subtitle="Alguien te invitó a vender este artículo en custodia."
       footer={open ? <PrimaryButton title={auth.isAuthenticated ? 'Publicar para esta compra' : 'Entrar para publicar'} icon="add-circle-outline"
         loading={auth.isLoading}
         onPress={() => { if (!auth.isAuthenticated) return auth.openLogin(); router.push({ pathname: '/vender', params: { invite: inv.code } }); }} /> : null}>

@@ -8,7 +8,7 @@ import { PayBox } from '@/components/PayBox';
 import { BackButton } from '@/components/BackButton';
 import { PrimaryButton } from '@/components/ds';
 import { ChainLinks, chainLinks } from '@/components/ChainLinks';
-import { toast, Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, TestnetPill, type IconName } from '@/components/ds';
+import { toast, Card, Chip, Icon, MoneyTimeline, moneyProgress, Skeleton, StickyFooter, st, statusTone, type IconName } from '@/components/ds';
 import { categoryIcon } from '@/components/categoryIcons';
 import { C, R, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
@@ -23,7 +23,7 @@ import { lazy, Suspense } from 'react';
 const PushCard = lazy(() => import('@/components/PushCard')); // diferido: solo tras pagar
 
 const HOW: { icon: IconName; title: string; text: string }[] = [
-  { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu pago de prueba queda en custodia (escrow). El vendedor todavía no lo recibe.' },
+  { icon: 'lock-closed', title: 'Pagas en custodia', text: 'Tu pago queda en custodia (escrow). El vendedor todavía no lo recibe.' },
   { icon: 'cube', title: 'Recibes y revisas', text: 'Cuando lo tengas en la mano y funcione, le das tu PIN al vendedor.' },
   { icon: 'cash', title: 'El vendedor cobra', text: 'Recién ahí se libera el pago. Si hay un problema, lo revisamos.' },
 ];
@@ -84,7 +84,6 @@ export default function LinkDeVenta() {
             <Text style={T.headline}>Meteorito</Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: S.xs }}>
-            <TestnetPill />
             {isAuthenticated && email ? <Text style={T.footnote} numberOfLines={1}>{email}</Text> : null}
           </View>
         </View>

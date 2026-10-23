@@ -142,7 +142,6 @@ export function Chip({ label, tone = 'lilac', icon, swap }: { label: string; ton
 }
 
 /** Pastilla discreta de red de pruebas. */
-export const TestnetPill = () => <Chip label="Modo prueba" tone="muted" icon="flask-outline" />;
 
 /* ---------- Skeleton ---------- */
 export function Skeleton({ w = '100%', h = 16, r = R.sm, style }: { w?: number | `${number}%`; h?: number; r?: number; style?: StyleProp<ViewStyle> }) {
