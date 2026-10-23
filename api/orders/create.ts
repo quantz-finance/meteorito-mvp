@@ -41,18 +41,24 @@ export default async function handler(req: any, res: any) {
     if (fullTitle.length < TITLE_MIN) throw new HttpError(400, `El título necesita al menos ${TITLE_MIN} letras.`);
     const price = Number(b.price_crc);
     if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw new HttpError(400, 'precio inválido');
-    // Fotos obligatorias (1-4) y solo de la carpeta del vendedor (subidas por /api/photos/upload-url).
+    // Fotos obligatorias (1-4) y solo de la carpeta del vendedor (subidas por /api/photos/upload-url) o de la invitación.
     const prefix = publicPrefix(user.sub);
     const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
     if (photos.length < 1) throw new HttpError(400, 'agrega al menos una foto');
-    if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(prefix))) throw new HttpError(400, 'fotos inválidas');
-    // El link no se publica si la wallet del vendedor no puede recibir USDC (activar con /api/wallet/activate).
-    if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Actívala y vuelve a publicar.'), { code: 'wallet_not_ready' });
-    // Publicación en respuesta a una invitación del comprador: la invitación debe seguir abierta y el precio acordado coincidir.
+    if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string')) throw new HttpError(400, 'fotos inválidas');
+    // Publicación en respuesta a una invitación del comprador: se lee antes de validar las fotos, porque el vendedor puede
+    // reutilizar las de la invitación (p. ej. la foto del anuncio de Facebook que importó el comprador).
     let invite: any = null;
     if (b.invite != null) {
       if (!validCode(b.invite)) throw new HttpError(400, 'invitación inválida');
       invite = await inviteByCode(b.invite);
+    }
+    const invitePhotos: string[] = Array.isArray(invite?.photos) ? invite.photos : [];
+    if (photos.some((u) => !u.startsWith(prefix) && !invitePhotos.includes(u))) throw new HttpError(400, 'fotos inválidas');
+    // El link no se publica si la wallet del vendedor no puede recibir USDC (activar con /api/wallet/activate).
+    if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Actívala y vuelve a publicar.'), { code: 'wallet_not_ready' });
+    // La invitación debe seguir abierta y el precio acordado coincidir.
+    if (b.invite != null) {
       if (!invite) throw new HttpError(404, 'La invitación no existe.');
       if (invite.status !== 'abierta') throw Object.assign(new HttpError(409, 'Esta invitación ya fue aceptada o cancelada.'), { code: 'invite_not_open' });
       // El comprador invita como INVITADO (guest:<hash de su llave>), así que comparar con el sub de Cavos nunca coincidía.

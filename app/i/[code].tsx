@@ -5,7 +5,7 @@ import * as Clipboard from 'expo-clipboard';
 import { userMessage } from '@/lib/cavosSession';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Image, Platform, Share, Text, View } from 'react-native';
+import { Image, Linking, Platform, Pressable, Share, Text, View } from 'react-native';
 import { Card, Chip, ErrorText, haptic, Icon, PrimaryButton, Screen, SkeletonCard } from '@/components/ds';
 import { toast } from '@/components/ds';
 import { Freshness } from '@/components/Freshness';
@@ -13,6 +13,7 @@ import { C, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { cancelInvite, getInvite, inviteLink, type Invite } from '@/lib/invites';
+import { inviteShareMessage } from '@/lib/inviteShare';
 import { formatCRC } from '@/lib/orders';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { track } from '@/lib/analytics';
@@ -48,15 +49,18 @@ export default function Invitacion() {
   const link = inviteLink(inv.code);
   const cat = getCategory(inv.category);
   const st = STATUS[inv.status];
-  const message = `Quiero comprarte ${`${inv.brand} ${inv.model}`.trim()} por ${formatCRC(inv.price_crc)}. Publica el artículo en Meteorito para que te pague en custodia: ${link}`;
+  const name = `${inv.brand} ${inv.model}`.trim();
+  // Mensaje listo para Messenger/WhatsApp (el link va dentro del texto: Messenger ignora `url` en algunos teléfonos).
+  const message = inviteShareMessage({ title: name, price_crc: inv.price_crc, source_url: inv.source_url }, link);
 
   async function share() {
+    track('invite_shared', { from_facebook: !!inv?.source_url });
     if (Platform.OS === 'web') {
       const nav = globalThis.navigator as Navigator | undefined;
-      if (nav?.share) return nav.share({ title: 'Meteorito', text: message, url: link }).catch(() => {});
-      return copy();
+      if (nav?.share) return nav.share({ title: 'Meteorito', text: message }).catch(() => {});
+      await Clipboard.setStringAsync(message); haptic.success(); toast('Mensaje copiado. Pégalo en Messenger o WhatsApp.'); return;
     }
-    await Share.share({ message, url: link });
+    await Share.share({ message });
   }
   async function copy() { await Clipboard.setStringAsync(link); haptic.success(); toast('Link copiado'); setCopied(true); setTimeout(() => setCopied(false), 2000); }
 
@@ -65,10 +69,23 @@ export default function Invitacion() {
       <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
         <Chip label={cat?.label ?? inv.category} /><Chip label={st.label} tone={st.tone} />
       </View>
-      <Text style={T.title}>{`${inv.brand} ${inv.model}`.trim()}</Text>
-      {inv.photos?.length ? <View style={{ flexDirection: 'row', gap: S.sm }}>{inv.photos.map((u) => <Image key={u} source={{ uri: u }} style={{ width: 56, height: 56, borderRadius: 10 }} />)}</View> : null}
-      <Text style={T.money}>{formatCRC(inv.price_crc)}</Text>
+      <View style={{ flexDirection: 'row', gap: S.sm + 4, alignItems: 'center' }}>
+        {inv.photos?.length ? <Image testID="invite-photo" accessibilityLabel={`Foto de ${name}`} source={{ uri: inv.photos[0] }} style={{ width: 88, height: 88, borderRadius: 14, backgroundColor: C.lilacBg }} resizeMode="cover" /> : null}
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text style={T.title} numberOfLines={3}>{name}</Text>
+          <Text style={T.money}>{formatCRC(inv.price_crc)}</Text>
+        </View>
+      </View>
+      {inv.photos && inv.photos.length > 1 ? <View style={{ flexDirection: 'row', gap: S.sm }}>{inv.photos.slice(1).map((u) => <Image key={u} source={{ uri: u }} style={{ width: 48, height: 48, borderRadius: 10 }} />)}</View> : null}
       {inv.note ? <Text style={T.callout}>“{inv.note}”</Text> : null}
+      {inv.source_url ? (
+        <Pressable accessibilityRole="link" accessibilityLabel="Ver anuncio en Facebook" hitSlop={8} onPress={() => { haptic.tap(); Linking.openURL(inv.source_url!).catch(() => {}); }}
+          style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: S.xs, minHeight: 32 }, pressed && { opacity: 0.7 }]}>
+          <Icon name="logo-facebook" size={16} color={C.lilac} />
+          <Text style={[T.footnote, { color: C.lilac }]} numberOfLines={1}>Ver anuncio en Facebook</Text>
+          <Icon name="open-outline" size={14} color={C.lilac} />
+        </Pressable>
+      ) : null}
     </Card>
   );
 
@@ -96,7 +113,7 @@ export default function Invitacion() {
   // Vista del vendedor.
   const open = inv.status === 'abierta';
   return (
-    <Screen back="/comprar" title="Quieren comprarte" subtitle="Alguien te invitó a vender este artículo en custodia."
+    <Screen back="/comprar" title="Quieren comprarte" subtitle={inv.source_url ? 'Vieron tu anuncio en Facebook y quieren pagarte en custodia.' : 'Alguien te invitó a vender este artículo en custodia.'}
       footer={open ? <PrimaryButton title={auth.isAuthenticated ? 'Publicar para esta compra' : 'Entrar para publicar'} icon="add-circle-outline"
         loading={auth.isLoading}
         onPress={() => { if (!auth.isAuthenticated) return auth.openLogin(); router.push({ pathname: '/vender', params: { invite: inv.code } }); }} /> : null}>

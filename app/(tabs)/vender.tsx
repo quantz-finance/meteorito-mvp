@@ -28,7 +28,7 @@ import { priceBucket, track, trackError } from '@/lib/analytics';
 import { photoFailureProps } from '@/lib/photoError';
 
 type PhotoStatus = 'processing' | 'ready' | 'uploading' | 'done' | 'error';
-interface Photo { key: string; uri: string; mime: string; width?: number; height?: number; status: PhotoStatus; blob?: Blob }
+interface Photo { key: string; uri: string; mime: string; width?: number; height?: number; status: PhotoStatus; blob?: Blob; /** ya subida (foto de la invitación del comprador): se reutiliza tal cual */ url?: string }
 interface Created { slug: string; title: string; price: number; photo: string | null }
 let photoSeq = 0;
 
@@ -85,6 +85,8 @@ function VenderForm() {
     getInvite(String(inviteParam)).then((i) => {
       if (!live || !i || i.status !== 'abierta') { if (live && i) setError('Esta invitación ya no está abierta.'); return; }
       setInvite(i); setCreated(null); setTitle(`${i.brand} ${i.model}`.trim().slice(0, TITLE_MAX)); setPrice(String(i.price_crc));
+      // Fotos de la invitación (p. ej. la del anuncio de Facebook que importó el comprador): el API acepta reutilizarlas.
+      if (i.photos?.length) setPhotos(i.photos.slice(0, MAX_PHOTOS).map((url) => ({ key: `p${++photoSeq}`, uri: url, mime: 'image/jpeg', status: 'ready' as const, url })));
     }).catch((e) => live && setError((e as Error).message));
     return () => { live = false; };
   }, [inviteParam]);
@@ -168,6 +170,7 @@ function VenderForm() {
       const draftId = newDraftId();
       const urls: string[] = [];
       for (const [i, p] of photos.entries()) {
+        if (p.url) { urls.push(p.url); continue; }
         setPhoto(p.key, { status: 'uploading' });
         try { urls.push(p.blob ? await uploadCompressed(a, p.blob, draftId, i) : await uploadPhoto(a, p, draftId, i)); setPhoto(p.key, { status: 'done' }); }
         catch (e) { setPhoto(p.key, { status: 'error' }); track('photo_upload_failed', { context: 'listing', index: i, precompressed: !!p.blob, ...photoFailureProps(e) }); throw e; }

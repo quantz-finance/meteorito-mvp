@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ui } from '@/components/ui';
 import { parseSlug } from '@/lib/orders';
 import { useStableWindow } from '@/lib/viewport';
@@ -40,9 +40,16 @@ export default function Comprar() {
         <Reveal i={3}><Card style={{ gap: S.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
             <Icon name="paper-plane-outline" size={24} color={C.lilac} />
-            <Text style={[T.headline, { flex: 1 }]}>¿Quieres algo que aún no está publicado?</Text>
+            <Text style={[T.headline, { flex: 1 }]}>¿Lo viste en Facebook o en otro lado?</Text>
           </View>
-          <Text style={T.callout} numberOfLines={3}>Invita a un vendedor: dices qué quieres y a qué precio; él publica y te manda el link de pago.</Text>
+          <Text style={T.callout} numberOfLines={3}>Invita al vendedor: pega el link del anuncio o di qué quieres y a qué precio. Él acepta y te manda el link de pago.</Text>
+          <Pressable onPress={() => { haptic.tap(); router.push({ pathname: '/i/nueva', params: { fb: '1' } }); }} accessibilityRole="button" accessibilityLabel="Importar de Facebook"
+            style={({ pressed }) => [st.fbBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+            <Icon name="logo-facebook" size={20} color={C.lilac} />
+            <Text style={[T.headline, { color: C.lilac, fontSize: 15, flex: 1 }]} numberOfLines={1}>Importar de Facebook</Text>
+            <Text style={[T.footnote, { color: C.textDim }]} numberOfLines={1}>Pega el link</Text>
+            <Icon name="chevron-forward" size={16} color={C.textDim} />
+          </Pressable>
           <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" onPress={() => router.push('/i/nueva')} />
         </Card></Reveal>
         <Reveal i={4}><Pressable accessibilityRole="button" accessibilityLabel="Pagar un link" onPress={() => { haptic.tap(); setPayOpen(true); }}
@@ -66,3 +73,7 @@ export default function Comprar() {
     </Screen>
   );
 }
+
+const st = StyleSheet.create({
+  fbBtn: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44, paddingHorizontal: S.md, borderRadius: R.md, borderWidth: 1, borderColor: C.lilac, backgroundColor: C.lilacBg },
+});

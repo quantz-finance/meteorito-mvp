@@ -10,9 +10,10 @@
 //  GET  ?push=key                                 -> llave pública VAPID (o null si no hay push configurado)
 //  POST { action:'push_subscribe'|'push_unsubscribe', subscription } (Bearer Cavos y/o X-Guest-Key)
 //                                                 -> avisos push de los pedidos de esa identidad (migración 011)
-//  POST { action:'import_facebook', url }         (Bearer Cavos) -> lee un anuncio PÚBLICO de Facebook Marketplace (solo
+//  POST { action:'import_facebook', url }         (Bearer Cavos o X-Guest-Key del comprador que invita) -> lee un anuncio PÚBLICO de Facebook Marketplace (solo
 //                                                 facebook.com / fb.me) para precargar Vender: título, precio en colones,
-//                                                 descripción y foto (data URL). Nunca crea nada: el vendedor revisa y genera.
+//                                                 descripción y foto (data URL). Nunca crea nada: quien importa revisa y
+//                                                 confirma (link de pago en Vender o invitación en Comprar).
 import { db, fail, json, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
@@ -20,7 +21,7 @@ import { crIbanError, cleanHolder, normalizeIban, normalizeSinpe, payoutView } f
 import { deleteSubscription, isMissingTable, parseSubscription, saveSubscription, vapid } from '../_lib/push';
 import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
 import { checkFacebookUrl } from '../_lib/fbparse';
-import { importFacebookListing, fbRateLimited } from '../_lib/fbimport';
+import { clientIp, FB_GUEST_IP_PER_MIN, importFacebookListing, fbRateLimited } from '../_lib/fbimport';
 import { env } from '../_lib/env';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
@@ -116,14 +117,21 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { ok: true });
     }
 
-    const user = await requireCavosUser(req);
     if (b.action === 'import_facebook') {
+      // Vendedor (Bearer Cavos) o comprador sin cuenta que invita al vendedor desde el anuncio (X-Guest-Key).
+      const who = await requireBuyerIdentity(req);
       const chk = checkFacebookUrl(b.url);
       if (!chk.ok) throw Object.assign(new HttpError(400, chk.error), { code: 'fb_url_invalid' });
-      if (fbRateLimited(user.sub)) throw Object.assign(new HttpError(429, 'Espera un momento antes de importar otro anuncio.'), { code: 'fb_rate_limited' });
+      // Límite por identidad (8/min) y, para invitados, también por IP: la llave de invitado es gratis de generar.
+      const ip = who.cavos ? null : clientIp(req);
+      if (fbRateLimited(who.cavos?.sub ?? who.guest!) || (ip && fbRateLimited(`ip:${ip}`, Date.now(), FB_GUEST_IP_PER_MIN))) {
+        throw Object.assign(new HttpError(429, 'Espera un momento antes de importar otro anuncio.'), { code: 'fb_rate_limited' });
+      }
       res.setHeader?.('Cache-Control', 'no-store');
       return json(res, 200, await importFacebookListing(chk.url, { rate: env.crcUsdcRate() }));
     }
+
+    const user = await requireCavosUser(req);
     if (b.action === 'payout_get' || b.action === 'payout_set') {
       const missing = (e: any) => { if (isMissingTable(e)) throw Object.assign(new HttpError(503, 'Todavía no puedes registrar tu cuenta. Intenta más tarde.'), { code: 'payout_unavailable' }); throw e; };
       if (b.action === 'payout_get') {

@@ -211,3 +211,34 @@ test('API-FB importar de Facebook: solo links de FB, nunca pide fuera de FB, dev
     expect(limited.code).toBe(429);
   } finally { __setFbFetchForTests(null); }
 });
+
+test('API-FB-BUYER comprador sin cuenta: importa con su llave de invitado (fixtures, sin red), invita con el link de FB y el vendedor publica con esa foto', async () => {
+  const html = readFileSync(resolve(__dirname, '../scripts/ci/fixtures/facebook/og-crc-dots-mobile.html'), 'utf8');
+  const seen: string[] = [];
+  __setFbFetchForTests(async (url) => {
+    seen.push(url);
+    if (url.includes('fbcdn.net')) return new Response(Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { status: 200, headers: { 'content-type': 'image/jpeg' } });
+    return new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
+  });
+  try {
+    const ITEM = 'https://www.facebook.com/marketplace/item/1234567890/';
+    expect((await call(store, { body: { action: 'import_facebook', url: ITEM } })).code).toBe(401);
+    const r = await call(store, { guest: KEY_A, body: { action: 'import_facebook', url: ITEM }, headers: { 'x-forwarded-for': '192.0.2.10' } });
+    expect(r.code).toBe(200);
+    expect(r.body.price_crc).toBe(25000);
+    expect(r.body.photos[0]).toMatch(/^data:image\/jpeg;base64,/);
+    expect(seen.every((u) => /^https:\/\/([a-z0-9-]+\.)*(facebook\.com|fbcdn\.net)\//.test(u))).toBe(true);
+    // El cliente sube la foto con la llave de invitado (carpeta del comprador) y crea la invitación con el link de FB.
+    const up = await call(upload, { guest: KEY_A, body: { as: 'guest', draftId: '77777777-7777-4777-8777-777777777777', index: 0, mime: 'image/jpeg', size: 1000 } });
+    expect(up.code).toBe(200);
+    const inv = await call(invites, { guest: KEY_A, body: { op: 'create', title: r.body.title ?? 'Artículo', price_crc: r.body.price_crc, photos: [up.body.publicUrl], source_url: ITEM } });
+    expect(inv.code).toBe(200);
+    const pub = await call(invites, { method: 'GET', query: { code: inv.body.code } });
+    expect(pub.body.source_url).toBe(ITEM);
+    expect(pub.body.photos).toEqual([up.body.publicUrl]);
+    const tok = await token({ sub: 'seller-fb-buyer' });
+    const c = await call(create, { tok, body: sellerBody('seller-fb-buyer', { title: pub.body.title, price_crc: pub.body.price_crc, photos: [up.body.publicUrl], invite: inv.body.code }) });
+    expect(c.code).toBe(200);
+    expect(db.tables.invitations.find((i: any) => i.code === inv.body.code).status).toBe('aceptada');
+  } finally { __setFbFetchForTests(null); }
+});

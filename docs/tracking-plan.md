@@ -19,7 +19,9 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 | `sell_step_completed` | wizard Vender | `step` (0-3), `step_name` |
 | `sell_submit_tapped` | último paso | `step` |
 | `link_created` | link creado | `category`, `photos`, `price_bucket`, `from_facebook` |
-| `facebook_import` | Vender → Importar de Facebook | `result` (success/partial/failed), `has_title`, `has_price`, `photos`, `has_description`, `converted`, `code` (solo si falló la llamada). Nunca la URL, el título, el precio ni el texto. |
+| `facebook_import` | Vender o Comprar (Invitar a un vendedor) → Importar de Facebook | `context` (`invite` si fue el comprador), `result` (success/partial/failed), `has_title`, `has_price`, `photos`, `has_description`, `converted`, `code` (solo si falló la llamada). Nunca la URL, el título, el precio ni el texto. |
+| `invite_created` | Comprar → Crear invitación | `photos`, `from_facebook` |
+| `invite_shared` | Invitación → Enviar link al vendedor | `from_facebook` |
 | `photo_upload_failed` | venta / disputa | `context`, `index`, `precompressed`, `stage` (compress/sign/storage), `code`, `http_status`, `mime` |
 | `share_clicked` / `link_copied` | Compartir | `method` |
 | `payment_link_opened` / `payment_link_not_found` | `/p/:slug` | `status`, `logged_in`, `category` |
