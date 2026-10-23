@@ -7,11 +7,11 @@ import { pressTransition } from '@/constants/motion';
 import { Fonts } from '@/constants/Colors';
 import { C, S, TOUCH } from '@/constants/theme';
 
-export function goBack(fallback: Href = '/') {
+export function goBack(fallback: Href = '/vender') {
   if (router.canGoBack()) router.back(); else router.replace(fallback);
 }
 
-export function BackButton({ fallback = '/', label = 'Volver' }: { fallback?: Href; label?: string }) {
+export function BackButton({ fallback = '/vender', label = 'Volver' }: { fallback?: Href; label?: string }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={6} testID="back-button"
       onPress={() => { haptic.tap(); goBack(fallback); }}

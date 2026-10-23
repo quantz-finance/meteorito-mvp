@@ -1,7 +1,8 @@
 // Tienda del vendedor + calificaciones (una sola función para no sumar funciones en Vercel).
 //  GET  ?store=<usuario>                         -> tienda pública: nombre, puntuación, productos disponibles (sin datos sensibles)
 //  POST { action:'me' }                          (Bearer Cavos) -> mi tienda (la crea con un usuario único si no existe)
-//  POST { action:'update', store_slug?, display_name? } (Bearer Cavos) -> cambiar usuario o nombre
+//  POST { action:'update', store_slug?, display_name?, avatar_url? } (Bearer Cavos) -> cambiar usuario, nombre o foto
+//                                                 (foto: solo una subida a SU carpeta por /api/photos/upload-url; null la quita)
 //  POST { action:'rate', slug, stars }           (X-Guest-Key o Bearer del comprador) -> 1-5 estrellas, una vez por pedido,
 //                                                 solo con el pedido Entregado o Liberado
 //  POST { action:'payout_get' } / { action:'payout_set', iban, holder_name, sinpe_phone? } (Bearer Cavos)
@@ -21,19 +22,21 @@ import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
 import { checkFacebookUrl } from '../_lib/fbparse';
 import { importFacebookListing, fbRateLimited } from '../_lib/fbimport';
 import { env } from '../_lib/env';
-import { baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
+import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
 
 async function publicStore(slug: string) {
-  const { data: store, error } = await db().from('public_stores').select(PUBLIC_COLS).eq('store_slug', slug).maybeSingle();
+  // avatar_url: migración 014. Sin ella, la tienda sigue igual (sin foto).
+  let { data: store, error } = await db().from('public_stores').select(`${PUBLIC_COLS}, avatar_url`).eq('store_slug', slug).maybeSingle();
+  if (error && missingColumn(error)) ({ data: store, error } = await db().from('public_stores').select(PUBLIC_COLS).eq('store_slug', slug).maybeSingle());
   if (error) storeDbErr(error);
   if (!store) return null;
   const { data: items, error: e2 } = await db().from('public_store_items').select('slug, title, price_crc, photo, created_at')
     .eq('store_slug', slug).order('created_at', { ascending: false }).limit(60);
   if (e2) storeDbErr(e2);
   return {
-    store_slug: store.store_slug, display_name: store.display_name,
+    store_slug: store.store_slug, display_name: store.display_name, avatar_url: (store as any).avatar_url ?? null,
     rating_avg: store.rating_avg == null ? null : Number(store.rating_avg), rating_count: Number(store.rating_count ?? 0),
     items: (items ?? []).map((i: any) => ({ slug: i.slug, title: i.title || 'Artículo', price_crc: Number(i.price_crc), photo: i.photo ?? null })),
   };
@@ -42,7 +45,7 @@ async function publicStore(slug: string) {
 async function myProfile(sub: string, email?: string) {
   const { data, error } = await db().from('seller_profiles').select('sub, store_slug, display_name').eq('sub', sub).maybeSingle();
   if (error) storeDbErr(error);
-  if (data) return data;
+  if (data) return data as { sub: string; store_slug: string; display_name: string };
   const base = baseSlugFromEmail(email);
   for (let i = 0; i < 6; i++) {
     const store_slug = i === 0 ? base : withSuffix(base);
@@ -173,11 +176,18 @@ export default async function handler(req: any, res: any) {
         patch.store_slug = s;
       }
       if (b.display_name != null) patch.display_name = cleanName(b.display_name);
-      const { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub);
+      if (b.avatar_url !== undefined) {
+        const url = b.avatar_url === null ? null : avatarUrlOf(b.avatar_url, user.sub);
+        if (b.avatar_url !== null && !url) throw Object.assign(new HttpError(400, 'No pudimos usar esa foto. Elige otra imagen e intenta de nuevo.'), { code: 'bad_avatar' });
+        patch.avatar_url = url;
+      }
+      const { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub); // solo el perfil del dueño
       if (error?.code === '23505') throw Object.assign(new HttpError(409, 'Ese nombre de usuario ya está en uso. Prueba otro.'), { code: 'store_slug_taken' });
+      if (error && 'avatar_url' in patch && missingColumn(error)) throw Object.assign(new HttpError(503, 'Todavía no puedes poner foto a tu tienda. Intenta más tarde.'), { code: 'avatar_unavailable' });
       if (error) storeDbErr(error);
       const slug = (patch.store_slug as string) ?? cur.store_slug;
-      return json(res, 200, (await publicStore(slug)) ?? { store_slug: slug, display_name: (patch.display_name as string) ?? cur.display_name, rating_avg: null, rating_count: 0, items: [] });
+      const fresh = (await publicStore(slug)) ?? { store_slug: slug, display_name: (patch.display_name as string) ?? cur.display_name, avatar_url: null, rating_avg: null, rating_count: 0, items: [] };
+      return json(res, 200, 'avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh);
     }
     throw new HttpError(400, 'acción inválida');
   } catch (e) { return fail(res, e); }

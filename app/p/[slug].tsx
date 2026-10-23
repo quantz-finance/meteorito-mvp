@@ -79,7 +79,7 @@ export default function LinkDeVenta() {
         onScroll={onScroll} scrollEventThrottle={16}>
         <View style={st.rowBetween}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-            <BackButton fallback="/" />
+            <BackButton fallback="/pedidos" />
             <LivelyMascot size={40} parallax={0.3} variant="mini" />
             <Text style={T.headline}>Meteorito</Text>
           </View>
@@ -228,7 +228,7 @@ function Center({ icon, title, text }: { icon: IconName; title: string; text: st
   const insets = useSafeAreaInsets();
   return (
     <View style={[st.screen, { alignItems: 'center', justifyContent: 'center', padding: S.lg, gap: S.md }]}>
-      <View style={{ position: 'absolute', top: insets.top + S.md, left: S.md }}><BackButton fallback="/" /></View>
+      <View style={{ position: 'absolute', top: insets.top + S.md, left: S.md }}><BackButton fallback="/pedidos" /></View>
       <Icon name={icon} size={48} color={C.lilac} />
       <Text style={[T.title, { textAlign: 'center' }]}>{title}</Text>
       <Text style={[T.callout, { textAlign: 'center' }]}>{text}</Text>

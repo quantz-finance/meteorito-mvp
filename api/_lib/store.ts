@@ -2,6 +2,7 @@
 // Si la migración no está aplicada, todo responde 503 'store_unavailable' y el resto de la app sigue igual.
 import { randomBytes } from 'node:crypto';
 import { HttpError } from './auth';
+import { publicPrefix } from './photos';
 
 export const STORE_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
 /** Rutas y palabras que no pueden ser usuario de tienda. */
@@ -36,4 +37,13 @@ export function storeDbErr(e: any): never {
   const missing = e && (e.code === '42P01' || e.code === 'PGRST205' || e.code === 'PGRST200' || /does not exist|schema cache/i.test(String(e.message ?? '')));
   if (missing) throw Object.assign(new HttpError(503, 'La tienda todavía no está disponible. Tus links de venta funcionan igual.'), { code: 'store_unavailable' });
   throw e;
+}
+
+/** Foto de la tienda: SOLO una imagen ya subida por /api/photos/upload-url a la carpeta del propio vendedor
+ *  (<bucket público>/<su carpeta>/<uuid>/0.jpg|png|webp). Cualquier otra URL -> null (se rechaza). */
+export function avatarUrlOf(raw: unknown, sub: string): string | null {
+  if (typeof raw !== 'string' || raw.length > 400) return null;
+  const prefix = publicPrefix(sub);
+  if (!raw.startsWith(prefix)) return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/0\.(jpg|png|webp)$/.test(raw.slice(prefix.length)) ? raw : null;
 }

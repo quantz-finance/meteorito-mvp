@@ -7,7 +7,7 @@ import type { MeteoritoAuth } from '@/lib/types';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
 import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { checkFacebookUrl, fbImportNotice, fbImportProps, importedPhotoBlob, importFromFacebook, type FbImport } from '@/lib/fbImport';
@@ -46,7 +46,16 @@ function saveDraft(d: Draft | null) {
   try { if (typeof window === 'undefined' || !window.sessionStorage) return; if (d) window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d)); else window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* sin storage */ }
 }
 
+// Vender es la pestaña de entrada: (tabs) queda montado debajo de /p, /i, /t… abiertos por link.
+// No se arma el formulario hasta que la pestaña se ve por primera vez (más liviano, sin campos duplicados ocultos).
 export default function Vender() {
+  const focused = useIsFocused();
+  const [seen, setSeen] = useState(focused);
+  useEffect(() => { if (focused) setSeen(true); }, [focused]);
+  return seen ? <VenderForm /> : null;
+}
+
+function VenderForm() {
   const auth = useAuth();
   const { address } = auth;
   const [d0] = useState(() => loadDraft(address));

@@ -1,18 +1,22 @@
 // Vista de una tienda: nombre, puntuación y productos disponibles (foto, nombre, precio). Sin datos sensibles.
 import { router } from 'expo-router';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Icon } from '@/components/ds';
+import { useState } from 'react';
+import { ErrorText, Icon } from '@/components/ds';
+import { StoreAvatar } from '@/components/StoreAvatar';
 import { GridPager } from '@/components/GridPager';
 import { pressTransition } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
 import { formatCRC } from '@/lib/orders';
 import { ratingLabel, type Store } from '@/lib/store';
 
-export function StoreHeader({ store }: { store: Store }) {
+export function StoreHeader({ store, editable, onChange }: { store: Store; editable?: boolean; onChange?: (s: Store) => void }) {
   const rated = store.rating_count > 0 && store.rating_avg != null;
+  const [err, setErr] = useState<string | null>(null);
   return (
+    <View style={{ gap: S.xs }}>
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
-      <View style={s.avatar}><Text style={s.avatarText}>{store.display_name.charAt(0).toUpperCase()}</Text></View>
+      <StoreAvatar store={store} editable={editable} onChange={onChange} onError={setErr} />
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text style={T.title} numberOfLines={1}>{store.display_name}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.xs }}>
@@ -20,6 +24,8 @@ export function StoreHeader({ store }: { store: Store }) {
           <Text style={T.callout} numberOfLines={1}>{ratingLabel(store)}</Text>
         </View>
       </View>
+    </View>
+    {err ? <ErrorText>{err}</ErrorText> : null}
     </View>
   );
 }
@@ -46,8 +52,6 @@ export function StoreItems({ store, empty, minCellW = 150, minCellH = 168, onIte
 }
 
 const s = StyleSheet.create({
-  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 24, fontWeight: '900', color: C.purpleDark },
   item: { flex: 1, backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   photo: { flex: 1, width: '100%', backgroundColor: C.lilacBg },
   meta: { paddingHorizontal: S.sm, paddingVertical: 6, gap: 0 },

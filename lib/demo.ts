@@ -35,7 +35,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes). */
@@ -268,6 +268,10 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     if (body.action === 'update') {
       if (body.store_slug != null) { const s2 = String(body.store_slug).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, ''); if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(s2)) throw err(400, 'bad_store_slug', 'Usa de 3 a 30 letras o números (sin espacios).'); st.store.slug = s2; }
       if (body.display_name != null && String(body.display_name).trim()) st.store.name = String(body.display_name).trim().slice(0, 40);
+      if (body.avatar_url !== undefined) { // demo: la foto queda local (data URL); el API real solo acepta su carpeta en Storage
+        if (body.avatar_url !== null && !/^data:image\/(jpeg|png|webp);base64,/.test(String(body.avatar_url))) throw err(400, 'bad_avatar', 'No pudimos usar esa foto. Elige otra imagen e intenta de nuevo.');
+        st.store.avatar = body.avatar_url;
+      }
       emit();
     }
     return demoGetStore(st.store.slug, true);
@@ -281,7 +285,7 @@ export function demoGetStore(slug: string, owner = false) {
   if (slug !== store.slug) return null;
   const r = Object.values(st.ratings ?? {});
   return {
-    store_slug: store.slug, display_name: store.name,
+    store_slug: store.slug, display_name: store.name, avatar_url: store.avatar ?? null,
     rating_avg: r.length ? Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100) / 100 : null, rating_count: r.length,
     // Igual que public_store_items: productos activos sin comprador (Mi tienda también ve los pausados).
     items: Object.values(st.orders).filter((o) => o.status === 'creado' && !o.listing_slug && !o.invite_code

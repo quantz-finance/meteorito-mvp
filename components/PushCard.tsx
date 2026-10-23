@@ -15,7 +15,7 @@ const COPY: Record<PushRole, { title: string; body: string }> = {
 };
 
 /** onSessionError: el error de sesión lo muestra la pantalla (una sola vez); la tarjeta se oculta en vez de repetirlo. */
-export default function PushCard({ role, onSessionError }: { role: PushRole; onSessionError?: (msg: string) => void }) {
+export default function PushCard({ role, onSessionError, compact }: { role: PushRole; onSessionError?: (msg: string) => void; /** pantallas bajas: sin el texto largo */ compact?: boolean }) {
   const auth = useAuth();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [hidden, setHidden] = useState(true);
@@ -42,7 +42,7 @@ export default function PushCard({ role, onSessionError }: { role: PushRole; onS
       <View style={s.icon}><Icon name="notifications" size={20} color="#fff" /></View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text style={T.headline} numberOfLines={2}>{c.title}</Text>
-        <Text style={T.footnote} numberOfLines={3}>{ios ? 'En iPhone: toca Compartir y luego "Agregar a inicio". Abre Meteorito desde ahí para activarlas.' : status === 'denied' ? 'Las bloqueaste en este navegador. Puedes activarlas en sus ajustes.' : c.body}</Text>
+        {compact && !ios && status !== 'denied' ? null : <Text style={T.footnote} numberOfLines={3}>{ios ? 'En iPhone: toca Compartir y luego "Agregar a inicio". Abre Meteorito desde ahí para activarlas.' : status === 'denied' ? 'Las bloqueaste en este navegador. Puedes activarlas en sus ajustes.' : c.body}</Text>}
         {err ? <ErrorText>{err}</ErrorText> : null}
         {!ios && status !== 'denied' ? <View style={{ alignSelf: 'flex-start', marginTop: 6 }}><PrimaryButton title="Activar" icon="notifications-outline" loading={busy} onPress={onEnable} /></View> : null}
       </View>

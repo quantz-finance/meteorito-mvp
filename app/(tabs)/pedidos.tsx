@@ -17,6 +17,9 @@ import { supabaseConfigured } from '@/lib/supabase';
 import { keepIfSame, needsPolling } from '@/lib/refresh';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { Freshness } from '@/components/Freshness';
+import { SalesSummary } from '@/components/SalesSummary';
+import { AccountSheet } from '@/components/AccountSheet';
+import { useStableWindow } from '@/lib/viewport';
 import { useStamp } from '@/lib/freshness';
 import { lazy, Suspense } from 'react';
 const PushCard = lazy(() => import('@/components/PushCard')); // diferido
@@ -40,6 +43,8 @@ export default function Pedidos() {
   // Error de sesión (token rechazado/vencido): se muestra UNA vez arriba y la tarjeta de notificaciones se oculta.
   const [sessionError, setSessionError] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null);
+  const [account, setAccount] = useState(false);
+  const short = useStableWindow().height < 740;
   const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
 
   const load = useCallback(async () => {
@@ -69,12 +74,16 @@ export default function Pedidos() {
   const open = orders?.find((o) => o.slug === openSlug) ?? null;
 
   return (
-    <Screen title="Mis pedidos" subtitle="El estado de tu dinero, siempre a la vista." scroll={false}
-      right={<IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />}>
+    <Screen title="Mis pedidos" subtitle={short ? undefined : 'El estado de tu dinero, siempre a la vista.'} scroll={false}
+      right={<>
+        <IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />
+        <IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />
+      </>}>
       <View style={{ flex: 1, gap: S.sm }}>
+      <SalesSummary orders={orders} compact={short} />
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : error ? <ErrorText>{error}</ErrorText> : null}
-      {orders !== null && !sessionError && <Suspense fallback={null}><PushCard role="seller" onSessionError={(m) => { setError(m); setSessionError(true); }} /></Suspense>}
+      {orders !== null && !sessionError && <Suspense fallback={null}><PushCard role="seller" compact={short} onSessionError={(m) => { setError(m); setSessionError(true); }} /></Suspense>}
       {orders && orders.length > 0 && <Freshness stamp={stamp} live={needsPolling(orders)} />}
       {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
         : orders.length === 0 ? (
@@ -84,10 +93,11 @@ export default function Pedidos() {
             <Text style={[T.callout, { textAlign: 'center' }]}>Crea un link de venta y compártelo por WhatsApp o Messenger.</Text>
             <PrimaryButton title="Crear link de venta" icon="add" onPress={() => router.push('/vender')} />
           </Card>
-        ) : <GridPager items={orders} keyOf={(o) => o.slug} minCellW={300} minCellH={118} maxCols={2} label="Página de pedidos"
-            renderItem={(o) => <OrderCard order={o} fill onPress={() => setOpenSlug(o.slug)} />} />}
+        ) : <GridPager items={orders} keyOf={(o) => o.slug} minCellW={300} minCellH={short ? 66 : 118} maxCols={2} label="Página de pedidos"
+            renderItem={(o) => <OrderCard order={o} timeline={!short} fill onPress={() => setOpenSlug(o.slug)} />} />}
       </View>
 
+      <AccountSheet visible={account} onClose={() => setAccount(false)} products={(orders ?? []).length} />
       <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? orderTitle(open) : ''}
         footer={open ? <PrimaryButton title="Compartir link" icon="share-outline" variant="secondary"
           onPress={() => { const slug = open.slug; setOpenSlug(null); router.push({ pathname: '/compartir/[slug]', params: { slug } }); }} /> : null}>
