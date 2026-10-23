@@ -40,6 +40,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '39', name: 'Teclado iOS: alto estable + encabezado compartido', file: './t39-keyboard-layout.test.ts', onchain: false },
   { id: '40', name: 'Regresión: pagar sin cuenta (push empaquetado; cambios de estado no dependen del push)', file: './t40-guest-pay-bundle.test.ts', onchain: false },
   { id: '41', name: 'Bugs de Neo: PIN bloqueado, invitación fail-closed, auto-invitación, reembolso, pedidos del vendedor', file: './t41-neo-bugs.test.ts', onchain: false },
+  { id: '43', name: 'photo_upload_failed con etapa (compress/sign/storage) y código', file: './t43-photo-failure-diagnostics.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },

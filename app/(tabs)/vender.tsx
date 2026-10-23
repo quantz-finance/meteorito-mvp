@@ -22,6 +22,7 @@ import { compressPhoto, MAX_PHOTOS, newDraftId, uploadCompressed, uploadPhoto } 
 import { formatPriceInput, parsePrice, TITLE_MAX, validateListing, type ListingErrors } from '@/lib/listing';
 import { supabaseConfigured } from '@/lib/supabase';
 import { priceBucket, track, trackError } from '@/lib/analytics';
+import { photoFailureProps } from '@/lib/photoError';
 
 type PhotoStatus = 'processing' | 'ready' | 'uploading' | 'done' | 'error';
 interface Photo { key: string; uri: string; mime: string; width?: number; height?: number; status: PhotoStatus; blob?: Blob }
@@ -119,7 +120,7 @@ export default function Vender() {
       for (const [i, p] of photos.entries()) {
         setPhoto(p.key, { status: 'uploading' });
         try { urls.push(p.blob ? await uploadCompressed(a, p.blob, draftId, i) : await uploadPhoto(a, p, draftId, i)); setPhoto(p.key, { status: 'done' }); }
-        catch (e) { setPhoto(p.key, { status: 'error' }); track('photo_upload_failed', { context: 'listing', index: i }); throw e; }
+        catch (e) { setPhoto(p.key, { status: 'error' }); track('photo_upload_failed', { context: 'listing', index: i, precompressed: !!p.blob, ...photoFailureProps(e) }); throw e; }
       }
       const t = title.trim();
       const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, ...(invite ? { invite: invite.code } : {}) });
