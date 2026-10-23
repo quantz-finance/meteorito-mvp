@@ -34,7 +34,7 @@ export interface DemoOrder {
   kind?: 'single' | 'listing'; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada'; stock?: number | null;
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
-export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
+export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
 interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
@@ -142,7 +142,9 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw err(400, 'bad_price', 'precio inválido');
       if (title.length < 3) throw err(400, 'bad_title', 'Escribe el nombre de lo que quieres comprar.');
       const code = 'inv' + String(++st.seq).padStart(5, '0');
-      st.invites[code] = { code, category: 'otro', brand: '', model: title, title, photos: Array.isArray(body.photos) ? body.photos.slice(0, 4) : [], price_crc: price, note: body.note ? String(body.note) : null, status: 'abierta', order_slug: null, created_at: now(), buyer: me() };
+      let source_url: string | null = null;
+      if (body.source_url) { const chk = checkFacebookUrl(String(body.source_url)); if (!chk.ok) throw err(400, 'fb_url_invalid', 'El link del anuncio no es de Facebook Marketplace.'); source_url = chk.url; }
+      st.invites[code] = { code, category: 'otro', brand: '', model: title, title, photos: Array.isArray(body.photos) ? body.photos.slice(0, 4) : [], price_crc: price, note: body.note ? String(body.note) : null, source_url, status: 'abierta', order_slug: null, created_at: now(), buyer: me() };
       emit(); return { code };
     }
     if (body.op === 'cancel') {
@@ -240,6 +242,13 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       st.ratings[o.slug] = stars; emit(); return { rated: true, stars };
     }
     if (body.action === 'push_subscribe' || body.action === 'push_unsubscribe') return { ok: true };
+    if (body.action === 'import_facebook') { // misma forma que el API real (vendedor o comprador invitado); sin red (foto propia del demo)
+      if (!checkFacebookUrl(body.url).ok) throw err(400, 'fb_url_invalid', FB_URL_INVALID);
+      await new Promise((r) => setTimeout(r, 400));
+      if (/\/item\/1\/|login/.test(String(body.url))) return { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: FB_IMPORT_FAILED };
+      return { result: 'success', title: 'Bicicleta de montaña aro 29', price_crc: 185000, price_source: { amount: 185000, currency: 'CRC' }, converted: false,
+        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], missing: [] };
+    }
     need('seller');
     if (body.action === 'payout_get') return { payout: st.payout ?? null };
     if (body.action === 'payout_set') {
@@ -248,13 +257,6 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       const sp = normalizeSinpe(body.sinpe_phone); if (sp === 'invalid') throw err(400, 'bad_sinpe', 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).');
       st.payout = { iban_last4: normalizeIban(body.iban).slice(-4), holder_name: holder, sinpe_last4: sp ? sp.slice(-4) : null, updated_at: now() }; emit();
       return { payout: st.payout };
-    }
-    if (body.action === 'import_facebook') { // misma forma que el API real; sin red (foto propia del demo)
-      if (!checkFacebookUrl(body.url).ok) throw err(400, 'fb_url_invalid', FB_URL_INVALID);
-      await new Promise((r) => setTimeout(r, 400));
-      if (/\/item\/1\/|login/.test(String(body.url))) return { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: FB_IMPORT_FAILED };
-      return { result: 'success', title: 'Bicicleta de montaña aro 29', price_crc: 185000, price_source: { amount: 185000, currency: 'CRC' }, converted: false,
-        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], missing: [] };
     }
     st.store ??= { slug: 'valeria', name: 'Valeria' };
     if (body.action === 'orders') return { orders: demoGetSellerOrders(DEMO_SELLER.address) };

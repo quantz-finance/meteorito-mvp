@@ -30,6 +30,6 @@ export async function inviteForOrder(slug: string): Promise<any | null> {
 }
 /** Vista pública: nunca expone buyer_user_id / seller_user_id. */
 export const publicInvite = (i: any, mine: boolean) => ({
-  code: i.code, category: i.category, brand: i.brand, model: i.model, title: `${i.brand ?? ''} ${i.model ?? ''}`.trim(), photos: Array.isArray(i.photos) ? i.photos : [], price_crc: i.price_crc, note: i.note ?? null,
+  code: i.code, category: i.category, brand: i.brand, model: i.model, title: `${i.brand ?? ''} ${i.model ?? ''}`.trim(), photos: Array.isArray(i.photos) ? i.photos : [], price_crc: i.price_crc, note: i.note ?? null, source_url: i.source_url ?? null,
   status: i.status, order_slug: i.order_slug ?? null, created_at: i.created_at, mine,
 });

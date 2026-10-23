@@ -40,10 +40,12 @@ export default function Comprar() {
         <Reveal i={3}><Card style={{ gap: S.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
             <Icon name="paper-plane-outline" size={24} color={C.lilac} />
-            <Text style={[T.headline, { flex: 1 }]}>¿Quieres algo que aún no está publicado?</Text>
+            <Text style={[T.headline, { flex: 1 }]}>¿Lo viste en Facebook o en otro lado?</Text>
           </View>
-          <Text style={T.callout} numberOfLines={3}>Invita a un vendedor: dices qué quieres y a qué precio; él publica y te manda el link de pago.</Text>
-          <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" onPress={() => router.push('/i/nueva')} />
+          <Text style={T.callout} numberOfLines={3}>Invita al vendedor: pega el link del anuncio o di qué quieres y a qué precio. Él acepta y te manda el link de pago.</Text>
+          <PrimaryButton title="Importar de Facebook" icon="logo-facebook" accessibilityLabel="Importar de Facebook"
+            onPress={() => router.push({ pathname: '/i/nueva', params: { fb: '1' } })} />
+          <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" variant="secondary" accessibilityLabel="Invitar a un vendedor" onPress={() => router.push('/i/nueva')} />
         </Card></Reveal>
         <Reveal i={4}><Pressable accessibilityRole="button" accessibilityLabel="Pagar un link" onPress={() => { haptic.tap(); setPayOpen(true); }}
           style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: S.sm + 4, backgroundColor: C.surface, borderRadius: R.lg, padding: S.sm + 4, minHeight: 64, borderWidth: 0.5, borderColor: C.line }, pressed && { opacity: 0.85 }]}>
@@ -66,3 +68,4 @@ export default function Comprar() {
     </Screen>
   );
 }
+

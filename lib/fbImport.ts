@@ -1,6 +1,7 @@
 // Importar de Facebook Marketplace (cliente): pide al API los datos del anuncio y los deja listos para precargar Vender.
-// No crea nada: el vendedor revisa y toca "Generar link". El link de FB nunca se guarda ni se manda a analítica.
-import { api } from './api';
+// No crea nada: el vendedor revisa y toca "Generar link" (o el comprador, "Crear invitación"). El link de FB nunca se
+// manda a analítica; solo la invitación del comprador lo guarda, como referencia para el vendedor.
+import { api, guestApi } from './api';
 import type { MeteoritoAuth } from './types';
 import { checkFacebookUrl, FB_IMPORT_FAILED } from '../api/_lib/fbparse'; // pura y chica
 export { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse';
@@ -15,6 +16,13 @@ export async function importFromFacebook(auth: MeteoritoAuth, raw: string): Prom
   const chk = checkFacebookUrl(raw);
   if (!chk.ok) throw Object.assign(new Error(chk.error), { code: 'fb_url_invalid' });
   return api<FbImport>(auth, '/api/store', { action: 'import_facebook', url: chk.url });
+}
+
+/** Comprador sin cuenta (Comprar → Invitar a un vendedor): mismo import, identificado con su llave de invitado. */
+export async function importFromFacebookAsBuyer(auth: Pick<MeteoritoAuth, 'getAuthToken'>, raw: string): Promise<FbImport> {
+  const chk = checkFacebookUrl(raw);
+  if (!chk.ok) throw Object.assign(new Error(chk.error), { code: 'fb_url_invalid' });
+  return guestApi<FbImport>(auth, '/api/store', { action: 'import_facebook', url: chk.url });
 }
 
 /** Foto importada (data URL del API o archivo propio en demo) -> Blob. Nada de URLs externas. */

@@ -1,6 +1,7 @@
 // /api/invites  (una sola función serverless; límite de funciones del plan de Vercel)
 //  GET  ?code=xxxxxxxx                          -> invitación pública (+ mine:true si X-Guest-Key es del comprador). Sin login.
-//  POST { op:'create', title, price_crc, photos?, note? }          (X-Guest-Key del comprador, sin cuenta)
+//  POST { op:'create', title, price_crc, photos?, note?, source_url? } (X-Guest-Key del comprador, sin cuenta)
+//       source_url: link del anuncio de Facebook Marketplace del que se importó (referencia para el vendedor; migración 015)
 //       (compatible: { category, brand, model, ... } sigue funcionando; category es opcional, por defecto 'otro')
 //  POST { op:'cancel', code }                                       (solo el comprador, solo si sigue abierta)
 import { db, json, fail } from '../_lib/db';
@@ -8,6 +9,7 @@ import { HttpError } from '../_lib/auth';
 import { guestSubFromReq } from '../_lib/guest';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 import { missingColumn } from '../_lib/listings';
+import { checkFacebookUrl } from '../_lib/fbparse';
 import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCode } from '../_lib/invites';
 
 const str = (v: unknown, max: number, req = true) => {
@@ -42,11 +44,21 @@ export default async function handler(req: any, res: any) {
       if (!`${brand ?? ''} ${model ?? ''}`.trim() || (title != null && title.length < 3)) throw new HttpError(400, 'Escribe el nombre de lo que quieres comprar.');
       const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
       if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(publicPrefix(guest)))) throw new HttpError(400, 'fotos inválidas');
-      const row: Record<string, unknown> = { buyer_user_id: guest, category, brand, model, price_crc: price, note: str(b.note, 500, false), status: 'abierta', ...(photos.length ? { photos } : {}) };
+      let source_url: string | null = null;
+      if (b.source_url != null && b.source_url !== '') {
+        const chk = typeof b.source_url === 'string' && b.source_url.length <= 1000 ? checkFacebookUrl(b.source_url) : null;
+        if (!chk?.ok) throw Object.assign(new HttpError(400, 'El link del anuncio no es de Facebook Marketplace.'), { code: 'fb_url_invalid' });
+        source_url = chk.url;
+      }
+      const row: Record<string, unknown> = { buyer_user_id: guest, category, brand, model, price_crc: price, note: str(b.note, 500, false), status: 'abierta', ...(photos.length ? { photos } : {}), ...(source_url ? { source_url } : {}) };
       for (let i = 0; i < 5; i++) {
         const code = inviteCode();
         let { error } = await db().from('invitations').insert({ ...row, code });
-        if (error && row.photos && missingColumn(error)) { delete row.photos; ({ error } = await db().from('invitations').insert({ ...row, code })); } // sin 012: sin fotos
+        // Columnas opcionales que pueden faltar si la migración no está aplicada: 015 (source_url) y 012 (photos).
+        for (const col of ['source_url', 'photos']) {
+          if (!error || !missingColumn(error) || !(col in row)) continue;
+          delete row[col]; ({ error } = await db().from('invitations').insert({ ...row, code }));
+        }
         if (!error) return json(res, 200, { code });
         if (error.code !== '23505') inviteErr(error);
       }

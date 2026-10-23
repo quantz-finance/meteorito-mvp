@@ -90,7 +90,7 @@ let testFetch: FetchLike | null = null;
 /** Solo tests: fetch simulado para el endpoint (nunca se llama en runtime). */
 export const __setFbFetchForTests = (f: FetchLike | null) => { testFetch = f; };
 
-// Límite por vendedor (por instancia): no convertir nuestra IP en un scraper ni quemarla con FB. 8 por minuto.
+// Límite por identidad (vendedor o llave de invitado) y por IP de invitados (por instancia): no convertir nuestra IP en un scraper ni quemarla con FB. 8 por minuto.
 const hits = new Map<string, number[]>();
 export function fbRateLimited(sub: string, now = Date.now(), max = 8): boolean {
   const recent = (hits.get(sub) ?? []).filter((t) => now - t < 60_000);
@@ -98,6 +98,16 @@ export function fbRateLimited(sub: string, now = Date.now(), max = 8): boolean {
   recent.push(now); hits.set(sub, recent);
   if (hits.size > 5000) hits.clear();
   return false;
+}
+
+/** Invitados (sin cuenta): máximo de importaciones por minuto desde una misma IP, sumando todas sus llaves. */
+export const FB_GUEST_IP_PER_MIN = 12;
+/** IP del cliente según el proxy de Vercel (x-vercel-forwarded-for / x-forwarded-for los pone Vercel, no el cliente). */
+export function clientIp(req: any): string | null {
+  const h = req?.headers ?? {};
+  const raw = h['x-vercel-forwarded-for'] ?? h['x-forwarded-for'] ?? h['x-real-ip'];
+  const v = String(Array.isArray(raw) ? raw[0] : raw ?? '').split(',')[0].trim();
+  return v && v.length <= 64 ? v : null;
 }
 
 /** Link de FB pegado por el vendedor -> datos para precargar el formulario. Nunca lanza: si no se puede, result 'failed'. */
