@@ -48,3 +48,7 @@ yarn-error.*
 .ci-secrets.env
 dist-demo/
 demo-videos/
+
+# Playwright
+test-results/
+playwright-report/
