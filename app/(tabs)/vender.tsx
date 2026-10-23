@@ -198,7 +198,7 @@ function VenderForm() {
   );
 
   if (created) return (
-    <Screen title="Vender" right={right} scroll={false}
+    <Screen footerBare title="Vender" right={right} scroll={false}
       footer={<View style={{ flexDirection: 'row', gap: S.sm }}>
         <View style={{ flex: 1 }}><PrimaryButton title="Otro link" icon="add" variant="secondary" onPress={() => { setCreated(null); setError(null); }} /></View>
         <View style={{ flex: 1 }}><PrimaryButton title="Mi tienda" icon="storefront-outline" variant="secondary" onPress={() => router.push('/mi-tienda')} /></View>
@@ -222,7 +222,7 @@ function VenderForm() {
   );
 
   return (
-    <Screen title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
+    <Screen footerBare title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
       footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={() => submit()} />}>
       <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
       {orphan ? <OrphanWalletCard compact={short} onRestored={(r) => { setOrphan(false); if (title.trim() && photos.length) submit(r); }} /> : null}

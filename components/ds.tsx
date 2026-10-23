@@ -32,7 +32,9 @@ export const haptic = {
 
 /* ---------- Layout ---------- */
 /** Pantalla con título grande iOS, safe area superior y footer fijo opcional (zona del pulgar). */
-export function Screen({ title, subtitle, right, children, footer, scroll = true, refreshControl, contentStyle, space = 'full', back }: {
+export function Screen({ title, subtitle, right, children, footer, footerBare, scroll = true, refreshControl, contentStyle, space = 'full', back }: {
+  /** Footer sin barra de fondo: el botón queda directo sobre el universo (p. ej. "Generar link" en Vender). */
+  footerBare?: boolean;
   /** Muestra el botón Volver arriba a la izquierda; el valor es a dónde ir si no hay historial. */
   back?: Href;
   title?: string; subtitle?: string; right?: ReactNode; children: ReactNode; footer?: ReactNode; scroll?: boolean; space?: SpaceMode;
@@ -57,7 +59,7 @@ export function Screen({ title, subtitle, right, children, footer, scroll = true
       <View style={st.screen}>
         <SpaceBackground mode={space} scrollY={scrollY} />
         {body}
-        {footer ? <StickyFooter>{footer}</StickyFooter> : null}
+        {footer ? <StickyFooter bare={footerBare}>{footer}</StickyFooter> : null}
       </View>
     </ScrollCtx.Provider>
   );
@@ -76,9 +78,9 @@ export function ScreenHeader({ title, subtitle, right, back }: { title: string; 
   );
 }
 
-export function StickyFooter({ children }: { children: ReactNode }) {
+export function StickyFooter({ children, bare }: { children: ReactNode; bare?: boolean }) {
   const insets = useSafeAreaInsets();
-  return <View style={[st.footer, { paddingBottom: Math.max(insets.bottom, S.md) }]}>{children}</View>;
+  return <View style={[st.footer, bare && st.footerBare, { paddingBottom: Math.max(insets.bottom, S.md) }]}>{children}</View>;
 }
 
 export function Card({ children, style, onPress, accessibilityLabel }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; accessibilityLabel?: string }) {
@@ -339,6 +341,8 @@ export const st = StyleSheet.create({
   headerTitle: { flex: 1, paddingTop: (TOUCH - 34) / 2 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: S.sm, height: TOUCH },
   footer: { paddingHorizontal: S.md, paddingTop: S.md, backgroundColor: C.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line, gap: S.sm },
+  // Mismo alto (el borde queda, transparente): sin salto de layout.
+  footerBare: { backgroundColor: 'transparent', borderTopColor: 'transparent' },
   card: { backgroundColor: C.surface, borderRadius: R.lg, padding: S.md, gap: S.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
   btn: { minHeight: BUTTON_H, borderRadius: R.md, backgroundColor: C.white, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: S.sm, paddingHorizontal: S.lg, width: '100%', maxWidth: 560, alignSelf: 'center' },

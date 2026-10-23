@@ -54,7 +54,7 @@ test.describe('Universo y Home', () => {
     expect([ub.x, ub.y, Math.round(ub.width), Math.round(ub.height)]).toEqual([0, 0, vp.width, vp.height]); // cubre la pantalla exacta
     await expect(u).toHaveCSS('pointer-events', 'none');
     const kf = await keyframeProps(page);
-    expect(kf.names).toEqual(expect.arrayContaining(['u-d1', 'u-d2', 'u-d3', 'u-tw', 'u-spark', 'u-neb', 'u-shoot', 'm-bob']));
+    expect(kf.names).toEqual(expect.arrayContaining(['u-d1', 'u-d2', 'u-d3', 'u-tw', 'u-tw2', 'u-spark', 'u-glint', 'u-neb', 'u-shoot', 'u-p1', 'u-p2', 'u-p3', 'm-bob']));
     expect(kf.props.length).toBeGreaterThan(0);
     for (const p of kf.props) expect(['transform', 'opacity']).toContain(p);
     // corre (hay animaciones activas) y no hay transiciones en el universo
@@ -77,11 +77,67 @@ test.describe('Universo y Home', () => {
     expect(r.same).toBe(true);
     expect(r.t).toBeGreaterThan(t0);
   });
+  test('ANIM-05 planetas discretos: visibles, tenues, sin tapar el formulario ni recibir toques', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    const ids = ['planet-ringed', 'planet-moon', 'planet-tiny'];
+    const vp = page.viewportSize()!;
+    // contenido clave del Vender: título, importar, campos, fotos, Generar link y barra de pestañas
+    const key = [page.getByText('Vender', { exact: true }).first(), page.getByText('Importar de Facebook'), page.getByPlaceholder(/iPhone 13/),
+      page.locator('input').nth(1), page.getByText('Agregar', { exact: true }), page.getByText('Generar link'), page.getByRole('tablist')];
+    const boxes = (await Promise.all(key.map((l) => l.first().boundingBox()))).filter(Boolean) as { x: number; y: number; width: number; height: number }[];
+    expect(boxes.length).toBeGreaterThanOrEqual(6);
+    for (const id of ids) {
+      const pl = page.locator(`#u [data-testid="${id}"]`);
+      await expect(pl).toHaveCount(1);
+      const st = await pl.evaluate((e) => { const c = getComputedStyle(e); return { op: Number(c.opacity), pe: c.pointerEvents, anim: c.animationName, dur: parseFloat(c.animationDuration) }; });
+      expect(st.op).toBeGreaterThanOrEqual(0.35); expect(st.op).toBeLessThanOrEqual(0.75); // tenue
+      expect(st.pe).toBe('none');
+      expect(st.anim).toMatch(/^u-p\d$/); expect(st.dur).toBeGreaterThanOrEqual(30); // deriva muy lenta
+      const b = (await pl.boundingBox())!;
+      expect(b.width).toBeLessThanOrEqual(64);
+      expect(b.x).toBeGreaterThanOrEqual(0); expect(b.x + b.width).toBeLessThanOrEqual(vp.width);
+      // margen para el anillo y el brillo: no se cruza con el contenido clave
+      const m = id === 'planet-ringed' ? 22 : 6;
+      for (const k of boxes) {
+        const hit = b.x - m < k.x + k.width && b.x + b.width + m > k.x && b.y - m < k.y + k.height && b.y + b.height + m > k.y;
+        expect(hit, `${id} ${JSON.stringify(b)} tapa ${JSON.stringify(k)}`).toBe(false);
+      }
+      // un toque sobre el planeta llega a la app, no al universo
+      const under = await page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('#u'), [b.x + b.width / 2, b.y + b.height / 2]);
+      expect(under).toBe(false);
+    }
+    await expectNoScroll(page);
+  });
+
+  test('ANIM-06 estrellas que brillan: titileo con ritmos distintos y destellos en cruz', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    const r = await page.evaluate(() => {
+      const a = document.getElementById('u')!.getAnimations({ subtree: true }) as CSSAnimation[];
+      const tw = a.filter((x) => /^u-(tw2?|spark|glint)$/.test(x.animationName));
+      return {
+        n: tw.length, running: tw.filter((x) => x.playState === 'running').length,
+        durs: [...new Set(tw.map((x) => Number((x.effect as KeyframeEffect).getTiming().duration)))],
+        curves: [...new Set(tw.map((x) => x.animationName))],
+        cross: document.querySelectorAll('#u .u-x').length,
+        ray: getComputedStyle(document.querySelector('#u .u-x')!, '::before').width,
+      };
+    });
+    expect(r.n).toBeGreaterThanOrEqual(16);
+    expect(r.running).toBe(r.n);
+    expect(r.durs.length).toBeGreaterThanOrEqual(12); // no parpadean al unísono
+    expect(r.curves).toEqual(expect.arrayContaining(['u-tw', 'u-tw2', 'u-spark', 'u-glint']));
+    expect(r.cross).toBeGreaterThanOrEqual(4);
+    expect(parseFloat(r.ray)).toBeGreaterThanOrEqual(8); // rayos visibles
+    // brillo visible: una estrella-destello cambia de opacidad en ~1 s
+    const op = () => page.evaluate(() => Array.from(document.querySelectorAll('#u .u-x')).map((e) => Number(getComputedStyle(e).opacity)));
+    const a = await op(); await page.waitForTimeout(900); const b = await op();
+    expect(Math.max(...a.map((v, i) => Math.abs(v - b[i])))).toBeGreaterThan(0.15);
+  });
 });
 
 test.describe('Reducir movimiento', () => {
   test.use({ reducedMotion: 'reduce' });
-  test('ANIM-04 con reducir movimiento el universo es estático (sin animación ni estrella fugaz)', async ({ page }) => {
+  test('ANIM-04 con reducir movimiento el universo es estático (sin animación, sin titileo ni estrella fugaz; planetas quietos)', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     const r = await page.evaluate(() => ({
       names: [...new Set(Array.from(document.querySelectorAll('#u *')).map((e) => getComputedStyle(e).animationName))],
@@ -91,6 +147,8 @@ test.describe('Reducir movimiento', () => {
     expect(r.names).toEqual(['none']);
     expect(r.running).toBe(0);
     expect(r.shoot).toBe('none');
+    // planetas quietos pero presentes; destellos sin titileo
+    for (const id of ['planet-ringed', 'planet-moon', 'planet-tiny']) await expect(page.locator(`#u [data-testid="${id}"]`)).toBeVisible();
     const a = await page.locator('#u').screenshot();
     await page.waitForTimeout(1200);
     const b = await page.locator('#u').screenshot();
