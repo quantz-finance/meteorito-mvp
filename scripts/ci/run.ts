@@ -57,6 +57,8 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '57', name: 'Plazo acordado (24 h-30 días) + cara a cara + extensión de mutuo acuerdo (tope 30 días, pendiente congela)', file: './t57-agreed-window.test.ts', onchain: false },
   { id: '58', name: 'Fotos solo cámara: token de un uso (propósito/pedido/5 min), envío con foto obligatoria, producto y disputa sin carrete, FB con su foto', file: './t58-camera-only.test.ts', onchain: false },
   { id: '63', name: 'Importar de un link: proveedores LatAm, SSRF estricto (DNS/IP privada, redirecciones), parsers con HTML real, precio sugerido, source_url', file: './t63-marketplace-import.test.ts', onchain: false },
+  { id: '60', name: 'Feed de Comprar + buscador: vendedores con producto activo, filtro verificados/sin verificar/todos, cursor, sin datos privados, sin acentos', file: './t60-feed.test.ts', onchain: false },
+  { id: '61', name: 'Perfil público del vendedor: verificado, ventas, reseñas, WhatsApp solo si elige mostrarlo, OG para compartir', file: './t61-seller-profile.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

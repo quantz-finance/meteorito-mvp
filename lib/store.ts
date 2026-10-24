@@ -80,3 +80,40 @@ export async function uploadStoreAvatar(auth: MeteoritoAuth, p: { uri: string; w
   try { return await updateMyStore(auth, { avatar_url: url }); }
   catch (e: any) { throw new Error(e?.code === 'avatar_unavailable' || e?.code === 'store_unavailable' ? 'Todavía no puedes poner foto a tu tienda. Intenta más tarde.' : AVATAR_ERROR); }
 }
+
+/* ---------- Feed de Comprar + perfil público (GET /api/store?feed / ?profile) ---------- */
+export type VerifiedFilter = 'true' | 'false' | 'all';
+export interface FeedSeller { store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; rating_avg: number | null; rating_count: number }
+export interface FeedItem { slug: string; title: string; price_crc: number; photo: string | null; created_at: string; seller: FeedSeller }
+export interface FeedPage { items: FeedItem[]; next_cursor: string | null }
+export interface Review { stars: number; comment: string | null; /** Nombre corto que eligió el comprador; null = "Compra verificada". */ buyer_name: string | null; created_at: string | null }
+export interface SellerProfile extends FeedSeller {
+  bio: string | null; location: string | null; sales_completed: number; member_since: string | null;
+  /** https://wa.me/506… solo si el vendedor puso su WhatsApp; null si no. */ whatsapp: string | null;
+  items: (StoreItem & { created_at?: string | null })[]; reviews: Review[];
+}
+export const FEED_ERROR = 'No pudimos cargar las publicaciones. Revisa tu conexión e intenta de nuevo.';
+
+export async function getFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }): Promise<FeedPage> {
+  if (DEMO_ENABLED) { const { demoFeed } = await import('./demoFeed'); return demoFeed(o); }
+  const qs = new URLSearchParams({ feed: '1', verified: o.verified });
+  if (o.q?.trim()) qs.set('q', o.q.trim());
+  if (o.cursor) qs.set('cursor', o.cursor);
+  if (o.limit) qs.set('limit', String(o.limit));
+  let r: Response;
+  try { r = await fetch(`/api/store?${qs}`); } catch { throw new Error(FEED_ERROR); }
+  const j: any = (await r.json().catch(() => null)) ?? {};
+  if (!r.ok) throw new Error(r.status >= 500 ? FEED_ERROR : j.error ?? FEED_ERROR);
+  return { items: Array.isArray(j.items) ? j.items : [], next_cursor: j.next_cursor ?? null };
+}
+/** Perfil público; null si no existe. */
+export async function getSellerProfile(slug: string): Promise<SellerProfile | null> {
+  if (DEMO_ENABLED) { const { demoProfile } = await import('./demoFeed'); return demoProfile(slug); }
+  let r: Response;
+  try { r = await fetch(`/api/store?profile=${encodeURIComponent(slug)}`); }
+  catch { throw new Error('No pudimos cargar el perfil. Revisa tu conexión e intenta de nuevo.'); }
+  if (r.status === 404) return null;
+  const j: any = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(r.status === 503 || r.status >= 500 ? STORE_UNAVAILABLE : j.error ?? `Error ${r.status}`);
+  return j as SellerProfile;
+}

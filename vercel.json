@@ -10,6 +10,17 @@
     },
     {
       "source": "/t/:store",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(facebookexternalhit|facebookcatalog|meta-externalagent|WhatsApp|Twitterbot|Slackbot|TelegramBot|LinkedInBot|Discordbot|Pinterestbot|SkypeUriPreview|redditbot|Embedly|vkShare|Applebot|Google-InspectionTool|Googlebot|bingbot).*"
+        }
+      ],
+      "destination": "/api/store?og=:store"
+    },
+    {
+      "source": "/t/:store",
       "destination": "/t/[store].html"
     },
     {

@@ -158,6 +158,14 @@ async function api(req, path, q, b) {
   }
   if (path === '/api/store') {
     if (req.method === 'GET' && q.get('push') === 'key') return { key: VAPID };
+    // Feed de Comprar y perfil público (misma forma que GET /api/store?feed / ?profile): productos permanentes activos de Valeria (verificada).
+    if (req.method === 'GET' && q.get('feed')) {
+      const items = Object.values(S.orders).filter((o) => o.kind === 'listing' && o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa' && q.get('verified') !== 'false')
+        .filter((o) => !q.get('q') || String(o.model).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q.get('q').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))
+        .map((o) => ({ slug: o.slug, title: o.model, price_crc: o.price_crc, photo: null, created_at: o.created_at, seller: { store_slug: 'valeria', display_name: 'Valeria', avatar_url: null, verified: true, rating_avg: null, rating_count: 0 } }));
+      return { items, next_cursor: null };
+    }
+    if (req.method === 'GET' && q.get('profile')) return q.get('profile') === 'valeria' ? { store_slug: 'valeria', display_name: 'Valeria', avatar_url: null, verified: true, bio: null, location: null, rating_avg: null, rating_count: 0, sales_completed: 0, member_since: '2026-10-01T00:00:00Z', whatsapp: null, items: [], reviews: [] } : null;
     if (req.method === 'GET' && q.get('store')) return q.get('store') === 'valeria' ? { store_slug: 'valeria', display_name: 'Valeria', rating_avg: null, rating_count: 0, items: Object.values(S.orders).filter((o) => o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa').map((o) => ({ slug: o.slug, title: o.model, price_crc: o.price_crc, photo: null })) } : null;
     if (b.action === 'push_subscribe') { needGuest(); if (!b.subscription?.endpoint) throw E(400, 'suscripción inválida'); S.subs.push({ guest, endpoint: b.subscription.endpoint }); return { ok: true }; }
     if (b.action === 'seller_contact') { // WhatsApp del vendedor: solo el comprador (su llave) y solo con el pedido pagado
