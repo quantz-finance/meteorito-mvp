@@ -50,7 +50,8 @@ export const publicSeller = (s: Seller) => ({ store_slug: s.store_slug, display_
 
 export interface FeedQuery { q?: unknown; cursor?: unknown; limit?: unknown; verified?: unknown;
   /** 'rank' = algoritmo (api/_lib/feedRank.ts); 'new' o ausente = lo más nuevo primero (clientes viejos). */ order?: unknown;
-  /** subs de los vendedores que sigue quien pide (solo POST action 'feed', nunca en la caché pública). */ followed?: string[] }
+  /** subs de los vendedores que sigue quien pide (solo POST action 'feed', nunca en la caché pública). */ followed?: string[];
+  /** Vista "Siguiendo": SOLO publicaciones de `followed` (con el mismo filtro de identidad y búsqueda). */ onlyFollowed?: boolean }
 /** Una página del feed (o de la búsqueda). Con order=rank: las FEED_RANK.window más nuevas que cumplen filtro y búsqueda,
  *  ordenadas por puntaje (cursor r<pos>_<ms>) y, después de la ventana, por fecha (cursor = created_at). null = no hay más. */
 export async function feedPage(p: FeedQuery) {
@@ -67,6 +68,12 @@ export async function feedPage(p: FeedQuery) {
   let onlySubs: string[] | null = null;
   if (verified === 'true') {
     onlySubs = (await profilesBy((q) => q.eq('verified', true).limit(500))).map((r) => r.sub);
+    if (!onlySubs.length) return { items: [], next_cursor: null, verified };
+  }
+  // Siguiendo: solo los vendedores que sigue quien pide. Sin seguidos -> vacío (no se consulta nada más).
+  if (p.onlyFollowed) {
+    const mine = [...new Set(p.followed ?? [])];
+    onlySubs = onlySubs ? onlySubs.filter((s) => mine.includes(s)) : mine;
     if (!onlySubs.length) return { items: [], next_cursor: null, verified };
   }
   let nameSubs: string[] = [];
