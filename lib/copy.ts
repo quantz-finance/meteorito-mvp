@@ -10,7 +10,7 @@ export const COPY = {
   },
   filters: { confirmed: 'Identidad confirmada', unconfirmed: 'Sin confirmar' }, // dos mitades iguales; sin "Todos"
   feed: {
-    latest: 'Lo más nuevo', results: 'Resultados', searchLabel: 'Buscar productos', searchPlaceholder: 'Buscar: PlayStation, bici, iPhone…',
+    latest: 'Para ti', results: 'Resultados', searchLabel: 'Buscar productos', searchPlaceholder: 'Buscar: PlayStation, bici, iPhone…',
     clear: 'Limpiar búsqueda', buy: 'Comprar',
     emptyConfirmedTitle: 'Todavía no hay vendedores con identidad confirmada',
     emptyConfirmedText: 'Aquí verás a los vendedores con identidad confirmada. Mientras tanto, mira las de Sin confirmar: con cualquier vendedor tu pago queda en custodia hasta que recibas.',
@@ -53,7 +53,7 @@ export const COPY = {
     follow: 'Seguir', following: 'Siguiendo',
     a11yFollow: (name: string) => `Seguir a ${name}`, a11yUnfollow: (name: string) => `Dejar de seguir a ${name}`,
     followers: (n: number) => (n === 1 ? 'seguidor' : 'seguidores'),
-    done: (name: string) => `Ahora sigues a ${name}.`,
+    done: (name: string) => `Ahora sigues a ${name}. Verás primero lo nuevo que publique.`,
     privateNote: 'Solo se muestra cuántos te siguen, nunca quiénes.',
   },
   myStore: { confirmIdentity: 'Confirma tu identidad' },

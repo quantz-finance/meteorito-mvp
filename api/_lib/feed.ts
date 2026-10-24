@@ -1,4 +1,6 @@
 // Feed público de Comprar + buscador + perfil público del vendedor (/t/<usuario>). Solo lectura, sin datos privados.
+// Orden: con order=rank, el algoritmo de api/_lib/feedRank.ts (novedad, seguidos, reputación, identidad, ventas, calidad,
+// actividad + diversidad de vendedores); sin él, lo más nuevo primero.
 // Feed: TODOS los vendedores con al menos un producto permanente activo (kind 'listing', status 'creado', activa, no hijo),
 // salvo los ocultos por moderación (seller_profiles.listed_in_feed = false, migración 020; sin ella nadie está oculto).
 // Filtro por verificación: seller_profiles.verified (migración 010; se activa a mano por ahora; a futuro, pago + KYC).
@@ -10,6 +12,7 @@ import { HttpError } from './auth';
 import { missingColumn } from './listings';
 import { storeDbErr } from './store';
 import { waLink } from './contact';
+import { decodeRankCursor, encodeRankCursor, FEED_RANK, rankFeed } from './feedRank';
 import { followerCount } from './follows';
 
 import { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, parseVerified, searchTokens, FEED_DEFAULT, FEED_MAX, type VerifiedFilter } from './feedText';
@@ -45,15 +48,20 @@ async function sellersFor(subs: string[]): Promise<Map<string, Seller>> {
 }
 const publicSeller = (s: Seller) => ({ store_slug: s.store_slug, display_name: s.display_name, avatar_url: s.avatar_url, verified: s.verified, rating_avg: s.rating_avg, rating_count: s.rating_count });
 
-export interface FeedQuery { q?: unknown; cursor?: unknown; limit?: unknown; verified?: unknown }
-/** Una página del feed (o de la búsqueda). next_cursor = created_at del último revisado; null si no hay más. */
+export interface FeedQuery { q?: unknown; cursor?: unknown; limit?: unknown; verified?: unknown;
+  /** 'rank' = algoritmo (api/_lib/feedRank.ts); 'new' o ausente = lo más nuevo primero (clientes viejos). */ order?: unknown;
+  /** subs de los vendedores que sigue quien pide (solo POST action 'feed', nunca en la caché pública). */ followed?: string[] }
+/** Una página del feed (o de la búsqueda). Con order=rank: las FEED_RANK.window más nuevas que cumplen filtro y búsqueda,
+ *  ordenadas por puntaje (cursor r<pos>_<ms>) y, después de la ventana, por fecha (cursor = created_at). null = no hay más. */
 export async function feedPage(p: FeedQuery) {
   const tokens = searchTokens(p.q);
   let verified: VerifiedFilter;
   try { verified = parseVerified(p.verified); } catch (e: any) { throw Object.assign(new HttpError(400, e.message), { code: 'bad_filter' }); }
   const limit = Math.min(FEED_MAX, Math.max(1, Number.parseInt(String(p.limit ?? FEED_DEFAULT), 10) || FEED_DEFAULT));
   let cursor: string | null = null;
-  if (p.cursor != null && p.cursor !== '') { cursor = decodeCursor(p.cursor); if (!cursor) throw Object.assign(new HttpError(400, 'Recarga el feed e intenta de nuevo.'), { code: 'bad_cursor' }); }
+  const rankCur = decodeRankCursor(p.cursor);
+  if (p.cursor != null && p.cursor !== '' && !rankCur) { cursor = decodeCursor(p.cursor); if (!cursor) throw Object.assign(new HttpError(400, 'Recarga el feed e intenta de nuevo.'), { code: 'bad_cursor' }); }
+  const ranked = !!rankCur || (p.order === 'rank' && !cursor);
 
   // Verificados: son pocos; se filtra en la base por sus subs. Buscar por nombre: subs de vendedores que coinciden.
   let onlySubs: string[] | null = null;
@@ -68,43 +76,90 @@ export async function feedPage(p: FeedQuery) {
     nameSubs = rows.filter((r) => foldText(r.display_name).includes(longest)).map((r) => r.sub);
   }
 
-  const BATCH = Math.max(limit * 3, 30);
-  const items: any[] = [];
   const sellers = new Map<string, Seller>();
-  let before = cursor; let next: string | null = null;
-  for (let round = 0; round < 4; round++) {
-    let q = db().from('orders').select('slug, brand, model, description, price_crc, photos, created_at, seller_user_id')
-      .eq('kind', 'listing').eq('status', 'creado').eq('listing_status', 'activa').is('listing_slug', null);
-    if (onlySubs) q = q.in('seller_user_id', onlySubs);
-    if (tokens.length) {
-      const pat = ilikePattern([...tokens].sort((a, b) => b.length - a.length)[0]);
-      const ors = [`brand.ilike.${pat}`, `model.ilike.${pat}`, `description.ilike.${pat}`];
-      if (nameSubs.length) ors.push(`seller_user_id.in.(${nameSubs.map((s) => `"${s.replace(/"/g, '')}"`).join(',')})`);
-      q = q.or(ors.join(','));
+  /** Publicaciones que cumplen filtro y búsqueda, más nuevas primero, desde `before` (y hasta `asOf`). */
+  const collect = async (before: string | null, max: number, asOf: string | null) => {
+    const BATCH = Math.max(max * 3, 30);
+    const items: any[] = [];
+    let next: string | null = null;
+    for (let round = 0; round < 4; round++) {
+      let q = db().from('orders').select('slug, brand, model, description, price_crc, photos, created_at, seller_user_id')
+        .eq('kind', 'listing').eq('status', 'creado').eq('listing_status', 'activa').is('listing_slug', null);
+      if (onlySubs) q = q.in('seller_user_id', onlySubs);
+      if (tokens.length) {
+        const pat = ilikePattern([...tokens].sort((a, b) => b.length - a.length)[0]);
+        const ors = [`brand.ilike.${pat}`, `model.ilike.${pat}`, `description.ilike.${pat}`];
+        if (nameSubs.length) ors.push(`seller_user_id.in.(${nameSubs.map((s) => `"${s.replace(/"/g, '')}"`).join(',')})`);
+        q = q.or(ors.join(','));
+      }
+      if (asOf) q = q.lte('created_at', asOf);
+      if (before) q = q.lt('created_at', before);
+      const { data, error } = await q.order('created_at', { ascending: false }).limit(BATCH);
+      if (error) storeDbErr(error);
+      const rows: any[] = data ?? [];
+      const missing = [...new Set(rows.map((o) => o.seller_user_id).filter((s) => s && !sellers.has(s)))] as string[];
+      for (const [k, v] of await sellersFor(missing)) sellers.set(k, v);
+      let full = false; let i = -1;
+      for (const o of rows) {
+        i++;
+        const s = sellers.get(o.seller_user_id);
+        before = o.created_at;
+        if (!s || !s.listed) continue;
+        if (verified === 'true' && !s.verified) continue;
+        if (verified === 'false' && s.verified) continue;
+        if (tokens.length && !matchesTokens(`${titleOf(o)} ${o.description ?? ''} ${s.display_name}`, tokens)) continue;
+        items.push({ o, s });
+        if (items.length >= max) { full = true; break; }
+      }
+      if (full) { next = i === rows.length - 1 && rows.length < BATCH ? null : encodeCursor(items[items.length - 1].o.created_at); break; }
+      if (rows.length < BATCH) { next = null; break; }
+      next = before ? encodeCursor(before) : null; // se revisó un lote completo sin llenar: seguir en la próxima vuelta
     }
-    if (before) q = q.lt('created_at', before);
-    const { data, error } = await q.order('created_at', { ascending: false }).limit(BATCH);
-    if (error) storeDbErr(error);
-    const rows: any[] = data ?? [];
-    const missing = [...new Set(rows.map((o) => o.seller_user_id).filter((s) => s && !sellers.has(s)))] as string[];
-    for (const [k, v] of await sellersFor(missing)) sellers.set(k, v);
-    let full = false; let i = -1;
-    for (const o of rows) {
-      i++;
-      const s = sellers.get(o.seller_user_id);
-      before = o.created_at;
-      if (!s || !s.listed) continue;
-      if (verified === 'true' && !s.verified) continue;
-      if (verified === 'false' && s.verified) continue;
-      if (tokens.length && !matchesTokens(`${titleOf(o)} ${o.description ?? ''} ${s.display_name}`, tokens)) continue;
-      items.push({ slug: o.slug, title: titleOf(o), price_crc: Number(o.price_crc), photo: o.photos?.[0] ?? null, created_at: o.created_at, seller: publicSeller(s) });
-      if (items.length >= limit) { full = true; break; }
-    }
-    if (full) { next = i === rows.length - 1 && rows.length < BATCH ? null : encodeCursor(items[items.length - 1].created_at); break; }
-    if (rows.length < BATCH) { next = null; break; }
-    next = before ? encodeCursor(before) : null; // se revisó un lote completo sin llenar: seguir en la próxima vuelta
+    return { items: items as { o: any; s: Seller }[], next };
+  };
+  const card = ({ o, s }: { o: any; s: Seller }) => ({ slug: o.slug, title: titleOf(o), price_crc: Number(o.price_crc), photo: o.photos?.[0] ?? null, created_at: o.created_at, seller: publicSeller(s) });
+
+  if (!ranked) {
+    const { items, next } = await collect(cursor, limit, null);
+    return { items: items.map(card), next_cursor: next, verified };
   }
-  return { items, next_cursor: next, verified };
+  // Algoritmo: la ventana se arma igual en cada página (mismo asOf), así el orden no cambia al paginar.
+  const asOf = rankCur?.asOf ?? Date.now();
+  const offset = rankCur?.offset ?? 0;
+  const win = await collect(null, FEED_RANK.window, new Date(asOf).toISOString());
+  const subs = [...new Set(win.items.map((x) => x.s.sub))];
+  const [sales, seen] = await Promise.all([salesBySeller(subs), lastSeenBySeller(subs)]);
+  const followed = new Set(p.followed ?? []);
+  const order = rankFeed(win.items.map((x) => ({
+    slug: x.o.slug, created_at: x.o.created_at, seller_key: x.s.sub, photos: Array.isArray(x.o.photos) ? x.o.photos.length : 0, title: titleOf(x.o), description: x.o.description, x,
+    seller: { verified: x.s.verified, rating_avg: x.s.rating_avg, rating_count: x.s.rating_count, sales_completed: sales.get(x.s.sub) ?? 0, followed: followed.has(x.s.sub), last_seen_at: seen.get(x.s.sub) ?? null },
+  })), asOf);
+  const page = order.slice(offset, offset + limit);
+  const end = offset + page.length;
+  const next = end < order.length ? encodeRankCursor(end, asOf) : win.next; // después de la ventana: por fecha
+  return { items: page.map((r) => card(r.x)), next_cursor: page.length ? next : null, verified };
+}
+
+/** Ventas completadas (liberadas + disputas resueltas) por vendedor, en una sola consulta. Ante error: vacío. */
+async function salesBySeller(subs: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!subs.length) return out;
+  const { data, error } = await db().from('orders').select('seller_user_id').in('seller_user_id', subs).in('status', ['liberado', 'resuelto']).limit(20000);
+  if (error) return out;
+  for (const r of data ?? []) out.set(r.seller_user_id, (out.get(r.seller_user_id) ?? 0) + 1);
+  return out;
+}
+/** Última conexión por vendedor (migración 021) SOLO para ordenar: nunca sale del servidor. Ocultada -> 'hidden'.
+ *  Sin la columna o ante error: vacío (la señal vale 0 para todos y no cambia el orden). */
+async function lastSeenBySeller(subs: string[]): Promise<Map<string, string | 'hidden'>> {
+  const out = new Map<string, string | 'hidden'>();
+  if (!subs.length) return out;
+  try {
+    const { data, error } = await db().from('seller_profiles').select('sub, last_seen_at, show_last_seen').in('sub', subs);
+    if (error) return out;
+    for (const r of data ?? []) if (r.show_last_seen === false) out.set(r.sub, 'hidden'); else if (typeof r.last_seen_at === 'string') out.set(r.sub, r.last_seen_at);
+  } catch { /* sin dato */ }
+  return out;
 }
 
 /** Cómo salieron las ventas del vendedor, SIN montos: completadas = liberadas + disputas resueltas. */

@@ -41,7 +41,7 @@ test.describe('Comprar: feed y perfil', () => {
     await search.fill('zzzz nada');
     await expect(page.getByText(/No encontramos/)).toBeVisible();
     await page.getByRole('button', { name: 'Limpiar búsqueda' }).first().click();
-    await expect(page.getByText('Lo más nuevo')).toBeVisible();
+    await expect(page.getByText('Para ti')).toBeVisible();
     await noHScroll(page);
     expect(await page.locator('body').innerText()).not.toMatch(VOSEO);
   });
@@ -116,7 +116,7 @@ test.describe('Comprar: feed y perfil', () => {
       expect(await t.evaluate((e) => e.scrollWidth <= e.clientWidth + 1), `"${n}" cortado`).toBe(true);
     }
     if (info.project.name === 'webkit-iphone-se') {
-      await page.getByText('Lo más nuevo').evaluate((e) => e.scrollIntoView({ block: 'start' }));
+      await page.getByText('Para ti').evaluate((e) => e.scrollIntoView({ block: 'start' }));
       await settle(page); await page.screenshot({ path: 'test-results/feed-2col.png' });
       await sale.evaluate((e) => e.scrollIntoView({ block: 'end' }));
       await settle(page); await page.screenshot({ path: 'test-results/feed-2col-venta.png' });

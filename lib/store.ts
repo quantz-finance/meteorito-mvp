@@ -100,17 +100,25 @@ export interface SellerProfile extends FeedSeller {
 }
 export const FEED_ERROR = 'No pudimos cargar las publicaciones. Revisa tu conexión e intenta de nuevo.';
 
-export async function getFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }): Promise<FeedPage> {
+/** Feed con el algoritmo (order=rank). `personal`: quien sigue a alguien pide su feed por POST (impulso de los que
+ *  sigue, sin caché pública); si no, GET cacheado igual para todos. */
+export async function getFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number; personal?: Pick<MeteoritoAuth, 'getAuthToken'> | null }): Promise<FeedPage> {
   if (DEMO_ENABLED) { const { demoFeed } = await import('./demoFeed'); return demoFeed(o); }
-  const qs = new URLSearchParams({ feed: '1', verified: o.verified });
-  if (o.q?.trim()) qs.set('q', o.q.trim());
-  if (o.cursor) qs.set('cursor', o.cursor);
-  if (o.limit) qs.set('limit', String(o.limit));
-  let r: Response;
-  try { r = await fetch(`/api/store?${qs}`); } catch { throw new Error(FEED_ERROR); }
-  const j: any = (await r.json().catch(() => null)) ?? {};
-  if (!r.ok) throw new Error(r.status >= 500 ? FEED_ERROR : j.error ?? FEED_ERROR);
-  return { items: Array.isArray(j.items) ? j.items : [], next_cursor: j.next_cursor ?? null };
+  let j: any;
+  if (o.personal) {
+    try { j = await guestApi(o.personal, '/api/store', { action: 'feed', verified: o.verified, ...(o.q?.trim() ? { q: o.q.trim() } : {}), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }); }
+    catch (e: any) { throw new Error(e?.status >= 500 || !e?.status ? FEED_ERROR : e.message || FEED_ERROR); }
+  } else {
+    const qs = new URLSearchParams({ feed: '1', verified: o.verified, order: 'rank' });
+    if (o.q?.trim()) qs.set('q', o.q.trim());
+    if (o.cursor) qs.set('cursor', o.cursor);
+    if (o.limit) qs.set('limit', String(o.limit));
+    let r: Response;
+    try { r = await fetch(`/api/store?${qs}`); } catch { throw new Error(FEED_ERROR); }
+    j = (await r.json().catch(() => null)) ?? {};
+    if (!r.ok) throw new Error(r.status >= 500 ? FEED_ERROR : j.error ?? FEED_ERROR);
+  }
+  return { items: Array.isArray(j?.items) ? j.items : [], next_cursor: j?.next_cursor ?? null };
 }
 /** Perfil público; null si no existe. */
 export async function getSellerProfile(slug: string): Promise<SellerProfile | null> {

@@ -3,6 +3,8 @@
 // ?feed=empty en la URL simula un feed vacío (para ver el estado vacío).
 import { foldText, matchesTokens, searchTokens, type VerifiedFilter } from '../api/_lib/feedText';
 import { demoGetStore, demoStoreSlug } from './demo';
+import { decodeRankCursor, encodeRankCursor, rankFeed } from '../api/_lib/feedRank';
+import { followedSlugs } from './follows';
 import type { FeedItem, FeedPage, SellerProfile } from './store';
 
 const H = 3600e3;
@@ -49,11 +51,16 @@ export async function demoFeed(o: { q?: string; cursor?: string | null; verified
   const tokens = searchTokens(o.q);
   const list = all().filter((i) => (o.verified === 'all' || String(i.seller.verified) === o.verified)
     && (!tokens.length || matchesTokens(`${i.title} ${i.seller.display_name}`, tokens)));
-  const start = o.cursor ? list.findIndex((i) => i.created_at < o.cursor!) : 0;
-  if (start < 0) return { items: [], next_cursor: null };
-  const page = list.slice(start, start + (o.limit ?? 10));
-  const more = start + page.length < list.length;
-  return { items: page, next_cursor: more ? page[page.length - 1].created_at : null };
+  // El mismo algoritmo que la API (api/_lib/feedRank.ts), con los vendedores que sigues en este dispositivo.
+  const cur = decodeRankCursor(o.cursor);
+  const now = cur?.asOf ?? Date.now();
+  const followed = new Set(followedSlugs());
+  const ranked = rankFeed(list.map((i) => ({ ...i, seller_key: i.seller.store_slug, photos: i.photo ? 1 : 0, description: null,
+    seller: { ...i.seller, sales_completed: sellerOf(i.seller.store_slug).sales, followed: followed.has(i.seller.store_slug), last_seen_at: null } })), now);
+  const start = cur?.offset ?? 0;
+  const page = ranked.slice(start, start + (o.limit ?? 10)).map((r) => list.find((i) => i.slug === r.slug)!);
+  const end = start + page.length;
+  return { items: page, next_cursor: end < ranked.length ? encodeRankCursor(end, now) : null };
 }
 export async function demoProfile(slug: string): Promise<SellerProfile | null> {
   const s = slug === valeria().store_slug ? valeria() : SELLERS.find((x) => x.store_slug === foldText(slug));
