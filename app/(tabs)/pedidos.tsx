@@ -114,7 +114,7 @@ export default function Pedidos() {
             <Chip key={open.status} swap label={STATUS_LABEL[open.status] ?? open.status} tone={statusTone(open.status)} />
           </View>
           <Card style={{ gap: S.md }}>
-            <MoneyTimeline status={open.status} shipped={!!detail?.shipped_tx} />
+            <MoneyTimeline status={open.status} shipped={!!detail?.shipped_tx} mode={open.delivery_mode ?? (detail?.slug === open.slug ? detail?.delivery_mode : null)} />
             <Text style={T.callout}>{(detail?.slug === open.slug && detail?.delivery_mode === 'cara_a_cara' && F2F_HINT[open.status]) || NEXT_HINT[open.status] || ''}</Text>
           </Card>
           <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />

@@ -238,6 +238,12 @@ export const MONEY_STEPS: { key: string; label: string; icon: IconName }[] = [
   { key: 'entregado', label: 'Entregado', icon: 'cube' },
   { key: 'liberado', label: 'Liberado', icon: 'cash' },
 ];
+/** Cara a cara (sin envío): Pagado, Entregado con PIN, Liberado. */
+export const MONEY_STEPS_F2F: { key: string; label: string; icon: IconName }[] = [
+  { key: 'pagado', label: 'Pagado', icon: 'lock-closed' },
+  { key: 'entregado_pin', label: 'Entregado con PIN', icon: 'key' },
+  { key: 'liberado', label: 'Liberado', icon: 'cash' },
+];
 export { moneyProgress };
 export function statusTone(status: string): 'lilac' | 'success' | 'warn' | 'muted' {
   if (status === 'liberado' || status === 'resuelto') return 'success';
@@ -246,15 +252,16 @@ export function statusTone(status: string): 'lilac' | 'success' | 'warn' | 'mute
   return 'lilac';
 }
 
-export function MoneyTimeline({ status, compact, shipped }: { status: string; compact?: boolean; shipped?: boolean }) {
-  const done = moneyProgress(status, shipped);
+export function MoneyTimeline({ status, compact, shipped, mode }: { status: string; compact?: boolean; shipped?: boolean; /** delivery_mode del pedido */ mode?: string | null }) {
+  const steps = mode === 'cara_a_cara' ? MONEY_STEPS_F2F : MONEY_STEPS;
+  const done = moneyProgress(status, shipped, mode);
   const dispute = status === 'en_disputa';
   const note = dispute ? <View style={st.disputeNote}><Icon name="alert-circle" size={18} color={C.orange} /><Text style={[T.footnote, { color: C.orange, flex: 1 }]}>Lo estamos revisando, respondemos en 24-48h.</Text></View> : null;
   const dot = compact ? 24 : 32;
   return (
     <View style={{ gap: S.sm }}>
-    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }} accessibilityLabel={`Estado del pago: ${done} de 4 pasos`}>
-      {MONEY_STEPS.map((s, i) => {
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }} accessibilityLabel={`Estado del pago: ${done} de ${steps.length} pasos`}>
+      {steps.map((s, i) => {
         const isDone = i < done;
         const isNext = i === done && done > 0 && !dispute; // antes del pago nada está "en curso"
         const isProblem = dispute && i === done;
@@ -271,7 +278,7 @@ export function MoneyTimeline({ status, compact, shipped }: { status: string; co
                   <Icon name={isProblem ? 'alert' : isDone ? 'checkmark' : s.icon} size={dot * 0.5} color={fg} />
                 </View>
               </View>
-              <TlLine hidden={i === 3} on={i < done} />
+              <TlLine hidden={i === steps.length - 1} on={i < done} />
             </View>
             <Text style={[st.tlLabel, { color: isDone ? C.text : isNext || isProblem ? (isProblem ? C.orange : C.lilac) : C.textDim }]}
               numberOfLines={1}>{isProblem ? 'En disputa' : s.label}</Text>

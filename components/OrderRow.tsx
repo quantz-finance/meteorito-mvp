@@ -19,7 +19,7 @@ export const OrderCard = memo(function OrderCard({ order, onPress, timeline = tr
         </View>
         <Text style={T.moneySm}>{formatCRC(order.price_crc)}</Text>
       </View>
-      {timeline ? <MoneyTimeline status={order.status} compact /> : null}
+      {timeline ? <MoneyTimeline status={order.status} mode={order.delivery_mode} compact /> : null}
     </Card>
   );
 }, (a, b) => a.order === b.order && a.timeline === b.timeline && a.fill === b.fill);

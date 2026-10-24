@@ -57,6 +57,10 @@ test('WIN-02 cara a cara: acuerdo antes de pagar, código al pagar, PIN del vend
   // Vendedor: sin "Ya lo envié"; pide 3 días más
   await openSellerRow(page, 'Pagado · fondos apartados', /Confirmar PIN y cobrar/);
   await expect(page.getByText('Ya lo envié', { exact: true })).toHaveCount(0);
+  // Línea de tiempo cara a cara: Pagado, Entregado con PIN (actual), Liberado; sin "Enviado".
+  await expect(page.getByText('Entregado con PIN').last()).toBeVisible();
+  await expect(page.getByLabel('Estado del pago: 1 de 3 pasos').last()).toBeVisible();
+  await expect(page.getByText('Enviado', { exact: true })).toHaveCount(0);
   await shot(page, 'vendedor-pin-cara-a-cara');
   await page.getByLabel('Pedir más tiempo').click();
   await page.getByLabel('Pedir 3 días más').click();
