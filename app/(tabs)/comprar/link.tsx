@@ -5,20 +5,21 @@ import { parseSlug } from '@/lib/orders';
 import { useStableWindow } from '@/lib/viewport';
 import { router } from 'expo-router';
 import { Card, ErrorText, haptic, Icon, PrimaryButton, Screen, Sheet } from '@/components/ds';
-import { ComprarNav } from '@/components/ComprarNav';
+import { ComprarNav, GUEST_BACK, useIsGuest } from '@/components/ComprarNav';
 import { Reveal } from '@/components/space';
 import { C, R, S, T } from '@/constants/theme';
 
 // Comprar › Pagar con link (/comprar/link): lo que antes estaba arriba del feed, igual: importar de Facebook, invitar
 // (pedir link) a un vendedor y pagar un link.
 export default function PagarConLink() {
+  const guest = useIsGuest(); // sin cuenta: sin barra de pestañas, Volver arriba a la izquierda
   const short = useStableWindow().height < 740;
   const [payOpen, setPayOpen] = useState(false);
   const [link, setLink] = useState('');
   const linkSlug = parseSlug(link);
   const goPay = () => { if (!linkSlug) return; setPayOpen(false); setLink(''); router.push(`/p/${linkSlug}`); };
   return (
-    <Screen title="Pagar con link" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
+    <Screen back={guest ? GUEST_BACK : undefined} backTop title="Pagar con link" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
       right={<ComprarNav active="link" />}>
       <View style={{ gap: S.md }}>
         <Reveal i={0}><Card style={{ gap: S.sm }}>

@@ -109,7 +109,7 @@ export async function run(t: T) {
   const copy = [MY_PURCHASES_TITLE, MY_PURCHASES_EMPTY, MY_PURCHASES_ACTIVE, MY_PURCHASES_CLOSED, MY_PURCHASES_NONE_ACTIVE,
     ...['escrow_creado', 'fondeado', 'enviado', 'en_disputa', 'entregado', 'liberado', 'resuelto', 'cancelado'].flatMap((s) => [purchaseNext({ status: s }), purchaseNext({ status: s, delivery_mode: 'cara_a_cara' }), purchaseStatus({ status: s })])];
   t.check('copy sin palabras prohibidas', !copy.some((c) => BANNED.test(c)), copy.find((c) => BANNED.test(c)));
-  t.check('estado vacío amable: este dispositivo o tu cuenta', MY_PURCHASES_EMPTY === 'Aquí van a aparecer las compras que hagas en este dispositivo o con tu cuenta.');
+  t.check('estado vacío amable', MY_PURCHASES_EMPTY === 'Aquí verás tus compras activas.');
   const screenSrc = read('app/(tabs)/comprar/compras.tsx');
   const literals = [...screenSrc.matchAll(/(?:title|label)="([^"]+)"|>([^<>{}]*[a-záéíóú][^<>{}]*)</g)].map((m) => m[1] ?? m[2]).filter(Boolean);
   t.check('pantalla sin palabras prohibidas', !literals.some((c) => BANNED.test(c)), literals.find((c) => BANNED.test(c)));
@@ -122,7 +122,7 @@ export async function run(t: T) {
   t.check('cada fila abre su seguimiento /p/<pedido>', /pathname: '\/p\/\[slug\]', params: \{ slug: r\.slug \}/.test(screenSrc));
   t.check('pantalla sin scroll (páginas con GridPager) y cerradas detrás de un selector', /scroll=\{false\}/.test(screenSrc) && /GridPager/.test(screenSrc) && /accessibilityRole="tablist"/.test(screenSrc));
   const layout = read('app/_layout.tsx');
-  t.check('Mis compras visible sin cuenta (comprador invitado) + acceso en la bienvenida si este dispositivo compró', /\[1\] === 'comprar' && \(segments as string\[\]\)\[2\] === 'compras'/.test(layout) && /hasLocalPurchases\(\)/.test(read('components/Welcome.tsx')));
+  t.check('Mis compras visible sin cuenta (comprador invitado) + acceso en la bienvenida si este dispositivo compró', /isPublicRoute\(segments/.test(layout) && /segments\[1\] === 'comprar'/.test(read('lib/publicRoutes.ts')) && /hasLocalPurchases\(\)/.test(read('components/Welcome.tsx')));
   const loader = read('lib/myPurchases.ts');
   t.check('servidor por /api/store action buyer_orders (llave y/o sesión), sin función nueva', /guestApi<[^>]+>\(auth, '\/api\/store', \{ action: 'buyer_orders' \}\)/.test(loader));
   const fns: string[] = []; const walk = (d: string) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) { if (f !== '_lib' && f !== 'api') walk(p); } else if (/\.ts$/.test(f) && f !== 'tsconfig.json') fns.push(p); } };

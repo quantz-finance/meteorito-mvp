@@ -615,7 +615,60 @@ test('MCK-MIS-02 recuperación: compras anteriores por la llave y por el PIN gua
 test('MCK-MIS-03 navegador nuevo: vacío con texto amable', async ({ page, request }) => {
   await reset(request, []);
   await page.goto('/comprar/compras');
-  await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí van a aparecer las compras que hagas en este dispositivo o con tu cuenta.');
+  await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí verás tus compras activas.');
+});
+
+// Bug: sin sesión, el icono "Mis compras" de la bienvenida abría la app completa (barra Vender/Comprar/Home + iconos)
+// sin salida. Ahora: Comprar entera es pública, sin la barra del vendedor, con "Volver" a la bienvenida.
+test('MCK-MIS-04 sin cuenta: bienvenida -> Mis compras sin menús del vendedor; Feed, seguimiento y Volver funcionan', async ({ page, request }, info) => {
+  await reset(request, [{ slug: 'trk555', status: 'enviado', contract_id: 'C5', buyer: KEY, model: 'Bici de montaña', price_crc: 150000 }, listing]);
+  await page.addInitScript(([k]) => { localStorage.setItem('meteorito:guest:v1', k); }, [KEY]);
+  await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('meteorito:purchases:v1', JSON.stringify([{ slug: 'trk555', title: 'Bici de montaña', price_crc: 150000, status: 'enviado' }])));
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible(); // bienvenida (sin sesión)
+  await page.getByLabel('Mis compras', { exact: true }).click();
+  await expect(page).toHaveURL(/\/comprar\/compras$/);
+  await expect(page.getByTestId('screen-title')).toHaveText('Mis compras');
+  // Un solo menú: los 3 iconos de Comprar; nada de Vender/Comprar/Home ni de login.
+  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Home' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Comprar' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Feed' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
+  const rows = page.getByTestId('purchase-row');
+  await expect(rows).toHaveCount(1);
+  await expectNoScroll(page);
+  if (SHOTS && info.project.name === 'mock-iphone-se') await page.screenshot({ path: `${SHOTS}/miscompras-invitado-lista.png` });
+  // Seguimiento y atrás: vuelve a Mis compras.
+  await rows.first().click();
+  await expect(page).toHaveURL(/\/p\/trk555/);
+  await page.getByRole('button', { name: 'Volver' }).first().click();
+  await expect(page).toHaveURL(/\/comprar\/compras$/);
+  await expect(rows).toHaveCount(1);
+  // Feed sin cuenta (no la bienvenida) y de vuelta.
+  await page.getByRole('tab', { name: 'Feed' }).click();
+  await expect(page).toHaveURL(/\/comprar$/);
+  await expect(page.getByTestId('feed-card').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
+  await page.getByRole('tab', { name: 'Mis compras' }).click();
+  await expect(page).toHaveURL(/\/comprar\/compras$/);
+  // Volver: sale a la bienvenida.
+  await page.getByTestId('back-button').click();
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
+});
+
+test('MCK-MIS-05 sin cuenta, sin compras: vacío amable con link al feed', async ({ page, request }, info) => {
+  await reset(request, [listing]);
+  await page.goto('/comprar/compras');
+  await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí verás tus compras activas.');
+  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(0);
+  await expect(page.getByTestId('back-button')).toBeVisible();
+  await expectNoScroll(page);
+  if (SHOTS && info.project.name === 'mock-iphone-se') await page.screenshot({ path: `${SHOTS}/miscompras-invitado-vacio.png` });
+  await page.getByTestId('purchases-to-feed').click();
+  await expect(page).toHaveURL(/\/comprar$/);
+  await expect(page.getByTestId('feed-card').first()).toBeVisible();
 });
 
 // ---- Recibe avisos de tu compra (comprador sin cuenta): tarjeta, recuperación con link y vuelta del login de Cavos ----

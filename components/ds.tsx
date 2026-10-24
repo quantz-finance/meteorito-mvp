@@ -32,11 +32,13 @@ export const haptic = {
 
 /* ---------- Layout ---------- */
 /** Pantalla con título grande iOS, safe area superior y footer fijo opcional (zona del pulgar). */
-export function Screen({ title, subtitle, right, children, footer, footerBare, scroll = true, refreshControl, contentStyle, space = 'full', back }: {
+export function Screen({ title, subtitle, right, children, footer, footerBare, scroll = true, refreshControl, contentStyle, space = 'full', back, backTop }: {
   /** Footer sin barra de fondo: el botón queda directo sobre el universo (p. ej. "Generar link" en Vender). */
   footerBare?: boolean;
   /** Muestra el botón Volver arriba a la izquierda; el valor es a dónde ir si no hay historial. */
   back?: Href;
+  /** Con título: Volver arriba a la izquierda (encima del título) en vez de la X a la derecha (p. ej. Comprar sin cuenta, que ya tiene 3 iconos); va directo a `back`. */
+  backTop?: boolean;
   title?: string; subtitle?: string; right?: ReactNode; children: ReactNode; footer?: ReactNode; scroll?: boolean; space?: SpaceMode;
   refreshControl?: React.ComponentProps<typeof ScrollView>['refreshControl']; contentStyle?: StyleProp<ViewStyle>;
 }) {
@@ -45,8 +47,8 @@ export function Screen({ title, subtitle, right, children, footer, footerBare, s
   const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
   // Con título, Volver va a la derecha (icono): el título empieza SIEMPRE en el mismo punto (arriba/izquierda) en todas
   // las pantallas, con o sin botones, y nada salta al cambiar de pestaña. Sin título, Volver queda arriba a la izquierda.
-  const backBtn = back && !title ? <BackButton fallback={back} /> : null;
-  const header = title ? <ScreenHeader title={title} subtitle={subtitle} right={right} back={back} /> : null;
+  const backBtn = back && (!title || backTop) ? <BackButton fallback={back} replace={backTop} /> : null;
+  const header = title ? <ScreenHeader title={title} subtitle={subtitle} right={right} back={backTop ? undefined : back} /> : null;
   const body = scroll ? (
     <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
       keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}

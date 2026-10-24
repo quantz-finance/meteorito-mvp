@@ -2,6 +2,7 @@
 //      (sin cuenta), accesos visibles (Mi cuenta, Home, pago antes de pagar y Vender) y copy en tuteo, sin voseo. Sin red.
 import { existsSync, readFileSync } from 'node:fs';
 import type { T } from './setup';
+import { isPublicRoute } from '../../lib/publicRoutes';
 import { PAY_SUMMARY, RULES, RULES_CONFIG, RULES_ROUTE, SELL_SUMMARY, TOUR } from '../../lib/rules';
 
 const read = (f: string) => readFileSync(f, 'utf8');
@@ -25,7 +26,7 @@ export async function run(t: T) {
 
   t.check('pantalla /como-funciona existe y lee lib/rules', RULES_ROUTE === '/como-funciona' && existsSync('app/como-funciona.tsx') && /from '@\/lib\/rules'/.test(read('app/como-funciona.tsx')));
   const screen = read('app/como-funciona.tsx');
-  t.check('funciona sin cuenta (no usa sesión ni API) y es ruta pública', !/useAuth|requireCavos|api\(|guestApi|fetch\(/.test(screen) && /segments\[0\] === 'como-funciona'/.test(read('app/_layout.tsx')));
+  t.check('funciona sin cuenta (no usa sesión ni API) y es ruta pública', !/useAuth|requireCavos|api\(|guestApi|fetch\(/.test(screen) && isPublicRoute(['como-funciona']));
   t.check('botón "Ver recorrido" detrás de TOUR.enabled', /TOUR\.enabled/.test(screen) && /Ver recorrido/.test(screen));
   const pay = read('app/p/[slug].tsx'), sell = read('app/(tabs)/vender.tsx'), home = read('app/(tabs)/pedidos.tsx'), acct = read('components/AccountSheet.tsx');
   t.check('pago: resumen + "Ver reglas" solo antes de pagar', /unpaid\s*\?\s*<RulesHint[^>]*text=\{PAY_SUMMARY\}/.test(pay));

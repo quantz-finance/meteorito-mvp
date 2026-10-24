@@ -15,7 +15,8 @@ const MAX = 50;
 const SLUG = /^[A-Za-z0-9_-]{3,64}$/;
 
 export const MY_PURCHASES_TITLE = 'Mis compras';
-export const MY_PURCHASES_EMPTY = 'Aquí van a aparecer las compras que hagas en este dispositivo o con tu cuenta.';
+export const MY_PURCHASES_EMPTY = 'Aquí verás tus compras activas.';
+export const MY_PURCHASES_TO_FEED = 'Ver productos';
 export const MY_PURCHASES_ACTIVE = 'Activas';
 export const MY_PURCHASES_CLOSED = 'Cerradas';
 export const MY_PURCHASES_NONE_ACTIVE = 'No tienes compras activas.';

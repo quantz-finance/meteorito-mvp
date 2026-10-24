@@ -11,11 +11,11 @@ import { useAuth } from '@/lib/cavos';
 import { formatCRC } from '@/lib/orders';
 import { loadMyPurchases } from '@/lib/myPurchases';
 import {
-  MY_PURCHASES_ACTIVE, MY_PURCHASES_CLOSED, MY_PURCHASES_EMPTY, MY_PURCHASES_NONE_ACTIVE, MY_PURCHASES_TITLE,
+  MY_PURCHASES_ACTIVE, MY_PURCHASES_CLOSED, MY_PURCHASES_EMPTY, MY_PURCHASES_TO_FEED, MY_PURCHASES_NONE_ACTIVE, MY_PURCHASES_TITLE,
   purchaseA11y, purchaseNext, purchaseStatus, readLocalPurchases, splitPurchases, type PurchaseRow,
 } from '@/lib/purchases';
 import { useStableWindow } from '@/lib/viewport';
-import { ComprarNav } from '@/components/ComprarNav';
+import { ComprarNav, GUEST_BACK, useIsGuest } from '@/components/ComprarNav';
 import { BuyerInboxRow } from '@/components/ChatInbox';
 
 function PurchaseCard({ r }: { r: PurchaseRow }) {
@@ -40,6 +40,7 @@ function PurchaseCard({ r }: { r: PurchaseRow }) {
 }
 
 export default function MisCompras() {
+  const guest = useIsGuest(); // sin cuenta: sin barra de pestañas, Volver arriba a la izquierda
   const auth = useAuth();
   const short = useStableWindow().height < 740;
   const [rows, setRows] = useState<PurchaseRow[] | null>(null);
@@ -63,7 +64,7 @@ export default function MisCompras() {
   );
 
   return (
-    <Screen title={MY_PURCHASES_TITLE} scroll={false} right={<ComprarNav active="compras" />}>
+    <Screen back={guest ? GUEST_BACK : undefined} backTop title={MY_PURCHASES_TITLE} scroll={false} right={<ComprarNav active="compras" />}>
       <View style={{ flex: 1, gap: S.sm }}>
         <BuyerInboxRow />
         {rows === null ? <><SkeletonCard /><SkeletonCard /></>
@@ -71,7 +72,7 @@ export default function MisCompras() {
             <Card style={{ alignItems: 'center', paddingVertical: S.xl, gap: S.md }}>
               <Icon name="bag-handle" size={40} color={C.lilac} />
               <Text testID="purchases-empty" style={[T.callout, { textAlign: 'center' }]}>{MY_PURCHASES_EMPTY}</Text>
-              <PrimaryButton title="Ver productos" icon="arrow-forward" variant="secondary" onPress={() => router.replace('/comprar')} />
+              <PrimaryButton title={MY_PURCHASES_TO_FEED} icon="storefront-outline" variant="secondary" testID="purchases-to-feed" onPress={() => router.replace('/comprar')} />
             </Card>
           ) : <>
             <View accessibilityRole="tablist" style={s.segs}>{seg('active', MY_PURCHASES_ACTIVE, active.length)}{seg('closed', MY_PURCHASES_CLOSED, closed.length)}</View>
