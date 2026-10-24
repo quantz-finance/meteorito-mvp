@@ -55,8 +55,8 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
   return contractId;
 }
 
-/** ramp-provider.mock: SINPE simulado. Fondea desde treasury. Monto SIEMPRE del pedido en DB. Idempotente por order_id. */
-export async function mockRampFund(orderId: string) {
+/** ramp-provider.mock: SINPE simulado (y pago con tarjeta ya verificado: api/_lib/lendara.ts). Fondea desde treasury. Monto SIEMPRE del pedido en DB. Idempotente por order_id. */
+export async function mockRampFund(orderId: string, meta: Record<string, unknown> = { ramp: 'mock' }) {
   const { data: order } = await db().from('orders').select('*').eq('id', orderId).single();
   if (order.funded_tx) return { fundedTx: order.funded_tx as string, pin: null };
   if (order.status !== 'escrow_creado') throw new HttpError(409, `status ${order.status}`);
@@ -77,7 +77,7 @@ export async function mockRampFund(orderId: string) {
   await advance(order.id, 'escrow_creado', {
     funded_tx: sent.hash, funded_at: new Date().toISOString(), status: 'fondeado', delivery_pin_hash: pinHash(order.id, pin),
   });
-  await logEvent(order.id, 'funded', { hash: sent.hash, amount, ramp: 'mock' });
+  await logEvent(order.id, 'funded', { hash: sent.hash, amount, ramp: 'mock', ...meta });
   return { fundedTx: sent.hash, pin };
 }
 

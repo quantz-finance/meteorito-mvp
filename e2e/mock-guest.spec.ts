@@ -266,3 +266,65 @@ test('MCK-UTM-03 con opt-out no se guarda ni se envía nada', async ({ page, req
   expect(await phEvents(request)).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('meteorito:first-touch:v1'))).toBeNull();
 });
+
+// ---- Pago con tarjeta (Lendara): el widget real (@lendara/widget, iframe) abre un widget simulado del mismo origen
+// (scripts/e2e/mock-server.mjs) que postea { transaction } como el de Lendara. Mismo archivo: el mock guarda estado (serie).
+
+async function openMethods(page: Page) {
+  await page.goto('/p/prod01');
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('Elige cómo pagar')).toBeVisible();
+}
+async function payWithCard(page: Page, number: string) {
+  await page.getByText('Pagar con tarjeta', { exact: true }).click();
+  const w = page.frameLocator('iframe.lendara-frame');
+  await w.locator('#n').fill(number);
+  await w.getByText('Pagar', { exact: true }).click();
+}
+
+test('MCK-CARD-01 invitado paga con tarjeta aprobada: PIN y pedido en custodia', async ({ page, request }) => {
+  await reset(request, [listing], true);
+  await openMethods(page);
+  // Sin scroll en iPhone SE: las dos opciones se ven completas
+  await expect(page.getByText('Pagar con tarjeta', { exact: true })).toBeInViewport();
+  await expect(page.getByText('Pagar por SINPE Móvil', { exact: true })).toBeInViewport();
+  await expect(page.getByText(/modo prueba|4242/i)).toHaveCount(0); // sin etiquetas de prueba en la UI
+  await payWithCard(page, '4242 4242 4242 4242');
+  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.locator('iframe.lendara-frame')).toHaveCount(0);
+  const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
+  expect((await state(request)).orders[slug].status).toBe('fondeado');
+  expect(await calls(request, '/api/escrow/pay', 'card_session')).toHaveLength(1);
+  expect(await calls(request, '/api/escrow/pay', 'card_confirm')).toHaveLength(1);
+  expect(await calls(request, '/api/escrow/pay', 'confirm_sinpe')).toHaveLength(0);
+});
+
+test('MCK-CARD-02 KYC rechazado: mensaje claro y puede pagar por SINPE', async ({ page, request }) => {
+  await reset(request, [listing], true);
+  await openMethods(page);
+  await payWithCard(page, '4000 0000 0000 0002');
+  await page.frameLocator('iframe.lendara-frame').getByText('Cerrar', { exact: true }).click();
+  await expect(page.getByText(/No pudimos verificar tu identidad/)).toBeVisible();
+  await page.getByText('Pagar por SINPE Móvil', { exact: true }).click();
+  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+});
+
+test('MCK-CARD-03 cerrar el widget sin pagar: vuelve a las opciones, sin error ni confirmación', async ({ page, request }) => {
+  await reset(request, [listing], true);
+  await openMethods(page);
+  await page.getByText('Pagar con tarjeta', { exact: true }).click();
+  await page.frameLocator('iframe.lendara-frame').getByText('Cerrar', { exact: true }).click();
+  await expect(page.getByText('Elige cómo pagar')).toBeVisible();
+  await expect(page.getByText(/No pudimos|no se pudo/)).toHaveCount(0);
+  expect(await calls(request, '/api/escrow/pay', 'card_confirm')).toHaveLength(0);
+});
+
+test('MCK-CARD-04 sin pago con tarjeta configurado: directo al SINPE (como antes)', async ({ page, request }) => {
+  await reset(request, [listing]);
+  await page.goto('/p/prod01');
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  await expect(page.getByText('Pagar con tarjeta', { exact: true })).toHaveCount(0);
+});
