@@ -4,23 +4,23 @@ import { ui } from '@/components/ui';
 import { parseSlug } from '@/lib/orders';
 import { useStableWindow } from '@/lib/viewport';
 import { router } from 'expo-router';
-import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet } from '@/components/ds';
-import { MY_PURCHASES_TITLE } from '@/lib/purchases';
-import { Feed } from '@/components/Feed';
+import { Card, ErrorText, haptic, Icon, PrimaryButton, Screen, Sheet } from '@/components/ds';
+import { ComprarNav } from '@/components/ComprarNav';
 import { Reveal } from '@/components/space';
 import { C, R, S, T } from '@/constants/theme';
 
-export default function Comprar() {
+// Comprar › Pagar con link (/comprar/link): lo que antes estaba arriba del feed, igual: importar de Facebook, invitar
+// (pedir link) a un vendedor y pagar un link.
+export default function PagarConLink() {
   const short = useStableWindow().height < 740;
   const [payOpen, setPayOpen] = useState(false);
   const [link, setLink] = useState('');
   const linkSlug = parseSlug(link);
   const goPay = () => { if (!linkSlug) return; setPayOpen(false); setLink(''); router.push(`/p/${linkSlug}`); };
   return (
-    <Screen title="Comprar" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
-      right={<IconButton icon="bag-handle" label={MY_PURCHASES_TITLE} onPress={() => router.push('/mis-compras')} />}>
-      {/* Arriba se mantienen: importar de un link (Facebook, Mercado Libre, Amazon… cualquier marketplace), invitar (pedir link) a un vendedor y pagar un link. Debajo, el feed. */}
-      <Feed header={<View style={{ gap: S.md }}>
+    <Screen title="Pagar con link" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
+      right={<ComprarNav active="link" />}>
+      <View style={{ gap: S.md }}>
         <Reveal i={0}><Card style={{ gap: S.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
             <Icon name="paper-plane-outline" size={24} color={C.lilac} />
@@ -40,7 +40,7 @@ export default function Comprar() {
           </View>
           <Icon name="chevron-forward" size={20} color={C.lilac} />
         </Pressable></Reveal>
-      </View>} />
+      </View>
 
       <Sheet visible={payOpen} onClose={() => setPayOpen(false)} title="Pagar un link"
         footer={<PrimaryButton title="Ver producto" icon="arrow-forward" disabled={!linkSlug} onPress={goPay} />}>

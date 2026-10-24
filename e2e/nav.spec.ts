@@ -40,6 +40,8 @@ test.describe('Navegación', () => {
     await open(page, '/vender', 'seller', true);
     const slug = await page.evaluate(() => (window as any).__meteoritoDemo.seed('creado', { title: 'Lámpara', price_crc: 20000 }));
     await open(page, '/comprar', 'seller');
+    await page.getByRole('tab', { name: 'Pagar con link' }).click(); // icono arriba a la derecha -> /comprar/link
+    await expect(page).toHaveURL(/\/comprar\/link/);
     await page.getByRole('button', { name: 'Pagar un link' }).click();
     await page.getByPlaceholder('meteorito.app/p/…').fill(`https://pago.meteorito.app/p/${slug}`);
     await page.getByRole('button', { name: /Ver producto/ }).click();

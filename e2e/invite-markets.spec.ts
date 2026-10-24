@@ -14,7 +14,7 @@ const copyOk = async (page: Page) => { const text = await page.locator('body').i
 
 test.describe('Comprar: invitar con el link de cualquier marketplace', () => {
   test('CMP-MKT-01 Mercado Libre: se reconoce sin error, no se intenta leer, el link va en la invitación', async ({ page }, info) => {
-    await open(page, '/comprar?buyer=A', 'buyer', true);
+    await open(page, '/comprar/link?buyer=A', 'buyer', true);
     await expect(page.getByRole('button', { name: 'Importar de un link' })).toBeVisible();
     await shot(page, info, '1-comprar');
     await page.getByRole('button', { name: 'Importar de un link' }).click();

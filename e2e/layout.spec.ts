@@ -5,7 +5,9 @@ const SCREENS: { path: string; role: 'seller' | 'buyer'; title?: string }[] = [
   { path: '/', role: 'seller' },
   { path: '/vender', role: 'seller', title: 'Vender' },
   { path: '/pedidos', role: 'seller', title: 'Home' },
-  { path: '/comprar', role: 'buyer' },
+  { path: '/comprar', role: 'buyer', title: 'Comprar' },
+  { path: '/comprar/link', role: 'buyer', title: 'Pagar con link' },
+  { path: '/comprar/compras', role: 'buyer', title: 'Mis compras' },
   { path: '/t/valeria?owner=1', role: 'seller' }, // Mi tienda = /t/<usuario> con las herramientas del dueño
   { path: '/i/nueva', role: 'buyer', title: 'Invitar a un vendedor' },
   { path: '/t/valeria', role: 'buyer' },

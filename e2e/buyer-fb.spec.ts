@@ -33,7 +33,7 @@ const captureShare = (page: Page) => page.addInitScript(() => {
 test.describe('Comprar: invitar desde Facebook', () => {
   test('CMP-FB-01 pegar link de FB -> invitación precargada -> mensaje para Messenger -> el vendedor ve foto y precio y publica', async ({ page }, info) => {
     await captureShare(page);
-    await open(page, '/comprar?buyer=A', 'buyer', true);
+    await open(page, '/comprar/link?buyer=A', 'buyer', true); // Comprar › Pagar con link
     const entry = page.getByRole('button', { name: 'Importar de un link' });
     await expect(entry).toBeVisible();
     // Pegar el link (Facebook u otro marketplace) es el caso más común: botón principal (blanco); invitar a mano queda secundario, debajo.

@@ -8,11 +8,12 @@ const noHScroll = async (page: import('@playwright/test').Page) => {
 };
 
 test.describe('Comprar: feed y perfil', () => {
-  test('FEED-01 arriba Facebook/invitar/pagar; feed de verificados con tarjetas; filtro Sin confirmar; buscar sin acentos; vacío con sugerencia', async ({ page }) => {
+  test('FEED-01 Comprar abre en el feed (sin nada encima; Facebook/invitar/pagar en Pagar con link); feed de verificados con tarjetas; filtro Todos; buscar sin acentos; vacío con sugerencia', async ({ page }) => {
     await open(page, '/comprar', 'buyer', true);
-    await expect(page.getByRole('button', { name: 'Importar de un link' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Invitar a un vendedor' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Pagar un link' })).toBeVisible();
+    await expect(page.getByRole('tab', { name: 'Feed' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: 'Importar de un link' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Invitar a un vendedor' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Pagar un link' })).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Identidad confirmada' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('feed-card').first()).toBeVisible();
     expect(await page.getByTestId('feed-card').count()).toBeGreaterThan(1);
