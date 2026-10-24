@@ -5,9 +5,11 @@ on:
     branches: [main]
   pull_request:
 
-# Un solo run on-chain a la vez (comparten wallets de testnet).
+# Un solo run on-chain a la vez (comparten wallets de testnet): solo los PRs entran en ci-testnet.
+# main (push) corre sin red (TESTNET=skip: los tests on-chain ya pasaron en el PR que se mergeó) y en su propio grupo por
+# commit: un PR en cola ya no lo desplaza ("cancelled" sin correr) y el deploy de main no queda en "Waiting for checks".
 concurrency:
-  group: ci-testnet
+  group: ${{ github.event_name == 'push' && format('ci-main-{0}', github.sha) || 'ci-testnet' }}
   cancel-in-progress: false
 
 permissions:
@@ -21,7 +23,8 @@ jobs:
       CI: 'true'
       STELLAR_NETWORK: testnet   # SOLO testnet; el backend rechaza cualquier otra red
       # PRs desde forks no reciben secretos: se corren solo los tests unitarios.
-      TESTNET: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'skip' || '' }}
+      # main (push) tampoco: corre unit + typecheck + export, sin tocar las wallets de testnet que usan los PRs.
+      TESTNET: ${{ (github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && 'skip' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
