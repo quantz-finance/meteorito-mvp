@@ -20,6 +20,8 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
         // REVISIÓN LEGAL (Neo): línea del chat (025 + 026). 12 meses desde el último mensaje; con una disputa abierta no se borra y el
         // plazo cuenta desde que se resuelve (chat_purge_old, supabase/migrations/026_chat_retention_dispute.sql).
         'Mensajes del chat: el texto de los mensajes que intercambias con un vendedor o un comprador dentro de Meteorito, con su fecha y hora, si se leyeron y los reportes que hagas. Los guardamos para que puedan coordinar la compra, para revisar reportes de abuso o fraude y como evidencia si se abre una disputa. Solo ven la conversación las dos partes; el equipo de Meteorito la revisa únicamente si alguien la reporta o hay una disputa. Si compras sin cuenta, la conversación queda ligada a la llave de este dispositivo, no a tu nombre. Borramos cada conversación 12 meses después de su último mensaje. Si hay una disputa abierta, no la borramos y los 12 meses empiezan a contar cuando se resuelve.',
+        // REVISIÓN LEGAL (Neo): línea NUEVA de avisos al comprador sin cuenta (028), propuesta pendiente de aprobación. Plazo propuesto: 90 días después de cerrar la compra.
+        'Avisos de tu compra (opcional): si pagas sin cuenta y eliges recibir avisos, guardamos el número de WhatsApp o el correo que nos des, el texto que aceptaste, su versión y la fecha. Los usamos solo para avisarte sobre esa compra (pago, envío, plazo de liberación, liberación y disputas) y para enviarte un link que te devuelve el acceso a la compra desde otro dispositivo. No se los mostramos al vendedor. Los correos salen por Brevo y los mensajes de WhatsApp los envía el equipo de Meteorito. Si eliges crear una cuenta, ligamos la compra a tu cuenta de Cavos. Borramos el contacto 90 días después de que se cierre la compra, o antes si nos lo pides.',
         'Última conexión (opcional): si la enciendes, quienes ven tu tienda en Meteorito ven cuándo estuviste activo por última vez, de forma aproximada y sin hora exacta (por ejemplo, «En línea» o «Activo hace 3 h»), para que sepan si sueles estar disponible. Está apagada por defecto, registramos cuándo la enciendes o la apagas, y puedes apagarla cuando quieras en Mi cuenta; al apagarla dejamos de mostrarla y borramos la hora guardada.',
       ] },
       { h: 'Analítica de uso (PostHog)', p: [
@@ -29,7 +31,7 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
       ] },
       { h: 'Para qué usamos los datos', p: ['Para operar el pago en custodia, prevenir fraude, resolver disputas, mejorar la app y elaborar estadísticas agregadas. No vendemos tus datos.'] },
       { h: 'Tus derechos', p: ['Según la Ley 8968 tienes derecho de acceso, rectificación, cancelación y oposición (derechos ARCO), y a revocar tu consentimiento. Escríbenos a ' + CONTACT_EMAIL + '.'] },
-      { h: 'Proveedores', p: ['Cavos (inicio de sesión y billetera), Trustless Work y Stellar (escrow), Supabase (base de datos y fotos), Vercel (hosting) y PostHog (analítica). Algunos procesan datos fuera de Costa Rica.'] },
+      { h: 'Proveedores', p: ['Cavos (inicio de sesión y billetera), Trustless Work y Stellar (escrow), Supabase (base de datos y fotos), Vercel (hosting), PostHog (analítica) y Brevo (correos de avisos de compra). Algunos procesan datos fuera de Costa Rica.'] },
       { h: 'Contacto', p: [CONTACT_EMAIL] },
     ],
   },
