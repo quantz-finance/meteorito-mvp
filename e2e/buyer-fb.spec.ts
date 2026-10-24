@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { open, expectNoScroll, expectInputs16, settle, BANNED, VOSEO } from './helpers';
+import { open, expectNoScroll, expectInputs16, settle, BANNED, VOSEO, withoutBetaNotice } from './helpers';
 
 // Comprar → invitar al vendedor desde un anuncio de Facebook Marketplace (comprador sin cuenta).
 // El demo responde import_facebook igual que /api/store (sin red, sin Facebook); el endpoint real con los fixtures
@@ -62,7 +62,7 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await expectInputs16(page);
     await titleAt16(page, 'Invitar a un vendedor');
     const text = await page.locator('body').innerText();
-    expect(text).not.toMatch(BANNED); expect(text).not.toMatch(VOSEO); expect(text).not.toMatch(/modo prueba|de prueba|testnet/i);
+    expect(text).not.toMatch(BANNED); expect(text).not.toMatch(VOSEO); expect(withoutBetaNotice(text)).not.toMatch(/modo prueba|de prueba|testnet/i); // solo el aviso de beta (BETA_NOTICE)
     await shot(page, info, '3-precargado');
     await page.getByRole('button', { name: /Crear invitación/ }).click();
     await expect(page).toHaveURL(/\/i\/inv\d+/);

@@ -503,3 +503,22 @@ test('MCK-TEL-01 "Contacta al vendedor" solo para el comprador y solo después d
   await expect(other.getByText('Contacta al vendedor')).toHaveCount(0);
   expect((await calls(request, '/api/store')).filter((c: any) => c.action === 'seller_contact').length).toBe(asked.length);
 });
+
+// Aviso de beta (lib/rules.ts BETA_NOTICE): en el pago, visible SIN scroll y ANTES del botón de pagar, también con fotos.
+test('MCK-BETA-01 aviso de beta visible en el viewport antes de "Pagar en custodia" (producto con fotos)', async ({ page, request }) => {
+  await reset(request, [{ ...listing, photos: ['/demo-fb-import.jpg', '/demo-fb-import.jpg', '/demo-fb-import.jpg'] }]);
+  await page.goto('/p/prod01');
+  await expect(page.getByTestId('order-photo')).toBeVisible();
+  const notice = page.getByTestId('beta-notice');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Beta en testnet, sin dinero real. Meteorito no verifica el producto.');
+  await expect(notice.getByText('Ver cómo funciona')).toBeVisible();
+  const pay = page.getByText(/Pagar en custodia/).last();
+  const vh = page.viewportSize()!.height;
+  const n = (await notice.boundingBox())!, b = (await pay.boundingBox())!;
+  expect(n.y).toBeGreaterThanOrEqual(0);
+  expect(n.y + n.height).toBeLessThanOrEqual(vh); // dentro del viewport, sin scroll
+  expect(n.y + n.height).toBeLessThanOrEqual(b.y); // antes del botón de pagar
+  await notice.getByText('Ver cómo funciona').click();
+  await expect(page).toHaveURL(/\/como-funciona/);
+});

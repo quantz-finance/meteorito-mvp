@@ -13,7 +13,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 import { checkFacebookUrl, fbImportNotice, fbImportProps, importedPhotoBlob, importFromFacebook, type FbImport } from '@/lib/fbImport';
 import { useStableWindow } from '@/lib/viewport';
 import { ui } from '@/components/ui';
-import { RulesHint } from '@/components/RulesLink';
+import { BetaNotice, RulesHint } from '@/components/RulesLink';
 import { SELL_SUMMARY } from '@/lib/rules';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet, SuccessCheck } from '@/components/ds';
 import { Reveal } from '@/components/space';
@@ -288,7 +288,8 @@ function VenderForm() {
 
       {error && <ErrorText>{error}</ErrorText>}
       <Text style={T.footnote}>De 1 a 4 fotos con buena luz.</Text>
-      <RulesHint text={SELL_SUMMARY} from="sell" />
+      <RulesHint text={SELL_SUMMARY} from="sell" compact={short} /* iPhone SE: solo "Ver reglas" para dejar espacio al aviso de beta */ />
+      <BetaNotice from="sell" />
       </View>
 
       <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de Facebook"

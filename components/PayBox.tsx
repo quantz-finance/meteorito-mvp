@@ -21,6 +21,7 @@ import { DEMO_ENABLED } from '@/lib/demo';
 import { ChainLinks } from '@/components/ChainLinks';
 import { openCardWidget } from '@/lib/cardPay';
 import { CardSheet, type CardPayInput } from '@/components/CardSheet';
+import { BetaNotice } from '@/components/RulesLink';
 
 const CARD_PROCESSING = 'Tu pago con tarjeta se está procesando. Vuelve a tocar "Pagar con tarjeta" en unos segundos.';
 const CARD_PROCESSING_INAPP = 'Tu pago se está procesando. Vuelve a tocar "Pagar" en unos segundos: no se te cobra dos veces.';
@@ -139,6 +140,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
       <Row icon="cube-outline" text="Cuando lo envíe, aquí vas a ver tu código de entrega." />
       <Text style={[T.footnote, { textAlign: 'center' }]}>Pagaste sin crear cuenta: este navegador guarda tu acceso a este pedido y tu código de entrega. Si borras los datos del navegador, no podrás confirmar ni reportar un problema desde aquí.</Text>
+      <BetaNotice from="pin" onNavigate={() => setSheet(null)} />
       <ChainLinks order={order} align="center" />
     </Sheet>
     <Sheet visible={sheet === 'photo' && !!ship?.photo} onClose={() => setSheet(null)} title="Foto del envío"
@@ -160,6 +162,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     footer = <>
       {err && !sheet && <ErrorText>{err}</ErrorText>}
       {mine ? <PrimaryButton title="Ver mi pedido" icon="receipt-outline" variant="ghost" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug: mine } })} /> : null}
+      <BetaNotice from="pay" />
       <PrimaryButton title={busy ? 'Preparando…' : `Pagar en custodia ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
         onPress={() => run(async () => {
           const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'start' });
