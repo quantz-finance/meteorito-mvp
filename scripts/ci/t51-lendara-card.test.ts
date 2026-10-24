@@ -72,6 +72,8 @@ export async function run(t: T) {
     return db;
   };
   const call = async (key: string, body: any) => { const r = res(); await pay(withGuest(req(null, body), key), r); return r; };
+  // Restaurar al final: en CI TREASURY_SECRET es la tesorería real de testnet que usan los tests on-chain (t01…).
+  const saved = Object.fromEntries(['LENDARA_API_KEY', 'LENDARA_API_URL', 'TREASURY_SECRET'].map((k) => [k, process.env[k]]));
   Object.assign(process.env, { LENDARA_API_KEY: 'lnd_test_ci', LENDARA_API_URL: 'https://lendara.test', TREASURY_SECRET: TREASURY.secret() });
 
   // --- sin configurar
@@ -171,5 +173,5 @@ export async function run(t: T) {
     t.check('si un pago anterior ya se completó, "Pagar con tarjeta" fondea en vez de cobrar otra vez', r.code === 200 && r.body?.pin === '123456' && sessions.length === 1 && funded.length === 1, `${r.code} ${JSON.stringify(r.body)}`); }
 
   __setLendaraDepsForTests(null);
-  delete process.env.LENDARA_API_KEY; delete process.env.LENDARA_API_URL; delete process.env.TREASURY_SECRET;
+  for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 }
