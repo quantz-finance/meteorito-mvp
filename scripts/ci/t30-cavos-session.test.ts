@@ -40,19 +40,20 @@ export async function run(t: T) {
   closeApp();
   t.check('(3) pestaña nueva: restored', S.rehydrateCavosToken() === 'restored' && S.currentCavosToken() === fresh);
   w.localStorage.setItem(pk, fresher);
-  t.check('(3) token más nuevo de otra pestaña reemplaza al viejo', S.rehydrateCavosToken() === 'renewable' || w.sessionStorage.getItem(tk) === fresher);
+  t.check('(3) token más nuevo de otra pestaña reemplaza al viejo', S.rehydrateCavosToken() === 'restored' && w.sessionStorage.getItem(tk) === fresher);
   w.sessionStorage.setItem(tk, fresh); S.persistCavosToken();
   t.check('(3) un token más viejo nunca pisa al guardado', w.localStorage.getItem(pk) === fresher);
   // iOS borra sessionStorage con la app abierta: getAuthToken cae al guardado
   w.sessionStorage = new Mem();
   t.check('(3) getAuthToken sin sessionStorage usa la copia', S.currentCavosToken() === fresher && w.sessionStorage.getItem(tk) === fresher);
 
-  // (4) token vencido pero dentro de la gracia (renovación silenciosa vía firma de la billetera en el servidor)
+  // (4) token vencido pero dentro de la gracia. Cavos (vault/registro) lo rechaza al reconectar (401 "Invalid user token",
+  // 13 de 13 en PostHog): NO se repone al SDK; "Entrar de nuevo" de inmediato (t82 cubre el re-login sin perder nada).
   reset(); const old = jwt(now - 2 * 3600); login(old);
-  t.check('(4) token vencido en gracia sí se guarda', w.localStorage.getItem(pk) === old);
-  closeApp();
-  t.check('(4) reabrir con token vencido en gracia: renewable, repuesto en silencio', S.rehydrateCavosToken() === 'renewable' && w.sessionStorage.getItem(tk) === old && !S.sessionExpiredOnOpen());
-  t.check('(4) sin pantalla de re-login', w.localStorage.getItem(ik) === identity);
+  t.check('(4) un token vencido no se persiste (Cavos ya no lo acepta)', w.localStorage.getItem(pk) !== old);
+  w.localStorage.setItem(pk, old); closeApp();
+  t.check('(4) reabrir con token vencido en gracia: stale, no se repone al SDK', S.rehydrateCavosToken() === 'stale' && !w.sessionStorage.getItem(tk) && S.sessionExpiredOnOpen());
+  t.check('(4) sin reconexión condenada: identidad del SDK quitada, marca "Entrar de nuevo"', !w.localStorage.getItem(ik) && S.hadSessionOnOpen() && !w.localStorage.getItem(pk));
 
   // (5) sesión realmente vencida (fuera de la gracia de 7 días)
   reset(); w.localStorage.setItem(ik, identity); w.localStorage.setItem(pk, jwt(now - 8 * 86400));

@@ -24,10 +24,11 @@ function jwksFor(iss: string): any {
 export class HttpError extends Error { constructor(public status: number, msg: string) { super(msg); } }
 
 export interface CavosUser { sub: string; email?: string; iss: string; renewed?: boolean }
-export const SESSION_EXPIRED = 'Tu sesión venció. Vuelve a cargar la página para continuar.';
+// Nunca "vuelve a cargar la página": recargar no renueva el token de Cavos (era el 59 % de los error_shown).
+export const SESSION_EXPIRED = 'Tu sesión venció. Vuelve a entrar con la misma cuenta para continuar.';
 export const SESSION_OTHER_WALLET = 'Tu sesión pertenece a otra cuenta o billetera. Vuelve a iniciar sesión para continuar.';
 export const SESSION_RELOGIN = 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
-export const AUTH_INVALID = 'No pudimos verificar tu sesión. Vuelve a cargar la página.';
+export const AUTH_INVALID = 'No pudimos verificar tu sesión. Vuelve a entrar con la misma cuenta para continuar.';
 const coded = (status: number, code: string, msg: string) => Object.assign(new HttpError(status, msg), { code });
 /** auth_invalid con motivo (issuer/aud/signature/...) e issuer (host) para diagnosticar sin token ni sub. */
 const invalid = (reason: string, iss = '') => Object.assign(coded(401, 'auth_invalid', AUTH_INVALID), { reason, issHost: issHost(iss) });
