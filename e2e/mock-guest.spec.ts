@@ -258,12 +258,12 @@ test('MCK-UTM-01 entra desde el landing con UTMs: app_opened y cada evento lleva
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('meteorito:first-touch:v1')!).utm_content)).toBe('hero');
   // Navegar (el router ya borró el query): los eventos siguientes siguen con las UTMs (super propiedades)
   await page.getByText(/Quiero comprar|Comprar sin cuenta/).first().click();
-  await expect(page).toHaveURL(/\/i\/nueva/);
+  await expect(page).toHaveURL(/\/comprar$/); // la bienvenida abre el feed
   await page.goto('/p/prod01'); // otra carga sin UTMs
   await expect.poll(async () => (await phEvents(request, 'payment_link_opened')).length, { timeout: 20_000 }).toBeGreaterThan(0);
   const linkOpened = (await phEvents(request, 'payment_link_opened'))[0];
   expect(linkOpened.properties).toMatchObject({ utm_source: 'landing', utm_content: 'hero' });
-  const screens = (await phEvents(request, 'screen_viewed')).filter((e) => e.properties.screen === '/i/nueva');
+  const screens = (await phEvents(request, 'screen_viewed')).filter((e) => e.properties.screen === '/comprar');
   expect(screens.length).toBeGreaterThan(0);
   expect(screens[0].properties.utm_source).toBe('landing');
 });
@@ -669,4 +669,54 @@ test('MCK-MIS-05 sin cuenta, sin compras: vacío amable con link al feed', async
   await page.getByTestId('purchases-to-feed').click();
   await expect(page).toHaveURL(/\/comprar$/);
   await expect(page.getByTestId('feed-card').first()).toBeVisible();
+});
+
+// Compra completa sin cuenta desde la bienvenida: feed -> producto -> pagar (llave de invitado) -> seguimiento -> Mis compras.
+test('MCK-BUY-01 sin cuenta: bienvenida -> feed -> producto -> paga -> seguimiento -> Mis compras, sin login en ningún paso', async ({ page, request }) => {
+  await reset(request, [listing]);
+  await page.goto('/');
+  await page.getByText(/Quiero comprar|Comprar sin cuenta/).first().click();
+  await expect(page).toHaveURL(/\/comprar$/);
+  const card = page.getByTestId('feed-card').filter({ hasText: 'Bici de montaña' }).first();
+  await expect(card).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
+  await card.getByRole('link', { name: /Bici de montaña/ }).click();
+  await expect(page).toHaveURL(/\/p\/prod01/);
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page).toHaveURL(/\/p\/h[0-9a-f]{5}\?pay=1/);
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
+  const api = (await state(request)).calls.filter((c: any) => c.path === '/api/escrow/pay');
+  expect(api.length).toBeGreaterThan(0);
+  expect(api.every((c: any) => c.guest)).toBe(true); // llave de invitado, nunca login
+  await page.getByText('Entendido', { exact: true }).click(); // cierra la hoja "Pagado"
+  await page.getByRole('button', { name: 'Volver' }).first().click();
+  await expect(page).toHaveURL(/\/comprar$/);
+  await page.getByRole('tab', { name: 'Mis compras' }).click();
+  await expect(page).toHaveURL(/\/comprar\/compras$/);
+  await expect(page.getByTestId('purchase-row')).toHaveCount(1);
+  await page.getByTestId('purchase-row').first().click();
+  await expect(page).toHaveURL(new RegExp(`/p/${slug}`));
+});
+
+test('MCK-MIS-06 sin cuenta: seguimiento abierto directo (sin historial) -> Volver va a Mis compras, no a Home/login', async ({ page, request }, info) => {
+  await reset(request, [{ slug: 'trk666', status: 'enviado', contract_id: 'C6', buyer: KEY, model: 'Consola', price_crc: 90000 }]);
+  await page.addInitScript(([k]) => { localStorage.setItem('meteorito:guest:v1', k); }, [KEY]);
+  await page.goto('/p/trk666');
+  await expect(page.getByText('Consola').first()).toBeVisible();
+  if (SHOTS && info.project.name === 'mock-iphone-se') await page.screenshot({ path: `${SHOTS}/seguimiento-invitado.png` });
+  await page.getByRole('button', { name: 'Volver' }).first().click();
+  await expect(page).toHaveURL(/\/comprar\/compras$/);
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('purchase-row')).toHaveCount(1);
+});
+
+test('MCK-MIS-07 sin cuenta: bienvenida -> Privacidad -> Volver vuelve a la bienvenida', async ({ page }) => {
+  await page.goto('/');
+  await page.getByText('Privacidad', { exact: true }).first().click();
+  await expect(page).toHaveURL(/\/legal\//);
+  await page.getByRole('button', { name: 'Volver' }).first().click();
+  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
 });

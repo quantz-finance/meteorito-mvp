@@ -7,7 +7,7 @@ import { RULES, RULES_INTRO, RULES_TITLE, TOUR } from '@/lib/rules';
 
 export default function ComoFunciona() {
   return (
-    <Screen back="/vender" title={RULES_TITLE} subtitle={RULES_INTRO} space="calm">
+    <Screen back="/vender" guestBack="/" title={RULES_TITLE} subtitle={RULES_INTRO} space="calm">
       {RULES.map((r, i) => (
         <Card key={r.id} style={s.card}>
           <View style={s.row}>

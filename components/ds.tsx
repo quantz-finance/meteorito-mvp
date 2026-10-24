@@ -14,7 +14,7 @@ import { Fonts } from '@/constants/Colors';
 import Reanimated, { useAnimatedScrollHandler, useSharedValue } from 'react-native-reanimated';
 import { moneyProgress } from '@/lib/progress';
 import { anim, pressTransition } from '@/constants/motion';
-import { BackButton, goBack } from '@/components/BackButton';
+import { BackButton, useBack } from '@/components/BackButton';
 import type { Href } from 'expo-router';
 import { MeteorBurst, ScrollCtx, SpaceBackground, type SpaceMode } from '@/components/space';
 
@@ -32,13 +32,15 @@ export const haptic = {
 
 /* ---------- Layout ---------- */
 /** Pantalla con título grande iOS, safe area superior y footer fijo opcional (zona del pulgar). */
-export function Screen({ title, subtitle, right, children, footer, footerBare, scroll = true, refreshControl, contentStyle, space = 'full', back, backTop }: {
+export function Screen({ title, subtitle, right, children, footer, footerBare, scroll = true, refreshControl, contentStyle, space = 'full', back, backTop, guestBack }: {
   /** Footer sin barra de fondo: el botón queda directo sobre el universo (p. ej. "Generar link" en Vender). */
   footerBare?: boolean;
   /** Muestra el botón Volver arriba a la izquierda; el valor es a dónde ir si no hay historial. */
   back?: Href;
   /** Con título: Volver arriba a la izquierda (encima del título) en vez de la X a la derecha (p. ej. Comprar sin cuenta, que ya tiene 3 iconos); va directo a `back`. */
   backTop?: boolean;
+  /** Sin cuenta y sin historial real: salir aquí (exitTo) en vez de Mis compras (legales y reglas -> bienvenida). */
+  guestBack?: Href;
   title?: string; subtitle?: string; right?: ReactNode; children: ReactNode; footer?: ReactNode; scroll?: boolean; space?: SpaceMode;
   refreshControl?: React.ComponentProps<typeof ScrollView>['refreshControl']; contentStyle?: StyleProp<ViewStyle>;
 }) {
@@ -48,7 +50,7 @@ export function Screen({ title, subtitle, right, children, footer, footerBare, s
   // Con título, Volver va a la derecha (icono): el título empieza SIEMPRE en el mismo punto (arriba/izquierda) en todas
   // las pantallas, con o sin botones, y nada salta al cambiar de pestaña. Sin título, Volver queda arriba a la izquierda.
   const backBtn = back && (!title || backTop) ? <BackButton fallback={back} replace={backTop} /> : null;
-  const header = title ? <ScreenHeader title={title} subtitle={subtitle} right={right} back={backTop ? undefined : back} /> : null;
+  const header = title ? <ScreenHeader title={title} subtitle={subtitle} right={right} back={backTop ? undefined : back} guestBack={guestBack} /> : null;
   const body = scroll ? (
     <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
       keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}
@@ -68,12 +70,14 @@ export function Screen({ title, subtitle, right, children, footer, footerBare, s
 }
 
 /** Encabezado compartido: fila de alto fijo (TOUCH) con el título arriba a la izquierda y acciones a la derecha. */
-export function ScreenHeader({ title, subtitle, right, back }: { title: string; subtitle?: string; right?: ReactNode; back?: Href }) {
+export function ScreenHeader({ title, subtitle, right, back: to, guestBack }: { title: string; subtitle?: string; right?: ReactNode; back?: Href; guestBack?: Href }) {
+  const goBack = useBack(to ?? '/vender', false, guestBack); // sin cuenta y sin historial real: nunca a una ruta con login (components/BackButton)
+  const back = to;
   return (
     <View style={{ gap: S.xs }}>
       <View style={st.header}>
         <Text style={[T.largeTitle, st.headerTitle]} numberOfLines={2} accessibilityRole="header" testID="screen-title">{title}</Text>
-        {right || back ? <View style={st.headerRight}>{right}{back ? <IconButton icon="close" label="Volver" onPress={() => goBack(back)} /> : null}</View> : null}
+        {right || back ? <View style={st.headerRight}>{right}{back ? <IconButton icon="close" label="Volver" onPress={goBack} /> : null}</View> : null}
       </View>
       {subtitle ? <Text style={T.callout}>{subtitle}</Text> : null}
     </View>
