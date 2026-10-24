@@ -8,6 +8,7 @@ import { RulesLink } from '@/components/RulesLink';
 import { C, T } from '@/constants/theme';
 import { Icon } from '@/components/ds';
 import { HISTORY_TITLE } from '@/lib/sellerTools';
+import { COPY } from '@/lib/copy';
 import { useAuth } from '@/lib/cavos';
 import { logoutSafely } from '@/lib/wallet';
 const ProfileCard = lazy(() => import('@/components/Payout').then((m) => ({ default: m.ProfileCard }))); // diferido: solo al abrir
@@ -20,7 +21,7 @@ export function AccountSheet({ visible, onClose, products }: { visible: boolean;
       footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={async () => { const m = await logoutSafely(auth); if (m) { setLogoutMsg(m); return; } setLogoutMsg(null); onClose(); }} />}>
       {logoutMsg ? <ErrorText>{logoutMsg}</ErrorText> : null}
       {visible ? <Suspense fallback={<SkeletonCard />}><ProfileCard products={products} /></Suspense> : null}
-      <ListRow icon="receipt-outline" title={HISTORY_TITLE} subtitle="Tus ventas con su estado y lo que cobraste." right={<Icon name="chevron-forward" size={18} color={C.lilac} />}
+      <ListRow icon="receipt-outline" title={HISTORY_TITLE} subtitle={COPY.salesHistory.subtitle} right={<Icon name="chevron-forward" size={18} color={C.lilac} />}
         onPress={() => { onClose(); router.push('/ventas'); }} />
       <Card><RulesLink from="account" onNavigate={onClose} /></Card>
       <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{auth.email ?? '—'}</Text></Card>

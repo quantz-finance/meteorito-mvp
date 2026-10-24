@@ -17,9 +17,12 @@ export async function run(t: T) {
   const base = { title: 'iPhone 13', price_crc: 250000, link, description: 'Batería 89 %. Con caja.' };
   const wF2F = adTemplate({ ...base, delivery_mode: 'cara_a_cara', protection_minutes: 1440 }, 'whatsapp');
   t.check('WhatsApp: título, precio, acuerdo cara a cara, custodia y link', wF2F === ['iPhone 13 por ₡250 000.', 'Entrega: Cara a cara · Protección: 24 h', AD_CUSTODY, `Paga aquí, sin crear cuenta: ${link}`].join('\n'), wF2F);
+  t.check('copy aprobado exacto (Neo)', AD_TITLE === 'Plantilla de anuncio' && AD_COPY === 'Copiar anuncio' && AD_COPIED === 'Anuncio copiado' && HISTORY_TITLE === 'Historial de ventas'
+    && AD_CUSTODY === 'Pago en custodia con Meteorito (beta en testnet, sin dinero real): el pago queda en un contrato de escrow en Stellar y se libera cuando quien compra da su PIN de entrega, o por tiempo si no abre una disputa antes. Meteorito no verifica el producto.'
+    && Object.values(OUTCOME_LABEL).join() === 'Cobrado,Cobro parcial,Reembolsado,Sin venta,En curso');
   const mEnv = adTemplate({ ...base, delivery_mode: null, protection_minutes: null }, 'marketplace');
   t.check('Marketplace: descripción, acuerdo por defecto (envío, 7 días desde el envío) en viñetas, custodia y link',
-    mEnv.includes('iPhone 13 · ₡250 000') && mEnv.includes('Batería 89 %. Con caja.') && mEnv.includes('- Entrega: Envío') && mEnv.includes('- Protección: 7 días desde el envío') && mEnv.includes(`- ${AD_CUSTODY}`) && mEnv.trim().endsWith(link), mEnv);
+    mEnv.includes('iPhone 13 · ₡250 000') && mEnv.includes('Batería 89 %. Con caja.') && mEnv.includes('- Entrega: Envío') && mEnv.includes('- Protección: 7 días desde el envío') && mEnv.includes(`- ${AD_CUSTODY}`) && mEnv.trim().endsWith(`Paga aquí, sin crear cuenta: ${link}`), mEnv);
   const m3 = adTemplate({ ...base, description: 'x'.repeat(900), delivery_mode: 'envio', protection_minutes: 3 * 1440 }, 'marketplace');
   t.check('Marketplace: plazo elegido (3 días) y descripción recortada a 500', m3.includes('- Protección: 3 días desde el envío') && !m3.includes('x'.repeat(501)));
   t.check('sin descripción ni título: no deja huecos', !adTemplate({ ...base, title: ' ', description: null }, 'marketplace').includes('\n\n\n') && adTemplate({ ...base, title: '' }, 'whatsapp').startsWith('Artículo por'));
@@ -37,7 +40,7 @@ export async function run(t: T) {
   t.check('historial: sin links sin pagar ni productos permanentes', rows.length === 6 && !rows.some((r) => r.slug === 'a' || r.slug === 'lst'));
   const by = Object.fromEntries(rows.map((r) => [r.slug, r]));
   t.check('resultado: liberado = Cobrado (precio completo)', by.bb.outcomeLabel === 'Cobrado' && by.bb.collected === 100000);
-  t.check('resultado: reembolso total = Reembolsado al comprador, ₡0', by.ccc.outcomeLabel === 'Reembolsado al comprador' && by.ccc.collected === 0);
+  t.check('resultado: reembolso total = Reembolsado, ₡0', by.ccc.outcomeLabel === 'Reembolsado' && by.ccc.collected === 0);
   t.check('resultado: reparto 30 % al comprador = Cobro parcial ₡70 000', by.dddd.outcome === 'parcial' && by.dddd.collected === 70000 && by.dddd.outcomeLabel === 'Cobro parcial: ₡70 000');
   t.check('en curso muestra su estado; cancelado = Sin venta; resuelto sin detalle no inventa', by.eeeee.outcomeLabel === 'En curso' && by.eeeee.statusLabel === 'Pagado · fondos apartados' && !by.eeeee.closed
     && by.ffffff.outcomeLabel === 'Sin venta' && by.ggggggg.outcomeLabel === 'Disputa resuelta' && by.ggggggg.collected === 0);

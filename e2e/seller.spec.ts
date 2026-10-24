@@ -81,7 +81,7 @@ test.describe('Vendedor (demo)', () => {
     await btn.click();
     const input = page.getByLabel('Link del anuncio');
     await expect(input).toBeVisible();
-    await expect(page.getByTestId('import-providers')).toContainText('Facebook, Walmart y más');
+    await expect(page.getByTestId('import-providers')).toContainText('Pega el link de tu anuncio');
     await expectInputs16(page);
     await input.fill('https://www.facebook.com/share/18HroUrSak/?mibextid=wwXIfr');
     await page.waitForTimeout(600); // animación de la hoja
@@ -119,7 +119,7 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('Pega el link completo de tu anuncio (empieza con https://).')).toBeVisible();
     await page.getByLabel('Link del anuncio').fill('https://www.facebook.com/marketplace/item/1/');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('No pudimos leer ese link; súbelo con la cámara.')).toBeVisible();
+    await expect(page.getByText('Todavía no podemos leer ese link. Tómale foto a tu anuncio y súbela.')).toBeVisible();
     await page.getByRole('button', { name: 'Cerrar' }).last().click();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('');
     await expect(page.getByText('FOTOS (0/4)', { exact: false })).toBeVisible();
@@ -138,7 +138,7 @@ test.describe('Vendedor (demo)', () => {
     await page.getByRole('button', { name: 'Importar de un link' }).click();
     // Mercado Libre no deja leer sus anuncios desde nuestros servidores: se avisa al pegar y no se intenta
     await page.getByLabel('Link del anuncio').fill('https://articulo.mercadolibre.com.mx/MLM-1770588108-bicicleta-gravel-andes-mtb-de-montana-r29-24v-shimano-altus-_JM');
-    await expect(page.getByTestId('import-provider')).toContainText('Todavía no podemos leer anuncios de Mercado Libre; súbelo con la cámara.');
+    await expect(page.getByTestId('import-provider')).toContainText('Todavía no podemos leer ese link. Tómale foto a tu anuncio y súbela.');
     await expect(page.getByRole('button', { name: /Importar$/ })).toBeDisabled();
     await expectInputs16(page);
     if (info.project.name === 'webkit-iphone-se') { await page.waitForTimeout(500); await page.screenshot({ path: 'test-results/import-1-mercadolibre.png' }); }
