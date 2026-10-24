@@ -106,6 +106,25 @@ export async function feedPage(p: FeedQuery) {
   return { items, next_cursor: next, verified };
 }
 
+/** Cómo salieron las ventas del vendedor, SIN montos: completadas = liberadas + disputas resueltas. */
+export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
+export async function salesOutcome(sub: string): Promise<SalesOutcome> {
+  const { data, error } = await db().from('orders').select('status').eq('seller_user_id', sub).in('status', ['liberado', 'resuelto', 'en_disputa']).limit(5000);
+  if (error) storeDbErr(error);
+  const n = (st: string) => (data ?? []).filter((o: any) => o.status === st).length;
+  const no_issues = n('liberado'), disputes_resolved = n('resuelto');
+  return { completed: no_issues + disputes_resolved, no_issues, disputes_resolved, disputes_open: n('en_disputa') };
+}
+/** Vendedor de un pedido o link (para la ficha /p/<slug>): perfil corto + cómo salieron sus ventas. Sin datos privados. */
+export async function sellerOfOrder(orderSlug: string) {
+  const { data: o, error } = await db().from('orders').select('seller_user_id').eq('slug', orderSlug).maybeSingle();
+  if (error) storeDbErr(error);
+  if (!(o as any)?.seller_user_id) return null;
+  const sub = (o as any).seller_user_id as string;
+  const [sellers, sales] = await Promise.all([sellersFor([sub]), salesOutcome(sub)]);
+  const s = sellers.get(sub);
+  return s ? { ...publicSeller(s), sales } : null;
+}
 /** Perfil público del vendedor: lo de la tienda + reseñas, ventas, miembro desde y WhatsApp (solo si eligió mostrarlo). */
 export async function sellerProfile(slug: string) {
   let row: any = null;
@@ -121,7 +140,7 @@ export async function sellerProfile(slug: string) {
   const [{ data: st }, { data: items, error: e2 }, sales, { data: rv }] = await Promise.all([
     db().from('public_stores').select('rating_avg, rating_count').eq('store_slug', slug).maybeSingle(),
     db().from('public_store_items').select('slug, title, price_crc, photo, created_at').eq('store_slug', slug).order('created_at', { ascending: false }).limit(60),
-    db().from('orders').select('id', { count: 'exact', head: true }).eq('seller_user_id', row.sub).eq('status', 'liberado'),
+    salesOutcome(row.sub),
     db().from('seller_ratings').select('stars, created_at').eq('seller_user_id', row.sub).order('created_at', { ascending: false }).limit(30),
   ]);
   if (e2) storeDbErr(e2);
@@ -130,7 +149,7 @@ export async function sellerProfile(slug: string) {
     store_slug: row.store_slug, display_name: row.display_name, avatar_url: row.avatar_url ?? null,
     verified: row.verified === true, bio: null as string | null, location: null as string | null,
     rating_avg: st?.rating_avg == null ? null : Number(st.rating_avg), rating_count: Number(st?.rating_count ?? 0),
-    sales_completed: Number(sales?.count ?? sales?.data?.length ?? 0),
+    sales_completed: sales.completed, sales,
     member_since: row.created_at ?? null,
     whatsapp: phone ? waLink(phone) : null,
     items: (items ?? []).map((i: any) => ({ slug: i.slug, title: i.title || 'Artículo', price_crc: Number(i.price_crc), photo: i.photo ?? null, created_at: i.created_at ?? null })),
@@ -140,12 +159,14 @@ export async function sellerProfile(slug: string) {
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const BASE = 'https://pago.meteorito.app';
+/** = COPY.identity.ogSuffix (lib/copy.ts; la API no importa de la app). t61 revisa que coincidan. */
+export const OG_IDENTITY = 'identidad confirmada';
 /** Meta tags OG/Twitter del perfil (para WhatsApp, Facebook, X, iMessage…). */
 export function profileMeta(p: Awaited<ReturnType<typeof sellerProfile>> & object): string {
   const url = `${BASE}/t/${p.store_slug}`;
   const stars = p.rating_count > 0 && p.rating_avg != null ? `${(Math.round(p.rating_avg * 10) / 10).toFixed(1)} estrellas (${p.rating_count} reseña${p.rating_count === 1 ? '' : 's'}) · ` : '';
   const n = p.items.length;
-  const title = `${p.display_name}${p.verified ? ' (verificado)' : ''} en Meteorito`;
+  const title = `${p.display_name}${p.verified ? ` (${OG_IDENTITY})` : ''} en Meteorito`;
   const desc = `${stars}${n} producto${n === 1 ? '' : 's'} disponible${n === 1 ? '' : 's'}. Compra sin crear cuenta: tu pago queda en custodia hasta que recibas.`;
   const img = p.avatar_url ?? p.items.find((i: { photo: string | null }) => i.photo)?.photo ?? `${BASE}/icon-512.png`;
   return [

@@ -13,7 +13,7 @@ test.describe('Comprar: feed y perfil', () => {
     await expect(page.getByRole('button', { name: 'Importar de Facebook' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Invitar a un vendedor' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Pagar un link' })).toBeVisible();
-    await expect(page.getByRole('tab', { name: 'Verificados' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: 'Identidad confirmada' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('feed-card').first()).toBeVisible();
     expect(await page.getByTestId('feed-card').count()).toBeGreaterThan(1);
     const verifiedCards = await page.getByTestId('feed-card').count();
@@ -39,24 +39,25 @@ test.describe('Comprar: feed y perfil', () => {
     await expect(page.getByRole('heading', { name: 'José Games' })).toBeVisible();
     await expect(page.getByTestId('profile-hero').getByTestId('verified-badge')).toBeVisible();
     await expect(page.getByText('ventas completadas')).toBeVisible();
+    await expect(page.getByTestId('sales-outcome')).toContainText('sin problemas');
     await expect(page.getByText('miembro desde')).toBeVisible();
     await expect(page.getByRole('button', { name: /WhatsApp/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Compartir perfil' }).first()).toBeVisible();
-    await expect(page.getByTestId('reviews')).toContainText('compra verificada');
+    await expect(page.getByTestId('reviews')).toContainText('compra liberada');
     await settle(page);
     await noHScroll(page);
   });
 
   test('FEED-03 vendedor sin verificar: nota sutil y sin WhatsApp si no lo publicó', async ({ page }) => {
     await open(page, '/t/ana-solis', 'buyer', true);
-    await expect(page.getByTestId('unverified-note')).toHaveText(/Vendedor sin verificar/);
+    await expect(page.getByTestId('unverified-note')).toHaveText(/Identidad sin confirmar/);
     await expect(page.getByRole('button', { name: /WhatsApp/ })).toHaveCount(0);
     await expect(page.getByText(/Todavía no tiene reseñas/)).toBeVisible();
   });
 
   test('FEED-04 feed vacío: estado vacío bonito con acción', async ({ page }) => {
     await open(page, '/comprar?feed=empty', 'buyer', true);
-    await expect(page.getByText('Todavía no hay vendedores verificados')).toBeVisible();
+    await expect(page.getByText('Todavía no hay vendedores con identidad confirmada')).toBeVisible();
     await page.getByRole('button', { name: 'Ver todos' }).click();
     await expect(page.getByText('Todavía no hay publicaciones')).toBeVisible();
   });

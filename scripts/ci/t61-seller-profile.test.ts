@@ -1,6 +1,8 @@
 // (61) Perfil público del vendedor (/t/<usuario>): verificado, ventas, miembro desde, reseñas de compras verificadas,
 //      WhatsApp SOLO si el vendedor lo puso, sin datos privados, meta OG para compartir (escapados) y vercel.json. Sin red.
 import type { T } from './setup';
+import { COPY } from '../../lib/copy';
+import { OG_IDENTITY } from '../../api/_lib/feed';
 import { readFileSync } from 'node:fs';
 import { __setDbForTests } from '../../api/_lib/db';
 import { fakeDb } from './fakedb';
@@ -35,6 +37,8 @@ export async function run(t: T) {
     { id: 'o1', slug: 'zzzzz1', seller_user_id: 's-vale', buyer_user_id: 'guest:abc', status: 'liberado', seller_email: 'vale@correo.com' },
     { id: 'o2', slug: 'zzzzz2', seller_user_id: 's-vale', buyer_user_id: 'guest:def', status: 'liberado' },
     { id: 'o3', slug: 'zzzzz3', seller_user_id: 's-vale', buyer_user_id: 'guest:ghi', status: 'enviado' },
+    { id: 'o4', slug: 'zzzzz4', seller_user_id: 's-vale', buyer_user_id: 'guest:jkl', status: 'resuelto', price_crc: 99000, resolution: { buyerPct: 50 } },
+    { id: 'o5', slug: 'zzzzz5', seller_user_id: 's-vale', buyer_user_id: 'guest:mno', status: 'en_disputa', price_crc: 77000 },
   ];
   db.tables.seller_ratings = [
     { order_id: 'o1', order_slug: 'zzzzz1', seller_user_id: 's-vale', buyer_user_id: 'guest:abc', stars: 5, created_at: '2026-10-21T00:00:00Z' },
@@ -44,7 +48,9 @@ export async function run(t: T) {
   let r = await get({ profile: 'valeria' });
   const p = r.body;
   t.check('perfil: nombre, foto, verificado, estrellas, ventas completadas y miembro desde', r.code === 200 && p.display_name === 'Valeria <b>Mora</b>' && p.avatar_url === 'https://x/v.jpg' && p.verified === true
-    && p.rating_avg === 4.5 && p.rating_count === 2 && p.sales_completed === 2 && p.member_since === '2026-09-01T00:00:00Z', JSON.stringify(p));
+    && p.rating_avg === 4.5 && p.rating_count === 2 && p.sales_completed === 3 && p.member_since === '2026-09-01T00:00:00Z', JSON.stringify(p));
+  t.check('perfil: cómo salieron sus ventas, sin montos (2 sin problemas, 1 disputa resuelta, 1 en disputa)', p?.sales?.completed === 3 && p.sales.no_issues === 2 && p.sales.disputes_resolved === 1 && p.sales.disputes_open === 1
+    && !/99000|77000|price|amount|buyerPct/.test(JSON.stringify(p.sales)), JSON.stringify(p?.sales));
   t.check('perfil: WhatsApp como wa.me cuando el vendedor eligió mostrarlo', p?.whatsapp === 'https://wa.me/50688881234', p?.whatsapp);
   t.check('perfil: productos y reseñas (más nuevas primero, nombre corto, sin id del comprador)', p?.items?.length === 1 && p?.reviews?.map((x: any) => x.stars).join() === '4,5'
     && p.reviews.every((x: any) => 'buyer_name' in x && !('buyer_user_id' in x)), JSON.stringify(p?.reviews));
@@ -72,11 +78,21 @@ export async function run(t: T) {
   // Vista previa al compartir (bots): HTML con OG del vendedor, escapado; host desconocido -> no se hace fetch (SSRF).
   r = await get({ og: 'valeria' }, { host: 'evil.example.com' });
   t.check('og: HTML con og:title/og:description/og:image/og:url del vendedor', r.code === 200 && /text\/html/.test(r.headers['content-type'])
-    && /property="og:title" content="Valeria &lt;b&gt;Mora&lt;\/b&gt; \(verificado\) en Meteorito"/.test(r.raw) && /og:image" content="https:\/\/x\/v\.jpg"/.test(r.raw)
+    && /property="og:title" content="Valeria &lt;b&gt;Mora&lt;\/b&gt; \(identidad confirmada\) en Meteorito"/.test(r.raw) && /og:image" content="https:\/\/x\/v\.jpg"/.test(r.raw)
     && /og:url" content="https:\/\/pago\.meteorito\.app\/t\/valeria"/.test(r.raw) && /4\.5 estrellas \(2 reseñas\)/.test(r.raw), r.raw.slice(0, 400));
   t.check('og: nada sin escapar ni el teléfono', !/<b>Mora/.test(r.raw) && !/8888/.test(r.raw));
   r = await get({ og: 'nadie' }, { host: 'evil.example.com' });
   t.check('og de un perfil que no existe -> 404 con HTML genérico', r.code === 404 && /Meteorito/.test(r.raw));
+
+  // Ficha /p/<slug>: vendedor del pedido + cómo salieron sus ventas; sin datos privados ni montos.
+  r = await get({ seller_of: 'zzzzz3' });
+  const so = r.body?.seller;
+  t.check('ficha: vendedor del pedido con estrellas y cómo salieron sus ventas', r.code === 200 && so?.store_slug === 'valeria' && so?.verified === true && so?.sales?.completed === 3 && so?.rating_count === 2, JSON.stringify(r.body));
+  t.check('ficha: sin datos privados ni montos', !/s-vale|correo|guest:|"sub"|contact_phone|listed|99000|77000|price/.test(JSON.stringify(r.body)), JSON.stringify(r.body));
+  r = await get({ seller_of: 'nooooo' });
+  t.check('ficha: pedido sin vendedor -> seller null (200)', r.code === 200 && r.body?.seller === null, JSON.stringify(r.body));
+  r = await get({ seller_of: '../x' });
+  t.check('ficha: slug inválido -> 400', r.code === 400);
 
   const vj = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'));
   const iOg = vj.rewrites.findIndex((x: any) => x.source === '/t/:store' && /og=:store/.test(x.destination));
@@ -86,5 +102,7 @@ export async function run(t: T) {
 
   const page = readFileSync(new URL('../../app/t/[store].tsx', import.meta.url), 'utf8');
   for (const e of ['seller_profile_viewed', 'seller_whatsapp_clicked', 'seller_profile_shared']) t.check(`evento ${e}`, page.includes(`'${e}'`));
-  t.check('perfil: "Vendedor sin verificar" (nota sutil) y recordatorio del escrow', /Vendedor sin verificar/.test(page) && /custodia/.test(page));
+  t.check('perfil: nota sutil "Identidad sin confirmar" y recordatorio del escrow (lib/copy.ts)', /COPY\.identity\.unconfirmed/.test(page) && COPY.identity.unconfirmed === 'Identidad sin confirmar' && /custodia/.test(COPY.profile.escrowNote));
+  t.check('OG usa el mismo texto que la app', OG_IDENTITY === COPY.identity.ogSuffix);
+  t.check('perfil y ficha muestran cómo salieron las ventas', /SalesOutcomeLine/.test(page) && /SalesOutcomeLine/.test(readFileSync(new URL('../../app/p/[slug].tsx', import.meta.url), 'utf8')));
 }

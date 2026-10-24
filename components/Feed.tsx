@@ -1,6 +1,7 @@
 // Feed de Comprar (tipo red social): publicaciones de los vendedores, lo más nuevo primero, con buscador, filtro por
-// verificación (Verificados por defecto / Sin verificar / Todos), paginación infinita por cursor, skeletons y estados
+// identidad (Identidad confirmada por defecto / Sin confirmar / Todos; textos en lib/copy.ts), paginación infinita por cursor, skeletons y estados
 // vacíos. Lecturas públicas: GET /api/store?feed (caché corta, sin datos privados).
+import { COPY } from '@/lib/copy';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -18,7 +19,7 @@ import { timeAgo } from '@/lib/timeago';
 export const SEARCH_DEBOUNCE_MS = 300;
 const PAGE = 10;
 const FILTERS: { key: VerifiedFilter; label: string; icon?: IconName }[] = [
-  { key: 'true', label: 'Verificados', icon: 'checkmark-circle' }, { key: 'false', label: 'Sin verificar' }, { key: 'all', label: 'Todos' },
+  { key: 'true', label: COPY.filters.confirmed, icon: 'checkmark-circle' }, { key: 'false', label: COPY.filters.unconfirmed }, { key: 'all', label: COPY.filters.all },
 ];
 
 export function Feed({ header }: { header: ReactElement }) {
@@ -65,10 +66,10 @@ export function Feed({ header }: { header: ReactElement }) {
       {header}
       <View style={s.search}>
         <Icon name="search" size={20} color={C.textDim} />
-        <TextInput style={s.searchInput} value={text} onChangeText={setText} placeholder="Buscar: PlayStation, bici, iPhone…" placeholderTextColor={C.textDim}
-          accessibilityLabel="Buscar productos" autoCapitalize="none" autoCorrect={false} returnKeyType="search" enterKeyHint="search" maxLength={60}
+        <TextInput style={s.searchInput} value={text} onChangeText={setText} placeholder={COPY.feed.searchPlaceholder} placeholderTextColor={C.textDim}
+          accessibilityLabel={COPY.feed.searchLabel} autoCapitalize="none" autoCorrect={false} returnKeyType="search" enterKeyHint="search" maxLength={60}
           onSubmitEditing={() => setQ(text.trim())} />
-        {text ? <Pressable onPress={clear} accessibilityRole="button" accessibilityLabel="Limpiar búsqueda" hitSlop={10} style={s.clear}>
+        {text ? <Pressable onPress={clear} accessibilityRole="button" accessibilityLabel={COPY.feed.clear} hitSlop={10} style={s.clear}>
           <Icon name="close-circle" size={20} color={C.textDim} /></Pressable> : null}
       </View>
       <View style={s.chips} accessibilityRole="tablist">
@@ -83,7 +84,7 @@ export function Feed({ header }: { header: ReactElement }) {
           );
         })}
       </View>
-      <Text style={T.caption}>{q ? 'Resultados' : 'Lo más nuevo'}</Text>
+      <Text style={T.caption}>{q ? COPY.feed.results : COPY.feed.latest}</Text>
     </View>
   );
 
@@ -95,13 +96,13 @@ export function Feed({ header }: { header: ReactElement }) {
       text={filter === 'all' ? 'Revisa cómo lo escribiste o prueba con una palabra más general, por ejemplo “consola” o “bici”.' : 'Puede que esté en otra lista: busca en Todos o prueba con una palabra más general.'}
       actions={<>
         {filter !== 'all' ? <PrimaryButton title="Buscar en Todos" icon="albums-outline" onPress={() => setFilter('all')} /> : null}
-        <PrimaryButton title="Limpiar búsqueda" icon="close" variant="secondary" onPress={clear} />
+        <PrimaryButton title={COPY.feed.clear} icon="close" variant="secondary" onPress={clear} />
         <PrimaryButton title="Pídeselo a un vendedor" icon="paper-plane-outline" variant="ghost" onPress={() => router.push('/i/nueva')} />
       </>} />
   );
   else if (filter === 'true') empty = (
-    <EmptyState icon="checkmark-circle" title="Todavía no hay vendedores verificados"
-      text="Aquí verás a los vendedores verificados. Mientras tanto, mira todas las publicaciones: con cualquier vendedor tu pago queda en custodia hasta que recibas."
+    <EmptyState icon="checkmark-circle" title={COPY.feed.emptyConfirmedTitle}
+      text={COPY.feed.emptyConfirmedText}
       actions={<PrimaryButton title="Ver todos" icon="albums-outline" onPress={() => setFilter('all')} />} />
   );
   else empty = (
@@ -200,7 +201,7 @@ const s = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.surface, borderRadius: R.md, paddingLeft: S.md, minHeight: TOUCH + 4, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   searchInput: { flex: 1, minWidth: 0, color: C.text, fontFamily: Fonts.regular, fontSize: 16, minHeight: TOUCH + 4, paddingVertical: 0, outlineStyle: 'none' } as any,
   clear: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
-  chips: { flexDirection: 'row', gap: S.sm },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 14, borderRadius: R.pill, borderWidth: 1, borderColor: 'rgba(201,182,255,0.4)' },
   chipOn: { backgroundColor: C.lilac, borderColor: C.lilac },
   chipText: { fontFamily: Fonts.bold, fontSize: 14, color: C.lilac },

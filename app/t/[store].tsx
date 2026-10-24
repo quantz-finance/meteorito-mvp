@@ -1,6 +1,7 @@
 // Perfil público del vendedor: pago.meteorito.app/t/<usuario>. Se ve sin cuenta y se comparte (meta OG vía /api/store?og).
-// Foto, nombre, verificado, estrellas, ventas, miembro desde, WhatsApp (solo si el vendedor lo puso), productos y reseñas
-// de compras verificadas. Lectura pública: GET /api/store?profile (caché corta, sin datos privados).
+// Foto, nombre, identidad confirmada, estrellas, ventas y cómo salieron (sin montos), miembro desde, WhatsApp (solo si el vendedor lo puso), productos y reseñas
+// de compras liberadas. Textos en lib/copy.ts. Lectura pública: GET /api/store?profile (caché corta, sin datos privados).
+import { COPY } from '@/lib/copy';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -8,7 +9,7 @@ import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } fr
 import { haptic, Icon, IconButton, PrimaryButton, Screen, Skeleton, st, toast, type IconName } from '@/components/ds';
 import { BackButton } from '@/components/BackButton';
 import { StoreAvatar } from '@/components/StoreAvatar';
-import { StarRow, VerifiedBadge } from '@/components/SellerBits';
+import { SalesOutcomeLine, StarRow, VerifiedBadge } from '@/components/SellerBits';
 import { pressTransition } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
 import { formatCRC } from '@/lib/orders';
@@ -83,15 +84,16 @@ function Profile({ p }: { p: SellerProfile }) {
           <Text style={T.callout} numberOfLines={1}>@{p.store_slug}</Text>
           {p.bio ? <Text style={[T.body, { textAlign: 'center', marginTop: S.xs }]} numberOfLines={4}>{p.bio}</Text> : null}
           {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
-          {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>Vendedor sin verificar</Text></View> : null}
+          {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{COPY.identity.unconfirmed}</Text></View> : null}
         </View>
         <View style={s.stats}>
           <Stat icon="star" iconColor="#FFD84D" value={rated ? avg.toFixed(1) : 'Nuevo'} label={rated ? `${p.rating_count} reseña${p.rating_count === 1 ? '' : 's'}` : 'sin reseñas'} />
           <View style={s.statSep} />
-          <Stat icon="bag-check-outline" value={String(p.sales_completed)} label={p.sales_completed === 1 ? 'venta completada' : 'ventas completadas'} />
+          <Stat icon="bag-check-outline" value={String(p.sales_completed)} label={COPY.profile.salesDone(p.sales_completed)} />
           <View style={s.statSep} />
           <Stat icon="calendar-outline" value={memberSince(p.member_since) || '—'} label="miembro desde" />
         </View>
+        <SalesOutcomeLine sales={p.sales} center />
       </View>
 
       <View style={{ gap: S.sm }}>
@@ -99,7 +101,7 @@ function Profile({ p }: { p: SellerProfile }) {
         <PrimaryButton title="Compartir perfil" icon="share-outline" variant={p.whatsapp ? 'secondary' : 'primary'} onPress={() => shareProfile(p)} />
         <View style={[s.metaRow, { justifyContent: 'center' }]}>
           <Icon name="lock-closed" size={13} color={C.textDim} />
-          <Text style={[T.footnote, { textAlign: 'center', flexShrink: 1 }]}>Con cualquier vendedor, tu pago queda en custodia hasta que recibas.</Text>
+          <Text style={[T.footnote, { textAlign: 'center', flexShrink: 1 }]}>{COPY.profile.escrowNote}</Text>
         </View>
       </View>
 
@@ -128,16 +130,16 @@ function Profile({ p }: { p: SellerProfile }) {
         {rated ? (
           <View style={s.summary}>
             <Text style={[T.money, { fontSize: 30 }]}>{avg.toFixed(1)}</Text>
-            <View style={{ gap: 2 }}><StarRow value={avg} size={18} /><Text style={T.footnote}>{p.rating_count} reseña{p.rating_count === 1 ? '' : 's'} de compras verificadas</Text></View>
+            <View style={{ gap: 2 }}><StarRow value={avg} size={18} /><Text style={T.footnote}>{COPY.profile.reviewsCount(p.rating_count)}</Text></View>
           </View>
         ) : null}
         {p.reviews.length ? p.reviews.map((r, i) => (
           <View key={i} style={s.review}>
             <View style={st.rowBetween}><StarRow value={r.stars} size={14} /><Text style={T.footnote}>{timeAgo(r.created_at)}</Text></View>
             {r.comment ? <Text style={T.body}>{r.comment}</Text> : null}
-            <View style={s.metaRow}><Icon name="shield-checkmark-outline" size={13} color={C.success} /><Text style={T.footnote}>{r.buyer_name ? `${r.buyer_name} · compra verificada` : 'Compra verificada'}</Text></View>
+            <View style={s.metaRow}><Icon name="shield-checkmark-outline" size={13} color={C.success} /><Text style={T.footnote}>{COPY.profile.reviewBy(r.buyer_name)}</Text></View>
           </View>
-        )) : <Empty icon="chatbubble-ellipses-outline" text="Todavía no tiene reseñas. Solo los compradores con una compra verificada pueden dejar una." />}
+        )) : <Empty icon="chatbubble-ellipses-outline" text={COPY.profile.noReviews} />}
       </View>
       <Text style={[T.footnote, { textAlign: 'center' }]}>Compras sin crear cuenta.</Text>
     </View>

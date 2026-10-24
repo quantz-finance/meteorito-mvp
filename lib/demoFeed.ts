@@ -6,6 +6,7 @@ import { demoGetStore, demoStoreSlug } from './demo';
 import type { FeedItem, FeedPage, SellerProfile } from './store';
 
 const H = 3600e3;
+const outcome = (n: number) => { const d = n > 10 ? 1 : 0; return { completed: n, no_issues: n - d, disputes_resolved: d, disputes_open: 0 }; };
 interface DemoSeller { store_slug: string; display_name: string; verified: boolean; rating_avg: number | null; rating_count: number; avatar_url: string | null; sales: number; since: string; wa: string | null }
 const SELLERS: DemoSeller[] = [
   { store_slug: 'jose-games', display_name: 'José Games', verified: true, rating_avg: 4.9, rating_count: 31, avatar_url: null, sales: 48, since: '2026-05-12T00:00:00Z', wa: 'https://wa.me/50670001234' },
@@ -62,7 +63,10 @@ export async function demoProfile(slug: string): Promise<SellerProfile | null> {
   const items = [...own, ...all().filter((i) => i.seller.store_slug === s.store_slug || (s.store_slug === valeria().store_slug && i.seller.store_slug === 'valeria'))
     .map((i) => ({ slug: i.slug, title: i.title, price_crc: i.price_crc, photo: i.photo, created_at: i.created_at }))];
   return {
-    ...pub(s), bio: null, location: null, sales_completed: s.sales, member_since: s.since, whatsapp: s.wa, items,
+    ...pub(s), bio: null, location: null, sales_completed: s.sales, sales: outcome(s.sales), member_since: s.since, whatsapp: s.wa, items,
     reviews: s.rating_count && !empty() ? REVIEWS.slice(0, Math.min(3, s.rating_count)).map((r) => ({ stars: r.stars, comment: r.comment, buyer_name: r.buyer_name, created_at: new Date(now - r.h * H).toISOString() })) : [],
   };
 }
+
+/** Ficha del demo: los pedidos son de la tienda del demo. */
+export async function demoOrderSeller() { const v = valeria(); return { ...pub(v), sales: outcome(v.sales) }; }

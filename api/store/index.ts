@@ -5,6 +5,8 @@
 //                                                 nuevo primero, paginado por cursor. Sin datos privados. Caché corta.
 //  GET  ?profile=<usuario>                        -> perfil público del vendedor (/t/<usuario>): tienda + verificado, ventas,
 //                                                 miembro desde, reseñas y WhatsApp (wa.me) SOLO si el vendedor lo puso.
+//  GET  ?seller_of=<pedido>                       -> vendedor de un pedido/link para la ficha /p/<slug>: nombre, foto,
+//                                                 identidad confirmada, estrellas y cómo salieron sus ventas (sin montos)
 //  GET  ?og=<usuario>                             -> HTML de /t/<usuario> con meta OG (vercel.json lo usa para los bots que
 //                                                 arman la vista previa al compartir: WhatsApp, Facebook, X, iMessage…)
 //  POST { action:'me' }                          (Bearer Cavos) -> mi tienda (la crea con un usuario único si no existe)
@@ -43,7 +45,7 @@ import { importListing } from '../_lib/importers';
 import { checkListingUrl } from '../_lib/importers/providers';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
-import { feedPage, injectMeta, profileMeta, sellerProfile } from '../_lib/feed';
+import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -141,6 +143,12 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, p);
     }
     if (req.method === 'GET' && req.query?.og != null) return ogPage(req, res);
+    if (req.method === 'GET' && req.query?.seller_of != null) {
+      const slug = String(req.query.seller_of);
+      if (!/^[a-z0-9]{6}$/.test(slug)) throw new HttpError(400, 'slug inválido');
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+      return json(res, 200, { seller: await sellerOfOrder(slug) });
+    }
     if (req.method === 'GET') {
       const slug = normalizeStoreSlug(req.query?.store);
       if (!validStoreSlug(slug)) throw new HttpError(404, 'Esta tienda no existe.');

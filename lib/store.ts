@@ -87,8 +87,10 @@ export interface FeedSeller { store_slug: string; display_name: string; avatar_u
 export interface FeedItem { slug: string; title: string; price_crc: number; photo: string | null; created_at: string; seller: FeedSeller }
 export interface FeedPage { items: FeedItem[]; next_cursor: string | null }
 export interface Review { stars: number; comment: string | null; /** Nombre corto que eligió el comprador; null = "Compra verificada". */ buyer_name: string | null; created_at: string | null }
+/** Cómo salieron las ventas, sin montos. completed = no_issues + disputes_resolved. */
+export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
 export interface SellerProfile extends FeedSeller {
-  bio: string | null; location: string | null; sales_completed: number; member_since: string | null;
+  bio: string | null; location: string | null; sales_completed: number; sales?: SalesOutcome; member_since: string | null;
   /** https://wa.me/506… solo si el vendedor puso su WhatsApp; null si no. */ whatsapp: string | null;
   items: (StoreItem & { created_at?: string | null })[]; reviews: Review[];
 }
@@ -116,4 +118,16 @@ export async function getSellerProfile(slug: string): Promise<SellerProfile | nu
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(r.status === 503 || r.status >= 500 ? STORE_UNAVAILABLE : j.error ?? `Error ${r.status}`);
   return j as SellerProfile;
+}
+
+export type OrderSeller = FeedSeller & { sales: SalesOutcome };
+/** Vendedor de un pedido/link para la ficha /p/<slug>. null si no tiene tienda o no se pudo cargar (no rompe la ficha). */
+export async function getOrderSeller(orderSlug: string): Promise<OrderSeller | null> {
+  if (DEMO_ENABLED) { const { demoOrderSeller } = await import('./demoFeed'); return demoOrderSeller(); }
+  try {
+    const r = await fetch(`/api/store?seller_of=${encodeURIComponent(orderSlug)}`);
+    if (!r.ok) return null;
+    const j: any = (await r.json().catch(() => null)) ?? {};
+    return j.seller && typeof j.seller.store_slug === 'string' ? j.seller as OrderSeller : null;
+  } catch { return null; }
 }

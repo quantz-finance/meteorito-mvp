@@ -2,6 +2,7 @@
 //      Verificados / Sin verificar / Todos, lo más nuevo primero, paginación por cursor, sin datos privados y búsqueda
 //      sin mayúsculas ni acentos que respeta el filtro. Sin red.
 import type { T } from './setup';
+import { BANNED_COPY, COPY } from '../../lib/copy';
 import { readFileSync } from 'node:fs';
 import { __setDbForTests } from '../../api/_lib/db';
 import { decodeCursor, encodeCursor, foldText, matchesTokens, searchTokens } from '../../api/_lib/feed';
@@ -121,7 +122,16 @@ export async function run(t: T) {
   const src = app + feed;
   t.check('Comprar mantiene Importar de Facebook, Invitar a un vendedor y Pagar un link arriba', /Importar de Facebook/.test(app) && /Invitar a un vendedor/.test(app) && /Pagar un link/.test(app));
   t.check('eventos feed_viewed, feed_item_clicked y feed_search', ['feed_viewed', 'feed_item_clicked', 'feed_search'].every((e) => src.includes(`'${e}'`)));
-  t.check('chips Verificados (por defecto), Sin verificar y Todos', /'Verificados'/.test(src) && /'Sin verificar'/.test(src) && /'Todos'/.test(src) && /useState<VerifiedFilter>\('true'\)/.test(src));
+  t.check('chips "Identidad confirmada" (por defecto), "Sin confirmar" y "Todos" desde lib/copy.ts', COPY.filters.confirmed === 'Identidad confirmada' && COPY.filters.unconfirmed === 'Sin confirmar' && COPY.filters.all === 'Todos'
+    && /COPY\.filters\.confirmed/.test(src) && /COPY\.filters\.unconfirmed/.test(src) && /useState<VerifiedFilter>\('true'\)/.test(src));
+  // Copy visible: sin "seguro", "garantía", "verificado", "empresa", "fintech", "banco" ni "billetera".
+  const strings = (o: any): string[] => Object.values(o).flatMap((v: any) => typeof v === 'string' ? [v] : typeof v === 'function' ? [String(v(1)), String(v(2)), String(v('María R.')), String(v(null))] : strings(v));
+  const visible = strings(COPY);
+  t.check('copy visible sin palabras prohibidas (lib/copy.ts)', visible.every((x) => !BANNED_COPY.test(x)), visible.filter((x) => BANNED_COPY.test(x)).join(' | '));
+  const lits = (f: string) => [...readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8').replace(/^\s*(\/\/|\*|\/\*\*).*$/gm, '').matchAll(/(['"`>])([^'"`<>{}\n]*[A-Za-zÁÉÍÓÚáéíóúñ]{3,}[^'"`<>{}\n]*)\1?/g)].map((m) => m[2]);
+  const files = ['components/Feed.tsx', 'components/SellerBits.tsx', 'app/t/[store].tsx', 'app/(tabs)/comprar.tsx', 'lib/demoFeed.ts'];
+  const bad = files.flatMap((f) => lits(f).filter((x) => BANNED_COPY.test(x) && !/verified|Verified/.test(x)).map((x) => `${f}: ${x}`));
+  t.check('feed, perfil y ficha sin palabras prohibidas en textos', bad.length === 0, bad.join(' | '));
   t.check('feed_search manda el número de resultados y NO el texto', /track\('feed_search', \{[^}]*results/.test(src) && !/track\('feed_search', \{[^}]*\b(q|query|text)\s*[:,}]/.test(src));
   t.check('debounce ~300 ms', /SEARCH_DEBOUNCE_MS = 3\d\d/.test(src));
   t.check('input del buscador con fontSize >= 16', /searchInput: \{[^}]*fontSize: (1[6-9]|2\d)/.test(src));

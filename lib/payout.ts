@@ -1,4 +1,5 @@
 // Cuenta IBAN para cobrar (registro; todavía no hay pagos reales al IBAN). API: /api/store (migración 011).
+import { COPY } from './copy';
 import { api } from './api';
 import type { MeteoritoAuth } from './types';
 import type { PayoutView } from '../api/_lib/payout';
@@ -25,7 +26,7 @@ export function profileSteps(p: { name?: string | null; storeSlug?: string | nul
     { key: 'store', label: 'Usuario de tienda', done: !!p.storeSlug },
     { key: 'iban', label: 'Cuenta IBAN para cobrar', done: !!p.payout },
     { key: 'product', label: 'Tu primer producto', done: (p.products ?? 0) > 0 },
-    { key: 'id', label: 'Verifica tu perfil', done: false, soon: true },
+    { key: 'id', label: COPY.myStore.confirmIdentity, done: false, soon: true },
   ];
 }
 export const profilePct = (steps: ProfileStep[]) => {
