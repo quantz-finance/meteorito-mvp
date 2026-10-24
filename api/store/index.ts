@@ -10,10 +10,11 @@
 //  GET  ?og=<usuario>                             -> HTML de /t/<usuario> con meta OG (vercel.json lo usa para los bots que
 //                                                 arman la vista previa al compartir: WhatsApp, Facebook, X, iMessage…)
 //  POST { action:'me' }                          (Bearer Cavos) -> mi tienda (la crea con un usuario único si no existe)
-//  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone? } (Bearer Cavos) -> cambiar usuario, nombre,
+//  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone?, whatsapp_public? } (Bearer Cavos) -> cambiar usuario, nombre,
 //                                                 foto o WhatsApp de contacto (foto: solo una subida a SU carpeta por
 //                                                 /api/photos/upload-url; null la quita. Teléfono: CR, se guarda +506XXXXXXXX;
-//                                                 '' o null lo quita. Migración 016)
+//                                                 '' o null lo quita. Migración 016. whatsapp_public: mostrarlo en el
+//                                                 perfil público, opt-in, requiere número; migración 019)
 //  POST { action:'seller_contact', slug }        (X-Guest-Key o Bearer del comprador) -> WhatsApp del vendedor, SOLO al comprador
 //                                                 del pedido y SOLO pagado (fondeado…resuelto). Sin 016 o sin teléfono: null
 //  POST { action:'rate', slug, stars, comment?, buyer_name? } (X-Guest-Key o Bearer del comprador) -> reseña de compra
@@ -84,6 +85,13 @@ async function myProfile(sub: string, email?: string) {
   throw new HttpError(500, 'No pudimos crear tu tienda. Intenta de nuevo.');
 }
 
+/** ¿El vendedor eligió mostrar su WhatsApp en el perfil público? (migración 019). Sin la columna o ante error: false. */
+async function whatsappPublicOf(sub: string): Promise<boolean> {
+  try {
+    const { data, error } = await db().from('seller_profiles').select('whatsapp_public').eq('sub', sub).maybeSingle();
+    return !error && (data as any)?.whatsapp_public === true;
+  } catch { return false; }
+}
 /** WhatsApp de contacto del vendedor (migración 016). Sin la columna o ante cualquier error: null (nunca rompe). */
 async function contactPhoneOf(sub: string | null | undefined): Promise<string | null> {
   if (!sub) return null;
@@ -286,8 +294,8 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'me') {
       const p = await myProfile(user.sub, user.email);
-      const [mine, contact_phone] = await Promise.all([ownerStore(user.sub, p), contactPhoneOf(user.sub)]);
-      return json(res, 200, { ...mine, contact_phone });
+      const [mine, contact_phone, whatsapp_public] = await Promise.all([ownerStore(user.sub, p), contactPhoneOf(user.sub), whatsappPublicOf(user.sub)]);
+      return json(res, 200, { ...mine, contact_phone, whatsapp_public: !!contact_phone && whatsapp_public });
     }
     if (b.action === 'listing_set') {
       if (!LISTING_STATUSES.includes(b.status)) throw new HttpError(400, 'Estado inválido.');
@@ -318,7 +326,20 @@ export default async function handler(req: any, res: any) {
         if (phone === 'invalid') throw Object.assign(new HttpError(400, 'Escribe un número de Costa Rica: 8 dígitos (ej. 8888 1234).'), { code: 'bad_phone' });
         patch.contact_phone = phone;
       }
-      const { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub); // solo el perfil del dueño
+      // WhatsApp en el perfil público: opt-in explícito del dueño, solo con número guardado. Quitar el número lo apaga.
+      let implicitWa = false;
+      if (b.whatsapp_public !== undefined) {
+        if (typeof b.whatsapp_public !== 'boolean') throw Object.assign(new HttpError(400, 'Valor inválido.'), { code: 'bad_flag' });
+        if (b.whatsapp_public && !('contact_phone' in patch ? patch.contact_phone : await contactPhoneOf(user.sub)))
+          throw Object.assign(new HttpError(400, 'Primero guarda tu WhatsApp.'), { code: 'no_phone' });
+        patch.whatsapp_public = b.whatsapp_public;
+      } else if ('contact_phone' in patch && patch.contact_phone === null) { patch.whatsapp_public = false; implicitWa = true; }
+      let { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub); // solo el perfil del dueño
+      if (error && 'whatsapp_public' in patch && missingColumn(error) && /whatsapp_public/.test(String(error.message ?? ''))) {
+        if (!implicitWa) throw Object.assign(new HttpError(503, 'Todavía no puedes mostrar tu WhatsApp en el perfil. Intenta más tarde.'), { code: 'whatsapp_public_unavailable' });
+        delete patch.whatsapp_public; // sin 019 no hay nada que apagar
+        ({ error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub));
+      }
       if (error?.code === '23505') throw Object.assign(new HttpError(409, 'Ese nombre de usuario ya está en uso. Prueba otro.'), { code: 'store_slug_taken' });
       if (error && 'contact_phone' in patch && missingColumn(error) && (!('avatar_url' in patch) || /contact_phone/.test(String(error.message ?? ''))))
         throw Object.assign(new HttpError(503, 'Todavía no puedes guardar tu WhatsApp. Intenta más tarde.'), { code: 'phone_unavailable' });
@@ -327,7 +348,8 @@ export default async function handler(req: any, res: any) {
       const slug = (patch.store_slug as string) ?? cur.store_slug;
       const fresh = (await publicStore(slug)) ?? { store_slug: slug, display_name: (patch.display_name as string) ?? cur.display_name, avatar_url: null, rating_avg: null, rating_count: 0, items: [] };
       const contact_phone = 'contact_phone' in patch ? patch.contact_phone as string | null : await contactPhoneOf(user.sub);
-      return json(res, 200, { ...('avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh), contact_phone });
+      const whatsapp_public = 'whatsapp_public' in patch ? patch.whatsapp_public === true : await whatsappPublicOf(user.sub);
+      return json(res, 200, { ...('avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh), contact_phone, whatsapp_public: !!contact_phone && whatsapp_public });
     }
     throw new HttpError(400, 'acción inválida');
   } catch (e) { return fail(res, e); }
