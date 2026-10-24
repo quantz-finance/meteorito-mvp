@@ -1,7 +1,8 @@
 // /api/invites  (una sola función serverless; límite de funciones del plan de Vercel)
 //  GET  ?code=xxxxxxxx                          -> invitación pública (+ mine:true si X-Guest-Key es del comprador). Sin login.
 //  POST { op:'create', title, price_crc, photos?, note?, source_url? } (X-Guest-Key del comprador, sin cuenta)
-//       source_url: link del anuncio de Facebook Marketplace del que se importó (referencia para el vendedor; migración 015)
+//       source_url: link del anuncio (Facebook, Mercado Libre, Amazon, cualquier tienda https) que vio el comprador
+//       (referencia para el vendedor; migración 015). Se acepta aunque no lo podamos leer.
 //       (compatible: { category, brand, model, ... } sigue funcionando; category es opcional, por defecto 'otro')
 //  POST { op:'cancel', code }                                       (solo el comprador, solo si sigue abierta)
 import { db, json, fail } from '../_lib/db';
@@ -10,7 +11,7 @@ import { guestSubFromReq } from '../_lib/guest';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 import { cameraRequired, listingPhotoOk } from '../_lib/capture';
 import { missingColumn } from '../_lib/listings';
-import { checkFacebookUrl } from '../_lib/fbparse';
+import { checkListingUrl } from '../_lib/importers/providers';
 import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCode } from '../_lib/invites';
 
 const str = (v: unknown, max: number, req = true) => {
@@ -47,8 +48,8 @@ export default async function handler(req: any, res: any) {
       if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(publicPrefix(guest)))) throw new HttpError(400, 'fotos inválidas');
       let source_url: string | null = null;
       if (b.source_url != null && b.source_url !== '') {
-        const chk = typeof b.source_url === 'string' && b.source_url.length <= 1000 ? checkFacebookUrl(b.source_url) : null;
-        if (!chk?.ok) throw Object.assign(new HttpError(400, 'El link del anuncio no es de Facebook Marketplace.'), { code: 'fb_url_invalid' });
+        const chk = typeof b.source_url === 'string' && b.source_url.length <= 1000 ? checkListingUrl(b.source_url) : null;
+        if (!chk?.ok || chk.url.length > 1000) throw Object.assign(new HttpError(400, 'El link del anuncio no es válido.'), { code: 'import_url_invalid' });
         source_url = chk.url;
       }
       // Solo fotos de la cámara de la app (token 'listing' del invitado) o, si trae source_url de import, la foto que el

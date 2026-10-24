@@ -65,3 +65,18 @@ honesto: `MeteoritoLinkPreview/1.0 (+https://meteorito.app)`.
 Las fotos importadas quedan exentas de la regla "solo cámara" (vienen del anuncio del propio vendedor). El servidor las
 guarda al importar (`storeImportedPhotos`, ruta `import-<clave del source_url>-<uuid>`, de #68) y solo valen en un
 producto que mande ese mismo `source_url`. Las que el vendedor agrega a mano siguen siendo solo de cámara.
+
+## Comprar → Invitar a un vendedor
+
+El comprador (sin cuenta) pega el link del anuncio de cualquier marketplace en **Importar de un link** (`app/i/nueva.tsx`).
+Se usa el mismo `providers.ts` para detectar el proveedor al pegar ("Anuncio de {proveedor}" con su icono) y el mismo
+`import_listing` (con su llave de invitado y el límite por IP) donde se deja leer:
+
+| Proveedor | Qué pasa en la invitación |
+|---|---|
+| Facebook, Walmart CR, tiendas genéricas https | se lee: nombre, precio y foto precargados ("Importado de X"). Si falla (privado, borrado): aviso neutro "Anuncio de X" y se completa a mano |
+| Mercado Libre, Encuentra24, Amazon, AliExpress, Shopee, OLX, Falabella, Temu | NO se pide (bloquean nuestros servidores). El link se acepta sin error ("Anuncio de X: tú escribes el nombre y el precio.") |
+
+En todos los casos el link queda en la invitación (`invitations.source_url`, migración 015: solo exige `https://`) y el
+vendedor ve "Ver anuncio en {proveedor}" y "Vieron tu anuncio en {proveedor}". `/api/invites` valida el link con
+`checkListingUrl` (https público, sin IPs ni nombres internos, máx. 1000). Tests: `t68`, `e2e/invite-markets.spec.ts`.
