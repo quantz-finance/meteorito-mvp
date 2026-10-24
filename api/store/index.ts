@@ -17,7 +17,7 @@
 //  POST { action:'import_facebook', url }         (Bearer Cavos o X-Guest-Key del comprador que invita) -> lee un anuncio PÚBLICO de Facebook Marketplace (solo
 //                                                 facebook.com / fb.me) para precargar Vender: título, precio en colones,
 //                                                 descripción y foto (data URL + photo_urls: la misma foto guardada por el
-//                                                 servidor en fb-<uuid>, la única que no viene de la cámara). Nunca crea nada: quien importa revisa y
+//                                                 servidor en import-<clave>-<uuid>, la única que no viene de la cámara). Nunca crea nada: quien importa revisa y
 //                                                 confirma (link de pago en Vender o invitación en Comprar).
 import { db, fail, json, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
@@ -157,9 +157,11 @@ export default async function handler(req: any, res: any) {
       }
       res.setHeader?.('Cache-Control', 'no-store');
       const r = await importFacebookListing(chk.url, { rate: env.crcUsdcRate() });
-      // La foto del anuncio queda guardada por el servidor (fb-<uuid>): es la única foto que no se toma con la cámara.
-      const photo_urls = r.photos.length ? await storeImportedPhotos(db().storage, r.photos, who.cavos?.sub ?? who.guest!, MAX_PHOTO_BYTES) : [];
-      return json(res, 200, { ...r, photo_urls });
+      // La foto del anuncio queda guardada por el servidor (import-<clave del link>-<uuid>): es la única que no se toma con
+      // la cámara, y solo vale en un producto o invitación que mande este mismo source_url.
+      const source_url = chk.url;
+      const photo_urls = r.photos.length ? await storeImportedPhotos(db().storage, r.photos, who.cavos?.sub ?? who.guest!, MAX_PHOTO_BYTES, source_url) : [];
+      return json(res, 200, { ...r, photo_urls, source_url });
     }
 
     const user = await requireCavosUser(req);

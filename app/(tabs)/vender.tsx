@@ -70,6 +70,8 @@ function VenderForm() {
   const [description, setDescription] = useState<string | null>(d0?.description ?? null); // solo si vino de Facebook
   const [fbOpen, setFbOpen] = useState(false);
   const [fbUrl, setFbUrl] = useState('');
+  /** source_url canónico del anuncio importado: habilita en el servidor las fotos que guardó al importar (no se publica). */
+  const [importSource, setImportSource] = useState<string | null>(null);
   const [fbBusy, setFbBusy] = useState(false);
   const [fbErr, setFbErr] = useState<string | null>(null);
   const [fbNotice, setFbNotice] = useState<{ title: string; body: string; failed: boolean } | null>(null);
@@ -145,6 +147,7 @@ function VenderForm() {
     if (res.title) { setTitle(res.title.slice(0, TITLE_MAX)); clearErr('title'); }
     if (res.price_crc && !invite) { setPrice(String(res.price_crc)); clearErr('price'); }
     setDescription(res.description ? res.description.slice(0, 2000) : null);
+    if (res.photo_urls?.some(Boolean)) setImportSource(res.source_url ?? chk.url);
     if (r) track('facebook_import', fbImportProps(res));
     setFbNotice({ ...fbImportNotice(res), failed: res.result === 'failed' });
     setFbBusy(false); setFbOpen(false); setFbUrl('');
@@ -171,12 +174,12 @@ function VenderForm() {
       await ensureWalletReady(a).catch((e) => { const msg = walletErrorNotice(e); if (e?.code === 'device_not_authorized' || needsDeviceStep(e)) setOrphan(true); throw Object.assign(new Error(msg), { code: e?.code }); }); // primer link: activar la wallet
       const urls = photos.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (Facebook / invitación)
       const t = title.trim();
-      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}) });
+      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}), ...(importSource ? { source_url: importSource } : {}) });
       track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: !!fbNotice && !fbNotice.failed, delivery_mode: mode, protection_minutes: windowMin });
       haptic.success();
       setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null, agreement: agreementSummary(mode, windowMin) });
       setMode('envio'); setWindowMin(DEFAULT_PROTECTION_MIN.envio); setCustomOpen(false); setCustomDays('');
-      setTitle(''); setPrice(''); setPhotos([]); setInvite(null); setDescription(null); setFbNotice(null); saveDraft(null);
+      setTitle(''); setPrice(''); setPhotos([]); setImportSource(null); setInvite(null); setDescription(null); setFbNotice(null); saveDraft(null);
       if (inviteParam) router.setParams({ invite: undefined });
     } catch (e: any) {
       haptic.error(); trackError('create_listing', e);

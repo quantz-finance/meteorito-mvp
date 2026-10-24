@@ -64,7 +64,7 @@ export default function NuevaInvitacion() {
     const res = r ?? FAILED;
     if (res.title) setTitle(res.title.slice(0, TITLE_MAX));
     if (res.price_crc) setPrice(String(res.price_crc));
-    setSource(chk.url); setErr(null);
+    setSource(res.source_url ?? chk.url); setErr(null);
     if (r) track('facebook_import', { ...fbImportProps(res), context: 'invite' });
     setFbNotice({ ...fbImportNotice(res), body: noticeBody(res), failed: res.result === 'failed' });
     setFbBusy(false); setFbOpen(false); setFbUrl('');

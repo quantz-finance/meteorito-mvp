@@ -330,7 +330,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       await new Promise((r) => setTimeout(r, 400));
       if (/\/item\/1\/|login/.test(String(body.url))) return { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: FB_IMPORT_FAILED };
       return { result: 'success', title: 'Bicicleta de montaña aro 29', price_crc: 185000, price_source: { amount: 185000, currency: 'CRC' }, converted: false,
-        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], photo_urls: ['/demo-fb-import.jpg'], missing: [] };
+        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], photo_urls: ['/demo-fb-import.jpg'], source_url: String(body.url), missing: [] };
     }
     need('seller');
     if (body.action === 'payout_get') return { payout: st.payout ?? null };

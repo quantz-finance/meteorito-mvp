@@ -96,11 +96,19 @@ export async function run(t: T) {
     r = await call(ship, { tok: seller, body: { slug: 'cam058', evidence: { photo: captureUrl(other.claims), capture_token: other.token, captured_at: new Date().toISOString() } } });
     t.check('foto de envío de OTRO pedido -> 400 capture_wrong_ref', r.code === 400 && r.body?.code === 'capture_wrong_ref', `${r.code} ${r.body?.code}`);
 
-    /* ---------- 3) Producto nuevo e invitación: cámara o Facebook ---------- */
-    const { listingPhotoOk } = await import('../../api/_lib/capture');
+    /* ---------- 3) Producto nuevo e invitación: cámara o foto importada CON su source_url ---------- */
+    const { listingPhotoOk, importSourceKey } = await import('../../api/_lib/capture');
+    const SRC = 'https://www.facebook.com/marketplace/item/443277198670299/';
+    const imp = publicPrefix('seller-58') + `import-${importSourceKey(SRC)}-44444444-4444-4444-8444-444444444444/0.jpg`;
     t.check('producto: foto vieja (draftId) -> no aceptada', !listingPhotoOk(publicPrefix('seller-58') + '44444444-4444-4444-8444-444444444444/0.jpg', 'seller-58'));
-    t.check('producto: foto de la cámara (listing-) y de Facebook (fb-) -> aceptadas; de envío (ship-) no',
-      listingPhotoOk(captureUrl(claims), 'seller-58') && listingPhotoOk(publicPrefix('seller-58') + 'fb-44444444-4444-4444-8444-444444444444/0.jpg', 'seller-58') && !listingPhotoOk(captureUrl(sc), 'seller-58'));
+    t.check('producto: foto de la cámara (listing-) aceptada; de envío (ship-) no', listingPhotoOk(captureUrl(claims), 'seller-58') && !listingPhotoOk(captureUrl(sc), 'seller-58'));
+    t.check('producto: foto importada vale SOLO con su source_url de import (sin él, o con otro link, no)',
+      listingPhotoOk(imp, 'seller-58', SRC) && !listingPhotoOk(imp, 'seller-58') && !listingPhotoOk(imp, 'seller-58', 'https://www.facebook.com/marketplace/item/1/') && !listingPhotoOk(imp, 'otro-58', SRC));
+    t.check('la exención no depende del sitio: cualquier source_url https de import (otro marketplace) funciona igual',
+      listingPhotoOk(publicPrefix('seller-58') + `import-${importSourceKey('https://www.ejemplo-marketplace.cr/anuncio/9')}-44444444-4444-4444-8444-444444444444/0.jpg`, 'seller-58', 'https://www.ejemplo-marketplace.cr/anuncio/9')
+      && importSourceKey('http://inseguro.cr/x') === null && importSourceKey('') === null);
+    const createSrc = readFileSync('api/orders/create.ts', 'utf8');
+    t.check('crear producto: las fotos importadas se validan con el source_url del body (no por ser de Facebook)', /listingPhotoOk\(u, user\.sub, importSource\)/.test(createSrc) && !/isFbPhoto|fb-/.test(createSrc + readFileSync('api/_lib/capture.ts', 'utf8')));
     const invites = (await import('../../api/invites/index')).default;
     r = await call(invites, { guest: KEY, body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [publicPrefix(GUEST) + '55555555-5555-4555-8555-555555555555/0.jpg'] } });
     t.check('invitación con foto del carrete (vía vieja) -> 400 camera_required', r.code === 400 && r.body?.code === 'camera_required', `${r.code} ${r.body?.code}`);
@@ -113,9 +121,16 @@ export async function run(t: T) {
     __setFbFetchForTests(async (url) => url.includes('fbcdn.net')
       ? new Response(Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { status: 200, headers: { 'content-type': 'image/jpeg' } })
       : new Response(readFileSync(new URL('./fixtures/facebook/og-crc-mobile.html', import.meta.url), 'utf8'), { status: 200, headers: { 'content-type': 'text/html' } }));
-    r = await call(store, { tok: seller, body: { action: 'import_facebook', url: 'https://www.facebook.com/marketplace/item/443277198670299/' } });
+    r = await call(store, { tok: seller, body: { action: 'import_facebook', url: SRC } });
     const fbUrl = r.body?.photo_urls?.[0];
-    t.check('import FB: foto como data URL + copia guardada por el servidor (fb-<uuid>) aceptada en el producto', r.code === 200 && /^data:image\/jpeg/.test(r.body?.photos?.[0] ?? '') && listingPhotoOk(fbUrl, 'seller-58') && [...db.objects].some((p) => fbUrl?.endsWith(p.slice(p.indexOf('/') + 1))), `${r.code} ${fbUrl}`);
+    t.check('import: foto como data URL + copia guardada por el servidor (import-<clave>-<uuid>) + source_url canónico', r.code === 200 && /^data:image\/jpeg/.test(r.body?.photos?.[0] ?? '') && r.body?.source_url === SRC && /\/import-[0-9a-f]{16}-[0-9a-f-]{36}\/0\.jpg$/.test(fbUrl ?? '') && [...db.objects].some((p) => fbUrl?.endsWith(p.slice(p.indexOf('/') + 1))), `${r.code} ${fbUrl}`);
+    t.check('import: la copia vale en el producto con ese source_url y no sin él', listingPhotoOk(fbUrl, 'seller-58', r.body?.source_url) && !listingPhotoOk(fbUrl, 'seller-58'));
+    const gi = await call(store, { guest: KEY, body: { action: 'import_facebook', url: SRC } });
+    const gUrl = gi.body?.photo_urls?.[0];
+    r = await call(invites, { guest: KEY, body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [gUrl] } });
+    t.check('invitación con foto importada SIN source_url -> 400 camera_required', r.code === 400 && r.body?.code === 'camera_required', `${r.code} ${r.body?.code}`);
+    r = await call(invites, { guest: KEY, body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [gUrl], source_url: gi.body?.source_url } });
+    t.check('invitación con foto importada + su source_url -> 200', r.code === 200, `${r.code} ${r.body?.error}`);
     __setFbFetchForTests(null);
 
     /* ---------- 5) Disputa: solo fotos de la cámara de ESTE pedido ---------- */
@@ -143,7 +158,7 @@ export async function run(t: T) {
       ['camera_opened', 'camera_captured', 'camera_denied'].every((e) => new RegExp(`track\\('${e}', \\{ stage: purpose`).test(cam)) && ![...cam.matchAll(/track\('camera_[a-z]+', \{([^}]*)\}/g)].some((m) => /blob|uri|url|shot|dataUrl/i.test(m[1].replace(/kb: Math.round\(blob.size \/ 1024\)/, ''))));
     const sa = src('components/SellerActions.tsx');
     t.check('"Ya lo envié" deshabilitado sin la foto de la cámara', /title="Ya lo envié"[^>]*disabled=\{!canShip\(photo\)\}/.test(sa) && /CameraCapture visible=\{camOpen\} purpose="ship"/.test(sa) && !/opcional\)'?\}?<\/Text>\s*<\/Pressable>\s*<\/View>/.test(sa) && !/Foto del paquete o comprobante \(opcional\)/.test(sa));
-    t.check('cara a cara: SellerActions sin paso de envío ni cámara', /status === 'fondeado' && faceToFace/.test(sa));
+    t.check('cara a cara: SellerActions sin paso de envío ni cámara', /status === 'fondeado' && f2f/.test(sa));
     t.check('Vender e invitación: el import de Facebook usa photo_urls del servidor', /photo_urls/.test(src('app/(tabs)/vender.tsx')) && /photo_urls/.test(src('app/i/nueva.tsx')));
 
     /* ---------- 7) Marca en la foto y textos del permiso ---------- */

@@ -233,7 +233,8 @@ test('API-FB-BUYER comprador sin cuenta: importa con su llave de invitado (fixtu
     const legacy = await call(upload, { guest: KEY_A, body: { as: 'guest', draftId: '77777777-7777-4777-8777-777777777777', index: 0, mime: 'image/jpeg', size: 1000 } });
     expect(legacy.code).toBe(403);
     const fbPhoto = r.body.photo_urls[0];
-    expect(fbPhoto).toMatch(/\/fb-[0-9a-f-]{36}\/0\.jpg$/);
+    expect(fbPhoto).toMatch(/\/import-[0-9a-f]{16}-[0-9a-f-]{36}\/0\.jpg$/);
+    expect(r.body.source_url).toBe(ITEM);
     const up = { body: { publicUrl: fbPhoto } };
     const inv = await call(invites, { guest: KEY_A, body: { op: 'create', title: r.body.title ?? 'Artículo', price_crc: r.body.price_crc, photos: [up.body.publicUrl], source_url: ITEM } });
     expect(inv.code).toBe(200);

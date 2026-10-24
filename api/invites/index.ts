@@ -45,14 +45,15 @@ export default async function handler(req: any, res: any) {
       if (!`${brand ?? ''} ${model ?? ''}`.trim() || (title != null && title.length < 3)) throw new HttpError(400, 'Escribe el nombre de lo que quieres comprar.');
       const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
       if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string' || !u.startsWith(publicPrefix(guest)))) throw new HttpError(400, 'fotos inválidas');
-      // Solo fotos de la cámara de la app (token 'listing' del invitado) o la del anuncio de Facebook que importó el servidor.
-      if (photos.some((u) => !listingPhotoOk(u, guest))) throw cameraRequired();
       let source_url: string | null = null;
       if (b.source_url != null && b.source_url !== '') {
         const chk = typeof b.source_url === 'string' && b.source_url.length <= 1000 ? checkFacebookUrl(b.source_url) : null;
         if (!chk?.ok) throw Object.assign(new HttpError(400, 'El link del anuncio no es de Facebook Marketplace.'), { code: 'fb_url_invalid' });
         source_url = chk.url;
       }
+      // Solo fotos de la cámara de la app (token 'listing' del invitado) o, si trae source_url de import, la foto que el
+      // servidor guardó al importar ese mismo link.
+      if (photos.some((u) => !listingPhotoOk(u, guest, source_url))) throw cameraRequired();
       const row: Record<string, unknown> = { buyer_user_id: guest, category, brand, model, price_crc: price, note: str(b.note, 500, false), status: 'abierta', ...(photos.length ? { photos } : {}), ...(source_url ? { source_url } : {}) };
       for (let i = 0; i < 5; i++) {
         const code = inviteCode();
