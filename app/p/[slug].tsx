@@ -44,8 +44,17 @@ import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { DEMO_ENABLED } from '@/lib/demo';
 import { RulesHint } from '@/components/RulesLink';
 import { PAY_SUMMARY } from '@/lib/rules';
+import { looksLikeDemoProduct } from '../../api/_lib/demoFlag';
+import { DemoProductPage } from '@/components/DemoProduct';
 
+/** /p/<slug>: producto de EJEMPLO del feed (ej-…) -> su ficha sin pago; si no, el link de pago real. */
 export default function LinkDeVenta() {
+  const { slug } = useLocalSearchParams<{ slug: string }>();
+  if (looksLikeDemoProduct(String(slug ?? ''))) return <DemoProductPage slug={String(slug)} />;
+  return <LinkDeVentaReal />;
+}
+
+function LinkDeVentaReal() {
   const { slug, acceso } = useLocalSearchParams<{ slug: string; acceso?: string }>();
   const auth = useAuth();
   const { isAuthenticated, email } = auth;

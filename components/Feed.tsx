@@ -2,6 +2,8 @@
 // con buscador, filtro por identidad en dos mitades iguales (Identidad confirmada por defecto / Sin confirmar; textos en
 // lib/copy.ts), paginación infinita por cursor, skeletons y estados vacíos. Lecturas públicas: GET /api/store?feed.
 // Ventas cerradas: hoy solo EJEMPLOS ficticios con etiqueta "Ejemplo" (lib/feedSales.ts, FEED_DEMO_SALES), 1 de cada 6.
+// Productos de ejemplo (demo: true, api/_lib/demoProducts.ts, FEED_DEMO_PRODUCTS): llegan del API después de los reales,
+// con etiqueta "Ejemplo" y sin botón Seguir; su ficha (/p/ej-…) no permite pagar.
 import { COPY } from '@/lib/copy';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
@@ -157,7 +159,7 @@ function openSeller(it: FeedItem, index: number, filter: VerifiedFilter) {
   router.push({ pathname: '/t/[store]', params: { store: it.seller.store_slug } });
 }
 function openItem(it: FeedItem, index: number, filter: VerifiedFilter, target: 'product' | 'cta') {
-  haptic.tap(); track('feed_item_clicked', { target, position: index, verified: it.seller.verified, filter });
+  haptic.tap(); track('feed_item_clicked', { target, position: index, verified: it.seller.verified, filter, ...(it.demo ? { demo: true } : {}) });
   router.push({ pathname: '/p/[slug]', params: { slug: it.slug } });
 }
 
@@ -166,17 +168,19 @@ export const FeedCard = memo(function FeedCard({ item: it, index, filter, activi
   const [broken, setBroken] = useState(false);
   return (
     <View style={[s.cell, s.card]} testID="feed-card">
-      <Pressable onPress={() => openItem(it, index, filter, 'product')} accessibilityRole="link" accessibilityLabel={`${it.title}, ${formatCRC(it.price_crc)}`}
+      <Pressable onPress={() => openItem(it, index, filter, 'product')} accessibilityRole="link"
+        accessibilityLabel={it.demo ? COPY.demoProducts.cardLabel(it.title, formatCRC(it.price_crc)) : `${it.title}, ${formatCRC(it.price_crc)}`}
         style={({ pressed }) => [pressTransition, pressed && { opacity: 0.92 }]}>
         {it.photo && !broken
           ? <Image source={{ uri: it.photo }} style={s.photo} resizeMode="cover" onError={() => setBroken(true)} accessibilityIgnoresInvertColors />
           : <View style={[s.photo, s.noPhoto]}><Icon name="image-outline" size={32} color={C.lilac} /></View>}
+        {it.demo ? <View style={s.example} testID="feed-demo-tag"><Text style={s.exampleText}>{COPY.demoProducts.tag}</Text></View> : null}
         <View style={s.cardBody}>
           <Text style={s.title} numberOfLines={2}>{it.title}</Text>
           <Text style={T.moneySm} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
         </View>
       </Pressable>
-      <View style={s.follow}><FollowButton store={it.seller} source="feed" size="sm" /></View>
+      {it.demo || it.seller.demo ? null : <View style={s.follow}><FollowButton store={it.seller} source="feed" size="sm" /></View>}
       <Pressable onPress={() => openSeller(it, index, filter)} accessibilityRole="link" accessibilityLabel={`Ver el perfil de ${it.seller.display_name}`}
         hitSlop={4} style={({ pressed }) => [s.who, pressed && { opacity: 0.8 }]}>
         <StoreAvatar store={it.seller} size={22} />

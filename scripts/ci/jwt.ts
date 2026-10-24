@@ -12,10 +12,10 @@ export async function installTestJwks() {
   __setJwksForTests(createLocalJWKSet({ keys: [jwk] }));
   keys = { priv: a.privateKey, other: b.privateKey };
 }
-export async function token(o: { sub: string; aud?: string; iss?: string; exp?: number; badKey?: boolean }) {
+export async function token(o: { sub: string; aud?: string; iss?: string; exp?: number; badKey?: boolean; email?: string; emailVerified?: boolean }) {
   if (!keys) throw new Error('installTestJwks() primero');
   const now = Math.floor(Date.now() / 1000);
-  return new SignJWT({ email: `${o.sub}@ci.test` }).setProtectedHeader({ alg: 'RS256', kid: 'ci' })
+  return new SignJWT({ email: o.email ?? `${o.sub}@ci.test`, ...(o.emailVerified === undefined ? {} : { email_verified: o.emailVerified }) }).setProtectedHeader({ alg: 'RS256', kid: 'ci' })
     .setSubject(o.sub).setIssuer(o.iss ?? ISS).setAudience(o.aud ?? AUD).setIssuedAt(now - 10).setExpirationTime(o.exp ?? now + 600)
     .sign(o.badKey ? keys.other : keys.priv);
 }

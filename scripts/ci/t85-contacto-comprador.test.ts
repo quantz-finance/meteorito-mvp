@@ -108,7 +108,7 @@ export async function run(t: T) {
   r = await call({ tok: sellerTok, body: { action: 'buyer_contact_get', slug: 'abc123' } });
   t.check('vendedor: 403 al pedir los contactos del comprador', r.code === 403);
   r = await call({ tok: sellerTok, body: { action: 'admin_contacts', slug: 'abc123' } });
-  t.check('vendedor (no admin): 403 en admin_contacts', r.code === 403 && r.body.code === 'not_admin');
+  t.check('vendedor (no admin): 404 en admin_contacts (como el panel de disputas)', r.code === 404);
   const src = ['api/_lib/feed.ts', 'api/_lib/purchases.ts', 'api/_lib/chat.ts', 'api/_lib/push.ts'].map((f) => readFileSync(f, 'utf8')).join('\n');
   t.check('ninguna respuesta al vendedor lee buyer_contacts', !/buyer_contacts/.test(src));
   process.env.ADMIN_EMAILS = 'team@ci.test';

@@ -5,6 +5,7 @@ import { HttpError, __setSessionStore } from './auth';
 import { notifyOrder } from './push';
 import { notifyBuyerStatus } from './buyerContact';
 import { trackServer } from './analytics';
+import { looksLikeDemoProduct } from './demoFlag';
 let c: any = null;
 export const db = (): any => (c ??= createClient(env.supabaseUrl(), env.supabaseService(), { auth: { persistSession: false } }));
 /** Solo tests: inyecta un cliente falso. */
@@ -18,6 +19,8 @@ export function fail(res: any, e: any) {
   return json(res, e instanceof HttpError ? e.status : 500, body);
 }
 export async function orderBySlug(slug: unknown): Promise<any> {
+  // Productos de EJEMPLO del feed (api/_lib/demoProducts.ts): no existen como pedido y nunca se pueden pagar.
+  if (looksLikeDemoProduct(slug)) throw Object.assign(new HttpError(409, 'Es un producto de ejemplo: no está a la venta y no se puede pagar.'), { code: 'demo_product' });
   if (typeof slug !== 'string' || !/^[a-z0-9]{6}$/.test(slug)) throw new HttpError(400, 'slug inválido');
   const { data, error } = await db().from('orders').select('*').eq('slug', slug).maybeSingle();
   if (error) throw error;

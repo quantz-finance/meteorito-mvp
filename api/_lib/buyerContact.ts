@@ -4,11 +4,12 @@
 //    PERMISO {grant, slug, buyer_user_id, exp 120 días} que viaja en X-Order-Access y vale SOLO para ese pedido.
 //    Funciona sin la migración 028 (no hay tabla): recuperar el acceso nunca depende de la base.
 //  - Contactos, vínculo con cuenta y bitácora de avisos viven en la migración 028. Sin ella: available:false y nada más.
-//  - Teléfono y correo NUNCA salen hacia el vendedor: solo el comprador (enmascarado) y el equipo (ADMIN_EMAILS) los ven.
+//  - Teléfono y correo NUNCA salen hacia el vendedor: solo el comprador (enmascarado) y el equipo (admin.ts, ADMIN_EMAILS) los ven.
 //  - Correo: Brevo transaccional (la misma cuenta del landing), detrás de GUEST_EMAIL_ENABLED=1 + BREVO_API_KEY.
 //  - WhatsApp: no hay API de envío. Se guarda el número y el equipo le escribe con un wa.me listo (admin_contacts).
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { HttpError } from './auth';
+import { isAdminUser, notFound } from './admin';
 import { isMissingTable } from './push';
 import {
   ACCESS_GRANT_DAYS, BETA_NOTICE_TEXT as BETA_NOTICE, ACCESS_LINK_DAYS, CONTACT_CONSENT_TEXT, CONTACT_CONSENT_VERSION, NOTICE_BY_STATUS, buildNotice, maskEmail, maskPhone,
@@ -224,10 +225,9 @@ export async function notifyBuyerStatus(db: Db, o: { id: string; slug: string; s
 }
 
 // ---------- Equipo ----------
-const admins = () => (process.env.ADMIN_EMAILS ?? '').split(',').map((x: string) => x.trim().toLowerCase()).filter(Boolean) as string[];
+/** Mismo rol que el panel de disputas (api/_lib/admin.ts, ADMIN_EMAILS). Quien no es admin: 404. */
 export function requireAdmin(who: Who) {
-  const email = normalizeEmail(who.cavos?.email);
-  if (!who.cavos || !email || !admins().includes(email)) throw Object.assign(new HttpError(403, 'Solo el equipo.'), { code: 'not_admin' });
+  if (!who.cavos || !isAdminUser(who.cavos as any)) throw notFound();
 }
 /** Contactos de un pedido para el EQUIPO (sin enmascarar) con el wa.me del último aviso listo para enviar. */
 export async function adminContacts(db: Db, order: any) {

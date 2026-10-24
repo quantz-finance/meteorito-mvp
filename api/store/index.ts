@@ -4,6 +4,8 @@
 //                                                 -> feed de Comprar (y buscador): productos activos de vendedores, lo más
 //                                                 nuevo primero, paginado por cursor. Sin datos privados. Caché corta.
 //       [&order=rank]                            -> con el algoritmo (api/_lib/feedRank.ts), sin personalizar (caché pública)
+//                                                 + productos de EJEMPLO (demo: true) DESPUÉS de los reales, cursor e…_…
+//                                                 (api/_lib/demoProducts.ts; FEED_DEMO_PRODUCTS en api/_lib/demoFlag.ts)
 //                                                 + sponsored: bloque Patrocinado (024), solo en la 1.ª página, [] si no hay
 //  POST { action:'feed', q?, verified?, cursor?, limit? } (X-Guest-Key y/o Bearer) -> el mismo feed con el algoritmo y el
 //                                                 impulso de los vendedores que SIGUE quien pide (022). Sin caché.
@@ -76,7 +78,8 @@ import { FOLLOW_IP_PER_MIN, followedSellerSubs, followingSlugs, followRateLimite
 import { sponsoredFor } from '../_lib/sponsored';
 import { blockChat, chatAvailable, listChats, openChat, readChat, reportChat, sendChat } from '../_lib/chat';
 import { parseVerified, searchTokens } from '../_lib/feedText';
-import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
+import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile, type FeedQuery } from '../_lib/feed';
+import { decodeDemoCursor, demoPage, demoProductsOn, demoProfile, isDemoStoreSlug, looksLikeDemoProduct, mergeDemo } from '../_lib/demoProducts';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -103,7 +106,7 @@ async function myProfile(sub: string, email?: string) {
   if (data) return data as { sub: string; store_slug: string; display_name: string };
   const base = baseSlugFromEmail(email);
   for (let i = 0; i < 6; i++) {
-    const store_slug = i === 0 ? base : withSuffix(base);
+    const store_slug = i === 0 && !isDemoStoreSlug(base) ? base : withSuffix(base); // los usuarios de las tiendas de ejemplo quedan reservados
     const row = { sub, store_slug, display_name: nameFromEmail(email) };
     const { error: e2 } = await db().from('seller_profiles').insert(row);
     if (!e2) return row;
@@ -166,7 +169,7 @@ async function reviewPairGuard(order: any) {
 /** Vista previa al compartir /t/<usuario>: el HTML de la app (mismo deploy) con los meta OG del vendedor. */
 async function ogPage(req: any, res: any) {
   const slug = normalizeStoreSlug(req.query.og);
-  const p = validStoreSlug(slug) ? await sellerProfile(slug).catch(() => null) : null;
+  const p = validStoreSlug(slug) ? (demoProductsOn() && demoProfile(slug)) || await sellerProfile(slug).catch(() => null) : null;
   const url = `https://pago.meteorito.app/t/${slug}`;
   let appHtml: string | null = null;
   const host = String(req.headers?.host ?? '');
@@ -182,10 +185,23 @@ async function ogPage(req: any, res: any) {
   res.send(injectMeta(appHtml, meta, url));
 }
 
+/** Feed + productos de EJEMPLO (solo con el algoritmo, que es lo que pide la app): los reales primero; cuando se terminan,
+ *  los ejemplos rellenan la página y siguen con el cursor e…_…. Con FEED_DEMO_PRODUCTS apagado: el feed de siempre. */
+async function feedWithDemo(p: FeedQuery) {
+  if (!demoProductsOn() || p.order !== 'rank') return feedPage(p);
+  const dc = decodeDemoCursor(p.cursor);
+  let verified;
+  try { verified = parseVerified(p.verified); } catch (e: any) { throw Object.assign(new HttpError(400, e.message), { code: 'bad_filter' }); }
+  if (dc) return { ...demoPage({ q: p.q, verified, cursor: dc, limit: p.limit }), verified };
+  return mergeDemo(await feedPage(p), { q: p.q, verified, limit: p.limit });
+}
+
 /** Bloque Patrocinado (024): solo en la primera página del feed con el algoritmo, con el mismo filtro y búsqueda. */
 async function withSponsored<P extends { verified: any }>(page: P, q: any): Promise<P & { sponsored?: unknown[] }> {
   if ((q.cursor != null && q.cursor !== '') || (q.order !== 'rank' && q.action !== 'feed')) return page;
-  return { ...page, sponsored: await sponsoredFor({ verified: parseVerified(q.verified), tokens: searchTokens(q.q) }) };
+  // Ranking honesto: un producto de ejemplo nunca sale como Patrocinado (aunque alguien lo pusiera en la tabla).
+  const sponsored = (await sponsoredFor({ verified: parseVerified(q.verified), tokens: searchTokens(q.q) })).filter((x) => !looksLikeDemoProduct(x.slug));
+  return { ...page, sponsored };
 }
 
 export default async function handler(req: any, res: any) {
@@ -195,13 +211,14 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { key: vapid()?.publicKey ?? null });
     }
     if (req.method === 'GET' && req.query?.feed != null) {
-      const page = await withSponsored(await feedPage({ q: req.query.q, cursor: req.query.cursor, limit: req.query.limit, verified: req.query.verified, order: req.query.order }), req.query);
+      const page = await withSponsored(await feedWithDemo({ q: req.query.q, cursor: req.query.cursor, limit: req.query.limit, verified: req.query.verified, order: req.query.order }), req.query);
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=60');
       return json(res, 200, page);
     }
     if (req.method === 'GET' && req.query?.profile != null) {
       const slug = normalizeStoreSlug(req.query.profile);
-      const p = validStoreSlug(slug) ? await sellerProfile(slug) : null;
+      // Tiendas de ejemplo (ficticias, demo: true): sus usuarios están reservados, así que nunca tapan una tienda real.
+      const p = validStoreSlug(slug) ? (demoProductsOn() && demoProfile(slug)) || await sellerProfile(slug) : null;
       if (!p) throw new HttpError(404, 'Este perfil no existe.');
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=120');
       return json(res, 200, p);
@@ -362,7 +379,7 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'feed') {
       const who = await requireBuyerIdentity(req);
-      const page = await withSponsored(await feedPage({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed: await followedSellerSubs(who.ids) }), b);
+      const page = await withSponsored(await feedWithDemo({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed: await followedSellerSubs(who.ids) }), b);
       res.setHeader?.('Cache-Control', 'private, no-store');
       return json(res, 200, page);
     }
@@ -450,6 +467,7 @@ export default async function handler(req: any, res: any) {
       if (b.store_slug != null) {
         const s = normalizeStoreSlug(b.store_slug);
         if (!validStoreSlug(s)) throw Object.assign(new HttpError(400, 'Usa de 3 a 30 letras o números (sin espacios).'), { code: 'bad_store_slug' });
+        if (isDemoStoreSlug(s)) throw Object.assign(new HttpError(409, 'Ese nombre de usuario ya está en uso. Prueba otro.'), { code: 'store_slug_taken' }); // tienda de ejemplo
         patch.store_slug = s;
       }
       if (b.display_name != null) patch.display_name = cleanName(b.display_name);
