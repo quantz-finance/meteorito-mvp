@@ -5,10 +5,12 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { haptic, Icon } from '@/components/ds';
 import { C } from '@/constants/theme';
 import { COMPRAR_VIEWS, type ComprarView } from '@/lib/comprarViews';
+import { Dot, useBuyerUnread } from '@/components/ChatInbox';
 
 export type { ComprarView } from '@/lib/comprarViews';
 
 export function ComprarNav({ active }: { active: ComprarView }) {
+  const unread = useBuyerUnread(); // mensajes sin leer del comprador: punto en Mis compras
   return (
     <View accessibilityRole="tablist" style={s.row}>
       {COMPRAR_VIEWS.map((v) => {
@@ -18,6 +20,7 @@ export function ComprarNav({ active }: { active: ComprarView }) {
             onPress={() => { if (on) return; haptic.tap(); router.replace(v.href); }}
             style={({ pressed }) => [s.btn, on && s.on, pressed && !on && { opacity: 0.7 }]}>
             <Icon name={v.icon} size={22} color={on ? C.purpleDark : C.lilac} />
+            {v.key === 'compras' && unread ? <Dot testID="compras-unread" /> : null}
           </Pressable>
         );
       })}

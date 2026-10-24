@@ -19,6 +19,7 @@ import { formatCRC, getPublicOrder, orderTitle, STATUS_LABEL, type PublicOrder }
 import { isBuyerDevice } from '@/lib/guest';
 import { SellerContact } from '@/components/SellerContact';
 import { OrderChatCard } from '@/components/OrderChat';
+import { AskSellerButton } from '@/components/ChatButton';
 import { canShowContact } from '../../api/_lib/contact';
 import { haptic } from '@/components/ds';
 import { getOrderSeller, rateOrder, ratedStars, rememberRated, type OrderSeller } from '@/lib/store';
@@ -255,6 +256,8 @@ function TrustBlock({ order }: { order: PublicOrder }) {
       {order.identifier_masked ? <View style={{ flexDirection: 'row' }}>
         <Chip label="Identificador declarado por el vendedor" tone="muted" icon="information-circle-outline" />
       </View> : null}
+      {/* Antes de pagar: preguntar al vendedor por este producto (chat ligado a la tienda + producto). */}
+      {seller && (order.status === 'creado' || order.status === 'escrow_creado') ? <AskSellerButton storeSlug={seller.store_slug} itemSlug={order.slug} /> : null}
     </View>
   );
 }

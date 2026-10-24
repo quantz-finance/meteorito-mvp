@@ -16,6 +16,7 @@ import {
 } from '@/lib/purchases';
 import { useStableWindow } from '@/lib/viewport';
 import { ComprarNav } from '@/components/ComprarNav';
+import { BuyerInboxRow } from '@/components/ChatInbox';
 
 function PurchaseCard({ r }: { r: PurchaseRow }) {
   return (
@@ -64,6 +65,7 @@ export default function MisCompras() {
   return (
     <Screen title={MY_PURCHASES_TITLE} scroll={false} right={<ComprarNav active="compras" />}>
       <View style={{ flex: 1, gap: S.sm }}>
+        <BuyerInboxRow />
         {rows === null ? <><SkeletonCard /><SkeletonCard /></>
           : active.length + closed.length === 0 ? (
             <Card style={{ alignItems: 'center', paddingVertical: S.xl, gap: S.md }}>
