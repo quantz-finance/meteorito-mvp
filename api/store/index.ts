@@ -20,6 +20,8 @@
 //  POST { action:'rate', slug, stars, comment?, buyer_name? } (X-Guest-Key o Bearer del comprador) -> reseña de compra
 //                                                 verificada: 1-5 estrellas, comentario opcional (280, sin links) y nombre
 //                                                 corto ("María R."), una por pedido, solo con el pedido Liberado (018)
+//  POST { action:'buyer_orders' }               (X-Guest-Key y/o Bearer Cavos) -> Mis compras: SOLO los pedidos de los que
+//                                                 esta llave o esta cuenta es el comprador (sin datos del vendedor ni PIN)
 //  POST { action:'payout_get' } / { action:'payout_set', iban, holder_name, sinpe_phone? } (Bearer Cavos)
 //                                                 -> cuenta IBAN para cobrar (migración 011). Solo sale enmascarada.
 //  GET  ?push=key                                 -> llave pública VAPID (o null si no hay push configurado)
@@ -47,6 +49,7 @@ import { importListing } from '../_lib/importers';
 import { checkListingUrl } from '../_lib/importers/providers';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
+import { buyerOrders } from '../_lib/purchases';
 import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
@@ -255,6 +258,13 @@ export default async function handler(req: any, res: any) {
       const source_url = ('source_url' in r && typeof r.source_url === 'string' && r.source_url) || chk.url;
       const photo_urls = r.photos.length ? await storeImportedPhotos(db().storage, r.photos, who.cavos?.sub ?? who.guest!, MAX_PHOTO_BYTES, source_url) : [];
       return json(res, 200, { ...r, photo_urls, source_url });
+    }
+
+    if (b.action === 'buyer_orders') {
+      // Mis compras: la llave de invitado de este dispositivo y/o la sesión Cavos. Nunca por slug ni por dirección.
+      const who = await requireBuyerIdentity(req);
+      res.setHeader?.('Cache-Control', 'no-store');
+      return json(res, 200, { orders: await buyerOrders(db(), who.ids) });
     }
 
     const user = await requireCavosUser(req);

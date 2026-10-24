@@ -65,6 +65,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '64', name: 'WhatsApp en el perfil público: opt-in del vendedor, privado por defecto', file: './t64-whatsapp-public.test.ts', onchain: false },
   { id: '67', name: 'Feed: ventas cerradas de EJEMPLO (ficticias, etiqueta Ejemplo, sin montos, flag, 1 de cada 6, respeta el filtro); reales solo con opt-in', file: './t67-feed-sales.test.ts', onchain: false },
   { id: '68', name: 'Comprar: invitar con el link de cualquier marketplace (lee FB/Walmart; ML/Amazon/Encuentra24 se aceptan sin pedirlos)', file: './t68-invite-any-marketplace.test.ts', onchain: false },
+  { id: '69', name: 'Mis compras: botón en Comprar, compras de este dispositivo (guardadas al pagar + recuperación por PIN/pedido propio) y del servidor solo por llave/sesión, activas primero', file: './t69-mis-compras.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

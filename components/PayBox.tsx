@@ -16,7 +16,8 @@ import { guestApi } from '@/lib/api';
 import { myListingOrder, rememberListingOrder } from '@/lib/listings';
 import { loadPin, savePin } from '@/lib/guest';
 import { useAuth } from '@/lib/cavos';
-import { formatCRC, type PublicOrder } from '@/lib/orders';
+import { formatCRC, orderTitle, type PublicOrder } from '@/lib/orders';
+import { rememberPurchase } from '@/lib/purchases';
 import { resolvedLabel } from '@/lib/status';
 import { track, trackError } from '@/lib/analytics';
 import { DEMO_ENABLED } from '@/lib/demo';
@@ -88,9 +89,11 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       payOpen(r);
     });
   }, [pay, order.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Mis compras: cada compra queda registrada en este dispositivo (al iniciar y al completar el pago) para volver a /p/<pedido>.
+  const remember = (slug: string, status: string) => rememberPurchase({ slug, title: orderTitle(order), price_crc: Number(order.price_crc), photo: order.photos?.[0] ?? null, status, delivery_mode: order.delivery_mode });
   const funded = (r: { pin?: string | null }, method: 'card' | 'sinpe') => {
     // El código de entrega se guarda en este navegador pero NO se muestra todavía: aparece cuando el vendedor lo envía.
-    track('payment_funded_client', { method }); if (r.pin) setPin(r.pin); setSheet(r.pin || pin ? 'paid' : null); onChange();
+    remember(order.slug, 'fondeado'); track('payment_funded_client', { method }); if (r.pin) setPin(r.pin); setSheet(r.pin || pin ? 'paid' : null); onChange();
   };
   // Tarjeta in-app: el servidor cobra (card_pay) y verifica (card_confirm). Número y CVC no salen de CardSheet.
   const payCardInApp = async (p: CardPayInput) => {
@@ -190,6 +193,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <PrimaryButton title={busy ? 'Preparando…' : `Pagar en custodia ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
         onPress={() => run(async () => {
           const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'start' });
+          remember(r.slug ?? order.slug, 'escrow_creado');
           if (r.slug && r.slug !== order.slug) { // producto permanente: seguir en el pedido propio de este comprador
             rememberListingOrder(order.slug, r.slug); track('listing_order_started');
             router.replace({ pathname: '/p/[slug]', params: { slug: r.slug, pay: '1' } }); return;

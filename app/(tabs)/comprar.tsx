@@ -4,7 +4,8 @@ import { ui } from '@/components/ui';
 import { parseSlug } from '@/lib/orders';
 import { useStableWindow } from '@/lib/viewport';
 import { router } from 'expo-router';
-import { Card, ErrorText, haptic, Icon, PrimaryButton, Screen, Sheet } from '@/components/ds';
+import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet } from '@/components/ds';
+import { MY_PURCHASES_TITLE } from '@/lib/purchases';
 import { Feed } from '@/components/Feed';
 import { Reveal } from '@/components/space';
 import { C, R, S, T } from '@/constants/theme';
@@ -16,7 +17,8 @@ export default function Comprar() {
   const linkSlug = parseSlug(link);
   const goPay = () => { if (!linkSlug) return; setPayOpen(false); setLink(''); router.push(`/p/${linkSlug}`); };
   return (
-    <Screen title="Comprar" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}>
+    <Screen title="Comprar" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
+      right={<IconButton icon="bag-handle" label={MY_PURCHASES_TITLE} onPress={() => router.push('/mis-compras')} />}>
       {/* Arriba se mantienen: importar de un link (Facebook, Mercado Libre, Amazon… cualquier marketplace), invitar (pedir link) a un vendedor y pagar un link. Debajo, el feed. */}
       <Feed header={<View style={{ gap: S.md }}>
         <Reveal i={0}><Card style={{ gap: S.sm }}>

@@ -3,12 +3,13 @@ import { useStableWindow } from '@/lib/viewport';
 import { Glow, LivelyMascot, Reveal, SpaceBackground } from '@/components/space';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/cavos';
-import { ErrorText, Icon, PrimaryButton } from '@/components/ds';
+import { ErrorText, Icon, IconButton, PrimaryButton } from '@/components/ds';
+import { hasLocalPurchases, MY_PURCHASES_TITLE } from '@/lib/purchases';
 import { C, S } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import { track } from '@/lib/analytics';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LearnSheet } from '@/components/LearnSheet';
 import { LegalLinks } from '@/components/LegalLinks';
 import { needsRelogin, RELOGIN_TITLE } from '@/lib/cavosSession';
@@ -16,6 +17,9 @@ import { needsRelogin, RELOGIN_TITLE } from '@/lib/cavosSession';
 export default function Welcome() {
   const { openLogin, isLoading, isAuthenticated, error, configured } = useAuth();
   const [learn, setLearn] = useState(false);
+  // Comprador sin cuenta que ya compró en este dispositivo: acceso a Mis compras arriba a la derecha (después del montaje: localStorage).
+  const [bought, setBought] = useState(false);
+  useEffect(() => { setBought(hasLocalPurchases()); }, []);
   const busy = isLoading || isAuthenticated; // autenticado pero cargando la cuenta
   const relogin = needsRelogin(error); // sesión vencida/sin token: pantalla clara "Entrar de nuevo", nunca el error del SDK
   // Sin scroll: todo cabe en una pantalla, incluso con la barra de Safari visible (~620 px útiles). La mascota y los
@@ -28,6 +32,9 @@ export default function Welcome() {
   return (
     <View style={{ flex: 1, backgroundColor: Platform.OS === 'web' ? 'transparent' : C.bg }}>
       <SpaceBackground mode="full" />
+      {bought ? <View style={{ position: 'absolute', zIndex: 2, top: insets.top + S.md, right: S.md }}>
+        <IconButton icon="bag-handle" label={MY_PURCHASES_TITLE} onPress={() => router.push('/mis-compras')} />
+      </View> : null}
       <View style={[s.col, { paddingTop: insets.top + (tiny ? S.md : S.lg), paddingBottom: insets.bottom + S.sm }]}>
         <View style={s.hero}>
           <View style={{ width: mascot, height: mascot, alignItems: 'center', justifyContent: 'center' }}>
