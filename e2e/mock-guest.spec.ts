@@ -719,6 +719,8 @@ test('MCK-MIS-07 sin cuenta: bienvenida -> Privacidad -> Volver vuelve a la bien
   await expect(page).toHaveURL(/\/legal\//);
   await page.getByRole('button', { name: 'Volver' }).first().click();
   await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
+});
+
 // ---- Recibe avisos de tu compra (comprador sin cuenta): tarjeta, recuperación con link y vuelta del login de Cavos ----
 // En este archivo (serial) y no en uno aparte: todos los mock-* comparten el estado del servidor simulado.
 const cntOrder = { slug: 'cnt001', kind: 'single', model: 'Bici de montaña', price_crc: 150000 };
