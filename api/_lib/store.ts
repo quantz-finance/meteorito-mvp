@@ -9,7 +9,7 @@ export const STORE_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
 export const RESERVED = new Set(['api', 'admin', 'meteorito', 'soporte', 'ayuda', 'tienda', 'tiendas', 'legal', 'nueva', 'vender', 'comprar', 'pedidos', 'mi-tienda', 'team']);
 /** Reseña = compra verificada: solo con el pedido liberado (el vendedor ya cobró). */
 export const RATABLE = ['liberado'];
-export { cleanReviewComment, REVIEW_MAX, shortBuyerName } from './reviewText';
+export { cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName } from './reviewText';
 
 /** "José.Pérez+x@…" -> "jose-perez". Vacío si no queda nada útil. */
 export function normalizeStoreSlug(raw: unknown): string {

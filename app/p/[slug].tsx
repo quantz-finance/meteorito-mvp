@@ -3,7 +3,6 @@ import { COPY } from '@/lib/copy';
 import { SalesOutcomeLine, StarsInline, VerifiedBadge } from '@/components/SellerBits';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
 import { Fonts } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Reveal } from '@/components/space';
@@ -188,21 +187,21 @@ function RateCard({ slug }: { slug: string }) {
       track('review_submitted', { stars: pick, has_comment: !!comment.trim(), has_name: !!name.trim() });
     } catch (e: any) {
       if (e?.code === 'already_rated') { rememberRated(slug, pick); setDone(pick); }
-      else setErr(e?.message ?? 'No pudimos guardar tu reseña.');
+      else setErr(e?.message ?? COPY.review.failed);
     } finally { setBusy(false); }
   }
   const shown = done ?? pick;
   if (done) return (
     <Card style={{ gap: S.sm, alignItems: 'center' }}>
-      <Text style={T.headline}>¡Gracias por tu reseña!</Text>
+      <Text style={T.headline}>{COPY.review.thanks}</Text>
       <View style={{ flexDirection: 'row', gap: S.xs }}>{[1, 2, 3, 4, 5].map((n) => <Icon key={n} name={n <= done ? 'star' : 'star-outline'} size={26} color={n <= done ? '#FFD84D' : C.textDim} />)}</View>
-      <Text style={[T.footnote, { textAlign: 'center' }]}>Ayuda a otros compradores a elegir con confianza.</Text>
-      {store ? <PrimaryButton title="Ver el perfil del vendedor" icon="person-circle-outline" variant="ghost" onPress={() => router.push({ pathname: '/t/[store]', params: { store } })} /> : null}
+      <Text style={[T.footnote, { textAlign: 'center' }]}>{COPY.review.thanksText}</Text>
+      {store ? <PrimaryButton title={COPY.review.seeProfile} icon="person-circle-outline" variant="ghost" onPress={() => router.push({ pathname: '/t/[store]', params: { store } })} /> : null}
     </Card>
   );
   return (
     <Card style={{ gap: S.sm }}>
-      <Text style={[T.headline, { textAlign: 'center' }]}>¿Cómo te fue con el vendedor?</Text>
+      <Text style={[T.headline, { textAlign: 'center' }]}>{COPY.review.title}</Text>
       <View style={{ flexDirection: 'row', gap: S.xs, justifyContent: 'center' }}>
         {[1, 2, 3, 4, 5].map((n) => (
           <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} estrella${n === 1 ? '' : 's'}`} accessibilityState={{ selected: n === pick }} disabled={busy}
@@ -213,13 +212,13 @@ function RateCard({ slug }: { slug: string }) {
       </View>
       {pick ? <>
         <TextInput style={[s.reviewInput, { minHeight: 88, textAlignVertical: 'top', paddingTop: 12 }]} value={comment} onChangeText={setComment} multiline maxLength={280}
-          placeholder="Cuéntales a otros compradores cómo te fue (opcional)" placeholderTextColor={C.textDim} accessibilityLabel="Comentario, opcional" />
+          placeholder={COPY.review.commentPlaceholder} placeholderTextColor={C.textDim} accessibilityLabel={COPY.review.commentLabel} />
         <TextInput style={s.reviewInput} value={name} onChangeText={setName} maxLength={40} autoCapitalize="words" autoComplete="given-name"
-          placeholder="Tu nombre (opcional), ej. María R." placeholderTextColor={C.textDim} accessibilityLabel="Tu nombre, opcional" />
-        <Text style={T.footnote}>Tu reseña es pública en el perfil del vendedor con tu nombre corto (ej. "María R."). Sin links.</Text>
+          placeholder={COPY.review.namePlaceholder} placeholderTextColor={C.textDim} accessibilityLabel={COPY.review.nameLabel} />
+        <Text style={T.footnote}>{COPY.review.publicNote}</Text>
         {err ? <Text style={[T.footnote, { color: C.orange }]}>{err}</Text> : null}
-        <PrimaryButton title="Publicar reseña" icon="send" loading={busy} onPress={send} />
-      </> : <Text style={[T.footnote, { textAlign: 'center' }]}>Toca de 1 a 5 estrellas. Solo puedes dejar una reseña por compra.</Text>}
+        <PrimaryButton title={COPY.review.submit} icon="send" loading={busy} onPress={send} />
+      </> : <Text style={[T.footnote, { textAlign: 'center' }]}>{COPY.review.pickHint}</Text>}
     </Card>
   );
 }

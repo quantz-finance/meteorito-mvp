@@ -16,3 +16,8 @@ export function shortBuyerName(raw: unknown): string | null {
   const first = cap(words[0]).slice(0, 18);
   return words.length > 1 ? `${first} ${words[words.length - 1].charAt(0).toLocaleUpperCase('es')}.` : first;
 }
+/** Anti-fraude (ventas repetidas entre las mismas cuentas): entre un mismo comprador y un mismo vendedor cuenta una
+ *  reseña cada REVIEW_PAIR_WINDOW_DAYS días y como máximo REVIEW_PAIR_MAX en total. El mismo comprador = misma cuenta
+ *  (sesión o llave de invitado) o misma dirección Stellar. Nadie se reseña a sí mismo. */
+export const REVIEW_PAIR_WINDOW_DAYS = 30;
+export const REVIEW_PAIR_MAX = 3;
