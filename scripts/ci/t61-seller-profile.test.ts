@@ -68,7 +68,7 @@ export async function run(t: T) {
     q.select = (cols?: string) => (tb === 'seller_profiles' && /whatsapp_public/.test(String(cols ?? '')) ? Object.assign(q, { maybeSingle: async () => ({ data: null, error: colErr }) }) : sel(cols)); return q; };
   delete db.tables.seller_profiles[0].whatsapp_public; // sin la columna (el fake devuelve todas las columnas)
   r = await get({ profile: 'valeria' });
-  t.check('sin migración 018: el perfil carga y NO muestra WhatsApp (se prometió solo tras pagar)', r.code === 200 && r.body?.whatsapp === null && !!r.body?.display_name, `${r.body?.whatsapp}`);
+  t.check('sin migración 019: el perfil carga y NO muestra WhatsApp (se prometió solo tras pagar)', r.code === 200 && r.body?.whatsapp === null && !!r.body?.display_name, `${r.body?.whatsapp}`);
   (db as any).from = orig;
   r = await get({ profile: 'no-existe' });
   t.check('perfil inexistente -> 404', r.code === 404, `${r.code}`);

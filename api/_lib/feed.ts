@@ -1,10 +1,10 @@
 // Feed público de Comprar + buscador + perfil público del vendedor (/t/<usuario>). Solo lectura, sin datos privados.
 // Feed: TODOS los vendedores con al menos un producto permanente activo (kind 'listing', status 'creado', activa, no hijo),
-// salvo los ocultos por moderación (seller_profiles.listed_in_feed = false, migración 018; sin ella nadie está oculto).
+// salvo los ocultos por moderación (seller_profiles.listed_in_feed = false, migración 019; sin ella nadie está oculto).
 // Filtro por verificación: seller_profiles.verified (migración 010; se activa a mano por ahora; a futuro, pago + KYC).
 // Búsqueda: sin mayúsculas ni acentos, por palabras (todas deben aparecer) en título, descripción y nombre del vendedor.
 // En la base: ILIKE con las vocales como comodín (encuentra "cámara" con "camara" sin necesitar unaccent) y el filtro
-// exacto después, con el mismo foldText. pg_trgm (018) solo acelera esos ILIKE.
+// exacto después, con el mismo foldText. pg_trgm (019) solo acelera esos ILIKE.
 import { db } from './db';
 import { HttpError } from './auth';
 import { missingColumn } from './listings';
@@ -17,7 +17,7 @@ export { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, pars
 interface Seller { sub: string; store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; listed: boolean; rating_avg: number | null; rating_count: number }
 const titleOf = (o: any) => `${o.brand ?? ''} ${o.model ?? ''}`.trim() || 'Artículo';
 
-/** seller_profiles con fallback: listed_in_feed (018) y avatar_url (014) pueden no existir todavía. */
+/** seller_profiles con fallback: listed_in_feed (019) y avatar_url (014) pueden no existir todavía. */
 async function profilesBy(apply: (q: any) => any): Promise<any[]> {
   for (const cols of ['sub, store_slug, display_name, avatar_url, verified, listed_in_feed', 'sub, store_slug, display_name, avatar_url, verified', 'sub, store_slug, display_name, verified']) {
     const { data, error } = await apply(db().from('seller_profiles').select(cols));
@@ -128,7 +128,7 @@ export async function sellerOfOrder(orderSlug: string) {
 /** Perfil público del vendedor: lo de la tienda + reseñas, ventas, miembro desde y WhatsApp (solo si eligió mostrarlo). */
 export async function sellerProfile(slug: string) {
   let row: any = null;
-  // whatsapp_public (018): el vendedor elige mostrar su WhatsApp en el perfil. Hasta entonces el número solo lo ve el
+  // whatsapp_public (019): el vendedor elige mostrar su WhatsApp en el perfil. Hasta entonces el número solo lo ve el
   // comprador después de pagar (lo que se le prometió al guardarlo en 016), así que sin la columna no se muestra.
   for (const cols of ['sub, store_slug, display_name, avatar_url, verified, verified_at, created_at, contact_phone, whatsapp_public', 'sub, store_slug, display_name, avatar_url, verified, verified_at, created_at', 'sub, store_slug, display_name, verified, created_at']) {
     const { data, error } = await db().from('seller_profiles').select(cols).eq('store_slug', slug).maybeSingle();
