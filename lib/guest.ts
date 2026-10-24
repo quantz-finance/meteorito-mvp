@@ -20,3 +20,5 @@ export function savePin(slug: string, pin: string) { mempins.set(slug, pin); try
 export function loadPin(slug: string): string | null { try { return window.localStorage.getItem(PIN(slug)) ?? mempins.get(slug) ?? null; } catch { return mempins.get(slug) ?? null; } }
 /** ¿Este dispositivo es el del comprador de este pedido? (guardó el PIN al pagar) */
 export const isBuyerDevice = (slug: string) => loadPin(slug) !== null;
+/** ¿Este navegador ya tiene llave de invitado? (sin crearla: solo para no pedir "Mis compras" al servidor sin motivo) */
+export function hasGuestKey(): boolean { if (mem) return true; try { return /^[a-f0-9]{64}$/.test(window.localStorage.getItem(KEY) ?? ''); } catch { return false; } }

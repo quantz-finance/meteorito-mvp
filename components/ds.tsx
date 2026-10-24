@@ -83,10 +83,10 @@ export function StickyFooter({ children, bare }: { children: ReactNode; bare?: b
   return <View style={[st.footer, bare && st.footerBare, { paddingBottom: Math.max(insets.bottom, S.md) }]}>{children}</View>;
 }
 
-export function Card({ children, style, onPress, accessibilityLabel }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; accessibilityLabel?: string }) {
-  if (!onPress) return <View style={[st.card, style]}>{children}</View>;
+export function Card({ children, style, onPress, accessibilityLabel, testID }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void; accessibilityLabel?: string; testID?: string }) {
+  if (!onPress) return <View testID={testID} style={[st.card, style]}>{children}</View>;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={() => { haptic.tap(); onPress(); }}
+    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={() => { haptic.tap(); onPress(); }}
       style={({ pressed }) => [st.card, style, pressTransition, pressed && st.pressed]}>
       {children}
     </Pressable>

@@ -169,6 +169,11 @@ async function api(req, path, q, b) {
     if (req.method === 'GET' && q.get('seller_of')) return { seller: null };
     if (req.method === 'GET' && q.get('store')) return q.get('store') === 'valeria' ? { store_slug: 'valeria', display_name: 'Valeria', rating_avg: null, rating_count: 0, items: Object.values(S.orders).filter((o) => o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa').map((o) => ({ slug: o.slug, title: o.model, price_crc: o.price_crc, photo: null })) } : null;
     if (b.action === 'push_subscribe') { needGuest(); if (!b.subscription?.endpoint) throw E(400, 'suscripción inválida'); S.subs.push({ guest, endpoint: b.subscription.endpoint }); return { ok: true }; }
+    if (b.action === 'buyer_orders') { // Mis compras: solo los pedidos de esta llave (sin 'creado'), sin datos del vendedor
+      needGuest();
+      return { orders: Object.values(S.orders).filter((o) => o.buyer === guest && o.status !== 'creado').map((o) => ({ slug: o.slug, brand: o.brand, model: o.model, price_crc: o.price_crc,
+        photo: o.photos?.[0] ?? null, status: o.status, created_at: o.created_at, funded_at: o.funded_at ?? null, delivery_mode: o.delivery_mode ?? null, resolution: o.resolution ?? null })) };
+    }
     if (b.action === 'seller_contact') { // WhatsApp del vendedor: solo el comprador (su llave) y solo con el pedido pagado
       needGuest(); const o = get(String(b.slug));
       if (o.buyer !== guest) throw E(403, 'Solo quien compró puede ver el contacto del vendedor.', 'not_buyer');

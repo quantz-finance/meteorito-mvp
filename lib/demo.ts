@@ -324,6 +324,10 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       st.ratings[o.slug] = stars; emit(); return { rated: true, stars, store_slug: st.store?.slug ?? 'valeria' };
     }
     if (body.action === 'push_subscribe' || body.action === 'push_unsubscribe') return { ok: true };
+    if (body.action === 'buyer_orders') { // Mis compras: igual que el API real, solo los pedidos de este comprador (sin 'creado')
+      return { orders: Object.values(st.orders).filter((o) => o.buyer === me() && o.status !== 'creado').map((o) => ({ slug: o.slug, brand: o.brand, model: o.model, price_crc: o.price_crc,
+        photo: o.photos[0] ?? null, status: o.status, created_at: o.created_at, funded_at: o.funded_at ?? null, delivery_mode: o.delivery_mode ?? null, resolution: o.resolution ?? null })) };
+    }
     if (body.action === 'seller_contact') { // igual que el API real: solo el comprador de ESTE pedido y solo pagado
       need('buyer'); const o = get(String(body.slug));
       if (!o.buyer || o.buyer !== me()) throw err(403, 'not_buyer', 'Solo quien compró puede ver el contacto del vendedor.');
