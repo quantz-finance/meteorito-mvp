@@ -79,7 +79,7 @@ function Gate() {
   const auth = useAuth();
   const segments = useSegments();
   const pathname = usePathname();
-  const isPublic = segments[0] === 'p' || segments[0] === 't' || segments[0] === 'i' || segments[0] === 'legal'; // link de pago, tienda, invitaciones de compra y legales: visibles sin login
+  const isPublic = segments[0] === 'p' || segments[0] === 't' || segments[0] === 'i' || segments[0] === 'legal' || segments[0] === 'como-funciona'; // link de pago, tienda, invitaciones de compra, legales y reglas: visibles sin login
   const authed = auth.isAuthenticated && !!auth.address;
   useEffect(() => { screen(authed || isPublic ? screenName(pathname) : 'welcome'); }, [pathname, authed]);
   useEffect(() => {
@@ -113,6 +113,7 @@ function Gate() {
       <Stack.Screen name="i/[code]" />
       <Stack.Screen name="compartir/[slug]" options={{ presentation: 'modal' }} />
       <Stack.Screen name="legal/[doc]" />
+      <Stack.Screen name="como-funciona" />
     </Stack>
     <DemoBadge />
     </>

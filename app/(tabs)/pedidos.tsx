@@ -19,6 +19,7 @@ import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { Freshness } from '@/components/Freshness';
 import { SalesSummary } from '@/components/SalesSummary';
 import { AccountSheet } from '@/components/AccountSheet';
+import { RulesLink } from '@/components/RulesLink';
 import { useStableWindow } from '@/lib/viewport';
 import { useStamp } from '@/lib/freshness';
 import { lazy, Suspense } from 'react';
@@ -81,6 +82,7 @@ export default function Pedidos() {
       </>}>
       <View style={{ flex: 1, gap: S.sm }}>
       <SalesSummary orders={orders} compact={short} />
+      <RulesLink from="home" />
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : error ? <ErrorText>{error}</ErrorText> : null}
       {orders !== null && !sessionError && <Suspense fallback={null}><PushCard role="seller" compact={short} onSessionError={(m) => { setError(m); setSessionError(true); }} /></Suspense>}
