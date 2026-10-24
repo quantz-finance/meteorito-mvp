@@ -67,6 +67,21 @@ export const COPY = {
     promote: 'Promocionar este producto',
     promoteText: 'Pronto podrás promocionar tus productos: aparecerán en el bloque Patrocinado de Comprar, donde los ven más compradores. Por ahora no se cobra nada y no tienes que hacer nada.',
   },
+  // Plantilla de anuncio e historial de ventas (lib/sellerTools.ts). Copy final aprobado por Neo.
+  adTemplate: {
+    title: 'Plantilla de anuncio', copy: 'Copiar anuncio', copied: 'Anuncio copiado',
+    custody: 'Pago en custodia con Meteorito (beta en testnet, sin dinero real): el pago queda en un contrato de escrow en Stellar y se libera cuando quien compra da su PIN de entrega, o por tiempo si no abre una disputa antes. Meteorito no verifica el producto.',
+    payHere: (link: string) => `Paga aquí, sin crear cuenta: ${link}`,
+  },
+  salesHistory: {
+    title: 'Historial de ventas', subtitle: 'Tus ventas con su estado y lo que cobraste.',
+    cobrado: 'Cobrado', parcial: 'Cobro parcial', reembolsado: 'Reembolsado', cancelado: 'Sin venta', disputaResuelta: 'Disputa resuelta', enCurso: 'En curso',
+  },
+  // Vender → Importar de un link. El error no nombra al proveedor (api/_lib/importers/providers.ts IMPORT_FAILED es el mismo texto; t65 lo revisa).
+  importLink: {
+    title: 'Importar de un link', label: 'Pega el link de tu anuncio',
+    failed: 'Todavía no podemos leer ese link. Tómale foto a tu anuncio y súbela.',
+  },
   myStore: { confirmIdentity: 'Confirma tu identidad' },
   activity: {
     online: 'En línea',

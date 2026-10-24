@@ -3,6 +3,7 @@
 // Ni el link ni el título van a analítica: solo proveedor, resultado y banderas.
 import { api, guestApi } from './api';
 import type { MeteoritoAuth } from './types';
+import { COPY } from './copy';
 import { checkListingUrl, IMPORT_FAILED, SUPPORTED, type ProviderId } from '../api/_lib/importers/providers'; // pura y chica
 export { checkListingUrl, IMPORT_FAILED, IMPORT_URL_INVALID, SUPPORTED } from '../api/_lib/importers/providers';
 
@@ -25,7 +26,7 @@ export function detectProvider(raw: string): { id: ProviderId; name: string; ico
   return c.ok ? { id: c.provider.id, name: c.provider.id === 'web' ? new URL(c.url).hostname.replace(/^www\./, '') : c.provider.name, icon: PROVIDER_ICON[c.provider.id], blocked: c.provider.status === 'blocked' } : null;
 }
 /** Proveedor que no deja leer sus anuncios desde nuestros servidores: se avisa al pegar, sin intentar. */
-export const blockedNotice = (name: string) => `Todavía no podemos leer anuncios de ${name}; súbelo con la cámara.`;
+export const blockedNotice = (_name?: string) => COPY.importLink.failed; // no nombra al proveedor
 
 export async function importFromLink(auth: MeteoritoAuth, raw: string): Promise<ListingImport> {
   const chk = checkListingUrl(raw);

@@ -12,7 +12,8 @@ import { userMessage } from '@/lib/cavosSession';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { blockedNotice, checkListingUrl, detectProvider, importFromLink, importNotice, importProps, IMPORT_FAILED, PROVIDER_ICON, SUPPORTED, supportedLabel, type ListingImport } from '@/lib/listingImport';
+import { COPY } from '@/lib/copy';
+import { blockedNotice, checkListingUrl, detectProvider, importFromLink, importNotice, importProps, IMPORT_FAILED, PROVIDER_ICON, SUPPORTED, type ListingImport } from '@/lib/listingImport';
 import { useStableWindow } from '@/lib/viewport';
 import { ui } from '@/components/ui';
 import { BetaNotice, RulesHint } from '@/components/RulesLink';
@@ -258,10 +259,10 @@ function VenderForm() {
           <Pressable onPress={() => { haptic.tap(); setFbNotice(null); setSource(null); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar aviso" style={s.fbClose}><Icon name="close" size={18} color={C.textDim} /></Pressable>
         </Card>
       ) : (
-        <Pressable onPress={() => { haptic.tap(); setFbErr(null); setFbOpen(true); }} accessibilityRole="button" accessibilityLabel="Importar de un link"
+        <Pressable onPress={() => { haptic.tap(); setFbErr(null); setFbOpen(true); }} accessibilityRole="button" accessibilityLabel={COPY.importLink.title}
           style={({ pressed }) => [s.fbBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
           <Icon name="link" size={20} color={C.lilac} />
-          <Text style={[T.headline, { color: C.lilac, fontSize: 15, flex: 1 }]} numberOfLines={1}>Importar de un link</Text>
+          <Text style={[T.headline, { color: C.lilac, fontSize: 15, flex: 1 }]} numberOfLines={1}>{COPY.importLink.title}</Text>
           <View style={s.provIcons} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             {SUPPORTED.slice(0, 3).map((p) => <Icon key={p.id} name={PROVIDER_ICON[p.id] as IconName} size={14} color={C.textDim} />)}
           </View>
@@ -350,14 +351,14 @@ function VenderForm() {
           : 'Envío: el plazo cuenta desde que tocas "Ya lo envié".'} Si el comprador no reporta un problema, el pago se libera al terminar el plazo. Lo ve antes de pagar.</Text>
       </Sheet>
 
-      <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de un link"
+      <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title={COPY.importLink.title}
         footer={<PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim() || !!detected?.blocked} onPress={runImport} />}>
         <Text style={T.callout}>Abre tu anuncio, toca Compartir y copia el link. Pégalo aquí: llenamos el nombre, el precio y las fotos para que solo revises.</Text>
         <View style={s.provRow} testID="import-providers">
           {SUPPORTED.slice(0, 5).map((p) => <View key={p.id} style={s.provBadge} accessibilityLabel={p.name}><Icon name={PROVIDER_ICON[p.id] as IconName} size={16} color={C.lilac} /></View>)}
-          <Text style={[T.footnote, { flex: 1 }]} numberOfLines={2}>{supportedLabel()}</Text>
+          <Text style={[T.footnote, { flex: 1 }]} numberOfLines={2}>{COPY.importLink.label}</Text>
         </View>
-        <TextInput style={[ui.input, fbErr && s.inputErr]} placeholder="Pega el link de tu anuncio" placeholderTextColor={C.textDim} value={fbUrl}
+        <TextInput style={[ui.input, fbErr && s.inputErr]} placeholder={COPY.importLink.label} placeholderTextColor={C.textDim} value={fbUrl}
           onChangeText={(v) => { setFbUrl(v); if (fbErr) setFbErr(null); }} autoCapitalize="none" autoCorrect={false} keyboardType="url" inputMode="url"
           returnKeyType="go" onSubmitEditing={runImport} editable={!fbBusy} autoFocus accessibilityLabel="Link del anuncio" />
         {fbBusy ? (

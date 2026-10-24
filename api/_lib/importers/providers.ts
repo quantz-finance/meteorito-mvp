@@ -31,7 +31,7 @@ export function providerForHost(host: string): Provider | null {
 export const isShortLink = (host: string) => PROVIDERS.some((p) => (p.short ?? []).some((b) => under(host.toLowerCase(), b)));
 
 export const IMPORT_URL_INVALID = 'Pega el link completo de tu anuncio (empieza con https://).';
-export const IMPORT_FAILED = 'No pudimos leer ese link; súbelo con la cámara.';
+export const IMPORT_FAILED = 'Todavía no podemos leer ese link. Tómale foto a tu anuncio y súbela.'; // = COPY.importLink.failed (lib/copy.ts); sin nombrar al proveedor
 
 /** Texto pegado -> primera URL https pública con pinta de anuncio. Acepta texto alrededor ("Mira esto: https://…") y sin https://. */
 export function checkListingUrl(input: unknown): { ok: true; url: string; provider: Provider } | { ok: false; url: null; error: string } {
