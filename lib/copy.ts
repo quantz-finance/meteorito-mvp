@@ -16,6 +16,13 @@ export const COPY = {
     emptyConfirmedText: 'Aquí verás a los vendedores con identidad confirmada. Mientras tanto, mira las de Sin confirmar: con cualquier vendedor tu pago queda en custodia hasta que recibas.',
     seeUnconfirmed: 'Ver Sin confirmar', seeConfirmed: 'Ver Identidad confirmada',
     searchOther: (label: string) => `Buscar en ${label}`,
+    // Vistas del feed: Para ti (el feed con el algoritmo, por defecto) y Siguiendo (solo las tiendas que sigues).
+    forYou: 'Para ti', following: 'Siguiendo', viewsLabel: 'Qué publicaciones ver',
+    followingEmptyTitle: 'Aún no sigues tiendas',
+    followingEmptyText: 'Cuando sigas una, sus publicaciones aparecen aquí.',
+    followingNoneTitle: 'Nada nuevo de las tiendas que sigues',
+    followingNoneText: (label: string) => `Las tiendas que sigues no tienen publicaciones en ${label}.`,
+    seeForYou: 'Ver Para ti',
   },
   sales: {
     sheetTitle: 'Es un ejemplo',

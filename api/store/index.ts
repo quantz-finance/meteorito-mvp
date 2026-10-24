@@ -9,6 +9,9 @@
 //                                                 + sponsored: bloque Patrocinado (024), solo en la 1.ª página, [] si no hay
 //  POST { action:'feed', q?, verified?, cursor?, limit? } (X-Guest-Key y/o Bearer) -> el mismo feed con el algoritmo y el
 //                                                 impulso de los vendedores que SIGUE quien pide (022). Sin caché.
+//       [view:'following']                       -> "Siguiendo": SOLO publicaciones de las tiendas que sigue quien pide (misma
+//                                                 identidad que seguir: cuenta y/o llave del dispositivo), con filtro y búsqueda;
+//                                                 sin productos de ejemplo (ej-) ni Patrocinado. No sigue a nadie -> items [].
 //  GET  ?profile=<usuario>                        -> perfil público del vendedor (/t/<usuario>): tienda + verificado, ventas, followers (SOLO el número; nunca quiénes, ni al dueño: t86),
 //                                                 miembro desde, reseñas y WhatsApp (wa.me) SOLO si el vendedor lo puso.
 //  GET  ?seller_of=<pedido>                       -> vendedor de un pedido/link para la ficha /p/<slug>: nombre, foto,
@@ -335,7 +338,14 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'feed') {
       const who = await requireBuyerIdentity(req);
-      const page = await withSponsored(await feedWithDemo({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed: await followedSellerSubs(who.ids) }), b);
+      if (b.view != null && b.view !== 'for_you' && b.view !== 'following') throw Object.assign(new HttpError(400, 'Vista inválida.'), { code: 'bad_view' });
+      const followed = await followedSellerSubs(who.ids);
+      if (b.view === 'following') { // Siguiendo: solo las tiendas que sigue; sin ejemplos ni Patrocinado.
+        const page = await feedPage({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed, onlyFollowed: true });
+        res.setHeader?.('Cache-Control', 'private, no-store');
+        return json(res, 200, { ...page, items: page.items.filter((i: any) => !looksLikeDemoProduct(i.slug) && !i.seller?.demo), sponsored: [], view: 'following' });
+      }
+      const page = await withSponsored(await feedWithDemo({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed }), b);
       res.setHeader?.('Cache-Control', 'private, no-store');
       return json(res, 200, page);
     }
