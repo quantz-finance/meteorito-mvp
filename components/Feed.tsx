@@ -1,26 +1,30 @@
-// Feed de Comprar (tipo red social): publicaciones de los vendedores, lo más nuevo primero, con buscador, filtro por
-// identidad (Identidad confirmada por defecto / Sin confirmar / Todos; textos en lib/copy.ts), paginación infinita por cursor, skeletons y estados
-// vacíos. Lecturas públicas: GET /api/store?feed (caché corta, sin datos privados).
+// Feed de Comprar (tipo red social): publicaciones de los vendedores en una cuadrícula de 2 columnas, lo más nuevo primero,
+// con buscador, filtro por identidad en dos mitades iguales (Identidad confirmada por defecto / Sin confirmar; textos en
+// lib/copy.ts), paginación infinita por cursor, skeletons y estados vacíos. Lecturas públicas: GET /api/store?feed.
+// Ventas cerradas: hoy solo EJEMPLOS ficticios con etiqueta "Ejemplo" (lib/feedSales.ts, FEED_DEMO_SALES), 1 de cada 6.
 import { COPY } from '@/lib/copy';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { haptic, Icon, PrimaryButton, Skeleton, type IconName } from '@/components/ds';
+import { haptic, Icon, PrimaryButton, Sheet, Skeleton, type IconName } from '@/components/ds';
 import { StoreAvatar } from '@/components/StoreAvatar';
-import { StarsInline, VerifiedBadge } from '@/components/SellerBits';
+import { StarRow, VerifiedBadge } from '@/components/SellerBits';
 import { pressTransition } from '@/constants/motion';
 import { Fonts } from '@/constants/Colors';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { track } from '@/lib/analytics';
 import { formatCRC } from '@/lib/orders';
 import { FEED_ERROR, getFeed, type FeedItem, type VerifiedFilter } from '@/lib/store';
-import { timeAgo } from '@/lib/timeago';
+import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
 
 export const SEARCH_DEBOUNCE_MS = 300;
 const PAGE = 10;
-const FILTERS: { key: VerifiedFilter; label: string; icon?: IconName }[] = [
-  { key: 'true', label: COPY.filters.confirmed, icon: 'checkmark-circle' }, { key: 'false', label: COPY.filters.unconfirmed }, { key: 'all', label: COPY.filters.all },
+/** Dos mitades iguales: Identidad confirmada / Sin confirmar. */
+const FILTERS: { key: VerifiedFilter; label: string }[] = [
+  { key: 'true', label: COPY.filters.confirmed }, { key: 'false', label: COPY.filters.unconfirmed },
 ];
+const other = (f: VerifiedFilter) => FILTERS.find((x) => x.key !== f)!;
+type Cell = FeedItem | SalePost | { kind: 'filler'; id: string };
 
 export function Feed({ header }: { header: ReactElement }) {
   const [filter, setFilter] = useState<VerifiedFilter>('true');
@@ -30,6 +34,7 @@ export function Feed({ header }: { header: ReactElement }) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [more, setMore] = useState(false);
+  const [example, setExample] = useState(false);
   const req = useRef(0);
   const viewed = useRef(false);
 
@@ -72,14 +77,13 @@ export function Feed({ header }: { header: ReactElement }) {
         {text ? <Pressable onPress={clear} accessibilityRole="button" accessibilityLabel={COPY.feed.clear} hitSlop={10} style={s.clear}>
           <Icon name="close-circle" size={20} color={C.textDim} /></Pressable> : null}
       </View>
-      <View style={s.chips} accessibilityRole="tablist">
+      <View style={s.seg} accessibilityRole="tablist" testID="feed-filter">
         {FILTERS.map((f) => {
           const on = f.key === filter;
           return (
             <Pressable key={f.key} onPress={() => pick(f.key)} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} accessibilityLabel={f.label}
-              style={({ pressed }) => [s.chip, on && s.chipOn, pressed && { opacity: 0.85 }]}>
-              {f.icon ? <Icon name={f.icon} size={15} color={on ? C.purpleDark : C.lilac} /> : null}
-              <Text style={[s.chipText, on && { color: C.purpleDark }]} numberOfLines={1}>{f.label}</Text>
+              style={({ pressed }) => [s.segBtn, on && s.segOn, pressed && { opacity: 0.85 }]}>
+              <Text style={[s.segText, on && { color: C.purpleDark }]} numberOfLines={1}>{f.label}</Text>
             </Pressable>
           );
         })}
@@ -93,9 +97,9 @@ export function Feed({ header }: { header: ReactElement }) {
   else if (phase === 'error') empty = <EmptyState icon="cloud-offline-outline" title="No pudimos cargar el feed" text={FEED_ERROR} actions={<PrimaryButton title="Reintentar" icon="refresh" variant="secondary" onPress={load} />} />;
   else if (q) empty = (
     <EmptyState icon="search" title={`No encontramos “${q.length > 24 ? q.slice(0, 24) + '…' : q}”`}
-      text={filter === 'all' ? 'Revisa cómo lo escribiste o prueba con una palabra más general, por ejemplo “consola” o “bici”.' : 'Puede que esté en otra lista: busca en Todos o prueba con una palabra más general.'}
+      text="Puede que esté en la otra lista. También puedes probar con una palabra más general, por ejemplo “consola” o “bici”."
       actions={<>
-        {filter !== 'all' ? <PrimaryButton title="Buscar en Todos" icon="albums-outline" onPress={() => setFilter('all')} /> : null}
+        <PrimaryButton title={COPY.feed.searchOther(other(filter).label)} icon="swap-horizontal" onPress={() => setFilter(other(filter).key)} />
         <PrimaryButton title={COPY.feed.clear} icon="close" variant="secondary" onPress={clear} />
         <PrimaryButton title="Pídeselo a un vendedor" icon="paper-plane-outline" variant="ghost" onPress={() => router.push('/i/nueva')} />
       </>} />
@@ -103,22 +107,35 @@ export function Feed({ header }: { header: ReactElement }) {
   else if (filter === 'true') empty = (
     <EmptyState icon="checkmark-circle" title={COPY.feed.emptyConfirmedTitle}
       text={COPY.feed.emptyConfirmedText}
-      actions={<PrimaryButton title="Ver todos" icon="albums-outline" onPress={() => setFilter('all')} />} />
+      actions={<PrimaryButton title={COPY.feed.seeUnconfirmed} icon="swap-horizontal" onPress={() => setFilter('false')} />} />
   );
   else empty = (
     <EmptyState icon="planet-outline" title="Todavía no hay publicaciones"
-      text={filter === 'false' ? 'Mira la lista de Todos o vuelve en un rato.' : 'Cuando los vendedores publiquen sus productos, los verás aquí. ¿Buscas algo? Pídeselo a un vendedor.'}
-      actions={filter === 'false' ? <PrimaryButton title="Ver todos" icon="albums-outline" onPress={() => setFilter('all')} />
-        : <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" variant="secondary" onPress={() => router.push('/i/nueva')} />} />
+      text="Mira la lista de Identidad confirmada o vuelve en un rato. ¿Buscas algo? Pídeselo a un vendedor."
+      actions={<>
+        <PrimaryButton title={COPY.feed.seeConfirmed} icon="swap-horizontal" onPress={() => setFilter('true')} />
+        <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" variant="secondary" onPress={() => router.push('/i/nueva')} />
+      </>} />
   );
 
+  // Ventas cerradas de ejemplo mezcladas (1 de cada 6, mismo filtro); relleno invisible si queda una sola en la última fila.
+  const mixed: Cell[] = phase === 'ready' ? mixFeed<FeedItem>(items, filter, q) : [];
+  const cells: Cell[] = mixed.length % 2 ? [...mixed, { kind: 'filler', id: 'filler' }] : mixed;
   return (
-    <FlatList data={phase === 'ready' ? items : []} keyExtractor={(i) => i.slug} style={{ flex: 1 }}
-      renderItem={({ item, index }) => <FeedCard item={item} index={index} filter={filter} />}
+    <>
+    <FlatList data={cells} keyExtractor={(i) => ('slug' in i ? i.slug : i.id)} style={{ flex: 1 }} numColumns={2} columnWrapperStyle={s.row}
+      renderItem={({ item, index }) => 'slug' in item ? <FeedCard item={item} index={index} filter={filter} />
+        : isSale(item) ? <SaleCard post={item} onPress={() => { haptic.tap(); track('feed_item_clicked', { target: 'sale_example', position: index, verified: item.verified, filter }); setExample(true); }} />
+        : <View style={s.cell} />}
       ItemSeparatorComponent={Sep} ListHeaderComponent={top} ListEmptyComponent={empty}
       ListFooterComponent={more ? <ActivityIndicator color={C.lilac} style={{ marginVertical: S.lg }} /> : <View style={{ height: S.xl }} />}
       onEndReached={loadMore} onEndReachedThreshold={0.6} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
-      showsVerticalScrollIndicator={false} initialNumToRender={4} windowSize={7} testID="feed" />
+      showsVerticalScrollIndicator={false} initialNumToRender={6} windowSize={7} testID="feed" />
+    <Sheet visible={example} onClose={() => setExample(false)} title={COPY.sales.sheetTitle}
+      footer={<PrimaryButton title={COPY.sales.sheetOk} icon="checkmark" onPress={() => setExample(false)} />}>
+      <Text style={T.callout}>{COPY.sales.sheetText}</Text>
+    </Sheet>
+    </>
   );
 }
 const Sep = () => <View style={{ height: S.md }} />;
@@ -132,58 +149,67 @@ function openItem(it: FeedItem, index: number, filter: VerifiedFilter, target: '
   router.push({ pathname: '/p/[slug]', params: { slug: it.slug } });
 }
 
+/** Tarjeta compacta (media columna): foto, título, precio y vendedor con su check de identidad. */
 export const FeedCard = memo(function FeedCard({ item: it, index, filter }: { item: FeedItem; index: number; filter: VerifiedFilter }) {
   const [broken, setBroken] = useState(false);
   return (
-    <View style={s.card} testID="feed-card">
-      <View style={s.cardHead}>
-        <Pressable onPress={() => openSeller(it, index, filter)} accessibilityRole="link" accessibilityLabel={`Ver el perfil de ${it.seller.display_name}`}
-          hitSlop={4} style={({ pressed }) => [s.who, pressed && { opacity: 0.8 }]}>
-          <StoreAvatar store={it.seller} size={40} />
-          <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={[T.headline, { flexShrink: 1 }]} numberOfLines={1}>{it.seller.display_name}</Text>
-              {it.seller.verified ? <VerifiedBadge size={16} /> : null}
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.xs }}>
-              <StarsInline avg={it.seller.rating_avg} count={it.seller.rating_count} />
-              <Text style={T.footnote}>·</Text>
-              <Text style={T.footnote} numberOfLines={1}>{timeAgo(it.created_at)}</Text>
-            </View>
-          </View>
-        </Pressable>
-      </View>
+    <View style={[s.cell, s.card]} testID="feed-card">
       <Pressable onPress={() => openItem(it, index, filter, 'product')} accessibilityRole="link" accessibilityLabel={`${it.title}, ${formatCRC(it.price_crc)}`}
         style={({ pressed }) => [pressTransition, pressed && { opacity: 0.92 }]}>
         {it.photo && !broken
           ? <Image source={{ uri: it.photo }} style={s.photo} resizeMode="cover" onError={() => setBroken(true)} accessibilityIgnoresInvertColors />
-          : <View style={[s.photo, s.noPhoto]}><Icon name="image-outline" size={40} color={C.lilac} /></View>}
-      </Pressable>
-      <View style={s.cardBody}>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text style={T.body} numberOfLines={2}>{it.title}</Text>
+          : <View style={[s.photo, s.noPhoto]}><Icon name="image-outline" size={32} color={C.lilac} /></View>}
+        <View style={s.cardBody}>
+          <Text style={s.title} numberOfLines={2}>{it.title}</Text>
           <Text style={T.moneySm} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
         </View>
-        <Pressable onPress={() => openItem(it, index, filter, 'cta')} accessibilityRole="button" accessibilityLabel={`Comprar ${it.title}`}
-          style={({ pressed }) => [s.cta, pressTransition, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}>
-          <Icon name="bag-handle-outline" size={18} color={C.purpleDark} />
-          <Text style={s.ctaText}>Comprar</Text>
-        </Pressable>
-      </View>
+      </Pressable>
+      <Pressable onPress={() => openSeller(it, index, filter)} accessibilityRole="link" accessibilityLabel={`Ver el perfil de ${it.seller.display_name}`}
+        hitSlop={4} style={({ pressed }) => [s.who, pressed && { opacity: 0.8 }]}>
+        <StoreAvatar store={it.seller} size={22} />
+        <Text style={[T.footnote, { color: C.text, flexShrink: 1 }]} numberOfLines={1}>{it.seller.display_name}</Text>
+        {it.seller.verified ? <VerifiedBadge size={14} /> : null}
+      </Pressable>
     </View>
   );
 });
 
-export function FeedSkeleton() {
+/** Venta cerrada (hoy solo ejemplos ficticios): foto, quién le vendió a quién, estrellas y comentario. Sin montos. */
+export const SaleCard = memo(function SaleCard({ post: p, onPress }: { post: SalePost; onPress: () => void }) {
+  const [broken, setBroken] = useState(false);
   return (
-    <View style={s.card} testID="feed-skeleton">
-      <View style={[s.cardHead, { gap: S.sm, flexDirection: 'row', alignItems: 'center' }]}>
-        <Skeleton w={40} h={40} r={20} /><View style={{ flex: 1, gap: 6 }}><Skeleton w="50%" h={14} /><Skeleton w="35%" h={12} /></View>
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={saleLabel(p)} testID="feed-sale"
+      style={({ pressed }) => [s.cell, s.card, pressTransition, pressed && { opacity: 0.92 }]}>
+      <View>
+        {p.photo && !broken
+          ? <Image source={{ uri: p.photo }} style={s.photo} resizeMode="cover" onError={() => setBroken(true)} accessibilityIgnoresInvertColors />
+          : <View style={[s.photo, s.noPhoto]}><Icon name={p.icon as IconName} size={40} color={C.lilac} /></View>}
+        <View style={s.example} testID="feed-sale-example"><Text style={s.exampleText}>{COPY.sales.example}</Text></View>
       </View>
-      <Skeleton h={220} r={0} />
-      <View style={[s.cardBody, { gap: S.sm }]}><View style={{ flex: 1, gap: 6 }}><Skeleton w="70%" h={14} /><Skeleton w="40%" h={18} /></View><Skeleton w={110} h={TOUCH} r={R.pill} /></View>
+      <View style={s.cardBody}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Icon name="bag-check-outline" size={14} color={C.success} />
+          <Text style={[T.footnote, { color: C.text, flexShrink: 1 }]} numberOfLines={2}>{saleHeadline(p)}</Text>
+          {p.verified ? <VerifiedBadge size={14} /> : null}
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          <StarRow value={p.stars} size={13} />
+          <Text style={T.footnote} numberOfLines={1}>{saleStars(p.stars)}</Text>
+        </View>
+        {p.comment ? <Text style={[T.footnote, { fontStyle: 'italic' }]} numberOfLines={2}>“{p.comment}”</Text> : null}
+      </View>
+    </Pressable>
+  );
+});
+
+export function FeedSkeleton() {
+  const half = (
+    <View style={[s.cell, s.card]} testID="feed-skeleton">
+      <Skeleton h={150} r={0} />
+      <View style={[s.cardBody, { gap: 6 }]}><Skeleton w="85%" h={14} /><Skeleton w="50%" h={16} /><Skeleton w="60%" h={12} /></View>
     </View>
   );
+  return <View style={s.row}>{half}{half}</View>;
 }
 
 function EmptyState({ icon, title, text, actions }: { icon: IconName; title: string; text: string; actions?: ReactElement }) {
@@ -201,18 +227,22 @@ const s = StyleSheet.create({
   search: { flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.surface, borderRadius: R.md, paddingLeft: S.md, minHeight: TOUCH + 4, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   searchInput: { flex: 1, minWidth: 0, color: C.text, fontFamily: Fonts.regular, fontSize: 16, minHeight: TOUCH + 4, paddingVertical: 0, outlineStyle: 'none' } as any,
   clear: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 14, borderRadius: R.pill, borderWidth: 1, borderColor: 'rgba(201,182,255,0.4)' },
-  chipOn: { backgroundColor: C.lilac, borderColor: C.lilac },
-  chipText: { fontFamily: Fonts.bold, fontSize: 14, color: C.lilac },
+  // Filtro: dos mitades iguales (mismo ancho y alto).
+  seg: { flexDirection: 'row', padding: 3, gap: 3, borderRadius: R.pill, borderWidth: 1, borderColor: 'rgba(201,182,255,0.4)' },
+  segBtn: { flex: 1, flexBasis: 0, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: TOUCH, paddingHorizontal: 2, borderRadius: R.pill },
+  segOn: { backgroundColor: C.lilac },
+  segText: { fontFamily: Fonts.bold, fontSize: 14, color: C.lilac, flexShrink: 1 },
+  // Cuadrícula de 2 columnas: cada celda es la mitad (flexBasis 0), también la última si queda sola (relleno invisible).
+  row: { flexDirection: 'row', gap: S.sm },
+  cell: { flex: 1, flexBasis: 0, minWidth: 0 },
   card: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 0.5, borderColor: C.line },
-  cardHead: { padding: S.sm + 4 },
-  who: { flexDirection: 'row', alignItems: 'center', gap: S.sm, alignSelf: 'flex-start', maxWidth: '100%' },
-  photo: { width: '100%', aspectRatio: 4 / 3, backgroundColor: C.lilacBg },
+  who: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: S.sm, paddingBottom: S.sm, minHeight: 32 },
+  photo: { width: '100%', aspectRatio: 1, backgroundColor: C.lilacBg },
   noPhoto: { alignItems: 'center', justifyContent: 'center' },
-  cardBody: { flexDirection: 'row', alignItems: 'center', gap: S.sm, padding: S.sm + 4 },
-  cta: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: TOUCH, paddingHorizontal: S.md, borderRadius: R.pill, backgroundColor: C.lilac },
-  ctaText: { fontFamily: Fonts.bold, fontSize: 15, color: C.purpleDark },
+  cardBody: { gap: 2, paddingHorizontal: S.sm, paddingTop: S.sm, paddingBottom: S.xs + 2 },
+  title: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 19, color: C.text },
+  example: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: R.pill, backgroundColor: 'rgba(20,10,40,0.72)' },
+  exampleText: { fontFamily: Fonts.bold, fontSize: 12, color: C.text, letterSpacing: 0.3 },
   empty: { alignItems: 'center', gap: S.sm, paddingVertical: S.lg, paddingHorizontal: S.sm },
   emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center', marginBottom: S.xs },
 });
