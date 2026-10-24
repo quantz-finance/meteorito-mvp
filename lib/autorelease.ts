@@ -2,11 +2,15 @@
 import { useEffect, useState } from 'react';
 import { DEMO_AUTO_RELEASE_MINUTES, DEMO_ENABLED } from './demo';
 
-export const DEFAULT_AUTO_RELEASE_MINUTES = 1440;
+export const DEFAULT_AUTO_RELEASE_MINUTES = 10080; // 7 días (igual que el servidor)
 
-/** 1440 -> "24 h", 90 -> "1 h 30 min", 10 -> "10 min". */
+/** 10080 -> "7 días", 1440 -> "1 día", 9000 -> "6 días 6 h", 90 -> "1 h 30 min", 10 -> "10 min". */
 export function formatWindow(min: number): string {
   const m = Number.isFinite(min) && min > 0 ? Math.round(min) : DEFAULT_AUTO_RELEASE_MINUTES;
+  if (m >= 1440) {
+    const d = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60);
+    return `${d} ${d === 1 ? 'día' : 'días'}${hh ? ` ${hh} h` : ''}`;
+  }
   const h = Math.floor(m / 60), r = m % 60;
   if (!h) return `${r} min`;
   return r ? `${h} h ${r} min` : `${h} h`;

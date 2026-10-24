@@ -1,6 +1,7 @@
 // Build REAL + backend simulado (scripts/e2e/mock-server.mjs): el comprador sin cuenta tal como corre en producción.
 import { test, expect, type Page } from '@playwright/test';
 import { reset, state, patch, failNext, calls, MOCK_PIN } from './mock';
+import { PAID } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -14,7 +15,8 @@ async function payAsGuest(page: Page) {
   await expect(page).toHaveURL(/\/p\/h[0-9a-f]{5}\?pay=1/);
   await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
   await page.getByText('Ya pagué', { exact: true }).click();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
   return page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
 }
 
@@ -67,7 +69,8 @@ test('MCK-LIM-03 botón atrás en medio del pago: vuelve a la tienda y al reabri
   await expect(page.getByText('Ver mi pedido')).toBeVisible();
   await page.getByText(/Pagar en custodia/).last().click();
   await page.getByText('Ya pagué', { exact: true }).click();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
   expect((await childOf(request)).length).toBe(1);
 });
 
@@ -81,7 +84,8 @@ test('MCK-LIM-02 doble toque en "Pagar" y en "Ya pagué": una sola llamada y el 
   expect((await calls(request, '/api/escrow/pay', 'start')).filter((c: any) => c.slug === 'prod01').length).toBe(1);
   await failNext(request, { path: '/api/escrow/pay', step: 'confirm_sinpe', delayMs: 600 });
   await page.getByText('Ya pagué', { exact: true }).dblclick();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
   expect((await calls(request, '/api/escrow/pay', 'confirm_sinpe')).length).toBe(1);
 });
 
@@ -97,7 +101,8 @@ test('MCK-LIM-01 sin red al tocar "Ya pagué": mensaje claro, sin cambio; con re
   expect(kid.status).toBe('escrow_creado');
   await context.setOffline(false);
   await page.getByText('Ya pagué', { exact: true }).click();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
 });
 
 test('MCK-API-01 error 500 del API al iniciar el pago: mensaje y reintento sin pedido duplicado', async ({ page, request }) => {
@@ -125,6 +130,23 @@ test('MCK-PIN-01 PIN bloqueado: vencido el plazo NO se libera solo', async ({ pa
   await page.waitForTimeout(1500);
   expect((await state(request)).orders.ord001.status).toBe('enviado');
   await expect(page.getByText('Pago liberado')).toHaveCount(0);
+});
+
+test('MCK-SHP-01 comprador: código oculto hasta el envío; luego "Va en camino", foto y código (build real)', async ({ page, request }) => {
+  await reset(request, [listing]);
+  const slug = await payAsGuest(page);
+  await page.goto(`/p/${slug}`);
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
+  const photo = 'data:image/png;base64,' + readFileSync(resolve(__dirname, '../scripts/demo/assets/producto-demo.png')).toString('base64');
+  await patch(request, slug, { status: 'enviado', shipped_tx: 's'.repeat(64), auto_release_at: new Date(Date.now() + 7 * 86_400_000).toISOString(), ship_evidence: { at: new Date().toISOString(), photo } });
+  await page.reload();
+  await expect(page.getByText('Va en camino')).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText('Dáselo al vendedor cuando lo recibas.')).toBeVisible();
+  await expect(page.getByTestId('ship-photo')).toBeVisible();
+  const pub = await (await request.get(`http://localhost:8084/sb/rest/v1/public_orders?slug=eq.${slug}`)).json();
+  expect(JSON.stringify(pub)).not.toContain('ship_evidence'); // la foto no va a la vista pública
 });
 
 for (const [pct, label] of [[100, 'Reembolsado'], [0, 'Disputa resuelta: pago al vendedor'], [40, 'Disputa resuelta: 40 % reembolsado']] as const) {
@@ -330,7 +352,8 @@ test('MCK-CARD-01 invitado paga con tarjeta aprobada en nuestro formulario: proc
   await failNext(request, { path: '/api/escrow/pay', step: 'card_pay', delayMs: 1200 }); // ver el estado "procesando"
   await page.getByTestId('card-pay').click();
   await expect(page.getByTestId('card-processing')).toBeVisible();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(PAID).first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
   const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
   expect((await state(request)).orders[slug].status).toBe('fondeado');
   const pays = await calls(request, '/api/escrow/pay', 'card_pay');
@@ -355,7 +378,8 @@ test('MCK-CARD-02 tarjeta rechazada: "Tu tarjeta fue rechazada" y puede pagar po
   await page.getByText('Pagar por SINPE Móvil', { exact: true }).click();
   await expect(page.getByText('Paga por SINPE Móvil', { exact: true })).toBeVisible();
   await page.getByText('Ya pagué', { exact: true }).click();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
   await expectNoCardLeak(request, reqs);
 });
 
@@ -366,7 +390,8 @@ test('MCK-CARD-03 tarjeta demorada: procesando varios segundos y luego PIN (sin 
   await fillCard(page, NUM.delayed);
   await page.getByTestId('card-pay').click();
   await expect(page.getByTestId('card-processing')).toBeVisible();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(PAID).first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
   expect(await calls(request, '/api/escrow/pay', 'card_pay')).toHaveLength(1);
   expect((await calls(request, '/api/escrow/pay', 'card_confirm')).length).toBeGreaterThanOrEqual(3);
 });
@@ -439,7 +464,8 @@ test('MCK-CARD-08 respaldo LENDARA_MODE=widget: el widget (iframe) sigue funcion
   const w = page.frameLocator('iframe.lendara-frame');
   await w.locator('#n').fill('4242 4242 4242 4242');
   await w.getByText('Pagar', { exact: true }).click();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
   expect(await calls(request, '/api/escrow/pay', 'card_session')).toHaveLength(1);
   expect(await calls(request, '/api/escrow/pay', 'card_pay')).toHaveLength(0);
 });
@@ -459,7 +485,7 @@ test('MCK-TEL-01 "Contacta al vendedor" solo para el comprador y solo después d
   await expect(page.getByText('Contacta al vendedor')).toHaveCount(0); // pedido creado, sin pagar
   expect((await calls(request, '/api/store')).filter((c: any) => c.action === 'seller_contact')).toHaveLength(0);
   await page.getByText('Ya pagué', { exact: true }).click();
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
   const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
   await page.goto(`/p/${slug}`);
   await expect(page.getByText('Contacta al vendedor')).toBeVisible();

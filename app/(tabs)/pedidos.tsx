@@ -28,8 +28,8 @@ const PushCard = lazy(() => import('@/components/PushCard')); // diferido
 const NEXT_HINT: Record<string, string> = {
   creado: 'Comparte el link. Cuando el comprador pague, te avisamos acá.',
   escrow_creado: 'El comprador está pagando.',
-  fondeado: 'El dinero está apartado. Coordina la entrega y márcala como enviada.',
-  enviado: 'Al entregar, pídele el PIN al comprador para cobrar.',
+  fondeado: 'El dinero está apartado. Envíalo y toca "Ya lo envié".',
+  enviado: 'Cuando lo reciba, pídele al comprador su código de entrega para cobrar. Si no reporta un problema, el pago se libera solo 7 días después del envío.',
   entregado: 'Entregado. El pago se está liberando.',
   liberado: 'Cobrado. ¡Buena venta!',
   en_disputa: 'Estamos revisando un problema reportado. El pago está en pausa.',

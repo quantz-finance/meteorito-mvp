@@ -39,7 +39,7 @@ Meteorito is a hackathon-stage prototype. To be upfront about what it is and is 
 - Buyer-initiated deals: the buyer creates an invitation (`/i/nueva`), the seller confirms by publishing, the payment link is reserved for the inviter (`docs/buyer-invites.md`). Both sides see live status ("Actualizado hace Xs").
 - Sale links: seller creates a listing with photos (IMEI optional), buyer pays in USDC (testnet).
 - Escrow via [Trustless Work](https://www.trustlesswork.com) on Stellar (Soroban).
-- Delivery PIN (locked after 3 wrong attempts), auto-release after `AUTO_RELEASE_MINUTES`.
+- Delivery PIN (locked after 3 wrong attempts), auto-release `AUTO_RELEASE_MINUTES` after shipping (default 7 days; production ignores values below 1440).
 - Dispute flow with percentage split (manual resolver script for now).
 - Fee-bumped transactions so users don't need XLM.
 - Product analytics with PostHog (see `docs/tracking-plan.md`).

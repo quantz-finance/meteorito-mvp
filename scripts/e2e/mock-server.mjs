@@ -19,7 +19,7 @@ const base = (o) => ({ kind: 'single', listing_slug: null, listing_status: 'acti
   description: null, photos: [], identifier_masked: null, checks_summary: [], created_at: new Date().toISOString(), amount_usdc: null, contract_id: null, funded_tx: null, shipped_tx: null,
   released_tx: null, approval_reason: null, auto_release_at: null, disputed_at: null, dispute_tx: null, resolved_tx: null, resolution: null, buyer: null, pin_attempts: 0, ...o });
 S = fresh();
-const PRIV = ['buyer', 'pin_attempts'];
+const PRIV = ['buyer', 'pin_attempts', 'ship_evidence']; // la foto del envío solo la ve el comprador (step shipment)
 const pub = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !PRIV.includes(k)));
 const hex = (n) => Array.from({ length: n }, (_, i) => ((S.seq * 31 + i * 7) % 16).toString(16)).join('');
 
@@ -56,7 +56,7 @@ async function api(req, path, q, b) {
   const guest = String(req.headers['x-guest-key'] ?? '');
   const needGuest = () => { if (!/^[0-9a-f]{64}$/.test(guest)) throw E(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.', 'guest_key_missing'); };
   const get = (slug) => { const o = S.orders[slug]; if (!o) throw E(404, 'Pedido no encontrado', 'not_found'); return o; };
-  if (path === '/api/health') return { ok: true, config: { autoReleaseMinutes: 10 } };
+  if (path === '/api/health') return { ok: true, config: { autoReleaseMinutes: 10080 } };
   if (path === '/api/escrow/pay') {
     needGuest(); let o = get(String(b.slug));
     if (b.step === 'start') {
@@ -69,6 +69,11 @@ async function api(req, path, q, b) {
       if (!['creado', 'escrow_creado'].includes(o.status)) throw E(409, 'Este pedido ya no está disponible.', 'bad_state');
       Object.assign(o, { buyer: guest, status: 'escrow_creado', contract_id: o.contract_id ?? 'C' + 'E2E'.padEnd(55, 'A'), amount_usdc: Math.round(o.price_crc / 510 * 100) / 100 });
       return { slug: o.slug, contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` }, card: S.card, cardMode: S.cardMode, guest: true };
+    }
+    if (b.step === 'shipment') { // como api/escrow/pay: solo el comprador ve la foto del envío y el número de guía
+      if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
+      if (!['enviado', 'entregado', 'liberado', 'en_disputa', 'resuelto'].includes(o.status)) return { shipped: false };
+      const ev = o.ship_evidence ?? {}; return { shipped: true, at: ev.at ?? null, photo: ev.photo ?? null, note: ev.note ?? null };
     }
     if (b.step === 'confirm_sinpe') {
       if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');

@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 
 export const PHOTO = resolve(__dirname, '../scripts/demo/assets/producto-demo.png');
 export const DEMO_PIN = '482915';
+/** Tras pagar: el código de entrega NO se muestra hasta que el vendedor toca "Ya lo envié". */
+export const PAID = /Pagado\. Esperando que el vendedor lo envíe/;
 type Role = 'seller' | 'buyer';
 
 /** Abre una ruta del demo con el rol dado (badge oculto para medir layout real). */
