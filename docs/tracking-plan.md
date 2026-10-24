@@ -19,7 +19,10 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 | `sell_step_completed` | wizard Vender | `step` (0-3), `step_name` |
 | `sell_submit_tapped` | último paso | `step` |
 | `link_created` | link creado | `category`, `photos`, `price_bucket`, `from_facebook` |
-| `facebook_import` | Vender o Comprar (Invitar a un vendedor) → Importar de Facebook | `context` (`invite` si fue el comprador), `result` (success/partial/failed), `has_title`, `has_price`, `photos`, `has_description`, `converted`, `code` (solo si falló la llamada). Nunca la URL, el título, el precio ni el texto. |
+| `facebook_import` | Comprar (Invitar a un vendedor) → Importar de Facebook (Vender usa `import_*`) | `context` (`invite` si fue el comprador), `result` (success/partial/failed), `has_title`, `has_price`, `photos`, `has_description`, `converted`, `code` (solo si falló la llamada). Nunca la URL, el título, el precio ni el texto. |
+| `import_started` | Vender → Importar de un link → Importar | `provider` (facebook, mercadolibre, encuentra24, amazon, aliexpress, walmart, web…). Nunca la URL. |
+| `import_succeeded` | Vender → el link se leyó (success o partial) | `provider`, `result`, `has_title`, `has_price`, `photos`, `has_description`, `converted` (precio sugerido desde otra moneda). Sin URL, título ni precio. |
+| `import_failed` | Vender → no se pudo leer el link | `provider`, `code` (`wall` verificación/login, `provider_blocked`, `private_ip`, `timeout`, `http`, `bad_type`, `too_large`, `unreadable`, `import_url_invalid`, 401/429…). |
 | `invite_created` | Comprar → Crear invitación | `photos`, `from_facebook` |
 | `invite_shared` | Invitación → Enviar link al vendedor | `from_facebook` |
 | `photo_upload_failed` | venta / disputa | `context`, `index`, `precompressed`, `stage` (compress/sign/storage), `code`, `http_status`, `mime` |

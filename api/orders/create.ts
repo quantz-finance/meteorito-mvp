@@ -9,6 +9,7 @@ import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 import { cameraRequired, listingPhotoOk } from '../_lib/capture';
 import { inviteByCode, inviteErr, validCode } from '../_lib/invites';
 import { missingColumn } from '../_lib/listings';
+import { listingSource } from '../_lib/importers/providers';
 import { guestSubFromReq } from '../_lib/guest';
 import { validateAgreement } from '../_lib/agreement';
 
@@ -84,10 +85,13 @@ export default async function handler(req: any, res: any) {
     let kind: 'listing' | 'single' | null = invite || b.single === true ? 'single' : 'listing';
     // Sin la migración 017 las columnas del acuerdo no existen: se crea sin ellas (rige el default: envío, 7 días).
     let agreed: Record<string, unknown> = agreement;
+    // Importado de un link (Facebook, Mercado Libre, Encuentra24…): de dónde vino. Sin la migración 019 se crea sin esas columnas.
+    let source: Record<string, unknown> = listingSource(b.source_url, b.source_provider);
     for (let i = 0; i < 5; i++) {
       const s = slug();
-      const ins = () => db().from('orders').insert({ ...row, ...agreed, slug: s, ...(kind ? { kind } : {}) });
+      const ins = () => db().from('orders').insert({ ...row, ...agreed, ...source, slug: s, ...(kind ? { kind } : {}) });
       let { error } = await ins();
+      if (error && missingColumn(error) && Object.keys(source).length) { source = {}; ({ error } = await ins()); }
       if (error && missingColumn(error) && Object.keys(agreed).length) { agreed = {}; ({ error } = await ins()); }
       if (error && kind && missingColumn(error)) { kind = null; ({ error } = await ins()); }
       if (!error) {

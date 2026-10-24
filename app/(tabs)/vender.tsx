@@ -1,7 +1,7 @@
 // Vender: el link en UNA sola pantalla. Nombre del producto, precio en colones y fotos -> "Generar link".
 // El link aparece aquí mismo con Copiar y Compartir. Categoría, marca, modelo, estado e identificador ya no se piden.
-// "Importar de Facebook": pega el link de un anuncio de Marketplace y precarga nombre, precio, foto y descripción.
-// No crea nada solo: el vendedor revisa y toca "Generar link" (los datos leídos de FB pueden venir mal).
+// "Importar de un link": pega el link de tu anuncio (Facebook, Mercado Libre, Encuentra24, Amazon…) y precarga nombre,
+// precio, fotos y descripción. Detecta el proveedor al pegar. No crea nada solo: el vendedor revisa y toca "Generar link".
 // "Entrega y plazo": cara a cara o envío (default) y el plazo para liberar (24 h, 3 días, 7 días u otro, de 24 h a 30 días).
 // Fotos: SOLO con la cámara de la app en el momento (CameraCapture, token 'listing'); se suben al tomarlas. Excepción: la
 // foto del anuncio importado de Facebook (la guarda el servidor) y las fotos de la invitación del comprador.
@@ -12,12 +12,12 @@ import { userMessage } from '@/lib/cavosSession';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { checkFacebookUrl, fbImportNotice, fbImportProps, importFromFacebook, type FbImport } from '@/lib/fbImport';
+import { checkListingUrl, detectProvider, importFromLink, importNotice, importProps, IMPORT_FAILED, PROVIDER_ICON, SUPPORTED, supportedLabel, type ListingImport } from '@/lib/listingImport';
 import { useStableWindow } from '@/lib/viewport';
 import { ui } from '@/components/ui';
 import { BetaNotice, RulesHint } from '@/components/RulesLink';
 import { SELL_SUMMARY } from '@/lib/rules';
-import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet, SuccessCheck } from '@/components/ds';
+import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, SuccessCheck, type IconName } from '@/components/ds';
 import { Reveal } from '@/components/space';
 import { ShareLink } from '@/components/ShareLink';
 import { Fonts } from '@/constants/Colors';
@@ -67,14 +67,15 @@ function VenderForm() {
   const [d0] = useState(() => loadDraft(address));
   const [title, setTitle] = useState(d0?.title ?? '');
   const [price, setPrice] = useState(d0?.price ?? '');
-  const [description, setDescription] = useState<string | null>(d0?.description ?? null); // solo si vino de Facebook
+  const [description, setDescription] = useState<string | null>(d0?.description ?? null); // solo si vino de un link importado
   const [fbOpen, setFbOpen] = useState(false);
   const [fbUrl, setFbUrl] = useState('');
-  /** source_url canónico del anuncio importado: habilita en el servidor las fotos que guardó al importar (no se publica). */
-  const [importSource, setImportSource] = useState<string | null>(null);
   const [fbBusy, setFbBusy] = useState(false);
   const [fbErr, setFbErr] = useState<string | null>(null);
-  const [fbNotice, setFbNotice] = useState<{ title: string; body: string; failed: boolean } | null>(null);
+  const [fbNotice, setFbNotice] = useState<{ title: string; body: string; failed: boolean; icon?: string } | null>(null);
+  /** Anuncio importado: source_url canónico (habilita en el servidor las fotos que guardó al importar) y proveedor (migración 019). */
+  const [source, setSource] = useState<{ url: string; provider: string } | null>(null);
+  const detected = detectProvider(fbUrl);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [errors, setErrors] = useState<ListingErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -126,33 +127,41 @@ function VenderForm() {
     setPhotos((ps) => (ps.length >= MAX_PHOTOS ? ps : [...ps, { key: `p${++photoSeq}`, uri: p.uri, mime: 'image/jpeg', status: 'ready', url: p.url }]));
     clearErr('photos'); setCamOpen(false);
   }
-  /** Foto del anuncio de Facebook: la guardó el servidor al importar (photo_urls); la data URL solo se usa para mostrarla. */
+  /** Foto del anuncio importado: la guardó el servidor al importar (photo_urls); la data URL solo se usa para mostrarla. */
   function addImportedPhoto(src: string, url: string | null | undefined) {
     if (!url) return; // sin copia en el servidor no se puede usar: el vendedor toma la suya con la cámara
     setPhotos((p) => (p.length >= MAX_PHOTOS ? p : [...p, { key: `p${++photoSeq}`, uri: src, mime: 'image/jpeg', status: 'ready', url }])); clearErr('photos');
   }
 
   async function runImport() {
-    const chk = checkFacebookUrl(fbUrl);
+    const chk = checkListingUrl(fbUrl);
     if (!chk.ok) { setFbErr(chk.error); haptic.error(); return; }
+    const provider = chk.provider.id;
     setFbErr(null); setFbBusy(true);
-    let r: FbImport | null = null;
-    try { r = await importFromFacebook(freshAuth(auth), chk.url); }
+    track('import_started', { provider });
+    let r: ListingImport | null = null;
+    try { r = await importFromLink(freshAuth(auth), chk.url); }
     catch (e: any) {
-      track('facebook_import', fbImportProps(null, e?.code));
-      // Sesión vencida o demasiados intentos: se avisa en la hoja. Cualquier otra falla: completar a mano.
-      if (e?.status === 401 || e?.status === 429 || e?.code === 'fb_url_invalid') { setFbErr(userMessage((e as Error).message)); setFbBusy(false); haptic.error(); return; }
+      track('import_failed', { provider, code: String(e?.code ?? e?.status ?? 'unknown').slice(0, 40) });
+      // Sesión vencida o demasiados intentos: su propio mensaje. Cualquier otra falla: el mensaje amable.
+      setFbErr(e?.status === 401 || e?.status === 429 || e?.code === 'import_url_invalid' ? userMessage((e as Error).message) : IMPORT_FAILED);
+      setFbBusy(false); haptic.error(); return;
     }
-    const res: FbImport = r ?? { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'] };
-    if (res.title) { setTitle(res.title.slice(0, TITLE_MAX)); clearErr('title'); }
-    if (res.price_crc && !invite) { setPrice(String(res.price_crc)); clearErr('price'); }
-    setDescription(res.description ? res.description.slice(0, 2000) : null);
-    if (res.photo_urls?.some(Boolean)) setImportSource(res.source_url ?? chk.url);
-    if (r) track('facebook_import', fbImportProps(res));
-    setFbNotice({ ...fbImportNotice(res), failed: res.result === 'failed' });
+    if (r.result === 'failed') { // la hoja sigue abierta: puede probar otro link o cerrar y tomar las fotos
+      track('import_failed', { provider: r.provider, code: String(r.code ?? 'unreadable').slice(0, 40) });
+      setFbErr(IMPORT_FAILED); setFbBusy(false); haptic.error(); return;
+    }
+    track('import_succeeded', importProps(r));
+    if (r.title) { setTitle(r.title.slice(0, TITLE_MAX)); clearErr('title'); }
+    if (r.price_crc && !invite) { setPrice(String(r.price_crc)); clearErr('price'); }
+    setDescription(r.description ? r.description.slice(0, 2000) : null);
+    setSource(r.source_url ? { url: r.source_url, provider: r.provider } : null);
+    setFbNotice({ ...importNotice(r), failed: false, icon: PROVIDER_ICON[r.provider] });
     setFbBusy(false); setFbOpen(false); setFbUrl('');
-    res.result === 'failed' ? haptic.error() : haptic.success();
-    res.photos.slice(0, Math.max(0, MAX_PHOTOS - photos.length)).forEach((src, i) => addImportedPhoto(src, res.photo_urls?.[i]));
+    haptic.success();
+    // Fotos del anuncio: las guardó el servidor (photo_urls) y son las únicas exentas de "solo cámara"; las que el
+    // vendedor agregue a mano se toman con la cámara.
+    r.photos.slice(0, Math.max(0, MAX_PHOTOS - photos.length)).forEach((src, i) => addImportedPhoto(src, r!.photo_urls?.[i]));
   }
 
   const removePhoto = useCallback((key: string) => { haptic.tap(); setPhotos((ps) => ps.filter((p) => p.key !== key)); }, []);
@@ -174,12 +183,12 @@ function VenderForm() {
       await ensureWalletReady(a).catch((e) => { const msg = walletErrorNotice(e); if (e?.code === 'device_not_authorized' || needsDeviceStep(e)) setOrphan(true); throw Object.assign(new Error(msg), { code: e?.code }); }); // primer link: activar la wallet
       const urls = photos.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (Facebook / invitación)
       const t = title.trim();
-      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}), ...(importSource ? { source_url: importSource } : {}) });
-      track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: !!fbNotice && !fbNotice.failed, delivery_mode: mode, protection_minutes: windowMin });
+      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}), ...(source ? { source_url: source.url, source_provider: source.provider } : {}) });
+      track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: source?.provider === 'facebook', import_provider: source?.provider ?? null, delivery_mode: mode, protection_minutes: windowMin });
       haptic.success();
       setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null, agreement: agreementSummary(mode, windowMin) });
       setMode('envio'); setWindowMin(DEFAULT_PROTECTION_MIN.envio); setCustomOpen(false); setCustomDays('');
-      setTitle(''); setPrice(''); setPhotos([]); setImportSource(null); setInvite(null); setDescription(null); setFbNotice(null); saveDraft(null);
+      setTitle(''); setPrice(''); setPhotos([]); setInvite(null); setDescription(null); setFbNotice(null); setSource(null); saveDraft(null);
       if (inviteParam) router.setParams({ invite: undefined });
     } catch (e: any) {
       haptic.error(); trackError('create_listing', e);
@@ -229,23 +238,25 @@ function VenderForm() {
       {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {`${invite.brand} ${invite.model}`.trim()} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
       {invite ? null : fbNotice ? (
-        <Card style={[s.fbNotice, fbNotice.failed && { borderColor: C.orange }]}>
-          <View style={[s.fbIcon, fbNotice.failed && { backgroundColor: C.warnBg }]}><Icon name={fbNotice.failed ? 'alert-circle' : 'logo-facebook'} size={20} color={fbNotice.failed ? C.orange : C.lilac} /></View>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={2}>{fbNotice.title}</Text>
-            <Text style={T.footnote} numberOfLines={2}>{fbNotice.body}</Text>
+        <Card style={[s.fbNotice, short && { padding: S.sm }, fbNotice.failed && { borderColor: C.orange }]}>{/* iPhone SE: aviso compacto (1 línea + 1 línea) para que el aviso de beta no quede bajo "Generar link" */}
+          <View style={[s.fbIcon, fbNotice.failed && { backgroundColor: C.warnBg }]}><Icon name={fbNotice.failed ? 'alert-circle' : (fbNotice.icon ?? 'link') as IconName} size={20} color={fbNotice.failed ? C.orange : C.lilac} /></View>
+          <View style={{ flex: 1, minWidth: 0, gap: short ? 0 : 2 }}>
+            <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={short ? 1 : 2}>{fbNotice.title}</Text>
+            <Text style={T.footnote} numberOfLines={short ? 1 : 2}>{fbNotice.body}</Text>
             {description ? <Pressable onPress={() => { haptic.tap(); setDescription(null); }} hitSlop={8} accessibilityRole="button" accessibilityLabel="Quitar descripción">
               <Text style={[T.footnote, { color: C.lilac }]} numberOfLines={1}>Incluye la descripción del anuncio · Quitar</Text>
             </Pressable> : null}
           </View>
-          <Pressable onPress={() => { haptic.tap(); setFbNotice(null); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar aviso" style={s.fbClose}><Icon name="close" size={18} color={C.textDim} /></Pressable>
+          <Pressable onPress={() => { haptic.tap(); setFbNotice(null); setSource(null); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Cerrar aviso" style={s.fbClose}><Icon name="close" size={18} color={C.textDim} /></Pressable>
         </Card>
       ) : (
-        <Pressable onPress={() => { haptic.tap(); setFbErr(null); setFbOpen(true); }} accessibilityRole="button" accessibilityLabel="Importar de Facebook"
+        <Pressable onPress={() => { haptic.tap(); setFbErr(null); setFbOpen(true); }} accessibilityRole="button" accessibilityLabel="Importar de un link"
           style={({ pressed }) => [s.fbBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
-          <Icon name="logo-facebook" size={20} color={C.lilac} />
-          <Text style={[T.headline, { color: C.lilac, fontSize: 15, flex: 1 }]} numberOfLines={1}>Importar de Facebook</Text>
-          <Text style={[T.footnote, { color: C.textDim }]} numberOfLines={1}>Pega el link</Text>
+          <Icon name="link" size={20} color={C.lilac} />
+          <Text style={[T.headline, { color: C.lilac, fontSize: 15, flex: 1 }]} numberOfLines={1}>Importar de un link</Text>
+          <View style={s.provIcons} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            {SUPPORTED.slice(0, 3).map((p) => <Icon key={p.id} name={PROVIDER_ICON[p.id] as IconName} size={14} color={C.textDim} />)}
+          </View>
           <Icon name="chevron-forward" size={16} color={C.textDim} />
         </Pressable>
       )}
@@ -293,7 +304,7 @@ function VenderForm() {
       </Pressable>
       {error && <ErrorText>{error}</ErrorText>}
       {short ? null : <Text style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>}
-      <RulesHint text={SELL_SUMMARY} from="sell" compact={short} /* iPhone SE: solo "Ver reglas" para dejar espacio al aviso de beta */ />
+      {short && fbNotice ? null : <RulesHint text={SELL_SUMMARY} from="sell" compact={short} /* iPhone SE: solo "Ver reglas" para dejar espacio al aviso de beta; con el aviso de importación se oculta (el aviso de beta ya enlaza "Ver cómo funciona") */ />}
       <BetaNotice from="sell" />
       </View>
 
@@ -331,13 +342,28 @@ function VenderForm() {
           : 'Envío: el plazo cuenta desde que tocas "Ya lo envié".'} Si el comprador no reporta un problema, el pago se libera al terminar el plazo. Lo ve antes de pagar.</Text>
       </Sheet>
 
-      <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de Facebook"
+      <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de un link"
         footer={<PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim()} onPress={runImport} />}>
-        <Text style={T.callout}>En Facebook abre tu anuncio, toca Compartir y luego Copiar link. Pégalo aquí: llenamos el nombre, el precio y la foto para que solo revises.</Text>
-        <TextInput style={[ui.input, fbErr && s.inputErr]} placeholder="facebook.com/marketplace/item/…" placeholderTextColor={C.textDim} value={fbUrl}
+        <Text style={T.callout}>Abre tu anuncio, toca Compartir y copia el link. Pégalo aquí: llenamos el nombre, el precio y las fotos para que solo revises.</Text>
+        <View style={s.provRow} testID="import-providers">
+          {SUPPORTED.slice(0, 5).map((p) => <View key={p.id} style={s.provBadge} accessibilityLabel={p.name}><Icon name={PROVIDER_ICON[p.id] as IconName} size={16} color={C.lilac} /></View>)}
+          <Text style={[T.footnote, { flex: 1 }]} numberOfLines={2}>{supportedLabel()}</Text>
+        </View>
+        <TextInput style={[ui.input, fbErr && s.inputErr]} placeholder="Pega el link de tu anuncio" placeholderTextColor={C.textDim} value={fbUrl}
           onChangeText={(v) => { setFbUrl(v); if (fbErr) setFbErr(null); }} autoCapitalize="none" autoCorrect={false} keyboardType="url" inputMode="url"
-          returnKeyType="go" onSubmitEditing={runImport} editable={!fbBusy} autoFocus accessibilityLabel="Link del anuncio de Facebook" />
-        {fbErr ? <ErrorText>{fbErr}</ErrorText> : <Text style={T.footnote}>Solo anuncios públicos. El link de Facebook no se guarda en tu producto.</Text>}
+          returnKeyType="go" onSubmitEditing={runImport} editable={!fbBusy} autoFocus accessibilityLabel="Link del anuncio" />
+        {fbBusy ? (
+          <View style={s.skel} testID="import-skeleton">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+              <Icon name={(detected?.icon ?? 'link') as IconName} size={18} color={C.lilac} />
+              <Text style={[T.footnote, { color: C.text, flex: 1 }]} numberOfLines={1}>Leyendo tu anuncio de {detected?.name ?? 'la página'}…</Text>
+            </View>
+            <Skeleton w="80%" h={14} /><Skeleton w="40%" h={14} />
+            <View style={{ flexDirection: 'row', gap: S.sm }}>{[0, 1, 2].map((i) => <Skeleton key={i} w={48} h={48} r={R.sm} />)}</View>
+          </View>
+        ) : fbErr ? <ErrorText>{fbErr}</ErrorText>
+          : detected ? <View style={s.detected} testID="import-provider"><Icon name={detected.icon as IconName} size={16} color={C.lilac} /><Text style={[T.footnote, { color: C.text, flex: 1 }]} numberOfLines={1}>Anuncio de {detected.name}</Text></View>
+          : <Text style={T.footnote}>Solo anuncios públicos. Tú confirmas el precio final.</Text>}
       </Sheet>
     </Screen>
   );
@@ -376,6 +402,11 @@ const s = StyleSheet.create({
   fbNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, padding: S.sm + 2, borderWidth: 1, borderColor: C.lilac },
   fbIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
   fbClose: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  skel: { gap: S.sm, padding: S.sm + 4, borderRadius: R.md, backgroundColor: C.bg, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
+  provIcons: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+  provRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs + 2 },
+  provBadge: { width: 28, height: 28, borderRadius: 8, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
+  detected: { flexDirection: 'row', alignItems: 'center', gap: S.xs + 2, minHeight: 20 },
   agreeRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44, paddingHorizontal: S.md, borderRadius: R.md, backgroundColor: C.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   choice: { flex: 1, flexDirection: 'row', gap: S.xs + 2, alignItems: 'center', justifyContent: 'center', minHeight: 48, borderRadius: R.md, borderWidth: 1, borderColor: C.lilac },
   chip: { flex: 1, minHeight: 44, borderRadius: R.md, borderWidth: 1, borderColor: C.lilac, alignItems: 'center', justifyContent: 'center' },

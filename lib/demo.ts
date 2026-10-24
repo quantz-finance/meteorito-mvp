@@ -21,6 +21,7 @@ export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeo
 import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe } from '../api/_lib/payout'; // pura y chica (~1 KB)
 import { canShowContact, normalizeContactPhone } from '../api/_lib/contact'; // pura
 import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
+import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
 import { daysLabel, EXTENSION_DAYS, MAX_TOTAL_FROM_PAYMENT_MIN, pendingExtension, protectionOf, validateAgreement } from '../api/_lib/agreement'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
@@ -210,7 +211,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       slug, category: body.category || 'otro', brand: title ? '' : String(body.brand ?? ''), model: title || String(body.model ?? ''), condition: String(body.condition ?? ''), price_crc: price,
       description: body.description ? String(body.description) : null, photos: Array.isArray(body.photos) ? body.photos.slice(0, 4) : [], status: 'creado',
       identifier_masked: body.identifier ? mask(String(body.identifier)) : null, amount_usdc: null, contract_id: null, funded_tx: null, released_tx: null, auto_release_at: null,
-      checks_summary: Array.isArray(body.checks) ? body.checks.slice(0, 20) : [], created_at: now(),
+      checks_summary: Array.isArray(body.checks) ? body.checks.slice(0, 20) : [], created_at: now(), ...listingSource(body.source_url, body.source_provider),
       seller_address: DEMO_SELLER.address, pin: null, pinShown: false, shipped_tx: null, evidence: null, dispute: null,
       delivery_mode: agreement.delivery_mode, protection_minutes: agreement.protection_minutes, release_ext: null, release_ext_minutes: 0,
       // Como producción: link nuevo = producto permanente; de invitación (o single:true) = un solo uso, reservado.
@@ -324,6 +325,17 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       if (!o.buyer || o.buyer !== me()) throw err(403, 'not_buyer', 'Solo quien compró puede ver el contacto del vendedor.');
       if (!canShowContact(o.status)) throw err(409, 'not_paid', 'Verás el contacto del vendedor cuando pagues.');
       return { contact_phone: st.store?.phone ?? null };
+    }
+    if (body.action === 'import_listing') { // "Importar de un link": misma forma que el API real; sin red (foto propia del demo)
+      const chk = checkListingUrl(body.url);
+      if (!chk.ok) throw err(400, 'import_url_invalid', chk.error);
+      await new Promise((r) => setTimeout(r, 900)); // deja ver el skeleton
+      const p = chk.provider; const name = p.id === 'web' ? new URL(chk.url).hostname.replace(/^www\./, '') : p.name;
+      if (p.status === 'blocked' || /no-existe|\/item\/1\/|login/.test(chk.url)) return { result: 'failed', provider: p.id, provider_name: name, source_url: chk.url, title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: IMPORT_FAILED, code: 'unreadable' };
+      const usd = p.id === 'amazon' || p.id === 'aliexpress'; const mxn = p.id === 'mercadolibre';
+      return { result: 'success', provider: p.id, provider_name: name, source_url: chk.url, title: 'Bicicleta de montaña aro 29',
+        price_crc: mxn ? 197400 : usd ? 151500 : 185000, price_source: mxn ? { amount: 7238.99, currency: 'MXN' } : usd ? { amount: 300, currency: 'USD' } : { amount: 185000, currency: 'CRC' }, converted: mxn || usd,
+        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], photo_urls: ['/demo-fb-import.jpg'], missing: [] };
     }
     if (body.action === 'import_facebook') { // misma forma que el API real (vendedor o comprador invitado); sin red (foto propia del demo)
       if (!checkFacebookUrl(body.url).ok) throw err(400, 'fb_url_invalid', FB_URL_INVALID);
