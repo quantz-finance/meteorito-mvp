@@ -31,7 +31,9 @@ const REVIEWS = [
 const empty = () => { try { return new URLSearchParams(window.location.search).get('feed') === 'empty'; } catch { return false; } };
 const valeria = (): DemoSeller => {
   const s = demoGetStore(demoStoreSlug());
-  return { store_slug: s?.store_slug ?? 'valeria', display_name: s?.display_name ?? 'Valeria', verified: true, rating_avg: 4.7, rating_count: 3, avatar_url: s?.avatar_url ?? null, sales: 23, since: '2026-06-03T00:00:00Z', wa: 'https://wa.me/50688881234' };
+  return { store_slug: s?.store_slug ?? 'valeria', display_name: s?.display_name ?? 'Valeria', verified: true,
+    // con calificaciones reales del demo, esas; si no, una muestra para que el perfil no se vea vacío
+    rating_avg: s?.rating_count ? s.rating_avg : 4.7, rating_count: s?.rating_count || 3, avatar_url: s?.avatar_url ?? null, sales: 23, since: '2026-06-03T00:00:00Z', wa: 'https://wa.me/50688881234' };
 };
 const sellerOf = (slug: string) => (slug === 'valeria' ? valeria() : SELLERS.find((s) => s.store_slug === slug)!);
 const pub = (s: DemoSeller) => ({ store_slug: s.store_slug, display_name: s.display_name, avatar_url: s.avatar_url, verified: s.verified, rating_avg: s.rating_avg, rating_count: s.rating_count });
