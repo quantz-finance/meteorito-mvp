@@ -11,6 +11,8 @@ import { OrderCard } from '@/components/OrderRow';
 import { SellerActions } from '@/components/SellerActions';
 import { SellerOrderChat } from '@/components/OrderChat';
 import { SellerInboxButton } from '@/components/ChatInbox';
+import { AdminDisputesButton } from '@/components/AdminDisputesButton';
+import { SellerDisputeReply } from '@/components/SellerDisputeReply';
 import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
@@ -86,7 +88,7 @@ export default function Pedidos() {
 
   return (
     <Screen title="Home" subtitle={short ? undefined : 'El estado de tu dinero, siempre a la vista.'} scroll={false}
-      right={<><SellerInboxButton /><IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} /></>}>
+      right={<><AdminDisputesButton /><SellerInboxButton /><IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} /></>}>
       {/* Sin botón "Actualizar" (era de pruebas): Home carga al enfocar, hace polling mientras haya pedidos no finales y
           vuelve a pedir al regresar a la app/pestaña (useFocusEffect + useOrdersRefresh). */}
       <View style={{ flex: 1, gap: S.sm }}>
@@ -123,6 +125,7 @@ export default function Pedidos() {
             <Text style={T.callout}>{(detail?.slug === open.slug && detail?.delivery_mode === 'cara_a_cara' && F2F_HINT[open.status]) || NEXT_HINT[open.status] || ''}</Text>
           </Card>
           <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />
+          {open.status === 'en_disputa' ? <SellerDisputeReply slug={open.slug} /> : null}
           {open.status !== 'creado' ? <SellerOrderChat slug={open.slug} onOpen={() => setOpenSlug(null)} /> : null}
           {open.status === 'creado' ? <AdTemplateButton onPress={() => {
             const d = detail?.slug === open.slug ? detail : null;

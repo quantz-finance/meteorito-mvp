@@ -59,9 +59,10 @@ function drawStamp(ctx: CanvasRenderingContext2D, w: number, h: number, lines: s
 
 type Phase = 'starting' | 'live' | 'review' | 'uploading' | 'failed';
 
-export function CameraCapture({ visible, purpose, refId, asGuest = false, onClose, onDone }: {
+export function CameraCapture({ visible, purpose, refId, asGuest = false, asSeller = false, title, hint, onClose, onDone }: {
   visible: boolean; purpose: CapturePurpose; /** slug del pedido (ship/dispute) o 'new' (producto) */ refId: string;
   /** comprador sin cuenta (invitación o disputa con su llave) */ asGuest?: boolean;
+  /** vendedor respondiendo una disputa (foto en su carpeta) */ asSeller?: boolean; title?: string; hint?: string;
   onClose: () => void; onDone: (p: CapturedPhoto) => void;
 }) {
   const auth = useAuth();
@@ -89,7 +90,7 @@ export function CameraCapture({ visible, purpose, refId, asGuest = false, onClos
     track('camera_opened', { stage: purpose, standalone: cameraEnv().standalone });
     const fake = fakeCamera();
     // Token de un uso en paralelo con el permiso de cámara.
-    const tokenP = requestCaptureToken(auth, purpose, refId, asGuest).then((t) => { setTok(t); return t; });
+    const tokenP = requestCaptureToken(auth, purpose, refId, asGuest, asSeller).then((t) => { setTok(t); return t; });
     try {
       if (fake && fake !== 'ok') throw fakeError(fake);
       if (!fake) {
@@ -112,7 +113,7 @@ export function CameraCapture({ visible, purpose, refId, asGuest = false, onClos
       setFailure('token'); setErr(userMessage(e?.message ?? '')); setPhase('failed'); return;
     }
     setPhase('live');
-  }, [auth, purpose, refId, asGuest, stop]);
+  }, [auth, purpose, refId, asGuest, asSeller, stop]);
 
   useEffect(() => { if (visible) start(); else { stop(); setTok(null); } return () => stop(); }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -156,7 +157,7 @@ export function CameraCapture({ visible, purpose, refId, asGuest = false, onClos
     if (!tokenFresh(tok)) { setErr('Pasaron más de 5 minutos. Toma la foto de nuevo.'); start(); return; }
     setPhase('uploading'); setErr(null);
     try {
-      const url = await uploadCaptured(auth, shot.blob, { token: tok.token, purpose }, asGuest);
+      const url = await uploadCaptured(auth, shot.blob, { token: tok.token, purpose }, asGuest, asSeller);
       stop(); haptic.success();
       onDone({ url, uri: shot.uri, token: tok.token, token_id: tok.id, captured_at: new Date(shot.at).toISOString(), purpose });
     } catch (e: any) {
@@ -177,8 +178,8 @@ export function CameraCapture({ visible, purpose, refId, asGuest = false, onClos
       <View testID="camera-capture" style={[st.root, { paddingTop: insets.top + S.sm, paddingBottom: Math.max(insets.bottom, S.md) }]}>
         <View style={st.top}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={[T.headline, { color: C.white }]} numberOfLines={1}>{TITLES[purpose]}</Text>
-            <Text style={[T.footnote, { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={2}>{HINTS[purpose]}</Text>
+            <Text style={[T.headline, { color: C.white }]} numberOfLines={1}>{title ?? TITLES[purpose]}</Text>
+            <Text style={[T.footnote, { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={2}>{hint ?? HINTS[purpose]}</Text>
           </View>
           <Pressable onPress={close} accessibilityRole="button" accessibilityLabel="Cerrar cámara" hitSlop={8} style={st.round}><Icon name="close" size={22} color={C.white} /></Pressable>
         </View>

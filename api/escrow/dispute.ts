@@ -7,7 +7,7 @@
 //  Admin (Bearer Cavos de un correo de ADMIN_EMAILS; si no, 404; sin sesión, 401). Ver api/_lib/admin.ts:
 //   { action:'admin_me' }                          -> { admin:true, email }
 //   { action:'admin_list' }                        -> { disputes, counts, flags, capabilities }
-//   { action:'admin_get', slug }                   -> detalle: línea de tiempo, envío, evidencia, chat, respuesta, on-chain, IA, auditoría
+//   { action:'admin_get', slug }                   -> detalle: línea de tiempo, envío, evidencia, mensajes entre las partes, respuesta, on-chain, IA, auditoría
 //   { action:'admin_ai', slug, refresh? }          -> resumen + recomendación con IA (caché por disputa; sin credencial: available:false)
 //   { action:'admin_decide', slug, outcome:'refund'|'release'|'split', buyer_pct?, note, confirm:true }
 //                                                  -> auditoría + resolución on-chain (si el servidor tiene DISPUTE_RESOLVER_SECRET;

@@ -74,9 +74,9 @@ export async function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
 }
 
 /** Sube una foto de la cámara con su token de captura (un uso, 5 min). La firma solo sale con un token válido. */
-export async function uploadCaptured(auth: MeteoritoAuth, blob: Blob, cap: { token: string; purpose: 'ship' | 'listing' | 'dispute' }, asGuest: boolean): Promise<string> {
+export async function uploadCaptured(auth: MeteoritoAuth, blob: Blob, cap: { token: string; purpose: 'ship' | 'listing' | 'dispute' }, asGuest: boolean, asSeller = false): Promise<string> {
   const { api, guestApi } = await import('./api');
-  const body = { purpose: cap.purpose, capture_token: cap.token, mime: 'image/jpeg', size: blob.size, ...(asGuest && cap.purpose === 'listing' ? { as: 'guest' } : {}) };
+  const body = { purpose: cap.purpose, capture_token: cap.token, mime: 'image/jpeg', size: blob.size, ...(asGuest && cap.purpose === 'listing' ? { as: 'guest' } : {}), ...(asSeller && cap.purpose === 'dispute' ? { as: 'seller' } : {}) };
   let r: { path: string; token: string; publicUrl: string };
   try { r = asGuest ? await guestApi(auth, '/api/photos/upload-url', body) : await api(auth, '/api/photos/upload-url', body); }
   catch (e) { throw tagPhotoError('sign', e); }
