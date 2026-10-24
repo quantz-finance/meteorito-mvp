@@ -1,6 +1,6 @@
 // Herramientas del vendedor (demo): plantilla de anuncio para Facebook, WhatsApp o Marketplace e historial de ventas.
 import { test, expect, type Page } from '@playwright/test';
-import { open, PHOTO, expectNoScroll } from './helpers';
+import { open, expectNoScroll, takePhoto } from './helpers';
 
 const SHOTS = process.env.TOOLS_SHOTS; // carpeta para capturas (opcional, p. ej. /workspace/out)
 const shot = async (page: Page, name: string) => { if (SHOTS) { await page.waitForTimeout(400); await page.screenshot({ path: `${SHOTS}/tools-${name}.png` }); } };
@@ -9,8 +9,7 @@ test('TOOLS-01 link listo: plantilla de anuncio con link, acuerdo y custodia; Wh
   await open(page, '/vender', 'seller', true);
   await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
   await page.getByPlaceholder('0').fill('150000');
-  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Agregar', { exact: true }).click()]);
-  await fc.setFiles(PHOTO);
+  await takePhoto(page);
   await page.getByText('Generar link').click();
   await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
   await expect(page.getByLabel('Plantilla de anuncio')).toBeVisible();
