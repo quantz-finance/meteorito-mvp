@@ -16,7 +16,11 @@ import { C, R, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, getPublicOrder, orderTitle, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
-import { isBuyerDevice } from '@/lib/guest';
+import { isBuyerDevice, saveGrant } from '@/lib/guest';
+import { ContactCard } from '@/components/ContactCard';
+import { RecoverAccess } from '@/components/RecoverAccess';
+import { redeemAccess } from '@/lib/buyerContact';
+import { rememberPurchase } from '@/lib/purchases';
 import { SellerContact } from '@/components/SellerContact';
 import { OrderChatCard } from '@/components/OrderChat';
 import { AskSellerButton } from '@/components/ChatButton';
@@ -42,8 +46,22 @@ import { RulesHint } from '@/components/RulesLink';
 import { PAY_SUMMARY } from '@/lib/rules';
 
 export default function LinkDeVenta() {
-  const { slug } = useLocalSearchParams<{ slug: string }>();
-  const { isAuthenticated, email } = useAuth();
+  const { slug, acceso } = useLocalSearchParams<{ slug: string; acceso?: string }>();
+  const auth = useAuth();
+  const { isAuthenticated, email } = auth;
+  const [, setAccessTick] = useState(0); // re-render tras abrir un link de acceso (isBuyerDevice lee localStorage)
+  const [accessMsg, setAccessMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Link de acceso (correo / WhatsApp): deja un permiso para ESTE pedido en este dispositivo y quita el token de la URL
+  // (que no quede en el historial ni viaje como redirect_uri si después crea su cuenta).
+  useEffect(() => {
+    if (!slug || typeof acceso !== 'string' || !acceso) return;
+    let on = true;
+    redeemAccess(auth, String(slug), acceso)
+      .then((r) => { if (!on) return; saveGrant(r.slug, r.grant); setAccessTick((n) => n + 1); setAccessMsg({ ok: true, text: 'Recuperaste el acceso a tu compra en este dispositivo.' }); track('buyer_access_redeemed'); })
+      .catch((e) => { if (on) setAccessMsg({ ok: false, text: (e as Error).message }); })
+      .finally(() => { try { router.setParams({ acceso: undefined } as any); } catch { /* */ } });
+    return () => { on = false; };
+  }, [slug, acceso]); // eslint-disable-line react-hooks/exhaustive-deps
   const [order, setOrder] = useState<PublicOrder | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
@@ -69,6 +87,10 @@ export default function LinkDeVenta() {
     prevStatus.current = st0;
   }, [order?.status]);
   useEffect(() => { if (order) track('payment_link_opened', { status: order.status, logged_in: isAuthenticated, category: (order as any).category ?? null }); else if (order === null) track('payment_link_not_found'); }, [order === undefined ? 0 : order === null ? 1 : order.slug]);
+
+  useEffect(() => {
+    if (order && accessMsg?.ok) rememberPurchase({ slug: order.slug, title: orderTitle(order), price_crc: Number(order.price_crc), photo: order.photos?.[0] ?? null, status: order.status, delivery_mode: order.delivery_mode });
+  }, [order?.slug, accessMsg?.ok]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) return <Center icon="cloud-offline-outline" title="No se pudo cargar" text={error} />;
   if (order === null) return <Center icon="link-outline" title="Este link no existe" text="Pídele al vendedor que te mande el link de nuevo." />;
@@ -135,6 +157,13 @@ export default function LinkDeVenta() {
         </Card>
       )}
 
+      {accessMsg ? <View testID="access-msg" style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
+        <Icon name={accessMsg.ok ? 'key' : 'alert-circle-outline'} size={20} color={accessMsg.ok ? C.success : C.orange} />
+        <Text style={[T.callout, { flex: 1, color: accessMsg.ok ? C.text : C.orange }]}>{accessMsg.text}</Text>
+      </View> : null}
+      {/* Avisos por WhatsApp / correo / cuenta: opcional, después de pagar, solo en el dispositivo del comprador. */}
+      {CONTACT_CARD_STATUSES.includes(order.status) && isBuyerDevice(order.slug) ? <ContactCard slug={order.slug} /> : null}
+      {CONTACT_CARD_STATUSES.includes(order.status) && !isBuyerDevice(order.slug) && !isAuthenticated ? <RecoverAccess slug={order.slug} /> : null}
       {/* WhatsApp del vendedor: solo el comprador (su dispositivo) y solo después de pagar; el servidor lo vuelve a validar. */}
       {/* Chat de la compra (comprador): mismo criterio que el contacto; el servidor valida llave/sesión y pedido. */}
       {canShowContact(order.status) && isBuyerDevice(order.slug) ? <OrderChatCard slug={order.slug} /> : null}
@@ -169,6 +198,7 @@ export default function LinkDeVenta() {
   );
 }
 
+const CONTACT_CARD_STATUSES = ['fondeado', 'enviado', 'entregado', 'en_disputa'];
 /** Reseña = compra verificada: solo con el pago liberado. */
 const RATABLE = ['liberado'];
 /** Reseña del comprador: 1-5 estrellas, comentario y nombre corto opcionales, una sola vez. El servidor valida la llave

@@ -4,7 +4,7 @@
 // (≤ SESSION_GRACE_DAYS, default 7). Reintento único.
 import type { MeteoritoAuth } from './types';
 import { DEMO_ENABLED, demoApi } from './demo';
-import { guestKey } from './guest';
+import { guestKey, loadGrant } from './guest';
 import { holdUpdate } from './updater';
 
 export async function proof(auth: MeteoritoAuth, action: string, ref: string) {
@@ -136,6 +136,8 @@ async function guestApiInner<T>(auth: Pick<MeteoritoAuth, 'getAuthToken'>, path:
   if (DEMO_ENABLED) return (await demoApi(path, body)) as T;
   const headers: Record<string, string> = { 'Content-Type': 'application/json', 'X-Guest-Key': guestKey() };
   const token = auth.getAuthToken(); if (token) headers.Authorization = `Bearer ${token}`;
+  const slug = (body as any)?.slug; const grant = typeof slug === 'string' ? loadGrant(slug) : null; // link de acceso abierto aquí
+  if (grant) headers['X-Order-Access'] = grant;
   const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(j.error ?? `Error ${r.status}`), { status: r.status, code: j.code ?? `http_${r.status}` });

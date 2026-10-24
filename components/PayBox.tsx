@@ -14,7 +14,8 @@ import { Fonts } from '@/constants/Colors';
 import { C, S, T } from '@/constants/theme';
 import { guestApi } from '@/lib/api';
 import { myListingOrder, rememberListingOrder } from '@/lib/listings';
-import { loadPin, savePin } from '@/lib/guest';
+import { loadGrant, loadPin, savePin } from '@/lib/guest';
+import { reissuePin } from '@/lib/buyerContact';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, orderTitle, type PublicOrder } from '@/lib/orders';
 import { rememberPurchase } from '@/lib/purchases';
@@ -38,7 +39,8 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [sinpe, setSinpe] = useState<{ amountUsdc: number; priceCrc: number; reference: string } | null>(null);
   const [pin, setPinState] = useState<string | null>(() => loadPin(order.slug)); // el PIN queda en este navegador (comprador invitado)
   const setPin = (p: string | null) => { setPinState(p); if (p) savePin(order.slug, p); };
-  const buyerHere = !!pin || auth.isAuthenticated; // este dispositivo es el del comprador (guardó el PIN) o hay sesión
+  const granted = !!loadGrant(order.slug); // abrió un link de acceso (correo / WhatsApp) en este dispositivo
+  const buyerHere = !!pin || granted || auth.isAuthenticated; // este dispositivo es el del comprador (PIN o link de acceso) o hay sesión
   const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'paid' | 'photo' | 'released' | 'dispute' | null>(null);
   const [card, setCard] = useState(false); // el servidor tiene el pago con tarjeta configurado (start -> card)
   // 'inapp' (default): nuestro formulario. 'widget': respaldo con el widget de Lendara (LENDARA_MODE=widget en el servidor).
@@ -65,6 +67,10 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     <Text style={T.caption}>Tu código de entrega</Text>
     <Text testID="delivery-code" style={{ fontFamily: Fonts.black, fontSize: 30, letterSpacing: 6, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
     <Text style={[T.footnote, { textAlign: 'center' }]}>{hint}</Text>
+  </View> : granted ? <View style={{ alignItems: 'center', gap: S.xs }}>
+    <Text style={[T.footnote, { textAlign: 'center' }]}>Tu código de entrega quedó en el navegador donde pagaste. Si no lo tienes, genera uno nuevo: el anterior deja de servir.</Text>
+    <PrimaryButton testID="pin-reissue" title="Generar código nuevo" icon="refresh" variant="ghost" loading={busy}
+      onPress={() => run(async () => { const r = await reissuePin(auth, order.slug); setPin(r.pin); })} />
   </View> : <Text style={T.footnote}>Tu código de entrega está en el navegador donde pagaste.</Text>;
   const confirmBtn = <PrimaryButton title="Recibí y está bien" icon="checkmark-circle" loading={busy}
     onPress={() => run(async () => { await guestApi(auth, '/api/escrow/confirm', { slug: order.slug, reason: 'buyer_confirm' }); setSheet('released'); onChange(); })} />;
@@ -165,7 +171,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <Text style={[T.title, { textAlign: 'center' }]}>{f2f ? F2F_PAID : PAID_WAITING}</Text>
       <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
       {f2f ? codeBox(F2F_CODE_HINT) : <Row icon="cube-outline" text="Cuando lo envíe, aquí vas a ver tu código de entrega." />}
-      <Text style={[T.footnote, { textAlign: 'center' }]}>Pagaste sin crear cuenta: este navegador guarda tu acceso a este pedido y tu código de entrega. Si borras los datos del navegador, no podrás confirmar ni reportar un problema desde aquí.</Text>
+      <Text style={[T.footnote, { textAlign: 'center' }]}>Pagaste sin crear cuenta: este navegador guarda tu acceso a este pedido y tu código de entrega. Para no perderlo si cambias de teléfono, elige abajo cómo recibir avisos (WhatsApp, correo o una cuenta). Es opcional.</Text>
       <BetaNotice from="pin" onNavigate={() => setSheet(null)} />
       <ChainLinks order={order} align="center" />
     </Sheet>

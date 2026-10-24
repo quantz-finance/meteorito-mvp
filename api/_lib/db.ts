@@ -3,6 +3,7 @@ import { env } from './env';
 import { randomBytes } from 'node:crypto';
 import { HttpError, __setSessionStore } from './auth';
 import { notifyOrder } from './push';
+import { notifyBuyerStatus } from './buyerContact';
 import { trackServer } from './analytics';
 let c: any = null;
 export const db = (): any => (c ??= createClient(env.supabaseUrl(), env.supabaseService(), { auth: { persistSession: false } }));
@@ -33,6 +34,8 @@ export async function advance(id: string, from: string, patch: Record<string, un
     // Import ESTÁTICO: un import() relativo no entra al bundle de Vercel (ERR_MODULE_NOT_FOUND) y rompía TODOS los
     // cambios de estado (pagar sin cuenta, enviar, liberar...). Y nunca debe tumbar la operación real.
     try { await notifyOrder(data[0] as any); } catch (e: any) { console.warn('[push] aviso falló', e?.message); }
+    // Avisos por correo / WhatsApp al comprador que dejó un contacto (migración 028). Sin 028 no hace nada.
+    try { await notifyBuyerStatus(db(), data[0] as any); } catch (e: any) { console.warn('[contacto] aviso falló', e?.message); }
   }
 }
 /** Bitácora best-effort: nunca debe tapar el resultado real (p. ej. un release rechazado). */

@@ -40,7 +40,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -315,6 +315,32 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       const [{ demoChatApi }, { demoProfile }] = await Promise.all([import('./demoChat'), import('./demoFeed')]);
       const store = st.store ?? { slug: 'valeria', name: 'Valeria' };
       return demoChatApi(body, { role: st.role, buyer: me(), sellerSlug: store.slug, sellerName: store.name, orders: st.orders as any, profile: demoProfile });
+    }
+    if (typeof body.action === 'string' && (body.action.startsWith('buyer_contact_') || body.action.startsWith('buyer_access_') || body.action === 'buyer_link_account' || body.action === 'buyer_pin_reissue')) {
+      // Avisos del comprador (misma forma que api/_lib/buyerContact.ts). En el demo la "migración 028" está aplicada.
+      const { maskEmail, maskPhone, normalizeEmail, normalizePhone } = await import('../api/_lib/contactText');
+      if (body.action === 'buyer_link_account') { st.linked = true; emit(); return { linked: true }; }
+      const o = get(String(body.slug));
+      if (body.action === 'buyer_access_redeem') {
+        if (body.token !== `demo-acceso-${o.slug}`) throw err(403, 'access_invalid', 'Este link venció o no es de esta compra. Pide uno nuevo desde el último aviso.');
+        return { grant: `demo-grant-${o.slug}`, slug: o.slug };
+      }
+      if (body.action === 'buyer_access_request') return { requested: true };
+      need('buyer'); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo quien compró puede hacer esto.');
+      st.contacts ??= {}; const list = (st.contacts[o.slug] ??= []);
+      if (body.action === 'buyer_contact_get') return { available: true, contacts: list, email: true };
+      if (body.action === 'buyer_pin_reissue') {
+        if (!['fondeado', 'enviado'].includes(o.status)) throw err(409, 'pin_not_needed', 'Esta compra ya no usa código de entrega.');
+        o.pin = String(100000 + (st.seq++ * 7919) % 900000); emit(); return { pin: o.pin };
+      }
+      if (body.action === 'buyer_contact_remove') { st.contacts[o.slug] = list.filter((c) => c.channel !== body.channel); emit(); return { removed: true }; }
+      if (body.consent !== true) throw err(400, 'consent_required', 'Marca la casilla para aceptar el uso de tu contacto.');
+      let masked: string;
+      if (body.channel === 'whatsapp') { const ph = normalizePhone(body.cc, body.phone); if (!ph) throw err(400, 'bad_phone', 'Revisa el número: código de país y número, sin espacios de más.'); masked = maskPhone(ph); }
+      else if (body.channel === 'email') { const em = normalizeEmail(body.email); if (!em) throw err(400, 'bad_email', 'Revisa el correo.'); masked = maskEmail(em); }
+      else throw err(400, 'bad_channel', 'Elige WhatsApp, correo o cuenta.');
+      const c = { channel: body.channel, masked }; st.contacts[o.slug] = [...list.filter((x) => x.channel !== body.channel), c]; emit();
+      return { saved: true, contact: c, emailed: body.channel === 'email' };
     }
     if (body.action === 'rate') {
       need('buyer'); const o = get(String(body.slug));
