@@ -36,6 +36,21 @@ export const COPY = {
     noReviews: 'Todavía no tiene reseñas. Solo quien compró y recibió (pago liberado) puede dejar una.',
   },
   ficha: { seeProfile: 'Ver perfil del vendedor', soldBy: (name: string) => `Vendido por ${name}` },
+  // Productos y tiendas de EJEMPLO del feed (api/_lib/demoProducts.ts, FEED_DEMO_PRODUCTS): ficticios, nunca se pagan.
+  demoProducts: {
+    tag: 'Ejemplo',
+    cardLabel: (title: string, price: string) => `Ejemplo. ${title}, ${price}`,
+    storeTitle: 'Tienda de ejemplo',
+    storeNote: 'Esta tienda, sus productos y sus reseñas son ficticios: los mostramos para que veas cómo se ve Meteorito. No están a la venta.',
+    productTitle: 'Producto de ejemplo',
+    productSubtitle: 'Así se ve una publicación en Meteorito.',
+    productNoteTitle: 'Es un ejemplo',
+    productNote: 'Este producto y su vendedor son ficticios: no está a la venta y no se puede pagar.',
+    payDisabled: 'Pago desactivado (ejemplo)',
+    seeStore: 'Ver la tienda de ejemplo',
+    gone: 'Este ejemplo ya no está disponible.',
+    reviewBy: (name: string | null) => `${name ?? 'Comprador'} · reseña de ejemplo`,
+  },
   review: {
     title: '¿Cómo te fue con el vendedor?',
     pickHint: 'Toca de 1 a 5 estrellas. Solo puedes dejar una reseña por compra.',

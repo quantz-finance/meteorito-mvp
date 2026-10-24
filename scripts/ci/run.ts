@@ -73,6 +73,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '79', name: 'Comprar en 3 pantallas (Feed por defecto, Pagar con link, Mis compras) con link propio e iconos arriba a la derecha', file: './t79-comprar-pantallas.test.ts', onchain: false },
   { id: '80', name: 'Chat comprador-vendedor: solo las dos partes (token + identidad), 1000 caracteres, idempotente, límite por minuto, leído/escribiendo, bloquear/reportar, push con enfriamiento, sin 025 no rompe', file: './t80-chat.test.ts', onchain: false },
   { id: '81', name: 'Chat en la app: tienda, producto antes de pagar y compra activa; bandejas con insignia sin pestaña nueva; compositor 16 px; eventos; privacidad para revisión legal', file: './t81-chat-ui.test.ts', onchain: false },
+  { id: '82', name: 'Productos de ejemplo en Comprar: después de los reales, filtro y búsqueda, nunca en Patrocinado, tiendas de ejemplo, fotos en /public y pago imposible', file: './t82-feed-demo-products.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

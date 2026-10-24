@@ -106,7 +106,7 @@ export async function run(t: T) {
   const prof = readFileSync(new URL('../../app/t/[store].tsx', import.meta.url), 'utf8');
   const feed = readFileSync(new URL('../../components/Feed.tsx', import.meta.url), 'utf8');
   const btn = readFileSync(new URL('../../components/FollowButton.tsx', import.meta.url), 'utf8');
-  t.check('perfil: botón Seguir (no para el dueño) + número de seguidores', /!owner \? <View[^>]*>\s*<FollowButton store=\{p\} source="profile"/.test(prof) && /testID="followers-count"/.test(prof));
+  t.check('perfil: botón Seguir (no para el dueño) + número de seguidores', /!owner(?: && !p\.demo)? \? <View[^>]*>\s*<FollowButton store=\{p\} source="profile"/.test(prof) && /testID="followers-count"/.test(prof));
   t.check('feed: botón Seguir compacto en la tarjeta', /<FollowButton store=\{it\.seller\} source="feed" size="sm"/.test(feed));
   t.check('botón: Seguir / Siguiendo desde lib/copy.ts, con ícono (sin emojis) y estado accesible', COPY.follow.follow === 'Seguir' && COPY.follow.following === 'Siguiendo'
     && /COPY\.follow\.following : COPY\.follow\.follow/.test(btn) && /<Icon name=\{on \? 'checkmark' : 'add'\}/.test(btn) && /accessibilityState=\{\{ selected: on/.test(btn) && !/\p{Extended_Pictographic}/u.test(btn));
