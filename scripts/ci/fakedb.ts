@@ -8,6 +8,7 @@ export function fakeDb() {
     const filters: ((r: any) => boolean)[] = [];
     let op: 'select' | 'insert' | 'update' | 'delete' = 'select';
     let payload: any = null; let returning = false;
+    let sort: { c: string; asc: boolean } | null = null; let cap: number | null = null;
     const rows = () => tables[t].filter((r) => filters.every((f) => f(r)));
     const exec = () => {
       if (op === 'insert') {
@@ -21,7 +22,10 @@ export function fakeDb() {
       }
       if (op === 'update') { const rs = rows(); rs.forEach((r) => Object.assign(r, payload)); return { data: returning ? rs.map((r) => ({ ...r })) : null, error: null }; }
       if (op === 'delete') { const rs = rows(); tables[t] = tables[t].filter((r) => !rs.includes(r)); return { data: null, error: null }; }
-      return { data: rows().map((r) => ({ ...r })), error: null };
+      let out = rows().map((r) => ({ ...r }));
+      if (sort) { const { c, asc } = sort; out.sort((a, b) => (a[c] === b[c] ? 0 : (a[c] < b[c] ? -1 : 1) * (asc ? 1 : -1))); }
+      if (cap != null) out = out.slice(0, cap);
+      return { data: out, error: null };
     };
     const q: any = {
       select: () => { if (op !== 'select') returning = true; return q; },
@@ -34,7 +38,11 @@ export function fakeDb() {
       lte: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] <= v); return q; },
       gt: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] > v); return q; },
       in: (c: string, vs: any[]) => { filters.push((r) => vs.includes(r[c])); return q; },
-      or: () => q, order: () => q, limit: () => q,
+      lt: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] < v); return q; },
+      ilike: (c: string, p: string) => { const re = new RegExp('^' + String(p).split('').map((ch) => (ch === '%' || ch === '*' ? '.*' : ch === '_' ? '.' : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('') + '$', 'is'); filters.push((r) => re.test(String(r[c] ?? ''))); return q; },
+      or: () => q,
+      order: (c: string, o?: { ascending?: boolean }) => { sort = { c, asc: o?.ascending !== false }; return q; },
+      limit: (n: number) => { cap = n; return q; },
       single: async () => { const r = exec(); const d = r.data?.[0] ?? null; return { data: d, error: d ? null : { message: 'no rows' } }; },
       maybeSingle: async () => { const r = exec(); return { data: r.data?.[0] ?? null, error: r.error }; },
       then: (res: any, rej: any) => Promise.resolve(exec()).then(res, rej),

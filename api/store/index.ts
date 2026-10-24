@@ -1,5 +1,14 @@
 // Tienda del vendedor + calificaciones (una sola función para no sumar funciones en Vercel).
 //  GET  ?store=<usuario>                         -> tienda pública: nombre, puntuación, productos disponibles (sin datos sensibles)
+//  GET  ?feed=1[&q=texto][&verified=true|false|all][&cursor=<iso>][&limit=N]
+//                                                 -> feed de Comprar (y buscador): productos activos de vendedores, lo más
+//                                                 nuevo primero, paginado por cursor. Sin datos privados. Caché corta.
+//  GET  ?profile=<usuario>                        -> perfil público del vendedor (/t/<usuario>): tienda + verificado, ventas,
+//                                                 miembro desde, reseñas y WhatsApp (wa.me) SOLO si el vendedor lo puso.
+//  GET  ?seller_of=<pedido>                       -> vendedor de un pedido/link para la ficha /p/<slug>: nombre, foto,
+//                                                 identidad confirmada, estrellas y cómo salieron sus ventas (sin montos)
+//  GET  ?og=<usuario>                             -> HTML de /t/<usuario> con meta OG (vercel.json lo usa para los bots que
+//                                                 arman la vista previa al compartir: WhatsApp, Facebook, X, iMessage…)
 //  POST { action:'me' }                          (Bearer Cavos) -> mi tienda (la crea con un usuario único si no existe)
 //  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone? } (Bearer Cavos) -> cambiar usuario, nombre,
 //                                                 foto o WhatsApp de contacto (foto: solo una subida a SU carpeta por
@@ -36,6 +45,7 @@ import { importListing } from '../_lib/importers';
 import { checkListingUrl } from '../_lib/importers/providers';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
+import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -95,11 +105,49 @@ async function ownerStore(sub: string, p: { store_slug: string; display_name: st
   return { ...pub, items: [...listings, ...pub.items.filter((i: any) => !seen.has(i.slug))] };
 }
 
+/** Vista previa al compartir /t/<usuario>: el HTML de la app (mismo deploy) con los meta OG del vendedor. */
+async function ogPage(req: any, res: any) {
+  const slug = normalizeStoreSlug(req.query.og);
+  const p = validStoreSlug(slug) ? await sellerProfile(slug).catch(() => null) : null;
+  const url = `https://pago.meteorito.app/t/${slug}`;
+  let appHtml: string | null = null;
+  const host = String(req.headers?.host ?? '');
+  if (/^[a-z0-9.-]+\.(meteorito\.app|vercel\.app)$/i.test(host)) { // nunca un host arbitrario (SSRF)
+    try {
+      const r = await fetch(`https://${host}/t/%5Bstore%5D.html`, { signal: AbortSignal.timeout(1500) });
+      if (r.ok) appHtml = await r.text();
+    } catch { /* página mínima */ }
+  }
+  const meta = p ? profileMeta(p) : '<title>Meteorito</title><meta property="og:title" content="Meteorito" />';
+  res.status(p ? 200 : 404).setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300, stale-while-revalidate=600');
+  res.send(injectMeta(appHtml, meta, url));
+}
+
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET' && req.query?.push === 'key') {
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300');
       return json(res, 200, { key: vapid()?.publicKey ?? null });
+    }
+    if (req.method === 'GET' && req.query?.feed != null) {
+      const page = await feedPage({ q: req.query.q, cursor: req.query.cursor, limit: req.query.limit, verified: req.query.verified });
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=60');
+      return json(res, 200, page);
+    }
+    if (req.method === 'GET' && req.query?.profile != null) {
+      const slug = normalizeStoreSlug(req.query.profile);
+      const p = validStoreSlug(slug) ? await sellerProfile(slug) : null;
+      if (!p) throw new HttpError(404, 'Este perfil no existe.');
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=120');
+      return json(res, 200, p);
+    }
+    if (req.method === 'GET' && req.query?.og != null) return ogPage(req, res);
+    if (req.method === 'GET' && req.query?.seller_of != null) {
+      const slug = String(req.query.seller_of);
+      if (!/^[a-z0-9]{6}$/.test(slug)) throw new HttpError(400, 'slug inválido');
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+      return json(res, 200, { seller: await sellerOfOrder(slug) });
     }
     if (req.method === 'GET') {
       const slug = normalizeStoreSlug(req.query?.store);

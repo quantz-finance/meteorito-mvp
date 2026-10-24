@@ -60,9 +60,9 @@ export function ProfileCard({ products = 0 }: { products?: number }) {
       <Progress pct={pct} />
       <View style={s.steps}>
         {steps.map((st) => (
-          <View key={st.key} style={[s.step, st.done && s.stepDone, st.soon && { opacity: 0.6 }]} accessibilityLabel={`${st.label}: ${st.done ? 'listo' : st.soon ? 'más adelante' : 'pendiente'}`}>
+          <View key={st.key} style={[s.step, st.done && s.stepDone, st.soon && { opacity: 0.6 }]} accessibilityLabel={`${st.label}: ${st.done ? 'listo' : st.soon ? 'próximamente' : 'pendiente'}`}>
             <Icon name={st.done ? 'checkmark-circle' : st.soon ? 'lock-closed-outline' : 'ellipse-outline'} size={16} color={st.done ? C.success : C.lilac} />
-            <Text style={[T.footnote, { color: st.done ? C.text : C.lilac }]} numberOfLines={1}>{st.label}{st.soon ? ' · más adelante' : ''}</Text>
+            <Text style={[T.footnote, { color: st.done ? C.text : C.lilac }]} numberOfLines={1}>{st.label}{st.soon ? ' · próximamente' : ''}</Text>
           </View>
         ))}
       </View>

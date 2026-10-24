@@ -381,6 +381,8 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   throw err(404, 'demo_no_endpoint', `Modo demo: ${p} no está simulado`);
 }
 
+/** Usuario de la tienda del demo (para el feed y el perfil simulados). */
+export const demoStoreSlug = () => S().store?.slug ?? 'valeria';
 /** Tienda pública simulada (misma forma que GET /api/store). */
 export function demoGetStore(slug: string, owner = false) {
   const st = S(); const store = st.store ?? { slug: 'valeria', name: 'Valeria' };

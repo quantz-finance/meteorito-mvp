@@ -1,4 +1,6 @@
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { COPY } from '@/lib/copy';
+import { SalesOutcomeLine, StarsInline, VerifiedBadge } from '@/components/SellerBits';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +19,7 @@ import { isBuyerDevice } from '@/lib/guest';
 import { SellerContact } from '@/components/SellerContact';
 import { canShowContact } from '../../api/_lib/contact';
 import { haptic } from '@/components/ds';
-import { rateOrder, ratedStars, rememberRated } from '@/lib/store';
+import { getOrderSeller, rateOrder, ratedStars, rememberRated, type OrderSeller } from '@/lib/store';
 import { useStamp } from '@/lib/freshness';
 import { keepIfSame } from '@/lib/refresh';
 import { lazy, Suspense } from 'react';
@@ -197,15 +199,30 @@ function RateCard({ slug }: { slug: string }) {
 }
 
 function TrustBlock({ order }: { order: PublicOrder }) {
+  // Vendedor de la ficha (perfil corto + cómo salieron sus ventas, sin montos). Si no carga, la ficha sigue igual.
+  const [seller, setSeller] = useState<OrderSeller | null>(null);
+  useEffect(() => { let on = true; getOrderSeller(order.slug).then((x) => { if (on) setSeller(x); }); return () => { on = false; }; }, [order.slug]);
+  const name = seller?.display_name ?? order.seller_name ?? null;
   return (
     <View style={{ gap: S.sm }}>
-      {order.seller_name ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-          <View style={s.avatar}><Text style={[T.headline, { color: C.purpleDark }]}>{order.seller_name.charAt(0).toUpperCase()}</Text></View>
-          <Text style={[T.callout, { flex: 1, color: C.text }]} numberOfLines={2}>
-            Vendido por {order.seller_name}{order.seller_phone_verified === true ? ' · teléfono verificado' : ''}
-          </Text>
-        </View>
+      {name ? (
+        <Pressable disabled={!seller} accessibilityRole={seller ? 'link' : undefined} accessibilityLabel={seller ? `${COPY.ficha.seeProfile}: ${name}` : undefined}
+          onPress={() => { if (!seller) return; track('feed_item_clicked', { target: 'seller', from: 'ficha', verified: seller.verified }); router.push({ pathname: '/t/[store]', params: { store: seller.store_slug } }); }}
+          style={({ pressed }) => [{ gap: 6 }, pressed && { opacity: 0.7 }]} testID="ficha-seller">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+            {seller?.avatar_url ? <Image source={{ uri: seller.avatar_url }} style={s.avatar} accessibilityIgnoresInvertColors />
+              : <View style={s.avatar}><Text style={[T.headline, { color: C.purpleDark }]}>{name.charAt(0).toUpperCase()}</Text></View>}
+            <View style={{ flex: 1, gap: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={[T.callout, { color: C.text, flexShrink: 1 }]} numberOfLines={1}>{COPY.ficha.soldBy(name)}</Text>
+                {seller?.verified ? <VerifiedBadge size={15} /> : null}
+              </View>
+              {seller ? <StarsInline avg={seller.rating_avg} count={seller.rating_count} /> : null}
+            </View>
+            {seller ? <Icon name="chevron-forward" size={18} color={C.textDim} /> : null}
+          </View>
+          {seller ? <SalesOutcomeLine sales={seller.sales} /> : null}
+        </Pressable>
       ) : null}
       {order.identifier_masked ? <View style={{ flexDirection: 'row' }}>
         <Chip label="Identificador declarado por el vendedor" tone="muted" icon="information-circle-outline" />
