@@ -29,10 +29,15 @@ const NEXT_HINT: Record<string, string> = {
   creado: 'Comparte el link. Cuando el comprador pague, te avisamos acá.',
   escrow_creado: 'El comprador está pagando.',
   fondeado: 'El dinero está apartado. Envíalo y toca "Ya lo envié".',
-  enviado: 'Cuando lo reciba, pídele al comprador su código de entrega para cobrar. Si no reporta un problema, el pago se libera solo 7 días después del envío.',
+  enviado: 'Cuando lo reciba, pídele al comprador su código de entrega para cobrar. Si no reporta un problema, el pago se libera solo al terminar el plazo acordado.',
   entregado: 'Entregado. El pago se está liberando.',
   liberado: 'Cobrado. ¡Buena venta!',
   en_disputa: 'Estamos revisando un problema reportado. El pago está en pausa.',
+};
+
+/** Cara a cara: no hay envío; el plazo corre desde el pago. */
+const F2F_HINT: Record<string, string> = {
+  fondeado: 'El dinero está apartado. Entrega el producto en persona y cobra con el código del comprador.',
 };
 
 export default function Pedidos() {
@@ -110,9 +115,9 @@ export default function Pedidos() {
           </View>
           <Card style={{ gap: S.md }}>
             <MoneyTimeline status={open.status} shipped={!!detail?.shipped_tx} />
-            <Text style={T.callout}>{NEXT_HINT[open.status] ?? ''}</Text>
+            <Text style={T.callout}>{(detail?.slug === open.slug && detail?.delivery_mode === 'cara_a_cara' && F2F_HINT[open.status]) || NEXT_HINT[open.status] || ''}</Text>
           </Card>
-          <SellerActions slug={open.slug} status={open.status} onChange={load} />
+          <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />
           <View style={{ gap: S.xs }}>
             <Text style={T.caption}>Detalles</Text>
             <Text style={T.footnote} selectable>{orderLink(open.slug)}</Text>

@@ -6,7 +6,9 @@ import { useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { DisputeSheet } from '@/components/DisputeSheet';
 import { Image, Pressable, Text, View } from 'react-native';
-import { deliveryCodeVisible, PAID_WAITING } from '@/lib/shipping';
+import { deliveryCodeVisible, F2F_CODE_HINT, F2F_PAID, PAID_WAITING } from '@/lib/shipping';
+import { agreementSummary } from '../api/_lib/agreement';
+import { ExtensionBox } from '@/components/ExtensionBox';
 import { Card, ErrorText, Icon, PrimaryButton, Sheet, SuccessCheck } from '@/components/ds';
 import { Fonts } from '@/constants/Colors';
 import { C, S, T } from '@/constants/theme';
@@ -46,6 +48,25 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   };
 
   const win = useAutoReleaseWindow();
+  const f2f = order.delivery_mode === 'cara_a_cara';
+  // Acuerdo que el comprador ve antes de pagar (y acepta al pagar: el servidor lo registra en order_events).
+  const agreement = agreementSummary(order.delivery_mode, order.protection_minutes);
+  const agreementRow = <View testID="agreement" style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center', justifyContent: 'center' }}>
+    <Icon name={f2f ? 'people-outline' : 'cube-outline'} size={18} color={C.lilac} />
+    <Text style={[T.footnote, { color: C.text, flexShrink: 1 }]}>{agreement}</Text>
+  </View>;
+  const ext = buyerHere ? <ExtensionBox order={order} role="buyer" onChange={onChange} call={(b) => guestApi(auth, '/api/escrow/confirm', { slug: order.slug, ...b })} /> : null;
+  const left = order.auto_release_at ? timeLeft(order.auto_release_at) : win;
+  const releaseNote = <Text style={[T.footnote, { textAlign: 'center' }]}>
+    El pago se libera solo{left ? ` en ${left}` : f2f ? ' 24 h después del pago' : ' 7 días después del envío'} si no reportas un problema.
+  </Text>;
+  const codeBox = (hint: string) => pin ? <View style={{ alignItems: 'center', gap: 2 }}>
+    <Text style={T.caption}>Tu código de entrega</Text>
+    <Text testID="delivery-code" style={{ fontFamily: Fonts.black, fontSize: 30, letterSpacing: 6, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
+    <Text style={[T.footnote, { textAlign: 'center' }]}>{hint}</Text>
+  </View> : <Text style={T.footnote}>Tu código de entrega está en el navegador donde pagaste.</Text>;
+  const confirmBtn = <PrimaryButton title="Recibí y está bien" icon="checkmark-circle" loading={busy}
+    onPress={() => run(async () => { await guestApi(auth, '/api/escrow/confirm', { slug: order.slug, reason: 'buyer_confirm' }); setSheet('released'); onChange(); })} />;
   // Foto del envío y número de guía (solo el comprador, por el API; no van a la vista pública).
   const [ship, setShip] = useState<{ photo: string | null; note: string | null } | null>(null);
   useEffect(() => {
@@ -113,6 +134,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.money}>{formatCRC(sinpe.priceCrc)}</Text>
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
+        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${agreement}.`} />
       </>}
     </Sheet>
     <CardSheet visible={sheet === 'card' && !!sinpe && order.status === 'escrow_creado'} amountCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
@@ -130,15 +152,16 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.footnote}>Referencia {sinpe.reference}</Text>
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
+        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${agreement}.`} />
         <Row icon="information-circle-outline" text='No envíes dinero: toca "Ya pagué" para continuar.' />
       </>}
     </Sheet>
     <Sheet visible={sheet === 'paid'} onClose={() => setSheet(null)}
       footer={<PrimaryButton title="Entendido" onPress={() => setSheet(null)} />}>
       <SuccessCheck />
-      <Text style={[T.title, { textAlign: 'center' }]}>{PAID_WAITING}</Text>
+      <Text style={[T.title, { textAlign: 'center' }]}>{f2f ? F2F_PAID : PAID_WAITING}</Text>
       <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
-      <Row icon="cube-outline" text="Cuando lo envíe, aquí vas a ver tu código de entrega." />
+      {f2f ? codeBox(F2F_CODE_HINT) : <Row icon="cube-outline" text="Cuando lo envíe, aquí vas a ver tu código de entrega." />}
       <Text style={[T.footnote, { textAlign: 'center' }]}>Pagaste sin crear cuenta: este navegador guarda tu acceso a este pedido y tu código de entrega. Si borras los datos del navegador, no podrás confirmar ni reportar un problema desde aquí.</Text>
       <BetaNotice from="pin" onNavigate={() => setSheet(null)} />
       <ChainLinks order={order} align="center" />
@@ -161,6 +184,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   if (order.status === 'creado' || (order.status === 'escrow_creado' && !sinpe)) {
     footer = <>
       {err && !sheet && <ErrorText>{err}</ErrorText>}
+      {agreementRow}
       {mine ? <PrimaryButton title="Ver mi pedido" icon="receipt-outline" variant="ghost" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug: mine } })} /> : null}
       <BetaNotice from="pay" />
       <PrimaryButton title={busy ? 'Preparando…' : `Pagar en custodia ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
@@ -179,7 +203,6 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   } else if (order.status === 'enviado' && !buyerHere) {
     footer = <Text style={[T.callout, { textAlign: 'center' }]}>Pedido enviado. El comprador confirma la recepción desde el mismo navegador donde pagó.</Text>;
   } else if (order.status === 'enviado') {
-    const left = order.auto_release_at ? timeLeft(order.auto_release_at) : win;
     footer = <>
       <Card style={{ gap: S.sm, paddingVertical: S.sm + 2 }}>
         <View style={{ flexDirection: 'row', gap: S.sm + 2, alignItems: 'center' }}>
@@ -193,19 +216,30 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
             {ship?.note ? <Text style={T.footnote} numberOfLines={1} selectable>{ship.note}</Text> : null}
           </View>
         </View>
-        {deliveryCodeVisible(order.status) && pin ? <View style={{ alignItems: 'center', gap: 2 }}>
-          <Text style={T.caption}>Tu código de entrega</Text>
-          <Text testID="delivery-code" style={{ fontFamily: Fonts.black, fontSize: 30, letterSpacing: 6, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
-          <Text style={[T.footnote, { textAlign: 'center' }]}>Dáselo al vendedor cuando lo recibas.</Text>
-        </View> : <Text style={T.footnote}>Tu código de entrega está en el navegador donde pagaste.</Text>}
+        {deliveryCodeVisible(order.status, order.delivery_mode) ? codeBox('Dáselo al vendedor cuando lo recibas.') : null}
       </Card>
-      <Text style={[T.footnote, { textAlign: 'center' }]}>
-        El pago se libera solo{left ? ` en ${left}` : ' 7 días después del envío'} si no reportas un problema.
-      </Text>
+      {releaseNote}
       {err && <ErrorText>{err}</ErrorText>}
-      <PrimaryButton title="Recibí y está bien" icon="checkmark-circle" loading={busy}
-        onPress={() => run(async () => { await guestApi(auth, '/api/escrow/confirm', { slug: order.slug, reason: 'buyer_confirm' }); setSheet('released'); onChange(); })} />
+      {confirmBtn}
+      {ext}
     </>;
+  } else if (order.status === 'fondeado' && f2f && buyerHere) {
+    // Cara a cara: sin envío. El código se ve ya; el vendedor lo ingresa cuando el comprador revisa el producto.
+    footer = <>
+      <Card style={{ gap: S.sm, paddingVertical: S.sm + 2 }}>
+        <View style={{ flexDirection: 'row', gap: S.sm + 2, alignItems: 'center' }}>
+          <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' }}><Icon name="people" size={22} color={C.purpleDark} /></View>
+          <Text style={[T.headline, { flex: 1 }]}>Entrega cara a cara</Text>
+        </View>
+        {codeBox(F2F_CODE_HINT)}
+      </Card>
+      {releaseNote}
+      {err && <ErrorText>{err}</ErrorText>}
+      {confirmBtn}
+      {ext}
+    </>;
+  } else if (order.status === 'fondeado' && f2f) {
+    footer = <Text style={[T.callout, { textAlign: 'center' }]}>Pagado. Entrega cara a cara: el comprador tiene el código en el navegador donde pagó.</Text>;
   } else if (order.status === 'fondeado') {
     footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
       <Icon name="time-outline" size={20} color={C.lilac} /><Text style={[T.callout, { textAlign: 'center', flexShrink: 1 }]}>{PAID_WAITING}</Text>

@@ -7,6 +7,13 @@ import type { IconName } from '@/components/ds';
 export const RULES_CONFIG = {
   /** Días tras el envío para liberar el pago si el comprador no da el código ni reporta un problema. */
   autoReleaseDays: 7,
+  /** Cara a cara: horas desde el pago (default) para liberar si el comprador no da el código ni reporta un problema. */
+  faceToFaceHours: 24,
+  /** Plazo que el vendedor puede acordar al crear el link: de 24 h a 30 días (validado en el servidor). */
+  minWindowHours: 24,
+  maxWindowDays: 30,
+  /** Extensión de mutuo acuerdo: días que se pueden pedir; el total desde el pago nunca pasa de maxWindowDays. */
+  extensionDays: [1, 3, 7],
   /** Días que tiene el vendedor para enviar antes de que el comprador pueda cancelar y recibir su reembolso. */
   sellerShipDays: 3,
   /** Horas que tiene el vendedor para responder una disputa con pruebas. */
@@ -25,11 +32,16 @@ export const RULES: Rule[] = [
   { id: 'custodia', icon: 'lock-closed', title: 'Pago en custodia',
     text: 'Cuando el comprador paga, el dinero queda apartado en un contrato y nadie lo toca hasta que se cumple el trato.' },
   { id: 'envio', icon: 'paper-plane', title: 'Envío',
-    text: 'El vendedor toca "Ya lo envié" y puede adjuntar una foto del paquete o del comprobante.' },
+    text: 'Al crear el link, el vendedor elige cara a cara o envío. Con envío, toca "Ya lo envié" y puede adjuntar una foto del paquete o del comprobante. Cara a cara no hay paso de envío.' },
   { id: 'codigo', icon: 'key', title: 'Código de entrega',
-    text: 'El comprador ve su código cuando el pedido va en camino. Al recibirlo, se lo da al vendedor: con ese código se libera el pago.' },
+    text: 'Con envío, el comprador ve su código cuando el pedido va en camino. Cara a cara, lo ve apenas paga y se lo da al vendedor cuando revisa el producto. Con ese código se libera el pago.' },
   { id: 'liberacion', icon: 'timer-outline', title: 'Liberación automática',
-    text: `Si el comprador no da el código ni reporta un problema, el pago se libera al vendedor a los ${C.autoReleaseDays} días del envío.` },
+    text: `Si el comprador no da el código ni reporta un problema, el pago se libera al terminar el plazo acordado: por defecto a los ${C.autoReleaseDays} días del envío, o a las ${C.faceToFaceHours} h del pago si es cara a cara.`,
+    points: [
+      `El vendedor elige el plazo al crear el link, de ${C.minWindowHours} h a ${C.maxWindowDays} días. El comprador lo ve antes de pagar.`,
+      `Cualquiera de los dos puede pedir ${C.extensionDays.join(', ').replace(/, (\d+)$/, ' o $1')} días más; el otro acepta o rechaza. Nunca más de ${C.maxWindowDays} días desde el pago.`,
+      'Mientras una extensión espera respuesta, el pago no se libera solo (hasta 24 h).',
+    ] },
   { id: 'problemas', icon: 'alert-circle', title: 'Problemas o disputas',
     text: 'El comprador puede reportar un problema antes de que se libere el pago. Eso congela el dinero.',
     points: [
@@ -41,13 +53,13 @@ export const RULES: Rule[] = [
   { id: 'reclamos', icon: 'ribbon-outline', title: `Reclamos hasta ${C.claimDays} días después`,
     text: `Hasta ${C.claimDays} días después de la liberación, el comprador puede reportar un problema. El vendedor recibe el aviso y el caso cuenta en su calificación. El dinero ya no se congela.` },
   { id: 'contacto', icon: 'logo-whatsapp', title: 'Contacto',
-    text: 'Después de pagar, el comprador puede escribirle al vendedor por WhatsApp para coordinar el envío.' },
+    text: 'Después de pagar, el comprador puede escribirle al vendedor por WhatsApp para coordinar el envío o la entrega.' },
 ];
 
 /** Resumen de una línea en /p/<slug> antes de pagar. */
 export const PAY_SUMMARY = 'Tu dinero queda en custodia hasta que recibas tu compra.';
 /** Resumen de una línea en Vender al crear el link. */
-export const SELL_SUMMARY = `El pago se libera con el código de entrega o a los ${C.autoReleaseDays} días.`;
+export const SELL_SUMMARY = 'El pago se libera con el código de entrega o al terminar el plazo que elijas.';
 
 /** Aviso de beta (texto EXACTO, aprobado por Rolando): "línea discreta donde importa" (pago antes del botón, Vender,
  *  hoja del PIN y hoja de disputa), nunca como banner en todas las pantallas. Es la ÚNICA mención de "testnet" permitida

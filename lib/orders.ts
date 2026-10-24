@@ -38,6 +38,8 @@ export interface NewOrder {
   condition?: string; price_crc: number; description?: string; identifier?: string; photos: string[]; checks?: CheckResult[];
   /** Código de la invitación de compra que este listing responde (el link queda reservado al comprador que invitó). */
   invite?: string;
+  /** Acuerdo de entrega (migración 017; el servidor valida 24 h a 30 días). */
+  delivery_mode?: 'envio' | 'cara_a_cara'; protection_minutes?: number;
 }
 
 export async function createOrder(auth: MeteoritoAuth, o: Omit<NewOrder, 'seller_address' | 'seller_email'>): Promise<string> {
@@ -55,6 +57,9 @@ export interface PublicOrder {
   kind?: 'single' | 'listing' | null; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada' | null;
   /** Migración 013: resultado de la disputa (porcentaje devuelto al comprador). */
   resolution?: { buyerPct?: number | null } | null;
+  /** Migración 017: acuerdo de entrega y extensión de mutuo acuerdo. Sin ella: envío, 7 días (defaults). */
+  delivery_mode?: 'envio' | 'cara_a_cara' | null; protection_minutes?: number | null;
+  release_ext?: { by: 'buyer' | 'seller'; days: number; at: string } | null; release_ext_minutes?: number | null;
   /** Opcionales: solo se muestran si el backend los expone (todavía no en public_orders). */
   seller_name?: string | null; seller_phone_verified?: boolean | null;
   /** true solo si Meteorito verificó el IMEI (no la declaración del vendedor). */

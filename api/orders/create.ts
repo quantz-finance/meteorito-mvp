@@ -9,6 +9,7 @@ import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
 import { inviteByCode, inviteErr, validCode } from '../_lib/invites';
 import { missingColumn } from '../_lib/listings';
 import { guestSubFromReq } from '../_lib/guest';
+import { validateAgreement } from '../_lib/agreement';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 // Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
@@ -41,6 +42,9 @@ export default async function handler(req: any, res: any) {
     if (fullTitle.length < TITLE_MIN) throw new HttpError(400, `El título necesita al menos ${TITLE_MIN} letras.`);
     const price = Number(b.price_crc);
     if (!Number.isInteger(price) || price < 1000 || price > 50_000_000) throw new HttpError(400, 'precio inválido');
+    // Acuerdo de entrega: cara a cara o envío y plazo de protección (24 h a 30 días), validado aquí.
+    const agreement = validateAgreement({ delivery_mode: b.delivery_mode, protection_minutes: b.protection_minutes });
+    if ('error' in agreement) throw Object.assign(new HttpError(400, agreement.error), { code: 'bad_agreement' });
     // Fotos obligatorias (1-4) y solo de la carpeta del vendedor (subidas por /api/photos/upload-url) o de la invitación.
     const prefix = publicPrefix(user.sub);
     const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
@@ -75,18 +79,22 @@ export default async function handler(req: any, res: any) {
     // Producto permanente (se vende muchas veces, un escrow por comprador), salvo respuesta a invitación: ese link queda
     // reservado para quien invitó. Sin la migración 012 la columna no existe: link de un uso, como antes.
     let kind: 'listing' | 'single' | null = invite || b.single === true ? 'single' : 'listing';
+    // Sin la migración 017 las columnas del acuerdo no existen: se crea sin ellas (rige el default: envío, 7 días).
+    let agreed: Record<string, unknown> = agreement;
     for (let i = 0; i < 5; i++) {
       const s = slug();
-      let { error } = await db().from('orders').insert({ ...row, slug: s, ...(kind ? { kind } : {}) });
-      if (error && kind && missingColumn(error)) { kind = null; ({ error } = await db().from('orders').insert({ ...row, slug: s })); }
+      const ins = () => db().from('orders').insert({ ...row, ...agreed, slug: s, ...(kind ? { kind } : {}) });
+      let { error } = await ins();
+      if (error && missingColumn(error) && Object.keys(agreed).length) { agreed = {}; ({ error } = await ins()); }
+      if (error && kind && missingColumn(error)) { kind = null; ({ error } = await ins()); }
       if (!error) {
         if (invite) { // aceptar la invitación (condicionado a que siga abierta: una sola publicación por invitación)
           const { data: ok, error: e2 } = await db().from('invitations').update({ status: 'aceptada', order_slug: s, seller_user_id: user.sub, accepted_at: new Date().toISOString() }).eq('code', invite.code).eq('status', 'abierta').select('code');
           if (e2) inviteErr(e2);
           if (!ok?.length) { await db().from('orders').update({ status: 'cancelado' }).eq('slug', s).eq('status', 'creado'); throw Object.assign(new HttpError(409, 'Esta invitación ya fue aceptada por otra publicación.'), { code: 'invite_not_open' }); }
         }
-        await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price, from_invite: !!invite });
-        return json(res, 200, { slug: s, kind: kind ?? 'single' });
+        await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price, from_invite: !!invite, delivery_mode: agreement.delivery_mode, protection_minutes: agreement.protection_minutes });
+        return json(res, 200, { slug: s, kind: kind ?? 'single', ...agreement });
       }
       if (error.code !== '23505') throw error;
     }
