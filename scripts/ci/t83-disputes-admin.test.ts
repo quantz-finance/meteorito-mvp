@@ -210,13 +210,17 @@ export async function run(t: T) {
   __setChainForTests(null); delete process.env.DISPUTE_RESOLVER_SECRET; delete process.env.DISPUTE_RESOLVER_PUBLIC;
   if (prevAdmins != null) process.env.ADMIN_EMAILS = prevAdmins;
 
-  /* ---------- Copy (textos del servidor que llegan a la UI) ---------- */
+  /* ---------- Copy ---------- */
   const BANNED = /(?<!\p{L})(segur[oa]s?|seguridad|garant\p{L}*|verificad[oa]s?|empresa\p{L}*|fintech|banco\p{L}*|billetera\p{L}*|proteg\p{L}*)(?!\p{L})/iu;
-  const files = ['api/_lib/disputeRules.ts', 'api/_lib/disputeView.ts'];
+  const files = ['app/admin/disputas.tsx', 'app/admin/disputa.tsx', 'components/AdminDisputesButton.tsx', 'components/AdminNotFound.tsx', 'components/SellerDisputeReply.tsx', 'api/_lib/disputeRules.ts', 'api/_lib/disputeView.ts', 'lib/demoAdmin.ts'];
   for (const f of files) {
     const src = readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8').split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
-    const strings: string[] = src.match(/(['"`])(?:(?!\1)[^\\\n]|\\.)*\1/g) ?? [];
+    const strings: string[] = [...(src.match(/(['"`])(?:(?!\1)[^\\\n]|\\.)*\1/g) ?? []), ...(src.match(/>[^<>{}\n]+</g) ?? [])];
     const bad = strings.filter((s) => BANNED.test(s));
     t.check(`${f}: copy sin palabras prohibidas`, bad.length === 0, bad[0]);
   }
+  const ui = ['app/admin/disputa.tsx', 'components/SellerDisputeReply.tsx'].map((f) => readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8')).join('\n');
+  t.check('sin emojis en las pantallas nuevas (iconos)', !/\p{Extended_Pictographic}/u.test(ui));
+  const tabs = readFileSync(new URL('../../app/(tabs)/_layout.tsx', import.meta.url), 'utf8');
+  t.check('sin 4.ª pestaña (la entrada es un icono en Home)', (tabs.match(/<Tabs\.Screen /g) ?? []).length === 3 && readFileSync(new URL('../../app/(tabs)/pedidos.tsx', import.meta.url), 'utf8').includes('<AdminDisputesButton />'));
 }
