@@ -21,8 +21,18 @@ export async function takePhoto(page: Page, label: string | RegExp = 'Tomar foto
 export const PAID = /Pagado\. Esperando que el vendedor lo envíe/;
 type Role = 'seller' | 'buyer';
 
-/** Abre una ruta del demo con el rol dado (badge oculto para medir layout real). */
-export async function open(page: Page, path: string, role: Role, reset = false) {
+const quietPages = new WeakSet<Page>();
+/** Abre una ruta del demo con el rol dado (badge oculto para medir layout real).
+ *  La invitación a mostrar la última conexión (hoja después del primer link) se da por vista, salvo seenInvite: true
+ *  (solo activity.spec la prueba; así no tapa la pantalla de "link listo" en los demás tests). */
+export async function open(page: Page, path: string, role: Role, reset = false, o: { seenInvite?: boolean } = {}) {
+  if (!o.seenInvite && !quietPages.has(page)) {
+    quietPages.add(page);
+    await page.addInitScript(() => {
+      const get = Storage.prototype.getItem;
+      Storage.prototype.getItem = function (k: string) { return k.startsWith('meteorito:last-seen-invite:') ? '1' : get.call(this, k); };
+    });
+  }
   const sep = path.includes('?') ? '&' : '?';
   await page.goto(`${path}${sep}role=${role}&badge=0${reset ? '&demo_reset=1' : ''}`);
   await page.waitForFunction(() => !!(window as any).__meteoritoDemo);

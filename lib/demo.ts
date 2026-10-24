@@ -40,7 +40,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -370,6 +370,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       o.listing_status = body.status; emit(); return demoGetStore(st.store.slug, true);
     }
     // La tienda es de la sesión del vendedor: el comprador del demo es otra cuenta, así que no es dueño de /t/valeria.
+    if (body.action === 'seen') return { updated: !!st.store.seenOn }; // última conexión: solo con consentimiento
     if (body.action === 'me') { if (st.role !== 'seller') throw err(404, 'no_store', 'Todavía no tienes tienda.'); return demoGetStore(st.store.slug, true); }
     if (body.action === 'update') {
       if (body.store_slug != null) { const s2 = String(body.store_slug).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, ''); if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(s2)) throw err(400, 'bad_store_slug', 'Usa de 3 a 30 letras o números (sin espacios).'); st.store.slug = s2; }
@@ -382,6 +383,11 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
         const ph = normalizeContactPhone(body.contact_phone);
         if (ph === 'invalid') throw err(400, 'bad_phone', 'Escribe un número de Costa Rica: 8 dígitos (ej. 8888 1234).');
         st.store.phone = ph; if (!ph) st.store.waPublic = false;
+      }
+      if (body.show_last_seen !== undefined) {
+        if (typeof body.show_last_seen !== 'boolean') throw err(400, 'bad_flag', 'Valor inválido.');
+        if (!!st.store.seenOn !== body.show_last_seen) st.store.seenDecided = true; // = registro de consentimiento
+        st.store.seenOn = body.show_last_seen;
       }
       if (body.whatsapp_public !== undefined) {
         if (body.whatsapp_public && !st.store.phone) throw err(400, 'no_phone', 'Primero guarda tu WhatsApp.');
@@ -402,7 +408,7 @@ export function demoGetStore(slug: string, owner = false) {
   if (slug !== store.slug) return null;
   const r = Object.values(st.ratings ?? {});
   return {
-    store_slug: store.slug, display_name: store.name, avatar_url: store.avatar ?? null, ...(owner ? { contact_phone: store.phone ?? null, whatsapp_public: !!store.phone && !!store.waPublic } : {}),
+    store_slug: store.slug, display_name: store.name, avatar_url: store.avatar ?? null, ...(owner ? { contact_phone: store.phone ?? null, whatsapp_public: !!store.phone && !!store.waPublic, show_last_seen: !!store.seenOn, last_seen_decided: !!store.seenDecided } : {}),
     rating_avg: r.length ? Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100) / 100 : null, rating_count: r.length,
     // Igual que public_store_items: productos activos sin comprador (Mi tienda también ve los pausados).
     items: Object.values(st.orders).filter((o) => o.status === 'creado' && !o.listing_slug && !o.invite_code

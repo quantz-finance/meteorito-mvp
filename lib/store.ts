@@ -1,4 +1,5 @@
 // Tienda personal del vendedor: pago.meteorito.app/t/<usuario>. API: /api/store (migración 010).
+import type { Activity } from './activity';
 import { api, guestApi } from './api';
 import { DEMO_ENABLED, demoApi, demoGetStore } from './demo';
 import { PUBLIC_BASE_URL } from './orders';
@@ -8,7 +9,8 @@ export { ratingLabel } from './rating';
 export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
 export interface Store { store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null;
   /** Solo Mi tienda (dueño): WhatsApp de contacto +506XXXXXXXX (migración 016); null = sin teléfono. Nunca en la tienda pública. */ contact_phone?: string | null;
-  /** Solo Mi tienda: el vendedor eligió mostrar su WhatsApp en el perfil público (migración 020). */ whatsapp_public?: boolean; rating_avg: number | null; rating_count: number; items: StoreItem[] }
+  /** Solo Mi tienda: el vendedor eligió mostrar su WhatsApp en el perfil público (migración 020). */ whatsapp_public?: boolean; /** Solo Mi tienda: muestra su última conexión (solo con consentimiento; apagada por defecto). */ show_last_seen?: boolean;
+  /** Solo Mi tienda: ya eligió alguna vez (hay registro de consentimiento). */ last_seen_decided?: boolean; rating_avg: number | null; rating_count: number; items: StoreItem[] }
 
 export const storeLink = (slug: string) => `${PUBLIC_BASE_URL}/t/${slug}`;
 export const STORE_UNAVAILABLE = 'La tienda todavía no está disponible. Tus links de venta funcionan igual.';
@@ -24,10 +26,14 @@ export async function getStore(slug: string): Promise<Store | null> {
   if (!r.ok) throw new Error(r.status === 503 || r.status >= 500 ? STORE_UNAVAILABLE : j.error ?? `Error ${r.status}`);
   return j as Store;
 }
+/** Avisa actividad del usuario con sesión (última conexión). Silencioso: nunca muestra errores. */
+export async function pingSeen(auth: MeteoritoAuth): Promise<void> {
+  try { await api(auth, '/api/store', { action: 'seen' }); } catch { /* sin red o sin sesión: no pasa nada */ }
+}
 export async function getMyStore(auth: MeteoritoAuth): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'me' }));
 }
-export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null; contact_phone?: string | null; whatsapp_public?: boolean }): Promise<Store> {
+export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null; contact_phone?: string | null; whatsapp_public?: boolean; show_last_seen?: boolean }): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'update', ...patch }));
 }
 /** Reseña del comprador (llave de invitado o sesión), una por pedido y solo con la compra liberada.
@@ -132,6 +138,19 @@ export async function getSellerProfile(slug: string): Promise<SellerProfile | nu
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(r.status === 503 || r.status >= 500 ? STORE_UNAVAILABLE : j.error ?? `Error ${r.status}`);
   return j as SellerProfile;
+}
+
+/** Última conexión (rango grueso) de varios vendedores; solo aparecen los que la encendieron. Sin caché (apagarla se nota
+ *  de inmediato). Silencioso: ante cualquier error, nada. */
+export async function getActivity(slugs: string[]): Promise<Record<string, Activity>> {
+  const list = [...new Set(slugs.filter(Boolean))].slice(0, 60);
+  if (!list.length) return {};
+  if (DEMO_ENABLED) { const { demoActivity } = await import('./demoFeed'); return demoActivity(list); }
+  try {
+    const r = await fetch(`/api/store?activity=${encodeURIComponent(list.join(','))}`, { cache: 'no-store' });
+    const j: any = r.ok ? await r.json().catch(() => null) : null;
+    return j?.activity && typeof j.activity === 'object' ? j.activity : {};
+  } catch { return {}; }
 }
 
 export type OrderSeller = FeedSeller & { sales: SalesOutcome };

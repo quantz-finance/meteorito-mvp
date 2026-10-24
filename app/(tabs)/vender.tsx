@@ -21,6 +21,7 @@ import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet
 import { Reveal } from '@/components/space';
 import { ShareLink } from '@/components/ShareLink';
 import { AdTemplateButton, AdTemplateSheet } from '@/components/AdTemplateSheet';
+import { LastSeenInvite } from '@/components/LastSeenInvite';
 import type { AdInput } from '@/lib/sellerTools';
 import { Fonts } from '@/constants/Colors';
 import { C, R, S, T } from '@/constants/theme';
@@ -233,6 +234,7 @@ function VenderForm() {
         <Reveal i={4}><Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar.</Text></Reveal>
       </View>
       <AdTemplateSheet visible={adOpen} onClose={() => setAdOpen(false)} ad={created.ad} />
+      <LastSeenInvite trigger={created.slug} />
     </Screen>
   );
 

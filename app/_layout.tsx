@@ -1,4 +1,5 @@
 // Primero: Buffer global para el SDK Cavos/Stellar (web).
+import { useLastSeenPing } from '@/lib/useLastSeenPing';
 import '@/lib/polyfills';
 
 import * as Font from 'expo-font';
@@ -89,6 +90,7 @@ function Gate() {
   // Liga sub -> wallet con cada token Cavos fresco nuevo (primer login y re-login; vencido = se omite).
   const tok = authed ? auth.getAuthToken() : null;
   useEffect(() => { if (authed) bindWalletOnLogin(auth); }, [authed, auth.wallet.state, tok]);
+  useLastSeenPing(auth, authed); // última conexión (estilo P2P): al abrir y al usar, máx. 1 vez cada 5 min
   // session_relogin_required: abrir el login de Cavos SIN logout (la llave se queda en este dispositivo).
   useEffect(() => { setReloginHandler((a) => a.openLogin()); return () => setReloginHandler(null); }, []);
   // Con sesión previa en este dispositivo, el splash (mascota) sigue hasta que Cavos termina de cargar la cuenta:

@@ -70,8 +70,36 @@ export function ProfileCard({ products = 0 }: { products?: number }) {
       <PayoutRow payout={payout} error={payoutErr} onPress={() => setOpen(true)} />
       <PayoutSheet visible={open} onClose={() => setOpen(false)} payout={payout ?? null} onSaved={(p) => { setPayout(p); setOpen(false); }} />
       {store ? <ContactRow phone={store.contact_phone ?? null} onPress={() => setContactOpen(true)} /> : null}
+      {store ? <LastSeenRow show={store.show_last_seen === true} onSaved={(v) => setStore((cur) => (cur ? { ...cur, show_last_seen: v } : cur))} /> : null}
       <ContactSheet visible={contactOpen} onClose={() => setContactOpen(false)} phone={store?.contact_phone ?? null} isPublic={!!store?.whatsapp_public}
         onSaved={(st) => { setStore((cur) => (cur ? { ...cur, contact_phone: st.contact_phone ?? null, whatsapp_public: !!st.whatsapp_public } : st)); setContactOpen(false); }} />
+    </View>
+  );
+}
+
+/** Última conexión pública (estilo P2P): "En línea" / "Activo hace…". Apagada por defecto: solo con consentimiento (cada cambio queda registrado). */
+function LastSeenRow({ show, onSaved }: { show: boolean; onSaved: (v: boolean) => void }) {
+  const auth = useAuth();
+  const [on, setOn] = useState(show); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  useEffect(() => setOn(show), [show]);
+  async function change(v: boolean) {
+    haptic.tap(); setOn(v); setErr(null); setBusy(true);
+    try { const st = await updateMyStore(auth, { show_last_seen: v }); onSaved(st.show_last_seen === true); }
+    catch (e) { setOn(!v); setErr(userMessage((e as Error).message)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <View style={{ gap: S.xs }}>
+      <View style={s.pubRow}>
+        <Icon name="time-outline" size={20} color={C.lilac} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={T.body}>{COPY.activity.toggle}</Text>
+          <Text style={T.footnote}>{on ? COPY.activity.toggleOn : COPY.activity.toggleOff}</Text>
+        </View>
+        <Switch value={on} onValueChange={change} disabled={busy} accessibilityLabel={COPY.activity.toggle}
+          trackColor={{ true: C.success, false: C.surface2 }} thumbColor={C.white} {...({ activeThumbColor: C.white } as object)} testID="last-seen-switch" />
+      </View>
+      {err ? <ErrorText>{err}</ErrorText> : null}
     </View>
   );
 }

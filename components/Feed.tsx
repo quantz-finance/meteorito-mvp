@@ -10,7 +10,9 @@ import { haptic, Icon, PrimaryButton, Sheet, Skeleton, type IconName } from '@/c
 import { StoreAvatar } from '@/components/StoreAvatar';
 import { FollowButton } from '@/components/FollowButton';
 import { SponsoredBlock } from '@/components/SponsoredBlock';
-import { StarRow, VerifiedBadge } from '@/components/SellerBits';
+import { ActivityLine, StarRow, VerifiedBadge } from '@/components/SellerBits';
+import { useActivity } from '@/lib/useActivity';
+import type { Activity } from '@/lib/activity';
 import { pressTransition } from '@/constants/motion';
 import { Fonts } from '@/constants/Colors';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
@@ -128,12 +130,13 @@ export function Feed({ header }: { header: ReactElement }) {
   );
 
   // Ventas cerradas de ejemplo mezcladas (1 de cada 6, mismo filtro); relleno invisible si queda una sola en la última fila.
+  const acts = useActivity(items.map((i) => i.seller.store_slug)); // última conexión: aparte y sin caché
   const mixed: Cell[] = phase === 'ready' ? mixFeed<FeedItem>(items, filter, q) : [];
   const cells: Cell[] = mixed.length % 2 ? [...mixed, { kind: 'filler', id: 'filler' }] : mixed;
   return (
     <>
-    <FlatList data={cells} keyExtractor={(i) => ('slug' in i ? i.slug : i.id)} style={{ flex: 1 }} numColumns={2} columnWrapperStyle={s.row}
-      renderItem={({ item, index }) => 'slug' in item ? <FeedCard item={item} index={index} filter={filter} />
+    <FlatList data={cells} extraData={acts} keyExtractor={(i) => ('slug' in i ? i.slug : i.id)} style={{ flex: 1 }} numColumns={2} columnWrapperStyle={s.row}
+      renderItem={({ item, index }) => 'slug' in item ? <FeedCard item={item} index={index} filter={filter} activity={acts[item.seller.store_slug] ?? null} />
         : isSale(item) ? <SaleCard post={item} onPress={() => { haptic.tap(); track('feed_item_clicked', { target: 'sale_example', position: index, verified: item.verified, filter }); setExample(true); }} />
         : <View style={s.cell} />}
       ItemSeparatorComponent={Sep} ListHeaderComponent={top} ListEmptyComponent={empty}
@@ -159,7 +162,7 @@ function openItem(it: FeedItem, index: number, filter: VerifiedFilter, target: '
 }
 
 /** Tarjeta compacta (media columna): foto, título, precio y vendedor con su check de identidad. */
-export const FeedCard = memo(function FeedCard({ item: it, index, filter }: { item: FeedItem; index: number; filter: VerifiedFilter }) {
+export const FeedCard = memo(function FeedCard({ item: it, index, filter, activity }: { item: FeedItem; index: number; filter: VerifiedFilter; activity?: Activity | null }) {
   const [broken, setBroken] = useState(false);
   return (
     <View style={[s.cell, s.card]} testID="feed-card">
@@ -180,6 +183,7 @@ export const FeedCard = memo(function FeedCard({ item: it, index, filter }: { it
         <Text style={[T.footnote, { color: C.text, flexShrink: 1 }]} numberOfLines={1}>{it.seller.display_name}</Text>
         {it.seller.verified ? <VerifiedBadge size={14} /> : null}
       </Pressable>
+      {activity ? <View style={s.activity}><ActivityLine activity={activity} compact /></View> : null}
     </View>
   );
 });
@@ -247,6 +251,7 @@ const s = StyleSheet.create({
   cell: { flex: 1, flexBasis: 0, minWidth: 0 },
   card: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 0.5, borderColor: C.line },
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: S.sm, paddingBottom: S.sm, minHeight: 32 },
+  activity: { paddingHorizontal: S.sm, marginTop: -S.xs, paddingBottom: S.sm }, // última conexión, debajo del vendedor
   photo: { width: '100%', aspectRatio: 1, backgroundColor: C.lilacBg },
   noPhoto: { alignItems: 'center', justifyContent: 'center' },
   follow: { position: 'absolute', top: 6, right: 6 },
