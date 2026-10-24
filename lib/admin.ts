@@ -43,6 +43,12 @@ export const decideDispute = (auth: MeteoritoAuth, slug: string, d: { outcome: O
   api<DecideResult>(auth, PATH, { action: 'admin_decide', slug, confirm: true, ...d });
 export const markGuestRefunded = (auth: MeteoritoAuth, slug: string, note: string) => api<{ done: boolean }>(auth, PATH, { action: 'admin_guest_refund', slug, note });
 
+/* ---------- Pagos a Cuenta IBAN (cola manual, 029) ---------- */
+export type { AdminPayoutRow } from '../api/_lib/payoutChoice';
+import type { AdminPayoutRow } from '../api/_lib/payoutChoice';
+export const listPayouts = (auth: MeteoritoAuth) => api<{ available: boolean; payouts: AdminPayoutRow[]; counts: { pendiente: number; pagado: number } }>(auth, PATH, { action: 'admin_payouts' });
+export const markPayoutPaid = (auth: MeteoritoAuth, slug: string, note: string) => api<{ done: boolean; already: boolean; paid_at: string }>(auth, PATH, { action: 'admin_payout_paid', slug, note });
+
 /* ---------- Vendedor: su versión de la disputa ---------- */
 export interface SellerResponseState { available: boolean; open: boolean; response: { body: string; photo: string | null; created_at: string } | null; deadline: string | null; can_respond: boolean }
 export const getSellerResponse = (auth: MeteoritoAuth, slug: string) => api<SellerResponseState>(auth, PATH, { action: 'seller_response_get', slug });

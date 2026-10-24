@@ -41,9 +41,13 @@ export const maskPhone = (last4: string) => `•••• ${last4}`;
 
 export const cleanHolder = (v: unknown) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
 
-/** Lo único que sale del servidor hacia la app: nunca el IBAN completo ni el teléfono completo. */
-export interface PayoutView { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null }
-export const payoutView = (row: { iban: string; holder_name: string; sinpe_phone?: string | null; updated_at?: string | null }): PayoutView => ({
-  iban_last4: row.iban.slice(-4), holder_name: row.holder_name,
-  sinpe_last4: row.sinpe_phone ? row.sinpe_phone.slice(-4) : null, updated_at: row.updated_at ?? null,
+/** Lo único que sale del servidor hacia la app: nunca el IBAN completo ni el teléfono completo. La dirección Stellar es
+ *  pública (la puso el vendedor) y se muestra corta en la app. method: dónde cobra (029); sin 029 siempre 'iban'. */
+export interface PayoutView { method: 'iban' | 'wallet'; iban_last4: string | null; holder_name: string | null; sinpe_last4: string | null; stellar_address: string | null; updated_at: string | null }
+export const payoutView = (row: { iban?: string | null; holder_name?: string | null; sinpe_phone?: string | null; updated_at?: string | null; payout_method?: string | null; stellar_address?: string | null }): PayoutView => ({
+  method: row.payout_method === 'wallet' ? 'wallet' : 'iban',
+  iban_last4: row.iban ? row.iban.slice(-4) : null, holder_name: row.holder_name ?? null,
+  sinpe_last4: row.sinpe_phone ? row.sinpe_phone.slice(-4) : null, stellar_address: row.stellar_address ?? null, updated_at: row.updated_at ?? null,
 });
+/** "GDJX…2K7C" */
+export const shortStellar = (a: string | null | undefined) => (a && a.length > 12 ? `${a.slice(0, 4)}…${a.slice(-4)}` : a ?? '');
