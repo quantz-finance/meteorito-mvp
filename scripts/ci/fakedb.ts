@@ -2,19 +2,20 @@
 const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id', user_wallets: 'sub', session_nonces: 'nonce', invitations: 'code', seller_ratings: 'order_id', seller_profiles: 'sub' };
 /** Índices únicos además de la PK (→ 23505). */
 const UNIQUE: Record<string, string[][]> = { seller_follows: [['follower_id', 'seller_user_id']],
-  chat_conversations: [['token'], ['buyer_id', 'seller_user_id', 'ctx']], chat_messages: [['conversation_id', 'client_id']], chat_reports: [['conversation_id', 'reporter_role']] };
+  chat_conversations: [['token'], ['buyer_id', 'seller_user_id', 'ctx']], chat_messages: [['conversation_id', 'client_id']], chat_reports: [['conversation_id', 'reporter_role']],
+  buyer_notifications: [['order_id', 'channel', 'dedupe_key']], buyer_contacts: [['order_id', 'channel']], buyer_links: [['guest_sub', 'account_sub']] };
 export function fakeDb() {
   const tables: Record<string, any[]> = { orders: [], ramp_mock_payments: [], disputes: [], order_events: [], invitations: [] };
   let seq = 1;
   const from = (t: string) => {
-    tables[t] ??= [];
+    // Una lectura NO crea la tabla (así un SELECT opcional, p. ej. buyer_links, no cuenta como escritura en los tests).
     const filters: ((r: any) => boolean)[] = [];
-    let op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
-    let conflict: string[] = [];
+    let op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select'; let conflict: string[] = []; let ignoreDup = false;
     let payload: any = null; let returning = false;
     let sort: { c: string; asc: boolean } | null = null; let cap: number | null = null;
-    const rows = () => tables[t].filter((r) => filters.every((f) => f(r)));
+    const rows = () => (tables[t] ?? []).filter((r) => filters.every((f) => f(r)));
     const exec = () => {
+      if (op !== 'select') tables[t] ??= [];
       if (op === 'insert') {
         const list = Array.isArray(payload) ? payload : [payload];
         const stored: any[] = [];
@@ -28,7 +29,7 @@ export function fakeDb() {
       }
       if (op === 'upsert') { // onConflict: columnas separadas por coma (o la PK)
         const list = Array.isArray(payload) ? payload : [payload]; const cols = conflict.length ? conflict : [PK[t] ?? 'id']; const stored: any[] = [];
-        for (const r of list) { const hit = tables[t].find((x) => cols.every((c) => x[c] === r[c])); if (hit) { Object.assign(hit, r); stored.push({ ...hit }); } else { const row = { ...r }; const k = PK[t] ?? 'id'; if (row[k] == null) row[k] = seq++; tables[t].push(row); stored.push({ ...row }); } }
+        for (const r of list) { const hit = tables[t].find((x) => cols.every((c) => x[c] === r[c])); if (hit) { if (!ignoreDup) Object.assign(hit, r); stored.push({ ...hit }); } else { const row = { ...r }; const k = PK[t] ?? 'id'; if (row[k] == null) row[k] = seq++; tables[t].push(row); stored.push({ ...row }); } }
         return { data: returning ? stored : null, error: null };
       }
       if (op === 'update') { const rs = rows(); rs.forEach((r) => Object.assign(r, payload)); return { data: returning ? rs.map((r) => ({ ...r })) : null, error: null }; }
@@ -42,12 +43,13 @@ export function fakeDb() {
       select: () => { if (op !== 'select') returning = true; return q; },
       insert: (p: any) => { op = 'insert'; payload = p; return q; },
       update: (p: any) => { op = 'update'; payload = p; return q; },
-      upsert: (p: any, o?: { onConflict?: string }) => { op = 'upsert'; payload = p; conflict = (o?.onConflict ?? '').split(',').map((x) => x.trim()).filter(Boolean); return q; },
+      upsert: (p: any, o: { onConflict?: string; ignoreDuplicates?: boolean } = {}) => { op = 'upsert'; payload = p; conflict = String(o.onConflict ?? '').split(',').map((x) => x.trim()).filter(Boolean); ignoreDup = !!o.ignoreDuplicates; return q; },
       delete: () => { op = 'delete'; return q; },
       eq: (c: string, v: any) => { filters.push((r) => r[c] === v); return q; },
       neq: (c: string, v: any) => { filters.push((r) => r[c] !== v); return q; },
       is: (c: string, v: any) => { filters.push((r) => (r[c] ?? null) === v); return q; },
       lte: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] <= v); return q; },
+      gte: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] >= v); return q; },
       gt: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] > v); return q; },
       in: (c: string, vs: any[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       lt: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] < v); return q; },

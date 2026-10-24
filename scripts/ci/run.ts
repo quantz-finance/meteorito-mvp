@@ -80,6 +80,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '86', name: 'Seguidores privados: la tienda y el API nunca dicen quién sigue (ni al dueño); solo el número, que no se toca; ventas cerradas en el feed siguen', file: './t86-followers-private.test.ts', onchain: false },
   { id: '87', name: 'Comprar › Siguiendo: solo las tiendas que sigues (cuenta o dispositivo), con filtro y búsqueda, sin ejemplos ni Patrocinado, vacío en tuteo; Para ti no cambia', file: './t87-feed-siguiendo.test.ts', onchain: false },
   { id: '88', name: 'Volver del invitado sin historial: nunca a una ruta con login (va a Mis compras); bienvenida -> feed', file: './t88-volver-invitado.test.ts', onchain: false },
+  { id: '85', name: 'Comprador sin cuenta: avisos por WhatsApp/correo/cuenta con consentimiento, link de acceso firmado, vínculo con cuenta, avisos por estado con tope, sin 028 no rompe', file: './t85-contacto-comprador.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

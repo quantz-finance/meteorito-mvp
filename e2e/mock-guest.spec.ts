@@ -1,7 +1,7 @@
 // Build REAL + backend simulado (scripts/e2e/mock-server.mjs): el comprador sin cuenta tal como corre en producción.
 import { test, expect, type Page } from '@playwright/test';
-import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN } from './mock';
-import { expectNoScroll, PAID } from './helpers';
+import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken } from './mock';
+import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -719,4 +719,135 @@ test('MCK-MIS-07 sin cuenta: bienvenida -> Privacidad -> Volver vuelve a la bien
   await expect(page).toHaveURL(/\/legal\//);
   await page.getByRole('button', { name: 'Volver' }).first().click();
   await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
+// ---- Recibe avisos de tu compra (comprador sin cuenta): tarjeta, recuperación con link y vuelta del login de Cavos ----
+// En este archivo (serial) y no en uno aparte: todos los mock-* comparten el estado del servidor simulado.
+const cntOrder = { slug: 'cnt001', kind: 'single', model: 'Bici de montaña', price_crc: 150000 };
+/** Capturas para revisión (solo local: E2E_SHOTS=<carpeta>). */
+const shot = (page: Page, name: string, project: string) => (process.env.E2E_SHOTS && project.includes('iphone-se') ? page.screenshot({ path: `${process.env.E2E_SHOTS}/contacto-${name}.png` }).catch(() => {}) : Promise.resolve());
+
+async function payAsGuestCnt(page: Page, slug = 'cnt001') {
+  await page.goto(`/p/${slug}`);
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await page.getByText('Entendido', { exact: true }).click(); // cierra la hoja "Pagado"
+}
+async function noHScroll(page: Page) {
+  await settle(page);
+  const w = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: window.innerWidth, wide: [...document.querySelectorAll('[data-testid="contact-card"] *')].filter((e) => e.getBoundingClientRect().right > window.innerWidth + 1).length }));
+  expect(w.sw, 'scroll horizontal').toBeLessThanOrEqual(w.iw + 1);
+  expect(w.wide, 'algo de la tarjeta se sale de la pantalla').toBe(0);
+}
+const cntCopyOk = async (page: Page) => { const t = await page.getByTestId('contact-card').innerText(); expect(t).not.toMatch(BANNED); expect(t).not.toMatch(VOSEO); expect(t).not.toMatch(/\p{Extended_Pictographic}/u); };
+
+test('CNT-01 sin la migración 028: no hay tarjeta y el pago sigue igual', async ({ page, request }) => {
+  await reset(request, [cntOrder]);
+  await payAsGuestCnt(page);
+  expect((await state(request)).orders.cnt001.status).toBe('fondeado');
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByTestId('contact-card')).toHaveCount(0);
+});
+
+test('CNT-02 WhatsApp (+506) y correo se guardan sin salir de la compra; consentimiento obligatorio', async ({ page, request }, info) => {
+  await reset(request, [cntOrder], false, 'inapp', true);
+  await payAsGuestCnt(page);
+  const card = page.getByTestId('contact-card');
+  await expect(card.getByText('Recibe avisos de tu compra')).toBeVisible();
+  for (const o of ['WhatsApp', 'Correo', 'Crear cuenta']) await expect(card.getByRole('radio', { name: o })).toBeVisible();
+  await card.scrollIntoViewIfNeeded();
+  await shot(page, 'tarjeta', info.project.name);
+  const url = page.url();
+  await card.getByRole('radio', { name: 'WhatsApp' }).click();
+  await expect(page.getByTestId('contact-cc')).toHaveValue('+506');
+  await page.getByTestId('contact-phone').fill('8888 7777');
+  await expectInputs16(page);
+  await expect(page.getByTestId('contact-save')).toBeDisabled(); // sin la casilla
+  await page.getByTestId('contact-consent').click();
+  await expect(card.getByText('Acepto que Meteorito use este contacto solo para avisarme sobre esta compra.')).toBeVisible();
+  await noHScroll(page); await cntCopyOk(page);
+  await shot(page, 'whatsapp', info.project.name);
+  await page.getByTestId('contact-save').click();
+  await expect(page.getByTestId('contact-saved-whatsapp')).toContainText('+506 •••• 7777');
+  expect(page.url()).toBe(url); // nunca navega
+  await card.getByRole('radio', { name: 'Correo' }).click();
+  await page.getByTestId('contact-email').fill('ana@correo.cr');
+  await page.getByTestId('contact-consent').click();
+  await page.getByTestId('contact-save').click();
+  await expect(page.getByTestId('contact-saved-email')).toContainText('a••@correo.cr');
+  expect(page.url()).toBe(url);
+  const s = await state(request);
+  expect(s.contacts.cnt001.map((c: any) => c.consent_version).every(Boolean)).toBe(true);
+  expect(s.orders.cnt001.status).toBe('fondeado');
+  await noHScroll(page);
+  await card.scrollIntoViewIfNeeded();
+  await shot(page, 'guardado', info.project.name);
+});
+
+test('CNT-03 "Ahora no" la oculta para esta compra (sin volver a insistir)', async ({ page, request }) => {
+  await reset(request, [cntOrder], false, 'inapp', true);
+  await payAsGuestCnt(page);
+  await page.getByTestId('contact-card').getByLabel('Ahora no').click();
+  await expect(page.getByTestId('contact-card')).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByTestId('contact-card')).toHaveCount(0);
+});
+
+test('CNT-04 Crear cuenta: el login vuelve a la MISMA /p/<slug> (redirect de Google/Apple) con la compra intacta', async ({ page, request }, info) => {
+  await reset(request, [cntOrder], false, 'inapp', true);
+  await payAsGuestCnt(page);
+  const before = await page.evaluate(() => ({ key: localStorage.getItem('meteorito:guest:v1'), pin: localStorage.getItem('meteorito:guest:pin:cnt001') }));
+  expect(before.pin).toBe(MOCK_PIN);
+  const card = page.getByTestId('contact-card');
+  await card.getByRole('radio', { name: 'Crear cuenta' }).click();
+  await page.getByTestId('contact-consent').click();
+  await page.getByTestId('contact-save').click();
+  await expect(page.getByTestId('contact-account-pending')).toBeVisible();
+  // El redirect_uri de Cavos es location.href: tiene que ser la compra, sin tokens.
+  expect(new URL(page.url()).pathname).toBe('/p/cnt001');
+  expect(page.url()).not.toContain('acceso=');
+  const pending = await page.evaluate(() => JSON.parse(localStorage.getItem('meteorito:contact:link-pending') || 'null'));
+  expect(pending?.slug).toBe('cnt001');
+  // Vuelta del proveedor OAuth (otra carga completa de la página, como en iPhone).
+  await page.goto('/p/cnt001?cavos_auth_code=e2e-code&state=e2e');
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByTestId('contact-account-pending')).toBeVisible(); // retoma el vínculo pendiente
+  const after = await page.evaluate(() => ({ key: localStorage.getItem('meteorito:guest:v1'), pin: localStorage.getItem('meteorito:guest:pin:cnt001') }));
+  expect(after).toEqual(before); // misma llave y mismo código: la compra sigue en este dispositivo
+  await expect(page.getByText('Tengo un problema')).toBeVisible();
+  await noHScroll(page);
+  await page.getByTestId('contact-card').scrollIntoViewIfNeeded();
+  await shot(page, 'cuenta-vuelta', info.project.name);
+  await page.getByTestId('contact-account-pending').getByText('Cancelar', { exact: true }).click();
+  await expect(page.getByTestId('contact-account-pending')).toHaveCount(0);
+});
+
+test('CNT-05 link de acceso en OTRO dispositivo: recupera la compra, quita el token de la URL y genera un código nuevo', async ({ browser, request }, info) => {
+  await reset(request, [cntOrder], false, 'inapp', true);
+  const a = await (await browser.newContext({ ...info.project.use })).newPage();
+  await payAsGuestCnt(a);
+  await patch(request, 'cnt001', { status: 'enviado', shipped_tx: 's'.repeat(64) });
+  const tok = await accessToken(request, 'cnt001');
+  const b = await (await browser.newContext({ ...info.project.use })).newPage(); // teléfono nuevo: sin llave ni PIN
+  await b.goto('/p/cnt001');
+  await expect(b.getByTestId('recover-open')).toBeVisible(); // sin acceso: ofrece pedir el link
+  await b.goto(`/p/cnt001?acceso=${tok}`);
+  await expect(b.getByTestId('access-msg')).toContainText('Recuperaste el acceso a tu compra en este dispositivo.');
+  await expect.poll(() => b.url()).not.toContain('acceso=');
+  await expect(b.getByText('Recibí y está bien')).toBeVisible();
+  await expect(b.getByText('Tengo un problema')).toBeVisible();
+  await b.getByTestId('pin-reissue').click();
+  await expect(b.getByTestId('delivery-code')).toHaveText('246802');
+  await shot(b, 'acceso-recuperado', info.project.name);
+  const s = await state(request);
+  expect(s.calls.some((c: any) => c.action === 'buyer_pin_reissue' && c.access)).toBe(true);
+  // Recarga: el permiso queda en el dispositivo.
+  await b.reload();
+  await expect(b.getByText('Recibí y está bien')).toBeVisible();
+  // Link inválido: mensaje claro, la página sigue.
+  const c = await (await browser.newContext({ ...info.project.use })).newPage();
+  await c.goto('/p/cnt001?acceso=acc-falso');
+  await expect(c.getByTestId('access-msg')).toContainText('Este link venció');
+  await expect(c.getByTestId('recover-open')).toBeVisible();
 });
