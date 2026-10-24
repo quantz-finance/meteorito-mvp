@@ -15,13 +15,15 @@ import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } fr
 import { haptic, Icon, IconButton, PrimaryButton, Screen, Skeleton, st, toast, type IconName } from '@/components/ds';
 import { BackButton } from '@/components/BackButton';
 import { StoreAvatar } from '@/components/StoreAvatar';
-import { SalesOutcomeLine, StarRow, VerifiedBadge } from '@/components/SellerBits';
+import { ActivityLine, SalesOutcomeLine, StarRow, VerifiedBadge } from '@/components/SellerBits';
 import { pressTransition } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import { formatCRC } from '@/lib/orders';
 import { getMyStore, getSellerProfile, storeLink, type SellerProfile, type Store, type StoreItem } from '@/lib/store';
 import { memberSince, timeAgo } from '@/lib/timeago';
+import { useActivity } from '@/lib/useActivity';
+import type { Activity } from '@/lib/activity';
 import { track } from '@/lib/analytics';
 
 export default function PerfilVendedor() {
@@ -38,6 +40,7 @@ export default function PerfilVendedor() {
     return () => { live = false; };
   }, [auth.isAuthenticated, auth.address]);
   const owner = !!p && isOwnerView(auth, mine?.store_slug, slug);
+  const acts = useActivity(p ? [p.store_slug] : []); // última conexión: aparte y sin caché
   useEffect(() => {
     if (!slug) return;
     let live = true;
@@ -60,7 +63,7 @@ export default function PerfilVendedor() {
       {error ? <Notice icon="cloud-offline-outline" title="No pudimos abrir este perfil" text={error} />
         : p === null ? <Notice icon="storefront-outline" title="Este perfil no existe" text="Revisa el link o pídele al vendedor que te lo mande de nuevo." />
         : p === undefined ? <ProfileSkeleton /> : <Profile p={owner && mine ? { ...p, display_name: mine.display_name, avatar_url: mine.avatar_url ?? null } : p}
-          owner={owner} mine={mine} onMine={setMine} onManage={setManaging}
+          activity={acts[p.store_slug] ?? null} owner={owner} mine={mine} onMine={setMine} onManage={setManaging}
           tools={owner && mine ? <OwnerTools store={mine} onStore={setMine} managing={managing} onCloseManage={() => setManaging(null)} /> : null} />}
     </Screen>
   );
@@ -82,7 +85,7 @@ function openWhatsApp(p: SellerProfile) {
   Linking.openURL(`${p.whatsapp}?text=${msg}`).catch(() => {});
 }
 
-function Profile({ p, owner, mine, onMine, onManage, tools }: { p: SellerProfile; owner: boolean; mine: Store | null; onMine: (s: Store) => void; onManage: (it: StoreItem) => void; tools: ReactNode }) {
+function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: SellerProfile; activity: Activity | null; owner: boolean; mine: Store | null; onMine: (s: Store) => void; onManage: (it: StoreItem) => void; tools: ReactNode }) {
   // Dueño: sus productos de la sesión (incluye los en pausa) y tocar uno lo gestiona; visitante: los activos y tocar abre la ficha.
   const managed = new Set(owner && mine ? mine.items.map((i) => i.slug) : []);
   const items: StoreItem[] = owner && mine ? [...mine.items, ...p.items.filter((i) => !managed.has(i.slug))] : p.items;
@@ -103,6 +106,7 @@ function Profile({ p, owner, mine, onMine, onManage, tools }: { p: SellerProfile
           </View>
           <Text style={T.callout} numberOfLines={1}>@{p.store_slug}</Text>
           {followers != null ? <Text style={T.footnote} testID="followers-count"><Text style={{ color: C.text, fontFamily: Fonts.bold }}>{followers}</Text> {COPY.follow.followers(followers)}</Text> : null}
+          <ActivityLine activity={activity} center />
           {p.bio ? <Text style={[T.body, { textAlign: 'center', marginTop: S.xs }]} numberOfLines={4}>{p.bio}</Text> : null}
           {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
           {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{COPY.identity.unconfirmed}</Text></View> : null}

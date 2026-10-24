@@ -14,7 +14,10 @@
 //  GET  ?og=<usuario>                             -> HTML de /t/<usuario> con meta OG (vercel.json lo usa para los bots que
 //                                                 arman la vista previa al compartir: WhatsApp, Facebook, X, iMessage…)
 //  POST { action:'me' }                          (Bearer Cavos) -> mi tienda (la crea con un usuario único si no existe)
-//  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone?, whatsapp_public? } (Bearer Cavos) -> cambiar usuario, nombre,
+//  GET  ?activity=<usuario>[,<usuario>…]        -> última conexión en rango grueso SOLO de quienes consintieron (021+023).
+//                                                 Sin caché: apagarla se nota de inmediato. Nunca la hora exacta.
+//  POST { action:'seen' }                        (Bearer Cavos) -> marca actividad (última conexión); solo con consentimiento; máx. 1 escritura / 5 min
+//  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone?, whatsapp_public?, show_last_seen? } (Bearer Cavos) -> cambiar usuario, nombre,
 //                                                 foto o WhatsApp de contacto (foto: solo una subida a SU carpeta por
 //                                                 /api/photos/upload-url; null la quita. Teléfono: CR, se guarda +506XXXXXXXX;
 //                                                 '' o null lo quita. Migración 016. whatsapp_public: mostrarlo en el
@@ -43,6 +46,7 @@
 //  POST { action:'import_listing', url }          (igual) -> lo mismo para cualquier anuncio público: Facebook, Mercado Libre,
 //                                                 Encuentra24, Amazon, AliExpress, Walmart o cualquier página https con
 //                                                 JSON-LD/Open Graph (api/_lib/importers, SSRF estricto). + provider y source_url.
+import { activityBySlug, lastSeenStateOf, LastSeenUnavailable, setLastSeen, touchSeen } from '../_lib/activity';
 import { db, fail, json, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
@@ -190,6 +194,12 @@ export default async function handler(req: any, res: any) {
       if (!p) throw new HttpError(404, 'Este perfil no existe.');
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=120');
       return json(res, 200, p);
+    }
+    if (req.method === 'GET' && req.query?.activity != null) {
+      // Última conexión: aparte del feed y del perfil (que se cachean) para que apagarla no deje rastro en ninguna caché.
+      const slugs = [...new Set(String(req.query.activity).split(',').map(normalizeStoreSlug).filter(validStoreSlug))].slice(0, 60);
+      res.setHeader('Cache-Control', 'private, no-store, max-age=0');
+      return json(res, 200, { activity: await activityBySlug(slugs) });
     }
     if (req.method === 'GET' && req.query?.og != null) return ogPage(req, res);
     if (req.method === 'GET' && req.query?.seller_of != null) {
@@ -340,10 +350,15 @@ export default async function handler(req: any, res: any) {
       res.setHeader?.('Cache-Control', 'no-store');
       return json(res, 200, { orders });
     }
+    if (b.action === 'seen') {
+      // Última conexión: UPDATE condicional (no escribe si ya hay una de hace menos de 5 min). Nunca devuelve la hora.
+      res.setHeader?.('Cache-Control', 'no-store');
+      return json(res, 200, { updated: await touchSeen(user.sub) });
+    }
     if (b.action === 'me') {
       const p = await myProfile(user.sub, user.email);
-      const [mine, contact_phone, whatsapp_public] = await Promise.all([ownerStore(user.sub, p), contactPhoneOf(user.sub), whatsappPublicOf(user.sub)]);
-      return json(res, 200, { ...mine, contact_phone, whatsapp_public: !!contact_phone && whatsapp_public });
+      const [mine, contact_phone, whatsapp_public, ls] = await Promise.all([ownerStore(user.sub, p), contactPhoneOf(user.sub), whatsappPublicOf(user.sub), lastSeenStateOf(user.sub), touchSeen(user.sub)]);
+      return json(res, 200, { ...mine, contact_phone, whatsapp_public: !!contact_phone && whatsapp_public, show_last_seen: ls.show, last_seen_decided: ls.decided });
     }
     if (b.action === 'listing_set') {
       if (!LISTING_STATUSES.includes(b.status)) throw new HttpError(400, 'Estado inválido.');
@@ -382,6 +397,16 @@ export default async function handler(req: any, res: any) {
           throw Object.assign(new HttpError(400, 'Primero guarda tu WhatsApp.'), { code: 'no_phone' });
         patch.whatsapp_public = b.whatsapp_public;
       } else if ('contact_phone' in patch && patch.contact_phone === null) { patch.whatsapp_public = false; implicitWa = true; }
+      // Última conexión pública: solo con consentimiento (apagada por defecto). Cada cambio queda registrado (023).
+      let lastSeen: boolean | undefined;
+      if (b.show_last_seen !== undefined) {
+        if (typeof b.show_last_seen !== 'boolean') throw Object.assign(new HttpError(400, 'Valor inválido.'), { code: 'bad_flag' });
+        try { lastSeen = (await setLastSeen(user.sub, b.show_last_seen)).show; }
+        catch (e) {
+          if (e instanceof LastSeenUnavailable) throw Object.assign(new HttpError(503, 'Todavía no puedes cambiar esto. Intenta más tarde.'), { code: 'last_seen_unavailable' });
+          throw e;
+        }
+      }
       let { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub); // solo el perfil del dueño
       if (error && 'whatsapp_public' in patch && missingColumn(error) && /whatsapp_public/.test(String(error.message ?? ''))) {
         if (!implicitWa) throw Object.assign(new HttpError(503, 'Todavía no puedes mostrar tu WhatsApp en el perfil. Intenta más tarde.'), { code: 'whatsapp_public_unavailable' });
@@ -397,7 +422,8 @@ export default async function handler(req: any, res: any) {
       const fresh = (await publicStore(slug)) ?? { store_slug: slug, display_name: (patch.display_name as string) ?? cur.display_name, avatar_url: null, rating_avg: null, rating_count: 0, items: [] };
       const contact_phone = 'contact_phone' in patch ? patch.contact_phone as string | null : await contactPhoneOf(user.sub);
       const whatsapp_public = 'whatsapp_public' in patch ? patch.whatsapp_public === true : await whatsappPublicOf(user.sub);
-      return json(res, 200, { ...('avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh), contact_phone, whatsapp_public: !!contact_phone && whatsapp_public });
+      const show_last_seen = lastSeen ?? (await lastSeenStateOf(user.sub)).show;
+      return json(res, 200, { ...('avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh), contact_phone, whatsapp_public: !!contact_phone && whatsapp_public, show_last_seen });
     }
     throw new HttpError(400, 'acción inválida');
   } catch (e) { return fail(res, e); }

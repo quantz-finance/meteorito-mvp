@@ -1,6 +1,7 @@
 // Modo demo: feed de Comprar y perfiles públicos simulados (misma forma que GET /api/store?feed / ?profile). Sin red.
 // Las fotos de ejemplo (/demo-feed/*.jpg) son opcionales: si no están en el build, la tarjeta muestra el ícono de producto.
 // ?feed=empty en la URL simula un feed vacío (para ver el estado vacío).
+import type { Activity } from './activity';
 import { foldText, matchesTokens, searchTokens, type VerifiedFilter } from '../api/_lib/feedText';
 import { demoGetStore, demoStoreSlug } from './demo';
 import { decodeRankCursor, encodeRankCursor, rankFeed } from '../api/_lib/feedRank';
@@ -9,11 +10,11 @@ import type { FeedItem, FeedPage, SellerProfile } from './store';
 
 const H = 3600e3;
 const outcome = (n: number) => { const d = n > 10 ? 1 : 0; return { completed: n, no_issues: n - d, disputes_resolved: d, disputes_open: 0 }; };
-interface DemoSeller { store_slug: string; display_name: string; verified: boolean; rating_avg: number | null; rating_count: number; avatar_url: string | null; sales: number; since: string; wa: string | null }
+interface DemoSeller { store_slug: string; display_name: string; verified: boolean; rating_avg: number | null; rating_count: number; avatar_url: string | null; sales: number; since: string; wa: string | null; seen?: Activity | null }
 const SELLERS: DemoSeller[] = [
-  { store_slug: 'jose-games', display_name: 'José Games', verified: true, rating_avg: 4.9, rating_count: 31, avatar_url: null, sales: 48, since: '2026-05-12T00:00:00Z', wa: 'https://wa.me/50670001234' },
-  { store_slug: 'ana-solis', display_name: 'Ana Solís', verified: false, rating_avg: null, rating_count: 0, avatar_url: null, sales: 0, since: '2026-10-02T00:00:00Z', wa: null },
-  { store_slug: 'carlos-bikes', display_name: 'Carlos Bikes', verified: false, rating_avg: 4.5, rating_count: 4, avatar_url: null, sales: 6, since: '2026-08-20T00:00:00Z', wa: 'https://wa.me/50660004321' },
+  { store_slug: 'jose-games', display_name: 'José Games', verified: true, rating_avg: 4.9, rating_count: 31, avatar_url: null, sales: 48, since: '2026-05-12T00:00:00Z', wa: 'https://wa.me/50670001234', seen: { k: 'min', n: 15 } },
+  { store_slug: 'ana-solis', display_name: 'Ana Solís', verified: false, rating_avg: null, rating_count: 0, avatar_url: null, sales: 0, since: '2026-10-02T00:00:00Z', wa: null, seen: { k: 'days', n: 4 } },
+  { store_slug: 'carlos-bikes', display_name: 'Carlos Bikes', verified: false, rating_avg: 4.5, rating_count: 4, avatar_url: null, sales: 6, since: '2026-08-20T00:00:00Z', wa: 'https://wa.me/50660004321', seen: { k: 'h', n: 3 } },
 ];
 const ITEMS: { slug: string; seller: string; title: string; price_crc: number; photo: string | null; ago: number }[] = [
   { slug: 'dmf001', seller: 'jose-games', title: 'PlayStation 3 con control', price_crc: 95000, photo: '/demo-feed/playstation.jpg', ago: 2 },
@@ -35,13 +36,20 @@ const DEMO_ADS = ['dmf003', 'dmf005', 'dmf004'];
 const ads = () => { try { return new URLSearchParams(window.location.search).get('ads') === '1'; } catch { return false; } };
 const empty = () => { try { return new URLSearchParams(window.location.search).get('feed') === 'empty'; } catch { return false; } };
 const valeria = (): DemoSeller => {
-  const s = demoGetStore(demoStoreSlug());
+  const s = demoGetStore(demoStoreSlug(), true); // con show_last_seen (solo lo usamos para el nombre, foto, puntuación y la última conexión)
   return { store_slug: s?.store_slug ?? 'valeria', display_name: s?.display_name ?? 'Valeria', verified: true,
     // con calificaciones reales del demo, esas; si no, una muestra para que el perfil no se vea vacío
-    rating_avg: s?.rating_count ? s.rating_avg : 4.7, rating_count: s?.rating_count || 3, avatar_url: s?.avatar_url ?? null, sales: 23, since: '2026-06-03T00:00:00Z', wa: 'https://wa.me/50688881234' };
+    rating_avg: s?.rating_count ? s.rating_avg : 4.7, rating_count: s?.rating_count || 3, avatar_url: s?.avatar_url ?? null, sales: 23, since: '2026-06-03T00:00:00Z', wa: 'https://wa.me/50688881234',
+    seen: s?.show_last_seen === true ? { k: 'online' } : null }; // el vendedor del demo es quien usa la app; solo si la encendió
 };
 const sellerOf = (slug: string) => (slug === 'valeria' ? valeria() : SELLERS.find((s) => s.store_slug === slug)!);
 const pub = (s: DemoSeller) => ({ store_slug: s.store_slug, display_name: s.display_name, avatar_url: s.avatar_url, verified: s.verified, rating_avg: s.rating_avg, rating_count: s.rating_count });
+/** Igual que GET /api/store?activity=: solo los vendedores que la encendieron (los de ejemplo, sí; Valeria, si consintió). */
+export async function demoActivity(slugs: string[]): Promise<Record<string, Activity>> {
+  const out: Record<string, Activity> = {};
+  for (const slug of slugs) { const s = slug === demoStoreSlug() ? valeria() : SELLERS.find((x) => x.store_slug === slug); if (s?.seen) out[slug] = s.seen; }
+  return out;
+}
 
 function all(): FeedItem[] {
   if (empty()) return [];

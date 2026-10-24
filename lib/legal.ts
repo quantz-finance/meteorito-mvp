@@ -1,7 +1,7 @@
 // Textos legales BORRADOR (pendientes de revisión legal). Español neutro.
 // Redacción prudente: describe lo que el código hace hoy (sin verificación de IMEI/iCloud, disputas resueltas por el equipo).
 export const CONTACT_EMAIL = 'team@meteorito.app';
-export const LEGAL_UPDATED = '12 de octubre de 2026';
+export const LEGAL_UPDATED = '24 de octubre de 2026';
 
 type Doc = { title: string; sections: { h: string; p: string[] }[] };
 const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
@@ -17,6 +17,7 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
         'Publicaciones: categoría, marca, modelo, estado, precio, descripción, fotos e identificador del equipo (IMEI o número de serie) que tú ingresas.',
         'Fotos: se guardan en Supabase (almacenamiento) y se muestran en el link de venta.',
         'Pedidos y disputas: estados, fechas, motivo y evidencia que adjuntes.',
+        'Última conexión (opcional): si la enciendes, quienes ven tu tienda en Meteorito ven cuándo estuviste activo por última vez, de forma aproximada y sin hora exacta (por ejemplo, «En línea» o «Activo hace 3 h»), para que sepan si sueles estar disponible. Está apagada por defecto, registramos cuándo la enciendes o la apagas, y puedes apagarla cuando quieras en Mi cuenta; al apagarla dejamos de mostrarla y borramos la hora guardada.',
       ] },
       { h: 'Analítica de uso (PostHog)', p: [
         'Usamos PostHog para medir cómo se usa la app (pantallas vistas, pasos completados, errores) y para reportar métricas agregadas del negocio.',

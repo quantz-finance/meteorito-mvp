@@ -68,6 +68,20 @@ export const COPY = {
     promoteText: 'Pronto podrás promocionar tus productos: aparecerán en el bloque Patrocinado de Comprar, donde los ven más compradores. Por ahora no se cobra nada y no tienes que hacer nada.',
   },
   myStore: { confirmIdentity: 'Confirma tu identidad' },
+  activity: {
+    online: 'En línea',
+    min: (n: number) => `Activo hace ${n} min`,
+    hours: (n: number) => `Activo hace ${n} h`,
+    yesterday: 'Activo ayer',
+    days: (n: number) => `Activo hace ${n} días`,
+    toggle: 'Mostrar mi última conexión',
+    // Consentimiento (Ley 8968): apagado por defecto. Si cambia algún texto, sube LAST_SEEN_TEXT_VERSION (api/_lib/activity.ts).
+    toggleOn: 'Quienes ven tu tienda en Meteorito ven cuándo estuviste activo por última vez (aproximado, sin hora exacta). Puedes apagarlo cuando quieras.',
+    toggleOff: 'Apagado: nadie ve cuándo estuviste activo.',
+    inviteTitle: 'Tu última conexión',
+    invite: 'Mostrar a quienes ven tu tienda en Meteorito cuándo estuviste activo por última vez (aproximado, sin hora exacta). Puedes apagarlo cuando quieras en Mi cuenta.',
+    inviteDone: 'Listo',
+  },
   store: {
     share: 'Compartir perfil', shareMine: 'Compartir mi tienda',
     linkCopied: 'Link copiado',

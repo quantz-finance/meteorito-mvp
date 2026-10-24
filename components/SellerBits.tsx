@@ -3,6 +3,7 @@ import { COPY } from '@/lib/copy';
 import { Text, View } from 'react-native';
 import { Icon, type IconName } from '@/components/ds';
 import type { SalesOutcome } from '@/lib/store';
+import { activityLabel, type Activity } from '@/lib/activity';
 import { C, S, T } from '@/constants/theme';
 
 export const VERIFIED_COLOR = '#5CC8FF';
@@ -42,6 +43,21 @@ export function SalesOutcomeLine({ sales, center }: { sales?: SalesOutcome | nul
     <View testID="sales-outcome" accessible accessibilityLabel={`${COPY.profile.outcomesTitle}: ${parts.map((x) => x.text).join(', ')}`}
       style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: center ? 'center' : 'flex-start' }}>
       {parts.map((x) => <View key={x.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name={x.icon} size={14} color={x.color} /><Text style={T.footnote}>{x.text}</Text></View>)}
+    </View>
+  );
+}
+
+/** Última conexión del vendedor (rango grueso del API, nunca la hora exacta). En línea: punto verde (ícono). */
+export function ActivityLine({ activity, compact = false, center = false }: { activity: Activity | null | undefined; compact?: boolean; center?: boolean }) {
+  const label = activityLabel(activity);
+  if (!label) return null;
+  const online = activity?.k === 'online';
+  const size = compact ? 8 : 10;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: compact ? 4 : 6, justifyContent: center ? 'center' : 'flex-start', minWidth: 0 }}
+      testID="seller-activity" accessibilityLabel={label}>
+      {online ? <Icon name="ellipse" size={size} color={C.success} /> : <Icon name="time-outline" size={compact ? 12 : 14} color={C.textDim} />}
+      <Text style={[T.footnote, compact && { fontSize: 12, lineHeight: 16 }, online && { color: C.success }]} numberOfLines={1}>{label}</Text>
     </View>
   );
 }
