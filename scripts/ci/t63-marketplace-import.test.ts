@@ -11,7 +11,8 @@ import { checkListingUrl, providerForHost, listingSource, IMPORT_FAILED, PROVIDE
 import { checkUrl, isPublicIp, safeGet, ImportNetError, type NetDeps, type RawResponse } from '../../api/_lib/importers/net';
 import { parseFor, suggestCrc, cutDescription, DESC_MAX } from '../../api/_lib/importers/parse';
 import { importListing, __setImportNetForTests, isImageBytes, siteOnlyTitle } from '../../api/_lib/importers';
-import { importNotice, importProps, supportedLabel, detectProvider } from '../../lib/listingImport';
+import { blockedNotice, importNotice, importProps, supportedLabel, detectProvider } from '../../lib/listingImport';
+import { COPY } from '../../lib/copy';
 import { installTestJwks, res, token } from './jwt';
 import { __setDbForTests } from '../../api/_lib/db';
 import { fakeDb } from './fakedb';
@@ -194,12 +195,13 @@ export async function run(t: T) {
   const props = importProps({ provider: 'amazon', result: 'success', title: 'X secreto', price_crc: 1, photos: ['a'], description: 'd', converted: true });
   t.check('analítica: provider y banderas, nunca URL, título ni precio', props.provider === 'amazon' && !JSON.stringify(props).includes('secreto') && !('url' in props) && !('price_crc' in props));
   const ven = read('app/(tabs)/vender.tsx');
-  t.check('Vender: un solo campo "Pega el link de tu anuncio", proveedor detectado, skeleton y error amable', /placeholder="Pega el link de tu anuncio"/.test(ven) && /testID="import-provider"/.test(ven) && /testID="import-skeleton"/.test(ven) && /setFbErr\(IMPORT_FAILED\)/.test(ven));
+  t.check('Vender: un solo campo "Pega el link de tu anuncio", proveedor detectado, skeleton y error amable', /placeholder=\{COPY\.importLink\.label\}/.test(ven) && COPY.importLink.label === 'Pega el link de tu anuncio' && COPY.importLink.title === 'Importar de un link' && /testID="import-provider"/.test(ven) && /testID="import-skeleton"/.test(ven) && /setFbErr\(IMPORT_FAILED\)/.test(ven));
   t.check('eventos import_started / import_succeeded / import_failed con provider', /track\('import_started', \{ provider \}\)/.test(ven) && /track\('import_succeeded', importProps\(r\)\)/.test(ven) && (ven.match(/track\('import_failed', \{ provider/g) ?? []).length === 2
     && ['import_started', 'import_succeeded', 'import_failed'].every((e) => read('docs/tracking-plan.md').includes('`' + e + '`')));
   // Textos visibles nuevos: sin las palabras prohibidas.
-  const sheet = ven.slice(ven.indexOf('title="Importar de un link"'), ven.indexOf('</Sheet>', ven.indexOf('title="Importar de un link"')));
-  const visible = [sheet, IMPORT_FAILED, supportedLabel(), JSON.stringify(importNotice({ result: 'partial', provider: 'amazon', provider_name: 'Amazon', source_url: null, title: null, price_crc: 1, price_source: { amount: 1, currency: 'USD' }, converted: true, description: null, photos: [], missing: ['title'] })),
+  const sheet = ven.slice(ven.indexOf('title={COPY.importLink.title}'), ven.indexOf('</Sheet>', ven.indexOf('title={COPY.importLink.title}')));
+  t.check('error de import: copy aprobado, sin nombrar al proveedor (servidor = cliente)', IMPORT_FAILED === 'Todavía no podemos leer ese link. Tómale foto a tu anuncio y súbela.' && COPY.importLink.failed === IMPORT_FAILED && blockedNotice('Mercado Libre') === IMPORT_FAILED);
+  const visible = [sheet, IMPORT_FAILED, COPY.importLink.label, supportedLabel(), JSON.stringify(importNotice({ result: 'partial', provider: 'amazon', provider_name: 'Amazon', source_url: null, title: null, price_crc: 1, price_source: { amount: 1, currency: 'USD' }, converted: true, description: null, photos: [], missing: ['title'] })),
     JSON.stringify(importNotice({ result: 'success', provider: 'encuentra24', provider_name: 'Encuentra24', source_url: null, title: 'a', price_crc: 1, price_source: null, converted: false, description: null, photos: ['x'], missing: [] }))].join(' ');
   const banned = visible.match(/\b(segur[oa]s?|garant[ií]as?|empresas?|fintech|bancos?|billeteras?)\b/gi);
   t.check('copy sin "seguro", "garantía", "empresa", "fintech", "banco" ni "billetera"', !banned, String(banned));

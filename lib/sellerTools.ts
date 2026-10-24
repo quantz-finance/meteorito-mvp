@@ -2,18 +2,19 @@
 // historial de ventas con estado y resultado. Sin red: la app usa /api/store (action 'orders') y el demo, lo mismo.
 import { agreementSummary, deliveryModeOf, protectionOf } from '../api/_lib/agreement';
 import { formatCRC, STATUS_LABEL } from './labels';
+import { COPY } from './copy';
 
 export type AdFormat = 'whatsapp' | 'marketplace';
 export const AD_FORMATS: { key: AdFormat; label: string }[] = [
   { key: 'whatsapp', label: 'WhatsApp' },
   { key: 'marketplace', label: 'Facebook o Marketplace' },
 ];
-export const AD_TITLE = 'Plantilla de anuncio';
+export const AD_TITLE = COPY.adTemplate.title;
 export const AD_HINT = 'Texto listo para pegar en tu publicación o chat, con tu link de pago.';
-export const AD_COPY = 'Copiar anuncio';
-export const AD_COPIED = 'Anuncio copiado';
-/** Cómo funciona el pago, en una línea (sin promesas: el dinero queda apartado y se libera después de la entrega). */
-export const AD_CUSTODY = 'Pago en custodia con Meteorito: el dinero queda apartado y el vendedor lo recibe después de la entrega.';
+export const AD_COPY = COPY.adTemplate.copy;
+export const AD_COPIED = COPY.adTemplate.copied;
+/** Cómo funciona el pago (copy aprobado, lib/copy.ts). */
+export const AD_CUSTODY = COPY.adTemplate.custody;
 
 export interface AdInput { title: string; price_crc: number; link: string; description?: string | null; delivery_mode?: string | null; protection_minutes?: number | null }
 
@@ -22,7 +23,7 @@ export function adTemplate(o: AdInput, format: AdFormat): string {
   const mode = deliveryModeOf(o);
   const agreement = agreementSummary(mode, protectionOf({ delivery_mode: mode, protection_minutes: o.protection_minutes }));
   if (format === 'whatsapp') {
-    return [`${title} por ${formatCRC(o.price_crc)}.`, agreement, AD_CUSTODY, `Paga aquí, sin crear cuenta: ${o.link}`].join('\n');
+    return [`${title} por ${formatCRC(o.price_crc)}.`, agreement, AD_CUSTODY, COPY.adTemplate.payHere(o.link)].join('\n');
   }
   const desc = (o.description ?? '').trim().slice(0, 500);
   return [
@@ -33,16 +34,16 @@ export function adTemplate(o: AdInput, format: AdFormat): string {
     ...agreement.split(' · ').map((l) => `- ${l}`),
     `- ${AD_CUSTODY}`,
     '',
-    `Link para pagar (sin crear cuenta): ${o.link}`,
+    COPY.adTemplate.payHere(o.link),
   ].join('\n');
 }
 
 // ---------- Historial de ventas ----------
-export const HISTORY_TITLE = 'Historial de ventas';
+export const HISTORY_TITLE = COPY.salesHistory.title;
 export const HISTORY_EMPTY = 'Todavía no tienes ventas. Cuando alguien pague uno de tus links, aparece aquí.';
 export type Outcome = 'cobrado' | 'parcial' | 'reembolsado' | 'cancelado' | 'en_curso';
 export const OUTCOME_LABEL: Record<Outcome, string> = {
-  cobrado: 'Cobrado', parcial: 'Cobro parcial', reembolsado: 'Reembolsado al comprador', cancelado: 'Sin venta', en_curso: 'En curso',
+  cobrado: COPY.salesHistory.cobrado, parcial: COPY.salesHistory.parcial, reembolsado: COPY.salesHistory.reembolsado, cancelado: COPY.salesHistory.cancelado, en_curso: COPY.salesHistory.enCurso,
 };
 const CLOSED = ['liberado', 'resuelto', 'cancelado'];
 
@@ -77,7 +78,7 @@ export function salesHistory(orders: HistoryOrder[]): SaleRow[] {
       const outcome = outcomeOf(o);
       const collected = collectedOf(o);
       const resultLabel = outcome === 'parcial' ? `${OUTCOME_LABEL.parcial}: ${formatCRC(collected)}`
-        : o.status === 'resuelto' && outcome === 'en_curso' ? 'Disputa resuelta' : OUTCOME_LABEL[outcome];
+        : o.status === 'resuelto' && outcome === 'en_curso' ? COPY.salesHistory.disputaResuelta : OUTCOME_LABEL[outcome];
       return {
         slug: o.slug, title: `${o.brand ?? ''} ${o.model ?? ''}`.trim() || 'Artículo', price_crc: o.price_crc, status: o.status,
         statusLabel: STATUS_LABEL[o.status] ?? o.status, outcome, outcomeLabel: resultLabel, collected,
