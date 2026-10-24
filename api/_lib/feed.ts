@@ -125,6 +125,13 @@ export async function sellerOfOrder(orderSlug: string) {
   const s = sellers.get(sub);
   return s ? { ...publicSeller(s), sales } : null;
 }
+/** Reseñas públicas (más nuevas primero). comment y buyer_name: migración 018; sin ella, solo estrellas. Nunca el comprador. */
+async function reviewsOf(sub: string): Promise<{ data: any[] }> {
+  const q = (cols: string) => db().from('seller_ratings').select(cols).eq('seller_user_id', sub).order('created_at', { ascending: false }).limit(30);
+  let { data, error } = await q('stars, created_at, comment, buyer_name');
+  if (error && missingColumn(error)) ({ data, error } = await q('stars, created_at'));
+  return { data: error ? [] : data ?? [] };
+}
 /** Perfil público del vendedor: lo de la tienda + reseñas, ventas, miembro desde y WhatsApp (solo si eligió mostrarlo). */
 export async function sellerProfile(slug: string) {
   let row: any = null;
@@ -141,7 +148,7 @@ export async function sellerProfile(slug: string) {
     db().from('public_stores').select('rating_avg, rating_count').eq('store_slug', slug).maybeSingle(),
     db().from('public_store_items').select('slug, title, price_crc, photo, created_at').eq('store_slug', slug).order('created_at', { ascending: false }).limit(60),
     salesOutcome(row.sub),
-    db().from('seller_ratings').select('stars, created_at').eq('seller_user_id', row.sub).order('created_at', { ascending: false }).limit(30),
+    reviewsOf(row.sub),
   ]);
   if (e2) storeDbErr(e2);
   const phone = row.whatsapp_public === true && typeof row.contact_phone === 'string' && row.contact_phone ? row.contact_phone : null;
@@ -153,7 +160,8 @@ export async function sellerProfile(slug: string) {
     member_since: row.created_at ?? null,
     whatsapp: phone ? waLink(phone) : null,
     items: (items ?? []).map((i: any) => ({ slug: i.slug, title: i.title || 'Artículo', price_crc: Number(i.price_crc), photo: i.photo ?? null, created_at: i.created_at ?? null })),
-    reviews: (rv ?? []).map((r: any) => ({ stars: Number(r.stars), comment: null as string | null, buyer_name: null as string | null, created_at: r.created_at ?? null })),
+    reviews: (rv ?? []).map((r: any) => ({ stars: Number(r.stars), comment: typeof r.comment === 'string' && r.comment ? r.comment : null,
+      buyer_name: typeof r.buyer_name === 'string' && r.buyer_name ? r.buyer_name : null, created_at: r.created_at ?? null })),
   };
 }
 

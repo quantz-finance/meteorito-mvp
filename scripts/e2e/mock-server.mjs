@@ -180,7 +180,7 @@ async function api(req, path, q, b) {
       if (o.buyer !== guest) throw E(403, 'Solo el comprador puede calificar.');
       if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw E(400, 'Elige de 1 a 5 estrellas.', 'bad_stars');
       if (S.ratings[o.slug]) throw E(409, 'Ya calificaste este pedido.', 'already_rated');
-      S.ratings[o.slug] = stars; return { rated: true, stars };
+      S.ratings[o.slug] = stars; return { rated: true, stars, store_slug: null };
     }
     throw E(401, 'Inicia sesión para continuar.');
   }

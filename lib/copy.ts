@@ -29,6 +29,15 @@ export const COPY = {
     noReviews: 'Todavía no tiene reseñas. Solo quien compró y recibió (pago liberado) puede dejar una.',
   },
   ficha: { seeProfile: 'Ver perfil del vendedor', soldBy: (name: string) => `Vendido por ${name}` },
+  review: {
+    title: '¿Cómo te fue con el vendedor?',
+    pickHint: 'Toca de 1 a 5 estrellas. Solo puedes dejar una reseña por compra.',
+    commentPlaceholder: 'Cuéntales a otros compradores cómo te fue (opcional)', commentLabel: 'Comentario, opcional',
+    namePlaceholder: 'Tu nombre (opcional), ej. María R.', nameLabel: 'Tu nombre, opcional',
+    publicNote: 'Tu reseña es pública en el perfil del vendedor con tu nombre corto (ej. "María R."). Sin links.',
+    submit: 'Publicar reseña', thanks: '¡Gracias por tu reseña!', thanksText: 'Ayuda a otros compradores a elegir con confianza.',
+    seeProfile: 'Ver el perfil del vendedor', failed: 'No pudimos guardar tu reseña.',
+  },
   myStore: { confirmIdentity: 'Confirma tu identidad' },
 } as const;
 

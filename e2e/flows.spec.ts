@@ -238,8 +238,10 @@ test.describe('Calificaciones y push (demo)', () => {
     await page.getByText('Recibí y está bien', { exact: true }).click();
     await page.getByText('Cerrar', { exact: true }).click();
     await page.getByRole('button', { name: '5 estrellas' }).click();
-    await expect(page.getByText('Tu calificación ayuda a otros compradores.')).toBeVisible();
-    await expect(page.getByRole('button', { name: '4 estrellas' })).toBeDisabled();
+    await page.getByLabel('Comentario, opcional').fill('Todo perfecto, muy amable');
+    await page.getByText('Publicar reseña', { exact: true }).click();
+    await expect(page.getByText('¡Gracias por tu reseña!')).toBeVisible();
+    await expect(page.getByText('Publicar reseña', { exact: true })).toHaveCount(0); // una sola vez
     await open(page, '/t/valeria', 'buyer');
     await expect(page.getByText(/5[.,]0/).first()).toBeVisible();
   });

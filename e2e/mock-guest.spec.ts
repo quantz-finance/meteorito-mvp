@@ -176,7 +176,8 @@ test('MCK-DIS-01 + CAL: el comprador disputa un pedido; otro pedido lo confirma 
   await expect(page.getByText('¡Listo! Pago liberado')).toBeVisible();
   await page.getByText('Cerrar', { exact: true }).last().click();
   await page.getByRole('button', { name: '5 estrellas' }).click();
-  await expect(page.getByText('Tu calificación ayuda a otros compradores.')).toBeVisible();
+  await page.getByText('Publicar reseña', { exact: true }).click();
+  await expect(page.getByText('¡Gracias por tu reseña!')).toBeVisible();
   expect((await state(request)).ratings[slug2]).toBe(5);
 });
 

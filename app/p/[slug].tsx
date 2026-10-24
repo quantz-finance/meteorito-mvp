@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { COPY } from '@/lib/copy';
 import { SalesOutcomeLine, StarsInline, VerifiedBadge } from '@/components/SellerBits';
 import { useEffect, useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Fonts } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Reveal } from '@/components/space';
 import { PayBox } from '@/components/PayBox';
@@ -164,36 +165,60 @@ export default function LinkDeVenta() {
   );
 }
 
-const RATABLE = ['entregado', 'liberado'];
-/** Calificación del comprador (1-5), una sola vez por pedido. El servidor valida la llave de invitado/sesión y el estado. */
+/** Reseña = compra verificada: solo con el pago liberado. */
+const RATABLE = ['liberado'];
+/** Reseña del comprador: 1-5 estrellas, comentario y nombre corto opcionales, una sola vez. El servidor valida la llave
+ *  de invitado/sesión y que el pedido esté liberado. Sale en el perfil público del vendedor. */
 function RateCard({ slug }: { slug: string }) {
   const auth = useAuth();
   const [done, setDone] = useState<number | null>(() => ratedStars(slug));
   const [pick, setPick] = useState(0);
+  const [comment, setComment] = useState('');
+  const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  async function send(stars: number) {
-    setPick(stars); setErr(null); setBusy(true);
-    try { await rateOrder(auth, slug, stars); rememberRated(slug, stars); setDone(stars); haptic.success(); }
-    catch (e: any) {
-      if (e?.code === 'already_rated') { rememberRated(slug, stars); setDone(stars); }
-      else { setErr(e?.message ?? 'No pudimos guardar tu calificación.'); setPick(0); }
+  const [store, setStore] = useState<string | null>(null);
+  async function send() {
+    if (!pick) return;
+    setErr(null); setBusy(true);
+    try {
+      const st0 = await rateOrder(auth, slug, pick, { comment, buyer_name: name });
+      rememberRated(slug, pick); setDone(pick); setStore(st0); haptic.success();
+      track('review_submitted', { stars: pick, has_comment: !!comment.trim(), has_name: !!name.trim() });
+    } catch (e: any) {
+      if (e?.code === 'already_rated') { rememberRated(slug, pick); setDone(pick); }
+      else setErr(e?.message ?? COPY.review.failed);
     } finally { setBusy(false); }
   }
   const shown = done ?? pick;
-  return (
+  if (done) return (
     <Card style={{ gap: S.sm, alignItems: 'center' }}>
-      <Text style={T.headline}>{done ? '¡Gracias por calificar!' : '¿Cómo te fue con el vendedor?'}</Text>
-      <View style={{ flexDirection: 'row', gap: S.xs }}>
+      <Text style={T.headline}>{COPY.review.thanks}</Text>
+      <View style={{ flexDirection: 'row', gap: S.xs }}>{[1, 2, 3, 4, 5].map((n) => <Icon key={n} name={n <= done ? 'star' : 'star-outline'} size={26} color={n <= done ? '#FFD84D' : C.textDim} />)}</View>
+      <Text style={[T.footnote, { textAlign: 'center' }]}>{COPY.review.thanksText}</Text>
+      {store ? <PrimaryButton title={COPY.review.seeProfile} icon="person-circle-outline" variant="ghost" onPress={() => router.push({ pathname: '/t/[store]', params: { store } })} /> : null}
+    </Card>
+  );
+  return (
+    <Card style={{ gap: S.sm }}>
+      <Text style={[T.headline, { textAlign: 'center' }]}>{COPY.review.title}</Text>
+      <View style={{ flexDirection: 'row', gap: S.xs, justifyContent: 'center' }}>
         {[1, 2, 3, 4, 5].map((n) => (
-          <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} estrella${n === 1 ? '' : 's'}`} disabled={!!done || busy}
-            onPress={() => send(n)} hitSlop={4} style={({ pressed }) => [{ padding: 6 }, pressed && { transform: [{ scale: 0.9 }] }]}>
+          <Pressable key={n} accessibilityRole="button" accessibilityLabel={`${n} estrella${n === 1 ? '' : 's'}`} accessibilityState={{ selected: n === pick }} disabled={busy}
+            onPress={() => { haptic.tap(); setPick(n); setErr(null); }} hitSlop={4} style={({ pressed }) => [{ padding: 6 }, pressed && { transform: [{ scale: 0.9 }] }]}>
             <Icon name={n <= shown ? 'star' : 'star-outline'} size={34} color={n <= shown ? '#FFD84D' : C.textDim} />
           </Pressable>
         ))}
       </View>
-      {err ? <Text style={[T.footnote, { color: C.orange, textAlign: 'center' }]}>{err}</Text>
-        : <Text style={[T.footnote, { textAlign: 'center' }]}>{done ? 'Tu calificación ayuda a otros compradores.' : 'Toca de 1 a 5 estrellas. Solo puedes calificar una vez.'}</Text>}
+      {pick ? <>
+        <TextInput style={[s.reviewInput, { minHeight: 88, textAlignVertical: 'top', paddingTop: 12 }]} value={comment} onChangeText={setComment} multiline maxLength={280}
+          placeholder={COPY.review.commentPlaceholder} placeholderTextColor={C.textDim} accessibilityLabel={COPY.review.commentLabel} />
+        <TextInput style={s.reviewInput} value={name} onChangeText={setName} maxLength={40} autoCapitalize="words" autoComplete="given-name"
+          placeholder={COPY.review.namePlaceholder} placeholderTextColor={C.textDim} accessibilityLabel={COPY.review.nameLabel} />
+        <Text style={T.footnote}>{COPY.review.publicNote}</Text>
+        {err ? <Text style={[T.footnote, { color: C.orange }]}>{err}</Text> : null}
+        <PrimaryButton title={COPY.review.submit} icon="send" loading={busy} onPress={send} />
+      </> : <Text style={[T.footnote, { textAlign: 'center' }]}>{COPY.review.pickHint}</Text>}
     </Card>
   );
 }
@@ -244,6 +269,7 @@ function Center({ icon, title, text }: { icon: IconName; title: string; text: st
 }
 
 const s = StyleSheet.create({
+  reviewInput: { backgroundColor: C.surface2, borderRadius: R.md, paddingHorizontal: S.md, minHeight: 48, color: C.text, fontFamily: Fonts.regular, fontSize: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' },
   noPhoto: { backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
   thumb: { width: 64, height: 64, borderRadius: 12, backgroundColor: C.lilacBg },

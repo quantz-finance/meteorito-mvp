@@ -22,6 +22,7 @@ import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe } from '../api/
 import { canShowContact, normalizeContactPhone } from '../api/_lib/contact'; // pura
 import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
 import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
+import { cleanReviewComment } from '../api/_lib/reviewText'; // pura
 import { daysLabel, EXTENSION_DAYS, MAX_TOTAL_FROM_PAYMENT_MIN, pendingExtension, protectionOf, validateAgreement } from '../api/_lib/agreement'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
@@ -315,9 +316,12 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo el comprador puede calificar.');
       const stars = Number(body.stars);
       if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw err(400, 'bad_stars', 'Elige de 1 a 5 estrellas.');
-      if (!['entregado', 'liberado'].includes(o.status)) throw err(409, 'not_ratable', 'Puedes calificar cuando el pedido esté entregado.');
+      if (o.status !== 'liberado') throw err(409, 'not_ratable', 'Podrás dejar tu reseña cuando se libere el pago.');
+      const c = cleanReviewComment(body.comment);
+      if (c === 'too_long') throw err(400, 'bad_comment', 'El comentario puede tener hasta 280 caracteres.');
+      if (c === 'link') throw err(400, 'bad_comment', 'Quita los links del comentario.');
       st.ratings ??= {}; if (st.ratings[o.slug]) throw err(409, 'already_rated', 'Ya calificaste este pedido.');
-      st.ratings[o.slug] = stars; emit(); return { rated: true, stars };
+      st.ratings[o.slug] = stars; emit(); return { rated: true, stars, store_slug: st.store?.slug ?? 'valeria' };
     }
     if (body.action === 'push_subscribe' || body.action === 'push_unsubscribe') return { ok: true };
     if (body.action === 'seller_contact') { // igual que el API real: solo el comprador de ESTE pedido y solo pagado
