@@ -1,4 +1,4 @@
--- 022: última conexión SOLO con consentimiento (Ley 8968, art. 5). Idempotente: se puede correr más de una vez.
+-- 023 (aplicada en prod como "022" el 24-oct; mismo contenido, renumerada porque #86 usa 022_seller_follows): última conexión SOLO con consentimiento (Ley 8968, art. 5). Idempotente: se puede correr más de una vez.
 -- 1) Apagada por defecto para quienes se registren desde ahora.
 -- 2) Registro de consentimiento: una fila por cada cambio (encender o apagar) con usuario, valor, fecha y versión del texto
 --    que vio (p. ej. 'v1-2026-10-24'). Solo la API (service role) lee y escribe: RLS activo y sin políticas.

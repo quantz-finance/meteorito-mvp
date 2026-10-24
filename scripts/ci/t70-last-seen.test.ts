@@ -3,7 +3,7 @@
 //        muestra nada, y nunca aparece como "inactivo".
 //      - Cada cambio queda en last_seen_consents (usuario, valor, fecha, versión del texto). Apagarla borra la hora.
 //      - Al público solo le llega un rango grueso por ?activity= (sin caché); el feed y el perfil (cacheados) no la traen.
-//      - Escritura máx. 1 vez cada 5 min (cliente y servidor). Sin 022 (o sin 021): nadie consiente, sin errores. Sin red.
+//      - Escritura máx. 1 vez cada 5 min (cliente y servidor). Sin 023 (o sin 021): nadie consiente, sin errores. Sin red.
 import type { T } from './setup';
 import { readFileSync } from 'node:fs';
 import { installTestJwks, token } from './jwt';
@@ -24,7 +24,7 @@ const MIN = 60e3, H = 60 * MIN, D = 24 * H;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const ISO_RE = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
 
-/** Simula la base sin 022 (tabla last_seen_consents) y, opcionalmente, sin 021 (columnas), como responde PostgREST. */
+/** Simula la base sin 023 (tabla last_seen_consents) y, opcionalmente, sin 021 (columnas), como responde PostgREST. */
 function withoutMigration(db: any, o: { cols: boolean }) {
   const orig = db.from.bind(db);
   const fail = (err: any): any => new Proxy({}, { get: (_t, k) => (k === 'then' ? (f: any) => Promise.resolve({ data: null, error: err }).then(f) : k === 'maybeSingle' || k === 'single' ? async () => ({ data: null, error: err }) : () => fail(err)) });
@@ -152,41 +152,41 @@ export async function run(t: T) {
   t.check('si el último consentimiento es false, no se muestra aunque la fila diga true', sp().show_last_seen === true && JSON.stringify((await act()).body) === '{"activity":{}}');
   consents().pop();
 
-  // -- sin 022 (021 sí, como prod hoy): nadie consiente, sin errores --
+  // -- sin 023 (021 sí, como prod hoy): nadie consiente, sin errores --
   sp().show_last_seen = true; sp().last_seen_at = ago(MIN); sp().whatsapp_public = false;
   const saved = db.tables.last_seen_consents; let restore = withoutMigration(db, { cols: false });
   r = await call({ tok, body: { action: 'me' } });
-  t.check('sin 022: Mi cuenta funciona y la ve apagada', r.code === 200 && r.body?.store_slug === 'valeria' && r.body?.show_last_seen === false, `${r.code} ${JSON.stringify(r.body)}`);
+  t.check('sin 023: Mi cuenta funciona y la ve apagada', r.code === 200 && r.body?.store_slug === 'valeria' && r.body?.show_last_seen === false, `${r.code} ${JSON.stringify(r.body)}`);
   const keep = sp().last_seen_at = ago(10 * MIN);
   r = await call({ tok, body: { action: 'seen' } });
-  t.check('sin 022: seen -> 200 sin escribir aunque la fila diga true', r.code === 200 && r.body?.updated === false && sp().last_seen_at === keep);
+  t.check('sin 023: seen -> 200 sin escribir aunque la fila diga true', r.code === 200 && r.body?.updated === false && sp().last_seen_at === keep);
   r = await act();
-  t.check('sin 022: el público no recibe nada aunque la fila diga true', r.code === 200 && JSON.stringify(r.body) === '{"activity":{}}', JSON.stringify(r.body));
-  t.check('sin 022: feed y perfil 200 sin rastro', (await profile())?.store_slug === 'valeria' && (await feed())?.items?.length >= 1 && await noTrace());
+  t.check('sin 023: el público no recibe nada aunque la fila diga true', r.code === 200 && JSON.stringify(r.body) === '{"activity":{}}', JSON.stringify(r.body));
+  t.check('sin 023: feed y perfil 200 sin rastro', (await profile())?.store_slug === 'valeria' && (await feed())?.items?.length >= 1 && await noTrace());
   r = await call({ tok, body: { action: 'update', show_last_seen: true } });
-  t.check('sin 022: encenderla -> 503 amable (sin registro no se enciende)', r.code === 503 && r.body?.code === 'last_seen_unavailable', `${r.code} ${JSON.stringify(r.body)}`);
+  t.check('sin 023: encenderla -> 503 amable (sin registro no se enciende)', r.code === 503 && r.body?.code === 'last_seen_unavailable', `${r.code} ${JSON.stringify(r.body)}`);
   r = await call({ tok, body: { action: 'update', show_last_seen: false } });
-  t.check('sin 022: apagarla -> 200 (ya estaba apagada para el público)', r.code === 200 && r.body?.show_last_seen === false, `${r.code} ${JSON.stringify(r.body)}`);
+  t.check('sin 023: apagarla -> 200 (ya estaba apagada para el público)', r.code === 200 && r.body?.show_last_seen === false, `${r.code} ${JSON.stringify(r.body)}`);
   restore();
 
-  // -- sin 021 ni 022 --
+  // -- sin 021 ni 023 --
   restore = withoutMigration(db, { cols: true });
   r = await call({ tok, body: { action: 'me' } });
-  t.check('sin 021/022: Mi cuenta funciona (apagada)', r.code === 200 && r.body?.show_last_seen === false, `${r.code}`);
+  t.check('sin 021/023: Mi cuenta funciona (apagada)', r.code === 200 && r.body?.show_last_seen === false, `${r.code}`);
   r = await call({ tok, body: { action: 'seen' } });
-  t.check('sin 021/022: seen -> 200', r.code === 200 && r.body?.updated === false);
-  t.check('sin 021/022: ?activity= -> 200 vacío', JSON.stringify((await act()).body) === '{"activity":{}}');
+  t.check('sin 021/023: seen -> 200', r.code === 200 && r.body?.updated === false);
+  t.check('sin 021/023: ?activity= -> 200 vacío', JSON.stringify((await act()).body) === '{"activity":{}}');
   r = await call({ tok, body: { action: 'update', display_name: 'Valeria M' } });
-  t.check('sin 021/022: el resto de update sigue funcionando', r.code === 200 && sp().display_name === 'Valeria M', `${r.code}`);
+  t.check('sin 021/023: el resto de update sigue funcionando', r.code === 200 && sp().display_name === 'Valeria M', `${r.code}`);
   restore(); db.tables.last_seen_consents = saved;
 
   // ---- código y migraciones ----
-  const m22 = readFileSync('supabase/migrations/022_last_seen_consent.sql', 'utf8').toLowerCase();
-  t.check('022: default false, idempotente', /alter column show_last_seen set default false/.test(m22) && /add column if not exists show_last_seen boolean not null default false/.test(m22));
-  t.check('022: tabla last_seen_consents (id, user_id, value, text_version, created_at default now()) con RLS', /create table if not exists public\.last_seen_consents/.test(m22)
-    && /user_id\s+text not null/.test(m22) && /value\s+boolean not null/.test(m22) && /text_version text not null/.test(m22) && /created_at\s+timestamptz not null default now\(\)/.test(m22)
-    && /enable row level security/.test(m22) && /create index if not exists/.test(m22));
-  t.check('022: apaga (y borra la hora) a todos los que no tienen registro de consentimiento', /update public\.seller_profiles/.test(m22) && /show_last_seen = false/.test(m22) && /last_seen_at = null/.test(m22) && /not exists \(select 1 from public\.last_seen_consents/.test(m22));
+  const m23 = readFileSync('supabase/migrations/023_last_seen_consent.sql', 'utf8').toLowerCase();
+  t.check('023: default false, idempotente', /alter column show_last_seen set default false/.test(m23) && /add column if not exists show_last_seen boolean not null default false/.test(m23));
+  t.check('023: tabla last_seen_consents (id, user_id, value, text_version, created_at default now()) con RLS', /create table if not exists public\.last_seen_consents/.test(m23)
+    && /user_id\s+text not null/.test(m23) && /value\s+boolean not null/.test(m23) && /text_version text not null/.test(m23) && /created_at\s+timestamptz not null default now\(\)/.test(m23)
+    && /enable row level security/.test(m23) && /create index if not exists/.test(m23));
+  t.check('023: apaga (y borra la hora) a todos los que no tienen registro de consentimiento', /update public\.seller_profiles/.test(m23) && /show_last_seen = false/.test(m23) && /last_seen_at = null/.test(m23) && /not exists \(select 1 from public\.last_seen_consents/.test(m23));
   const layout = readFileSync('app/_layout.tsx', 'utf8');
   t.check('la app avisa actividad al abrir y al volver (useLastSeenPing en el layout)', /useLastSeenPing\(/.test(layout));
   const ui = readFileSync('components/Payout.tsx', 'utf8');

@@ -14,7 +14,7 @@
 //  GET  ?og=<usuario>                             -> HTML de /t/<usuario> con meta OG (vercel.json lo usa para los bots que
 //                                                 arman la vista previa al compartir: WhatsApp, Facebook, X, iMessage…)
 //  POST { action:'me' }                          (Bearer Cavos) -> mi tienda (la crea con un usuario único si no existe)
-//  GET  ?activity=<usuario>[,<usuario>…]        -> última conexión en rango grueso SOLO de quienes consintieron (021+022).
+//  GET  ?activity=<usuario>[,<usuario>…]        -> última conexión en rango grueso SOLO de quienes consintieron (021+023).
 //                                                 Sin caché: apagarla se nota de inmediato. Nunca la hora exacta.
 //  POST { action:'seen' }                        (Bearer Cavos) -> marca actividad (última conexión); solo con consentimiento; máx. 1 escritura / 5 min
 //  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone?, whatsapp_public?, show_last_seen? } (Bearer Cavos) -> cambiar usuario, nombre,
@@ -397,7 +397,7 @@ export default async function handler(req: any, res: any) {
           throw Object.assign(new HttpError(400, 'Primero guarda tu WhatsApp.'), { code: 'no_phone' });
         patch.whatsapp_public = b.whatsapp_public;
       } else if ('contact_phone' in patch && patch.contact_phone === null) { patch.whatsapp_public = false; implicitWa = true; }
-      // Última conexión pública: solo con consentimiento (apagada por defecto). Cada cambio queda registrado (022).
+      // Última conexión pública: solo con consentimiento (apagada por defecto). Cada cambio queda registrado (023).
       let lastSeen: boolean | undefined;
       if (b.show_last_seen !== undefined) {
         if (typeof b.show_last_seen !== 'boolean') throw Object.assign(new HttpError(400, 'Valor inválido.'), { code: 'bad_flag' });

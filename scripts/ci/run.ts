@@ -61,7 +61,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '61', name: 'Perfil público del vendedor: verificado, ventas, reseñas, WhatsApp solo si elige mostrarlo, OG para compartir', file: './t61-seller-profile.test.ts', onchain: false },
   { id: '65', name: 'Herramientas del vendedor: plantilla de anuncio (link + acuerdo + custodia) e historial de ventas con resultado', file: './t65-seller-tools.test.ts', onchain: false },
   { id: '66', name: 'Una sola página de tienda: /t/<usuario> es Mi tienda; herramientas solo para el dueño; compartir siempre', file: './t66-store-page.test.ts', onchain: false },
-  { id: '70', name: 'Última conexión solo con consentimiento: apagada por defecto, registro de cada cambio, sin rastro público al apagarla, rangos sin hora exacta, sin 022 no rompe', file: './t70-last-seen.test.ts', onchain: false },
+  { id: '70', name: 'Última conexión solo con consentimiento: apagada por defecto, registro de cada cambio, sin rastro público al apagarla, rangos sin hora exacta, sin 023 no rompe', file: './t70-last-seen.test.ts', onchain: false },
   { id: '62', name: 'Reseñas: compra liberada, 1-5 + comentario opcional (280, sin links) + nombre corto, una por pedido', file: './t62-reviews.test.ts', onchain: false },
   { id: '64', name: 'WhatsApp en el perfil público: opt-in del vendedor, privado por defecto', file: './t64-whatsapp-public.test.ts', onchain: false },
   { id: '67', name: 'Feed: ventas cerradas de EJEMPLO (ficticias, etiqueta Ejemplo, sin montos, flag, 1 de cada 6, respeta el filtro); reales solo con opt-in', file: './t67-feed-sales.test.ts', onchain: false },

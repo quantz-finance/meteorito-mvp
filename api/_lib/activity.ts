@@ -1,7 +1,7 @@
 // Última conexión del vendedor (estilo P2P), SOLO con consentimiento (Ley 8968, art. 5).
-// - Datos: seller_profiles.last_seen_at + show_last_seen (021) y last_seen_consents (022: un registro por cada cambio,
+// - Datos: seller_profiles.last_seen_at + show_last_seen (021) y last_seen_consents (023: un registro por cada cambio,
 //   con usuario, valor, fecha y versión del texto que vio).
-// - Se muestra solo si show_last_seen = true Y el último registro de consentimiento dice true. Sin 022 (o ante cualquier
+// - Se muestra solo si show_last_seen = true Y el último registro de consentimiento dice true. Sin 023 (o ante cualquier
 //   error) nadie consiente: no se guarda ni se muestra nada, y la app funciona igual.
 // - Sin consentimiento no se guarda la hora (touchSeen no escribe) y al apagarlo se borra.
 // - Al público solo le llega un rango grueso, por un endpoint sin caché (?activity=); el feed y el perfil cacheados no
@@ -33,7 +33,7 @@ export function activityOf(lastSeen: unknown, show: boolean, now = Date.now()): 
 
 const missingTable = (e: any) => !!e && (e.code === '42P01' || e.code === 'PGRST205' || /last_seen_consents/.test(String(e.message ?? '')) && /does not exist|schema cache/i.test(String(e.message ?? '')));
 
-/** Último consentimiento de cada usuario. Sin 022 o con error: mapa vacío (= nadie consiente). */
+/** Último consentimiento de cada usuario. Sin 023 o con error: mapa vacío (= nadie consiente). */
 async function consentsOf(subs: string[]): Promise<{ ok: boolean; latest: Map<string, boolean> }> {
   const latest = new Map<string, boolean>();
   if (!subs.length) return { ok: true, latest };
@@ -77,7 +77,7 @@ export class LastSeenUnavailable extends Error { constructor() { super('last_see
 /**
  * El dueño enciende o apaga. Registra el consentimiento solo si el valor cambia.
  * Apagar: primero se apaga y se borra la hora (efecto inmediato, sin rastro), después se registra.
- * Encender: primero se registra (sin registro no se enciende); sin 022/021 -> LastSeenUnavailable.
+ * Encender: primero se registra (sin registro no se enciende); sin 023/021 -> LastSeenUnavailable.
  */
 export async function setLastSeen(sub: string, value: boolean, now = Date.now()): Promise<{ show: boolean; recorded: boolean }> {
   const cur = await lastSeenStateOf(sub);
