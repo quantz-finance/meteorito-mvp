@@ -16,9 +16,12 @@ test.describe('Comprar: feed y perfil', () => {
     await expect(page.getByRole('tab', { name: 'Identidad confirmada' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByTestId('feed-card').first()).toBeVisible();
     expect(await page.getByTestId('feed-card').count()).toBeGreaterThan(1);
-    const verifiedCards = await page.getByTestId('feed-card').count();
+    // La lista es virtualizada: en 375x667 (WebKit) solo monta las primeras tarjetas, así que no se cuentan;
+    // se comprueba que el filtro cambia: un vendedor sin confirmar no sale en "Identidad confirmada" y sí en "Todos".
+    const unconfirmed = page.getByRole('link', { name: 'Ver el perfil de Carlos Bikes' });
+    await expect(unconfirmed).toHaveCount(0);
     await page.getByRole('tab', { name: 'Todos' }).click();
-    await expect.poll(() => page.getByTestId('feed-card').count()).toBeGreaterThan(verifiedCards);
+    await expect(unconfirmed.first()).toBeAttached();
     const search = page.getByLabel('Buscar productos');
     await search.fill('PLÁYSTATION');
     await expect(page.getByText('Resultados')).toBeVisible();
