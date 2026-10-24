@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { haptic, Icon } from '@/components/ds';
 import { C, S, T } from '@/constants/theme';
 import { track } from '@/lib/analytics';
-import { RULES_ROUTE } from '@/lib/rules';
+import { BETA_NOTICE, BETA_NOTICE_LINK, RULES_ROUTE } from '@/lib/rules';
 
 const open = (from: string, before?: () => void) => { haptic.tap(); before?.(); track('rules_opened', { from }); router.push(RULES_ROUTE); };
 
@@ -36,7 +36,22 @@ export function RulesHint({ text, from, compact }: { text: string; from: string;
   );
 }
 
+/** Aviso de beta: footnote con icono de información, color tenue legible (C.textDim: AA sobre el fondo y las hojas)
+ *  y enlace "Ver cómo funciona". onNavigate cierra la hoja (PIN, disputa) antes de navegar. */
+export function BetaNotice({ from, onNavigate, center }: { from: string; onNavigate?: () => void; center?: boolean }) {
+  return (
+    <View style={[s.beta, center && { justifyContent: 'center' }]} testID="beta-notice">
+      <Icon name="information-circle-outline" size={16} color={C.textDim} />
+      <Text style={[T.footnote, { flexShrink: 1, color: C.textDim }, center && { textAlign: 'center' }]}>
+        {BETA_NOTICE}{' '}
+        <Text accessibilityRole="link" onPress={() => open(`beta_${from}`, onNavigate)} style={{ color: C.lilac, textDecorationLine: 'underline' }}>{BETA_NOTICE_LINK}</Text>
+      </Text>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
+  beta: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   link: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingVertical: 4, alignSelf: 'flex-start' },
   hint: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 28 },
 });

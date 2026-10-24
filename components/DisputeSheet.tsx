@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ErrorText, haptic, Icon, PrimaryButton, Sheet, type IconName } from '@/components/ds';
 import { ui } from '@/components/ui';
+import { BetaNotice } from '@/components/RulesLink';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { guestApi } from '@/lib/api';
 import { useAuth } from '@/lib/cavos';
@@ -51,6 +52,7 @@ export function DisputeSheet({ visible, onClose, slug, onOpened }: { visible: bo
         <PrimaryButton title="Reportar problema" icon="alert-circle" loading={busy} disabled={!reason} onPress={submit} />
       </>}>
       <Text style={T.callout}>Pausamos el pago al vendedor mientras lo revisamos. Respondemos en 24-48 h.</Text>
+      <BetaNotice from="dispute" onNavigate={onClose} />
       <View style={s.grid}>
         {REASONS.map((r) => {
           const on = reason === r.id;

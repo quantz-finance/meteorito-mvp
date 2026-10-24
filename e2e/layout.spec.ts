@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { open, seed, settle, expectNoScroll, expectInputs16, expectTitleAt16, BANNED, VOSEO } from './helpers';
+import { open, seed, settle, expectNoScroll, expectInputs16, expectTitleAt16, BANNED, VOSEO, withoutBetaNotice } from './helpers';
 
 const SCREENS: { path: string; role: 'seller' | 'buyer'; title?: string }[] = [
   { path: '/', role: 'seller' },
@@ -23,7 +23,7 @@ test.describe('Layout y copy', () => {
       expect(text).not.toMatch(BANNED);
       expect(text).not.toMatch(VOSEO);
       expect(text).not.toMatch(/saldo|balance|USDC|wallet|billetera/i); // la app nunca muestra saldo ni wallet
-      expect(text).not.toMatch(/de prueba|testnet/i);
+      expect(withoutBetaNotice(text)).not.toMatch(/de prueba|testnet/i); // solo se permite el aviso de beta (BETA_NOTICE)
     });
   }
   test('LAY /p/<slug> del comprador: sin scroll y sin palabras prohibidas', async ({ page }) => {

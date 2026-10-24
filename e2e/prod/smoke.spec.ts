@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { expectNoScroll, BANNED } from '../helpers';
+import { expectNoScroll, BANNED, withoutBetaNotice } from '../helpers';
 
 const PRODUCT = process.env.PROD_PRODUCT ?? 'e1ldky';      // producto permanente de prueba (listing activo)
 const STORE = process.env.PROD_STORE ?? 'bobbyaliensshop'; // tienda pública existente
@@ -40,7 +40,7 @@ test.describe('Producción: solo lectura', () => {
     await expectNoScroll(page);
     const text = await page.locator('body').innerText();
     expect(text).not.toMatch(BANNED);
-    expect(text).not.toMatch(/testnet|saldo|balance|USDC|billetera/i);
+    expect(withoutBetaNotice(text)).not.toMatch(/testnet|saldo|balance|USDC|billetera/i); // solo el aviso de beta (BETA_NOTICE)
   });
 
   test(`PROD-03 página pública /p/${PRODUCT} del comprador`, async ({ page }) => {
@@ -50,7 +50,7 @@ test.describe('Producción: solo lectura', () => {
     await expectNoScroll(page);
     const text = await page.locator('body').innerText();
     expect(text).not.toMatch(BANNED);
-    expect(text).not.toMatch(/testnet|saldo|USDC|billetera/i);
+    expect(withoutBetaNotice(text)).not.toMatch(/testnet|saldo|USDC|billetera/i); // solo el aviso de beta (BETA_NOTICE)
   });
 
   test(`PROD-04 tienda pública /t/${STORE}`, async ({ page }) => {

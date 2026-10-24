@@ -53,6 +53,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '53', name: 'Envío simple ("Ya lo envié", foto opcional) + liberación segura (PIN/confirmación/7 días, mínimo en prod, disputa congela)', file: './t53-simple-shipping.test.ts', onchain: false },
   { id: '54', name: 'WhatsApp del vendedor: formato CR normalizado, solo el comprador y solo después de pagar', file: './t54-seller-phone.test.ts', onchain: false },
   { id: '55', name: 'Cómo funciona: reglas en un módulo, pantalla sin cuenta, accesos en pago/Vender/Home/Mi cuenta, tuteo', file: './t55-rules-section.test.ts', onchain: false },
+  { id: '56', name: 'Aviso de beta: texto exacto en pago (antes de pagar), Vender, PIN y disputa; discreto y AA; única excepción a "sin testnet"', file: './t56-beta-notice.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

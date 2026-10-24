@@ -1,6 +1,10 @@
 import { expect, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 
+import { BETA_NOTICE } from '../lib/rules';
+/** Regla "sin etiquetas de modo prueba / testnet en la UI": la ÚNICA excepción es el aviso de beta aprobado (BETA_NOTICE,
+ *  texto exacto en lib/rules.ts). Se quita SOLO esa constante del texto antes de revisar; cualquier otra mención falla. */
+export const withoutBetaNotice = (text: string) => text.split(BETA_NOTICE).join('');
 export const PHOTO = resolve(__dirname, '../scripts/demo/assets/producto-demo.png');
 export const DEMO_PIN = '482915';
 /** Tras pagar: el código de entrega NO se muestra hasta que el vendedor toca "Ya lo envié". */
