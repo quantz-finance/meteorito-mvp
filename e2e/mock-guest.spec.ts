@@ -548,9 +548,11 @@ test('MCK-WIN-02 envío: "7 días desde el envío"; el comprador acepta 3 días 
   await expect(page.getByText('Entrega: Envío · Protección: 7 días desde el envío')).toBeVisible(); // sin columnas: default
   await page.getByText(/Pagar en custodia/).last().click();
   await page.getByText('Ya pagué', { exact: true }).click();
-  await expect(page).toHaveURL(/\/p\/h[0-9a-f]{5}/);
+  // Esperar la respuesta de "Ya pagué" (guarda el código en este navegador = comprador). Si navegamos antes, la petición
+  // se aborta, el navegador no queda como comprador y no ve la solicitud de extensión (falló así en CI, mock-chromium).
+  await expect(page.getByText(PAID).first()).toBeVisible();
   const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
-  await expect.poll(async () => (await state(request)).orders[slug].status).toBe('fondeado');
+  expect((await state(request)).orders[slug].status).toBe('fondeado');
   const due = Date.now() + 7 * 86_400_000;
   await patch(request, slug, { status: 'enviado', auto_release_at: new Date(due).toISOString(), release_ext: { by: 'seller', days: 3, at: new Date().toISOString() } });
   await page.goto(`/p/${slug}`);
