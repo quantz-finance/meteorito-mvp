@@ -1,6 +1,6 @@
 // Helpers del backend simulado (scripts/e2e/mock-server.mjs).
 import { expect, type APIRequestContext, type Page } from '@playwright/test';
-export const MOCK = 'http://localhost:8084';
+export const MOCK = `http://localhost:${process.env.E2E_MOCK_PORT ?? 8084}`; // mismo puerto que playwright.config.ts
 export const MOCK_PIN = '135790';
 export async function reset(request: APIRequestContext, orders: any[], card = false, cardMode: 'inapp' | 'widget' = 'inapp') { await request.post(`${MOCK}/__mock/reset`, { data: { orders, card, cardMode } }); }
 export async function state(request: APIRequestContext): Promise<any> { return (await request.get(`${MOCK}/__mock/state`)).json(); }

@@ -6,8 +6,17 @@ import { haptic, Icon } from '@/components/ds';
 import { C } from '@/constants/theme';
 import { COMPRAR_VIEWS, type ComprarView } from '@/lib/comprarViews';
 import { Dot, useBuyerUnread } from '@/components/ChatInbox';
+import { useAuth } from '@/lib/cavos';
 
 export type { ComprarView } from '@/lib/comprarViews';
+
+/** Sin sesión de vendedor (Cavos): comprador invitado, con su llave en este dispositivo. */
+export function useIsGuest() {
+  const auth = useAuth();
+  return !(auth.isAuthenticated && auth.address);
+}
+/** Volver para el comprador invitado en las pantallas de Comprar (sin barra de pestañas): regresa a la bienvenida. */
+export const GUEST_BACK = '/' as const;
 
 export function ComprarNav({ active }: { active: ComprarView }) {
   const unread = useBuyerUnread(); // mensajes sin leer del comprador: punto en Mis compras

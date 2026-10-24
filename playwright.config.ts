@@ -8,7 +8,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = Number(process.env.E2E_PORT ?? 8083);
-const MOCK_PORT = 8084;
+const MOCK_PORT = Number(process.env.E2E_MOCK_PORT ?? 8084); // build-mock.mjs usa el mismo E2E_MOCK_PORT
 const DEVICE_IGNORE = [/api-.*\.spec\.ts/, /mock-.*\.spec\.ts/, /prod\/.*/];
 export default defineConfig({
   testDir: 'e2e',
