@@ -82,6 +82,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '88', name: 'Volver del invitado sin historial: nunca a una ruta con login (va a Mis compras); bienvenida -> feed', file: './t88-volver-invitado.test.ts', onchain: false },
   { id: '89', name: 'Comprar › Buscar en un modalcito: lupa (4.º icono), input enfocado >= 16 px, mismo filtro y vistas, cerrar y limpiar, punto y chip', file: './t89-buscar-modal.test.ts', onchain: false },
   { id: '85', name: 'Comprador sin cuenta: avisos por WhatsApp/correo/cuenta con consentimiento, link de acceso firmado, vínculo con cuenta, avisos por estado con tope, sin 028 no rompe', file: './t85-contacto-comprador.test.ts', onchain: false },
+  { id: '89', name: 'Dónde cobrar (029): wallet Stellar con trustline o Cuenta IBAN con cola manual del admin, sin 029 como antes', file: './t89-cobro-wallet-iban.test.ts', onchain: false },
   { id: '88', name: 'Pago con cripto (USDC o XLM en Stellar): cotización con colchón y vencimiento, SEP-7, detección en Horizon, conversión XLM->USDC, de menos/de más/doble pago, invitado, cron', file: './t88-crypto-pay.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
