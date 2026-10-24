@@ -74,8 +74,8 @@ Se usa el mismo `providers.ts` para detectar el proveedor al pegar ("Anuncio de 
 
 | Proveedor | Qué pasa en la invitación |
 |---|---|
-| Facebook, Walmart CR, tiendas genéricas https | se lee: nombre, precio y foto precargados ("Importado de X"). Si falla (privado, borrado): aviso neutro "Anuncio de X" y se completa a mano |
-| Mercado Libre, Encuentra24, Amazon, AliExpress, Shopee, OLX, Falabella, Temu | NO se pide (bloquean nuestros servidores). El link se acepta sin error ("Anuncio de X: tú escribes el nombre y el precio.") |
+| Facebook, Walmart CR, tiendas genéricas https | se lee: nombre, precio y foto precargados ("Importado de X"). Si falla (privado, borrado): "No pudimos leer ese anuncio." y se completa a mano |
+| Mercado Libre, Encuentra24, Amazon, AliExpress, Shopee, OLX, Falabella, Temu | NO se pide (bloquean nuestros servidores). El link se acepta igual ("No pudimos leer ese anuncio. Escribe el nombre y el precio.") |
 
 En todos los casos el link queda en la invitación (`invitations.source_url`, migración 015: solo exige `https://`) y el
 vendedor ve "Ver anuncio en {proveedor}" y "Vieron tu anuncio en {proveedor}". `/api/invites` valida el link con

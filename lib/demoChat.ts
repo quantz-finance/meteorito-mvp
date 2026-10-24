@@ -1,6 +1,6 @@
 // Chat en MODO DEMO: misma forma de respuesta que /api/store (acciones chat_*), sin red. En sessionStorage, como el
 // resto del demo. El comprador y el vendedor del demo comparten el navegador: se cambia de vista con ?role=.
-import { buyerLabel, chatPreview, cleanChatText, CHAT_MAX, isUnread, type ChatRole } from '../api/_lib/chatText'; // pura
+import { blockLock, buyerLabel, chatPreview, cleanChatText, CHAT_BLOCK_LOCKED, CHAT_MAX, isUnread, type ChatRole } from '../api/_lib/chatText'; // pura
 import { canShowContact } from '../api/_lib/contact'; // pura
 
 const KEY = 'meteorito:demo:chat:v1';
@@ -26,6 +26,8 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
   const party = (c: Conv) => (role === 'seller' ? c.store === x.sellerSlug : c.buyer === x.buyer);
   const get = (t: unknown) => { const c = s.convs[String(t)]; if (!c || !party(c)) throw err(404, 'chat_not_found', 'No encontramos esta conversación.'); return c; };
   const now = new Date().toISOString();
+  // Pedidos entre ese comprador y el vendedor del demo (todos los pedidos del demo son de ese vendedor).
+  const lockOf = (c: Conv) => (c.store === x.sellerSlug ? blockLock(Object.values(x.orders).filter((o) => o.buyer && o.buyer === c.buyer)) : null);
   if (body.action === 'chat_open') {
     let store: string, store_name: string, ctx: string, order_slug: string | null = null, item_slug: string | null = null, subject: string | null = null, item_photo: string | null = null;
     if (body.order_slug) {
@@ -68,7 +70,7 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
     if (body.full !== true) return st;
     const ref = c.order_slug ?? c.item_slug; const o = ref ? x.orders[ref] : null;
     const p = role === 'buyer' ? await x.profile(c.store) : null;
-    return { ...st, conversation: { token: c.token, kind: c.order_slug ? 'order' : 'store', subject: c.subject, item_photo: c.item_photo,
+    return { ...st, can_block: role === 'seller' && !lockOf(c), conversation: { token: c.token, kind: c.order_slug ? 'order' : 'store', subject: c.subject, item_photo: c.item_photo,
       item: o && !c.order_slug ? { slug: o.slug, price_crc: o.price_crc } : null, order: o && c.order_slug ? { slug: o.slug, status: o.status, price_crc: o.price_crc } : null,
       paid: !!(o && c.order_slug && canShowContact(o.status)),
       other: role === 'buyer' ? { name: c.store_name, store_slug: c.store, avatar_url: p?.avatar_url ?? null } : { name: buyerLabel(c.buyer), store_slug: null, avatar_url: null } } };
@@ -89,7 +91,9 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
   }
   if (body.action === 'chat_block') {
     if (role !== 'seller') throw err(403, 'not_seller', 'Solo el vendedor puede bloquear la conversación.');
-    c.blocked = body.blocked !== false; save(s); return { blocked: c.blocked };
+    const want = body.blocked !== false;
+    if (want && !c.blocked && lockOf(c)) throw err(409, 'chat_block_locked', CHAT_BLOCK_LOCKED);
+    c.blocked = want; save(s); return { blocked: c.blocked };
   }
   if (body.action === 'chat_report') {
     const k = `${c.token}:${role}`; const already = s.reports.includes(k); if (!already) s.reports.push(k); save(s);

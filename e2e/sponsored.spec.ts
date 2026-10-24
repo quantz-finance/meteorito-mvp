@@ -44,7 +44,7 @@ test('ADS-03 Mi tienda: "Promocionar este producto" solo avisa que pronto se pod
   await open(page, '/mi-tienda', 'seller');
   await page.getByText('Bici de montaña').first().click();
   await page.getByTestId('promote').click();
-  await expect(page.getByTestId('promote-sheet')).toContainText('Pronto podrás promocionar tus productos');
+  await expect(page.getByTestId('promote-sheet')).toContainText('Todavía no puedes promocionar tus productos. Por ahora no se cobra nada y no tienes que hacer nada.');
   await expect(page.getByText('₡', { exact: false }).filter({ hasText: /pag(a|o)/i })).toHaveCount(0);
   await page.getByRole('button', { name: 'Entendido' }).click();
   await expect(page.getByTestId('promote-sheet')).toHaveCount(0);

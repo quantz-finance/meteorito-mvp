@@ -14,6 +14,10 @@ import {
 } from '../../api/_lib/chat';
 import { fakeDb } from './fakedb';
 import store from '../../api/store/index';
+import dispute from '../../api/escrow/dispute';
+import { __setChainForTests } from '../../api/_lib/escrow';
+import { blockLock, CHAT_BLOCK_LOCKED } from '../../api/_lib/chatText';
+import { COPY } from '../../lib/copy';
 
 const KEY_A = 'a'.repeat(64), KEY_B = 'b'.repeat(64), KEY_C = 'c'.repeat(64);
 const call = async (o: { method?: string; body?: any; query?: any; guest?: string; tok?: string; ip?: string }) => {
@@ -135,17 +139,59 @@ export async function run(t: T) {
   r = await call({ guest: KEY_A, body: { action: 'chat_get', token: tkO, full: true } });
   t.check('cabecera del pedido: kind order, pagado (sin aviso de "paga dentro")', r.body?.conversation?.kind === 'order' && r.body?.conversation?.paid === true && r.body?.conversation?.order?.status === 'fondeado', JSON.stringify(r.body?.conversation));
 
-  // Bloquear y reportar.
+  // Bloquear: no con una compra en curso o una disputa abierta entre los dos (cualquier pedido del par, aquí compr1 fondeado).
+  const conv0 = () => db.tables.chat_conversations.find((c: any) => c.token === tk);
+  const o2 = db.tables.orders.find((o: any) => o.slug === 'compr1');
   r = await call({ guest: KEY_A, body: { action: 'chat_block', token: tk, blocked: true } });
   t.check('el comprador no puede bloquear -> 403', r.code === 403 && r.body?.code === 'not_seller', `${r.code}`);
+  r = await call({ tok: tokSeller, body: { action: 'chat_get', token: tk, full: true } });
+  t.check('compra en curso (fondeado): la cabecera dice can_block:false al vendedor', r.code === 200 && r.body?.can_block === false, JSON.stringify(r.body?.can_block));
   r = await call({ tok: tokSeller, body: { action: 'chat_block', token: tk, blocked: true } });
-  t.check('el vendedor bloquea', r.code === 200 && r.body?.blocked === true && !!db.tables.chat_conversations[0].blocked_at);
+  t.check('compra en curso: el servidor rechaza el bloqueo (409 chat_block_locked, texto de COPY.chat.blockLocked)', r.code === 409 && r.body?.code === 'chat_block_locked'
+    && r.body?.error === CHAT_BLOCK_LOCKED && CHAT_BLOCK_LOCKED === COPY.chat.blockLocked && !conv0().blocked_at, `${r.code} ${JSON.stringify(r.body)}`);
+  t.check('regla pura: disputa abierta / compra en curso / solo pedidos terminados', blockLock([{ status: 'liberado' }, { status: 'en_disputa' }]) === 'dispute'
+    && blockLock([{ status: 'liberado', dispute_state: 'open' }]) === 'dispute' && blockLock([{ status: 'enviado' }]) === 'order' && blockLock([{ status: 'creado' }]) === 'order'
+    && blockLock([{ status: 'liberado' }, { status: 'resuelto' }, { status: 'cancelado' }]) === null && blockLock([]) === null);
+  o2.status = 'liberado'; // la compra terminó
+  r = await call({ tok: tokSeller, body: { action: 'chat_get', token: tk, full: true } });
+  t.check('compra terminada: can_block:true', r.body?.can_block === true, JSON.stringify(r.body?.can_block));
+  r = await call({ guest: KEY_A, body: { action: 'chat_get', token: tk, full: true } });
+  t.check('el comprador nunca recibe can_block:true', r.body?.can_block === false, JSON.stringify(r.body?.can_block));
+  r = await call({ tok: tokSeller, body: { action: 'chat_block', token: tk, blocked: true } });
+  t.check('sin compra en curso ni disputa: el vendedor bloquea', r.code === 200 && r.body?.blocked === true && !!conv0().blocked_at);
   r = await call({ guest: KEY_A, body: { action: 'chat_send', token: tk, body: 'hola?', client_id: 'cli00005' } });
   t.check('bloqueada: el comprador no puede escribir -> 403 chat_blocked', r.code === 403 && r.body?.code === 'chat_blocked', `${r.code}`);
+
+  // Con la conversación bloqueada, el comprador SIEMPRE puede abrir la disputa de su compra: el flujo no pasa por el chat.
+  o2.status = 'entregado'; o2.contract_id = 'CNOTUSED'; o2.released_tx = null;
+  __setChainForTests({ releaseGuard: async () => ({ disputed: true, released: false, resolved: false }) as any });
+  const dr: any = { code: 0, body: null }; dr.status = (c: number) => { dr.code = c; return dr; }; dr.setHeader = () => dr; dr.send = (b: string) => { dr.body = JSON.parse(b); return dr; };
+  try { await dispute({ method: 'POST', headers: { 'x-guest-key': KEY_A }, body: { slug: 'compr1', reason: 'no_llego' } }, dr); } finally { __setChainForTests(null); }
+  t.check('chat bloqueado: el comprador sin cuenta abre su disputa igual (200, pedido en_disputa, disputa open)', dr.code === 200 && o2.status === 'en_disputa'
+    && db.tables.disputes.some((d: any) => d.order_id === 'o2' && d.state === 'open') && !!conv0().blocked_at, `${dr.code} ${JSON.stringify(dr.body)} ${o2.status}`);
+  const disputeSrc = readFileSync(new URL('../../api/escrow/dispute.ts', import.meta.url), 'utf8') + readFileSync(new URL('../../components/DisputeSheet.tsx', import.meta.url), 'utf8');
+  const pay = readFileSync(new URL('../../components/PayBox.tsx', import.meta.url), 'utf8');
+  t.check('la disputa no depende del chat (API, hoja y botón "Tengo un problema" sin chat ni bloqueo)', !/chat|blocked/i.test(disputeSrc.replace(/chatbubble-ellipses-outline/g, ''))
+    && /const canDispute = buyerHere && \['fondeado', 'enviado', 'entregado'\]\.includes\(order\.status\) && !order\.released_tx;/.test(pay));
   r = await call({ tok: tokSeller, body: { action: 'chat_block', token: tk, blocked: false } });
-  t.check('y puede desbloquear', r.code === 200 && r.body?.blocked === false && db.tables.chat_conversations[0].blocked_at === null);
+  t.check('desbloquear siempre se puede (también con disputa abierta)', r.code === 200 && r.body?.blocked === false && conv0().blocked_at === null);
+  r = await call({ tok: tokSeller, body: { action: 'chat_block', token: tk, blocked: true } });
+  t.check('disputa abierta: no se puede volver a bloquear (409)', r.code === 409 && r.body?.code === 'chat_block_locked' && conv0().blocked_at === null, `${r.code}`);
+  r = await call({ tok: tokSeller, body: { action: 'chat_get', token: tkO, full: true } });
+  t.check('disputa abierta: tampoco en la conversación de la compra (can_block:false)', r.body?.can_block === false, JSON.stringify(r.body?.can_block));
+
+  // Reportar: la otra parte no recibe aviso ni ve ningún cambio (ni push, ni bloqueo, ni campo nuevo en su vista).
+  const before = JSON.stringify(conv0());
+  const sellerView0 = (await call({ tok: tokSeller, body: { action: 'chat_get', token: tk } })).body;
   r = await call({ guest: KEY_A, body: { action: 'chat_report', token: tk, reason: 'spam', detail: 'Me manda links raros' } });
   t.check('reportar: queda registrado (motivo + detalle corto)', r.code === 200 && r.body?.reported === true && db.tables.chat_reports.length === 1 && db.tables.chat_reports[0].reason === 'spam' && db.tables.chat_reports[0].reporter_role === 'buyer');
+  const sellerView1 = (await call({ tok: tokSeller, body: { action: 'chat_get', token: tk } })).body;
+  const strip = (v: any) => JSON.stringify({ ...v, other_read_at: null });
+  t.check('reportar no cambia la conversación ni lo que ve la otra parte (sin aviso, sin bloqueo)', JSON.stringify(conv0()).replace(/"seller_(read|seen)_at":"[^"]*"/g, '') === before.replace(/"seller_(read|seen)_at":"[^"]*"/g, '')
+    && strip(sellerView0) === strip(sellerView1) && sellerView1?.blocked === false && !('reported' in (sellerView1 ?? {})), `${before} | ${JSON.stringify(conv0())}`);
+  const chatSrc = readFileSync(new URL('../../api/_lib/chat.ts', import.meta.url), 'utf8');
+  const repFn = chatSrc.slice(chatSrc.indexOf('export async function reportChat'));
+  t.check('reportChat solo inserta en chat_reports (sin push ni cambios en la conversación)', !/notify|push|update\(|blocked_at/.test(repFn) && /from\(REP\)\.insert/.test(repFn));
   r = await call({ guest: KEY_A, body: { action: 'chat_report', token: tk, reason: 'spam' } });
   t.check('reportar dos veces no duplica', r.code === 200 && r.body?.already === true && db.tables.chat_reports.length === 1);
   r = await call({ guest: KEY_B, body: { action: 'chat_report', token: tk, reason: 'spam' } });
@@ -199,6 +245,13 @@ export async function run(t: T) {
   t.check('migración 025 idempotente, índices, RLS sin grants públicos, notify pgrst, retención 12 meses', /create table if not exists public\.chat_conversations/.test(mig) && /create table if not exists public\.chat_messages/.test(mig)
     && /create unique index if not exists chat_conversations_pair_uidx/.test(mig) && (mig.match(/enable row level security/g) ?? []).length === 3
     && /revoke all on public\.chat_messages from anon, authenticated/.test(mig) && !/grant (select|insert|all)/i.test(mig) && /notify pgrst/.test(mig) && /interval '12 months'/.test(mig) && /char_length\(body\) between 1 and 1000/.test(mig));
+  const m26 = readFileSync(new URL('../../supabase/migrations/026_chat_retention_dispute.sql', import.meta.url), 'utf8');
+  const sql26 = m26.replace(/--[^\n]*/g, '');
+  t.check('migración 026: idempotente (solo create or replace de chat_purge_old), pausa con disputa abierta y cuenta desde la resolución', /create or replace function public\.chat_purge_old\(\) returns bigint/.test(sql26)
+    && !/create table|alter table|drop |cron\.schedule|cron\.unschedule/i.test(sql26) && /order_status = 'en_disputa' or dispute_state in \('pending', 'open'\)/.test(sql26)
+    && /not coalesce\(conv\.dispute_open, false\)/.test(sql26) && /greatest\(max\(last_at\), max\(resolved_at\)\)/.test(sql26) && /interval '12 months'/.test(sql26)
+    && /c\.order_slug is not null and o\.slug = c\.order_slug/.test(sql26) && /c\.order_slug is null and o\.buyer_user_id = c\.buyer_id and o\.seller_user_id = c\.seller_user_id/.test(sql26)
+    && /revoke all on function public\.chat_purge_old\(\) from public, anon, authenticated/.test(sql26));
   const vercel = JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'));
   t.check('sin función nueva: el chat vive en /api/store', !JSON.stringify(vercel).includes('/api/chat') && /chat_send/.test(readFileSync(new URL('../../api/store/index.ts', import.meta.url), 'utf8')));
 }
