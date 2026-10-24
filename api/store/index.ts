@@ -60,9 +60,11 @@
 //                                                 Encuentra24, Amazon, AliExpress, Walmart o cualquier página https con
 //                                                 JSON-LD/Open Graph (api/_lib/importers, SSRF estricto). + provider y source_url.
 import { activityBySlug, lastSeenStateOf, LastSeenUnavailable, setLastSeen, touchSeen } from '../_lib/activity';
-import { db, fail, json, orderBySlug } from '../_lib/db';
+import { db, fail, json, logEvent, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
+import { adminContacts, getContacts, linkAccount, redeemAccess, reissuePin, removeContact, requireAdmin, saveContact, sendNotice } from '../_lib/buyerContact';
+import { normalizeEmail } from '../_lib/contactText';
 import { crIbanError, cleanHolder, normalizeIban, normalizeSinpe, payoutView } from '../_lib/payout';
 import { deleteSubscription, isMissingTable, parseSubscription, saveSubscription, vapid } from '../_lib/push';
 import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
@@ -318,6 +320,48 @@ export default async function handler(req: any, res: any) {
       const source_url = ('source_url' in r && typeof r.source_url === 'string' && r.source_url) || chk.url;
       const photo_urls = r.photos.length ? await storeImportedPhotos(db().storage, r.photos, who.cavos?.sub ?? who.guest!, MAX_PHOTO_BYTES, source_url) : [];
       return json(res, 200, { ...r, photo_urls, source_url });
+    }
+
+    if (typeof b.action === 'string' && (b.action.startsWith('buyer_contact_') || b.action.startsWith('buyer_access_') || b.action === 'buyer_link_account' || b.action === 'buyer_pin_reissue' || b.action === 'admin_contacts')) {
+      // Avisos y recuperación del comprador sin cuenta (api/_lib/buyerContact.ts, migración 028). Teléfono y correo
+      // nunca salen hacia el vendedor: aquí solo responde el comprador (enmascarado) o el equipo (ADMIN_EMAILS).
+      res.setHeader?.('Cache-Control', 'no-store');
+      if (b.action === 'buyer_link_account') {
+        const who = await requireBuyerIdentity(req);
+        const r = await linkAccount(db(), who);
+        if (r.linked && typeof b.slug === 'string' && b.consent === true) { // y avisos a la cuenta para esta compra
+          const order = await orderBySlug(b.slug);
+          if (isBuyerOf(order, who)) {
+            try { await saveContact(db(), order, who, { channel: 'account', consent: true, consent_version: b.consent_version }); }
+            catch (e: any) { if (e?.code !== 'contact_unavailable' && e?.code !== 'contact_closed') throw e; }
+          }
+        }
+        return json(res, 200, r);
+      }
+      const order = await orderBySlug(b.slug);
+      if (b.action === 'buyer_access_redeem') return json(res, 200, redeemAccess(order, b.token)); // el token ES la prueba
+      if (b.action === 'buyer_access_request') {
+        // Otro dispositivo: si el correo coincide con el contacto guardado, le mandamos un link nuevo. Respuesta siempre igual.
+        const email = normalizeEmail(b.email);
+        if (email && !fbRateLimited(`acc:${clientIp(req) ?? 'x'}`, Date.now(), 4)) {
+          const { data } = await db().from('buyer_contacts').select('channel, email').eq('order_id', order.id).eq('email', email).is('revoked_at', null);
+          const ch = (data ?? [])[0]?.channel;
+          if (ch) await sendNotice(db(), order, 'acceso', { only: ch as 'email' | 'account' });
+        }
+        return json(res, 200, { requested: true });
+      }
+      const who = await requireBuyerIdentity(req);
+      if (b.action === 'admin_contacts') { requireAdmin(who); return json(res, 200, await adminContacts(db(), order)); }
+      if (!isBuyerOf(order, who)) throw Object.assign(new HttpError(403, 'Solo quien compró puede hacer esto.'), { code: 'not_buyer' });
+      if (b.action === 'buyer_contact_get') return json(res, 200, await getContacts(db(), order));
+      if (b.action === 'buyer_contact_save') return json(res, 200, await saveContact(db(), order, who, b));
+      if (b.action === 'buyer_contact_remove') return json(res, 200, await removeContact(db(), order, b.channel));
+      if (b.action === 'buyer_pin_reissue') {
+        const r = await reissuePin(db(), order);
+        await logEvent(order.id, 'pin_reissued', { via: who.cavos ? 'account' : 'access_link' });
+        return json(res, 200, r);
+      }
+      throw new HttpError(400, 'acción inválida');
     }
 
     if (b.action === 'buyer_orders') {

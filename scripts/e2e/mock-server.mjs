@@ -14,7 +14,8 @@ const PIN = '135790';
 const VAPID = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString('base64url');
 
 let S;
-const fresh = (orders = [], card = false, cardMode = 'inapp') => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], ph: [], subs: [], ratings: {}, fail: [], seq: 0, card, cardMode, lendara: {} });
+// contactsOn: como producción CON la migración 028 (avisos del comprador). Sin ella: available:false (default, como hoy).
+const fresh = (orders = [], card = false, cardMode = 'inapp', contactsOn = false) => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], ph: [], subs: [], ratings: {}, fail: [], seq: 0, card, cardMode, lendara: {}, contactsOn, contacts: {}, links: [], access: {}, grants: {} });
 const base = (o) => ({ kind: 'single', listing_slug: null, listing_status: 'activa', status: 'creado', category: 'otro', brand: '', model: 'Bici de montaña', condition: '', price_crc: 150000,
   description: null, photos: [], identifier_masked: null, checks_summary: [], created_at: new Date().toISOString(), amount_usdc: null, contract_id: null, funded_tx: null, shipped_tx: null,
   released_tx: null, approval_reason: null, auto_release_at: null, disputed_at: null, dispute_tx: null, resolved_tx: null, resolution: null, buyer: null, pin_attempts: 0, ...o });
@@ -58,6 +59,9 @@ async function api(req, path, q, b) {
   const guest = String(req.headers['x-guest-key'] ?? '');
   const needGuest = () => { if (!/^[0-9a-f]{64}$/.test(guest)) throw E(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.', 'guest_key_missing'); };
   const get = (slug) => { const o = S.orders[slug]; if (!o) throw E(404, 'Pedido no encontrado', 'not_found'); return o; };
+  // Link de acceso ya abierto en este dispositivo (X-Order-Access): comprador SOLO de ese pedido (como api/_lib/guest.ts).
+  const grantSlug = S.grants[String(req.headers['x-order-access'] ?? '')] ?? null;
+  const isBuyer = (o) => o.buyer === guest || (grantSlug === o.slug && String(b.slug) === o.slug);
   if (path === '/api/health') return { ok: true, config: { autoReleaseMinutes: 10080 } };
   if (path === '/api/escrow/pay') {
     needGuest(); let o = get(String(b.slug));
@@ -73,12 +77,12 @@ async function api(req, path, q, b) {
       return { slug: o.slug, contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` }, card: S.card, cardMode: S.cardMode, guest: true };
     }
     if (b.step === 'shipment') { // como api/escrow/pay: solo el comprador ve la foto del envío y el número de guía
-      if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
+      if (!isBuyer(o)) throw E(403, 'no eres el comprador de este pedido');
       if (!['enviado', 'entregado', 'liberado', 'en_disputa', 'resuelto'].includes(o.status)) return { shipped: false };
       const ev = o.ship_evidence ?? {}; return { shipped: true, at: ev.at ?? null, photo: ev.photo ?? null, note: ev.note ?? null };
     }
     if (b.step === 'confirm_sinpe') {
-      if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
+      if (!isBuyer(o)) throw E(403, 'no eres el comprador de este pedido');
       if (o.status === 'fondeado') return { funded: true, fundedTx: o.funded_tx, pin: null }; // idempotente: el PIN no se re-emite
       if (o.status !== 'escrow_creado') throw E(409, 'Primero inicia el pago.', 'bad_state');
       Object.assign(o, { status: 'fondeado', funded_tx: 'f'.repeat(64), funded_at: new Date().toISOString(), ...f2fDue(o) }); return { funded: true, fundedTx: o.funded_tx, pin: PIN };
@@ -88,7 +92,7 @@ async function api(req, path, q, b) {
     // Tarjeta in-app (card_pay): como api/_lib/lendara.ts cardPay. Aprobada: 1 consulta "pending" y luego completed;
     // demorada: 3 consultas "pending". Rechazada / no recibida: error inmediato con el mensaje real.
     if (b.step === 'card_pay') {
-      if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
+      if (!isBuyer(o)) throw E(403, 'no eres el comprador de este pedido');
       if (!S.card) throw E(503, 'El pago con tarjeta no está disponible por ahora. Paga por SINPE Móvil.', 'card_unavailable');
       if (Object.keys(b).some((k) => /^(card|cardnumber|card_number|number|pan|cvc|cvv|csc|exp|expiry)$/i.test(k))) throw E(400, 'Solicitud inválida.', 'card_input');
       if (o.status !== 'escrow_creado') throw E(409, 'Este pedido ya está pagado o ya no se puede pagar.', 'bad_state');
@@ -102,7 +106,7 @@ async function api(req, path, q, b) {
       return { pending: true };
     }
     if (b.step === 'card_session' || b.step === 'card_confirm') {
-      if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
+      if (!isBuyer(o)) throw E(403, 'no eres el comprador de este pedido');
       if (!S.card) throw E(503, 'El pago con tarjeta no está disponible por ahora. Paga por SINPE Móvil.', 'card_unavailable');
       if (o.status === 'fondeado' && b.step === 'card_confirm') return { fundedTx: o.funded_tx, pin: null };
       if (o.status !== 'escrow_creado') throw E(409, 'Primero inicia el pago.', 'bad_state');
@@ -127,7 +131,7 @@ async function api(req, path, q, b) {
   }
   if (path === '/api/escrow/confirm') {
     needGuest(); const o = get(String(b.slug));
-    if (o.buyer !== guest) throw E(403, 'no eres el comprador');
+    if (!isBuyer(o)) throw E(403, 'no eres el comprador');
     const running = o.status === 'enviado' || (o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara');
     if (b.reason === 'extend' || b.reason === 'extend_answer') { // como api/escrow/confirm (lado comprador)
       if (!running) throw E(409, 'El plazo no se puede cambiar en este momento.', 'ext_not_running');
@@ -147,7 +151,7 @@ async function api(req, path, q, b) {
   }
   if (path === '/api/escrow/dispute') {
     needGuest(); const o = get(String(b.slug));
-    if (o.buyer !== guest) throw E(403, 'Solo el comprador puede reportar un problema.');
+    if (!isBuyer(o)) throw E(403, 'Solo el comprador puede reportar un problema.');
     if (!['fondeado', 'enviado', 'entregado'].includes(o.status)) throw E(409, 'Ya no se puede reportar un problema.', 'bad_state');
     Object.assign(o, { status: 'en_disputa', disputed_at: new Date().toISOString() }); return { disputed: true };
   }
@@ -171,6 +175,32 @@ async function api(req, path, q, b) {
     if (req.method === 'GET' && q.get('seller_of')) return { seller: null };
     if (req.method === 'GET' && q.get('store')) return q.get('store') === 'valeria' ? { store_slug: 'valeria', display_name: 'Valeria', rating_avg: null, rating_count: 0, items: Object.values(S.orders).filter((o) => o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa').map((o) => ({ slug: o.slug, title: o.model, price_crc: o.price_crc, photo: null })) } : null;
     if (b.action === 'push_subscribe') { needGuest(); if (!b.subscription?.endpoint) throw E(400, 'suscripción inválida'); S.subs.push({ guest, endpoint: b.subscription.endpoint }); return { ok: true }; }
+    if (typeof b.action === 'string' && (b.action.startsWith('buyer_contact_') || b.action.startsWith('buyer_access_') || b.action === 'buyer_link_account' || b.action === 'buyer_pin_reissue')) {
+      // Avisos del comprador (api/_lib/buyerContact.ts). Sin la 028 (contactsOn=false): available:false / contact_unavailable.
+      if (b.action === 'buyer_link_account') {
+        if (!String(req.headers.authorization ?? '').startsWith('Bearer ')) throw E(401, 'Entra con tu cuenta para continuar.', 'auth_missing');
+        if (!S.contactsOn) return { linked: false, reason: 'unavailable' };
+        needGuest(); S.links.push({ guest, slug: b.slug ?? null }); return { linked: true };
+      }
+      const o = get(String(b.slug));
+      if (b.action === 'buyer_access_redeem') {
+        if (S.access[String(b.token)] !== o.slug) throw E(403, 'Este link venció o no es de esta compra. Pide uno nuevo desde el último aviso.', 'access_invalid');
+        const grant = 'grant-' + o.slug + '-' + (++S.seq); S.grants[grant] = o.slug; return { grant, slug: o.slug };
+      }
+      if (b.action === 'buyer_access_request') return { requested: true };
+      needGuest(); if (!isBuyer(o)) throw E(403, 'Solo quien compró puede hacer esto.', 'not_buyer');
+      const list = (S.contacts[o.slug] ??= []);
+      if (b.action === 'buyer_contact_get') return { available: S.contactsOn, contacts: S.contactsOn ? list.map(({ channel, masked }) => ({ channel, masked })) : [], email: true };
+      if (b.action === 'buyer_pin_reissue') { if (!['fondeado', 'enviado'].includes(o.status)) throw E(409, 'Esta compra ya no usa código de entrega.', 'pin_not_needed'); return { pin: '246802' }; }
+      if (!S.contactsOn) throw E(503, 'Por ahora no podemos guardar tu contacto. Tu compra sigue en este navegador.', 'contact_unavailable');
+      if (b.consent !== true || !b.consent_version) throw E(400, 'Marca la casilla para aceptar el uso de tu contacto.', 'consent_required');
+      let masked, value;
+      if (b.channel === 'whatsapp') { const d = String(b.phone ?? '').replace(/\D/g, ''); if (String(b.cc) === '+506' && !/^[2-8]\d{7}$/.test(d)) throw E(400, 'Revisa el número: código de país y número, sin espacios de más.', 'bad_phone'); value = `${b.cc}${d}`; masked = `${b.cc} •••• ${d.slice(-4)}`; }
+      else if (b.channel === 'email') { const e = String(b.email ?? '').trim().toLowerCase(); if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(e)) throw E(400, 'Revisa el correo.', 'bad_email'); value = e; masked = e[0] + '••@' + e.split('@')[1]; }
+      else throw E(400, 'Elige WhatsApp, correo o cuenta.');
+      S.contacts[o.slug] = [...list.filter((c) => c.channel !== b.channel), { channel: b.channel, masked, value, consent_version: b.consent_version }];
+      return { saved: true, contact: { channel: b.channel, masked }, emailed: b.channel === 'email' };
+    }
     if (b.action === 'buyer_orders') { // Mis compras: solo los pedidos de esta llave (sin 'creado'), sin datos del vendedor
       needGuest();
       return { orders: Object.values(S.orders).filter((o) => o.buyer === guest && o.status !== 'creado').map((o) => ({ slug: o.slug, brand: o.brand, model: o.model, price_crc: o.price_crc,
@@ -178,13 +208,13 @@ async function api(req, path, q, b) {
     }
     if (b.action === 'seller_contact') { // WhatsApp del vendedor: solo el comprador (su llave) y solo con el pedido pagado
       needGuest(); const o = get(String(b.slug));
-      if (o.buyer !== guest) throw E(403, 'Solo quien compró puede ver el contacto del vendedor.', 'not_buyer');
+      if (!isBuyer(o)) throw E(403, 'Solo quien compró puede ver el contacto del vendedor.', 'not_buyer');
       if (!['fondeado', 'enviado', 'entregado', 'liberado', 'en_disputa', 'resuelto'].includes(o.status)) throw E(409, 'Verás el contacto del vendedor cuando pagues.', 'not_paid');
       return { contact_phone: '+50688887777' };
     }
     if (b.action === 'rate') {
       needGuest(); const o = get(String(b.slug)); const stars = Number(b.stars);
-      if (o.buyer !== guest) throw E(403, 'Solo el comprador puede calificar.');
+      if (!isBuyer(o)) throw E(403, 'Solo el comprador puede calificar.');
       if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw E(400, 'Elige de 1 a 5 estrellas.', 'bad_stars');
       if (S.ratings[o.slug]) throw E(409, 'Ya calificaste este pedido.', 'already_rated');
       S.ratings[o.slug] = stars; return { rated: true, stars, store_slug: null };
@@ -219,7 +249,8 @@ createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   if (u.pathname.startsWith('/__mock/')) {
     const b = await body(req);
-    if (u.pathname === '/__mock/reset') { S = fresh(b.orders ?? [], !!b.card, b.cardMode ?? 'inapp'); return send(res, 200, { ok: true }); }
+    if (u.pathname === '/__mock/reset') { S = fresh(b.orders ?? [], !!b.card, b.cardMode ?? 'inapp', !!b.contacts); return send(res, 200, { ok: true }); }
+    if (u.pathname === '/__mock/access') { const tok = 'acc-' + b.slug + '-' + (++S.seq); S.access[tok] = b.slug; return send(res, 200, { token: tok }); } // = link del correo
     const lw = u.pathname.match(/^\/__mock\/lendara\/widget\/([\w-]+)$/);
     if (lw) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(lendaraWidget(lw[1])); }
     const ls = u.pathname.match(/^\/__mock\/lendara\/([\w-]+)\/(completed|kyc_rejected|expired|pending_anchor)$/);
@@ -244,7 +275,7 @@ createServer(async (req, res) => {
   if (u.pathname.startsWith('/sb/')) return send(res, 404, { message: 'no simulado' });
   if (u.pathname.startsWith('/api/')) {
     const b = req.method === 'POST' ? await body(req) : {};
-    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, guest: !!req.headers['x-guest-key'], at: Date.now(), ...(b.step === 'card_pay' ? { body: b } : {}) });
+    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, guest: !!req.headers['x-guest-key'], access: !!req.headers['x-order-access'], bearer: !!req.headers.authorization, at: Date.now(), ...(b.step === 'card_pay' ? { body: b } : {}) });
     const f = S.fail.find((x) => x.path === u.pathname && (x.step == null || x.step === b.step) && x.times > 0);
     if (f) { f.times--; if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs)); if (f.status) return send(res, f.status, { error: f.error ?? 'Error del servidor de prueba', code: f.code }); }
     try { return send(res, 200, await api(req, u.pathname, u.searchParams, b)); }

@@ -5,6 +5,8 @@
 //  - Sin wallet propia: el escrow se despliega con la wallet `platform` como buyer_address (reembolsos de disputa los gestiona el equipo).
 import { createHash } from 'node:crypto';
 import { requireCavosUser, HttpError, type CavosUser } from './auth';
+import { grantBuyerFromReq, linkedGuests } from './buyerContact';
+import { db } from './db';
 
 export const GUEST_PREFIX = 'guest:';
 export const isGuestSub = (sub: unknown) => typeof sub === 'string' && sub.startsWith(GUEST_PREFIX);
@@ -33,7 +35,12 @@ export async function requireBuyerIdentity(req: any): Promise<BuyerIdentity> {
     try { cavos = await requireCavosUser(req); }
     catch (e) { if (!guest) throw e; }
   }
-  if (!guest && !cavos) throw Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.'), { code: 'guest_key_missing' });
-  return { ids: [guest, cavos?.sub].filter(Boolean) as string[], guest, cavos };
+  // Link de acceso ya abierto en este dispositivo (X-Order-Access): vale SOLO para el pedido del body (slug).
+  const granted = grantBuyerFromReq(req, req.body?.slug);
+  if (!guest && !cavos && !granted) throw Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.'), { code: 'guest_key_missing' });
+  // Cuenta vinculada a llaves de invitado (migración 028): sus compras sin cuenta también son de la cuenta. Sin 028: nada.
+  const linked = cavos ? await linkedGuests(db(), cavos.sub) : [];
+  const ids = [...new Set([guest, cavos?.sub, granted, ...linked].filter(Boolean) as string[])];
+  return { ids, guest, cavos };
 }
 export const isBuyerOf = (order: any, who: BuyerIdentity) => !!order.buyer_user_id && who.ids.includes(order.buyer_user_id);

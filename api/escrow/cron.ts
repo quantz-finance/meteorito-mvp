@@ -11,6 +11,7 @@ import { env, releaseDueAt, releaseBlockedUntil } from '../_lib/env';
 import { isFaceToFace } from '../_lib/agreement';
 import { missingColumn } from '../_lib/listings';
 import { approveAndRelease } from '../_lib/escrow';
+import { notifyDueSoon } from '../_lib/buyerContact';
 import { autoResolvePass } from '../_lib/disputeAdmin';
 
 async function claim(id: string): Promise<boolean> {
@@ -54,8 +55,10 @@ export default async function handler(req: any, res: any) {
     if (error) throw error;
     const out = [];
     for (const o of data ?? []) out.push(await processOrder(o));
+    // Avisos "el pago se libera en menos de 24 h" a compradores con contacto (028). Best-effort, deduplicado.
+    const dueSoon = await notifyDueSoon(db());
     // Disputas: auto-resolución por reglas SOLO con el flag disputes_auto_resolve (apagado por defecto). Nunca tumba el cron.
     const disputes = await autoResolvePass().catch((e: any) => ({ skipped: 'error', resolved: [], errors: [String(e?.message ?? e).slice(0, 120)] }));
-    return json(res, 200, { processed: out, disputes });
+    return json(res, 200, { processed: out, disputes, due_soon_notices: dueSoon });
   } catch (e) { return fail(res, e); }
 }
