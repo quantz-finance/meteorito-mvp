@@ -130,6 +130,12 @@ const pub = (o: DemoOrder) => {
   return rest;
 };
 
+/** Tokens de captura del demo (igual que el API: un uso, 5 min, propósito y pedido). Solo en memoria. */
+const demoCaps = new Map<string, { id: string; purpose: string; ref: string; exp: number; used: boolean }>();
+const DEMO_CAPTURE_TTL = 5 * 60_000;
+/** JPEG mínimo (1x1) para los pedidos sembrados como enviados. */
+const DEMO_SHIP_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+
 /** Reemplazo de los endpoints /api/*: misma forma de respuesta, sin red. */
 export async function demoApi(path: string, body: any = {}): Promise<any> {
   const st = S(); const p = path.split('?')[0];
@@ -138,6 +144,30 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   const now = () => new Date().toISOString();
 
   const newSlug = () => 'demo' + String(++st.seq).padStart(2, '0');
+  if (p === '/api/photos/upload-url') { // cámara de la app: token de captura y firma de subida (la foto queda local)
+    if (body.action === 'capture_token') {
+      const purpose = String(body.purpose);
+      if (!['ship', 'listing', 'dispute'].includes(purpose)) throw err(400, 'capture_bad_purpose', 'propósito inválido');
+      const ref = purpose === 'listing' ? 'new' : String(body.ref);
+      if (purpose === 'ship') { need('seller'); const o = get(ref); if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.'); }
+      if (purpose === 'dispute') { need('buyer'); const o = get(ref); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador de este pedido'); }
+      const id = Array.from({ length: 4 }, () => Math.random().toString(16).slice(2, 10).padEnd(8, '0')).join('').slice(0, 32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
+      const token = `demo.${purpose}.${id}`; const exp = Date.now() + DEMO_CAPTURE_TTL;
+      demoCaps.set(token, { id, purpose, ref, exp, used: false });
+      return { token, id, purpose, ref, code: purpose === 'listing' ? 'P-' + id.slice(0, 6).toUpperCase() : ref.toUpperCase(), exp: new Date(exp).toISOString(), now: now() };
+    }
+    if (body.purpose != null) {
+      const c = demoCaps.get(String(body.capture_token ?? ''));
+      if (!body.capture_token) throw err(401, 'capture_token_required', 'Toma la foto con la cámara de Meteorito.');
+      if (!c) throw err(403, 'capture_token_invalid', 'La foto no es válida. Tómala de nuevo con la cámara.');
+      if (c.purpose !== body.purpose) throw err(403, 'capture_wrong_purpose', 'Esa foto es para otra cosa. Tómala de nuevo con la cámara.');
+      if (Date.now() > c.exp) throw err(410, 'capture_token_expired', 'Pasaron más de 5 minutos. Toma la foto de nuevo.');
+      if (c.used) throw err(409, 'capture_token_used', 'Esa foto ya se usó. Toma otra con la cámara.');
+      c.used = true;
+      return { path: 'demo', token: 'demo', publicUrl: null, capture: { token_id: c.id, purpose: c.purpose } };
+    }
+    throw err(403, 'camera_required', 'Toma la foto con la cámara de Meteorito.');
+  }
   if (p === '/api/invites') {
     st.invites ??= {};
     if (body.op === 'create') {
@@ -227,12 +257,14 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     need('seller'); const o = get(String(body.slug));
     if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.');
     if (o.delivery_mode === 'cara_a_cara') throw err(409, 'face_to_face', 'La entrega es cara a cara: no hay envío. Pide el código al comprador.');
-    // Plazo acordado desde "Ya lo envié" (sin acuerdo: la ventana del demo, 7 días).
-    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.auto_release_at = iso(nowMs() + (o.protection_minutes ? protectionOf(o) : DEMO_AUTO_RELEASE_MINUTES) * 60_000 + (o.release_ext_minutes ?? 0) * 60_000);
-    // Igual que el API: evidencia opcional {at, photo?, note?}; en demo la foto es una data URL local.
-    const raw = body.evidence ?? {}; const ev: { at: string; photo?: string; note?: string } = { at: now() };
-    if (raw.photo) { if (!/^data:image\/(jpeg|png|webp);base64,/.test(String(raw.photo))) throw err(400, 'bad_ship_photo', 'No pudimos usar esa foto. Elige otra e intenta de nuevo.'); ev.photo = String(raw.photo); }
+    // Igual que el API: foto OBLIGATORIA de la cámara (token 'ship' de este pedido, ya usado al subir); en demo la foto es una data URL local.
+    const raw = body.evidence ?? {};
+    if (!raw.photo) throw err(400, 'ship_photo_required', 'Toma la foto del paquete o del comprobante con la cámara para marcarlo como enviado.');
+    const cap = demoCaps.get(String(raw.capture_token ?? ''));
+    if (!cap || cap.purpose !== 'ship' || cap.ref !== o.slug || !cap.used || !/^data:image\/jpeg;base64,/.test(String(raw.photo))) throw err(400, 'bad_ship_photo', 'Toma la foto del paquete o del comprobante con la cámara de Meteorito.');
+    const ev: { at: string; photo: string; captured_at: string; token_id: string; purpose: 'ship'; note?: string } = { at: now(), photo: String(raw.photo), captured_at: String(raw.captured_at ?? now()), token_id: cap.id, purpose: 'ship' };
     if (typeof raw.note === 'string' && raw.note.trim()) ev.note = raw.note.trim().slice(0, 200);
+    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.auto_release_at = iso(nowMs() + (o.protection_minutes ? protectionOf(o) : DEMO_AUTO_RELEASE_MINUTES) * 60_000 + (o.release_ext_minutes ?? 0) * 60_000); // plazo acordado desde "Ya lo envié"
     o.evidence = ev; emit();
     return { shippedTx: o.shipped_tx, evidenceHash: demoTxHash('ev:' + o.slug) };
   }
@@ -272,6 +304,8 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     need('buyer'); const o = get(String(body.slug));
     if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo el comprador puede reportar un problema.');
     if (!['fondeado', 'enviado', 'entregado'].includes(o.status) || o.released_tx) throw err(409, 'bad_state', 'Ya no se puede reportar un problema.');
+    const ev = Array.isArray(body.evidence) ? body.evidence : []; const caps = Array.isArray(body.captures) ? body.captures : [];
+    if (ev.some((_: unknown, i: number) => { const c = demoCaps.get(String(caps[i] ?? '')); return !c || c.purpose !== 'dispute' || c.ref !== o.slug || !c.used; })) throw err(400, 'camera_required', 'Toma la foto con la cámara de Meteorito.');
     o.status = 'en_disputa'; o.disputed_at = now(); o.dispute = { reason: body.reason, description: body.description ?? null, evidence: Array.isArray(body.evidence) ? body.evidence.slice(0, 4) : [], at: now() }; emit(); return { disputed: true };
   }
   if (p === '/api/store') {
@@ -296,7 +330,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       await new Promise((r) => setTimeout(r, 400));
       if (/\/item\/1\/|login/.test(String(body.url))) return { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: FB_IMPORT_FAILED };
       return { result: 'success', title: 'Bicicleta de montaña aro 29', price_crc: 185000, price_source: { amount: 185000, currency: 'CRC' }, converted: false,
-        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], missing: [] };
+        description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], photo_urls: ['/demo-fb-import.jpg'], source_url: String(body.url), missing: [] };
     }
     need('seller');
     if (body.action === 'payout_get') return { payout: st.payout ?? null };
@@ -388,7 +422,12 @@ export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviad
   let { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [], ...(opts.single ? { single: true } : {}),
     ...(opts.delivery_mode ? { delivery_mode: opts.delivery_mode } : {}), ...(opts.protection_minutes ? { protection_minutes: opts.protection_minutes } : {}) });
   if (upTo !== 'creado') { set('buyer'); slug = (await demoApi('/api/escrow/pay', { slug, step: 'start' })).slug; await demoApi('/api/escrow/pay', { slug, step: 'confirm_sinpe' }); }
-  if (upTo === 'enviado' && opts.delivery_mode !== 'cara_a_cara') { set('seller'); await demoApi('/api/escrow/ship', { slug }); }
+  if (upTo === 'enviado' && opts.delivery_mode !== 'cara_a_cara') { // mismo camino que la cámara: token 'ship', firma (lo marca usado) y "Ya lo envié" con la foto
+    set('seller');
+    const tk = await demoApi('/api/photos/upload-url', { action: 'capture_token', purpose: 'ship', ref: slug });
+    await demoApi('/api/photos/upload-url', { purpose: 'ship', capture_token: tk.token, mime: 'image/jpeg', size: 1 });
+    await demoApi('/api/escrow/ship', { slug, evidence: { photo: DEMO_SHIP_PHOTO, capture_token: tk.token, captured_at: tk.now } });
+  }
   set(prev); emit(); return slug;
 }
 

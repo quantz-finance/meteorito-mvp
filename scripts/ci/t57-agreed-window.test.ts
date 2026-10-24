@@ -66,7 +66,7 @@ export async function run(t: T) {
     /* ---------- 2) Crear link: se guarda, se valida en el servidor y tolera la columna ausente ---------- */
     const create = (await import('../../api/orders/create')).default;
     const seller = await token({ sub: 'seller-57' });
-    const body = (over: any = {}) => ({ proof: sellerProof(), title: 'Bici de montaña', price_crc: 150000, photos: [publicPrefix('seller-57') + '44444444-4444-4444-8444-444444444444/0.jpg'], ...over });
+    const body = (over: any = {}) => ({ proof: sellerProof(), title: 'Bici de montaña', price_crc: 150000, photos: [publicPrefix('seller-57') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg'], ...over });
     let db = fakeDb(); __setDbForTests(db as any);
     let r = res(); await create(req(seller, body({ delivery_mode: 'cara_a_cara', protection_minutes: 4320 })), r);
     t.check('crear con cara a cara y 3 días -> guardado', r.code === 200 && db.tables.orders[0]?.delivery_mode === 'cara_a_cara' && db.tables.orders[0]?.protection_minutes === 4320, `${r.code} ${r.body?.error}`);

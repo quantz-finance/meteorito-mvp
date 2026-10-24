@@ -48,7 +48,7 @@ export async function run(t: T) {
   t.check('código inválido -> 400', r.code === 400);
 
   // El vendedor publica en respuesta a la invitación.
-  const seller = Keypair.random(); const photo = publicPrefix('seller1') + '44444444-4444-4444-8444-444444444444/0.jpg';
+  const seller = Keypair.random(); const photo = publicPrefix('seller1') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg';
   const sellerBody = (price: number, invite?: string) => ({ proof: signProof(seller, 'create', 'new'), category: 'celular', brand: 'Apple', model: 'iPhone 13', condition: 'Bueno', price_crc: price, photos: [photo], ...(invite ? { invite } : {}) });
   r = await call(create, { tok: await token({ sub: 'seller1' }), body: sellerBody(100000, code) });
   t.check('precio distinto al de la invitación -> 409 y no publica', r.code === 409 && r.body?.code === 'invite_price_mismatch' && db.tables.orders.length === 0, `${r.code} ${r.body?.error}`);
@@ -63,7 +63,7 @@ export async function run(t: T) {
   t.check('el comprador ve order_slug para ir a pagar', r.body?.status === 'aceptada' && r.body?.order_slug === slug);
 
   // Una invitación = una publicación.
-  r = await call(create, { tok: await token({ sub: 'seller2' }), body: { ...sellerBody(250000, code), photos: [publicPrefix('seller2') + '44444444-4444-4444-8444-444444444444/0.jpg'] } });
+  r = await call(create, { tok: await token({ sub: 'seller2' }), body: { ...sellerBody(250000, code), photos: [publicPrefix('seller2') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg'] } });
   t.check('segunda publicación sobre la misma invitación -> 409', r.code === 409 && r.body?.code === 'invite_not_open' && db.tables.orders.length === 1, `${r.code} ${r.body?.error}`);
 
   // El link queda reservado a quien invitó.
@@ -78,6 +78,6 @@ export async function run(t: T) {
   t.check('otro no puede cancelar -> 403', r.code === 403, `${r.code}`);
   r = await call(invites, { guest: KEY_A, body: { op: 'cancel', code: c2 } });
   t.check('el comprador cancela su invitación abierta', r.code === 200 && db.tables.invitations.find((i: any) => i.code === c2).status === 'cancelada');
-  r = await call(create, { tok: await token({ sub: 'seller3' }), body: { ...sellerBody(250000, c2), photos: [publicPrefix('seller3') + '44444444-4444-4444-8444-444444444444/0.jpg'] } });
+  r = await call(create, { tok: await token({ sub: 'seller3' }), body: { ...sellerBody(250000, c2), photos: [publicPrefix('seller3') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg'] } });
   t.check('no se puede publicar sobre una invitación cancelada -> 409', r.code === 409 && db.tables.orders.length === 1, `${r.code}`);
 }

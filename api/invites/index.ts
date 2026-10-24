@@ -8,6 +8,7 @@ import { db, json, fail } from '../_lib/db';
 import { HttpError } from '../_lib/auth';
 import { guestSubFromReq } from '../_lib/guest';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
+import { cameraRequired, listingPhotoOk } from '../_lib/capture';
 import { missingColumn } from '../_lib/listings';
 import { checkFacebookUrl } from '../_lib/fbparse';
 import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCode } from '../_lib/invites';
@@ -50,6 +51,9 @@ export default async function handler(req: any, res: any) {
         if (!chk?.ok) throw Object.assign(new HttpError(400, 'El link del anuncio no es de Facebook Marketplace.'), { code: 'fb_url_invalid' });
         source_url = chk.url;
       }
+      // Solo fotos de la cámara de la app (token 'listing' del invitado) o, si trae source_url de import, la foto que el
+      // servidor guardó al importar ese mismo link.
+      if (photos.some((u) => !listingPhotoOk(u, guest, source_url))) throw cameraRequired();
       const row: Record<string, unknown> = { buyer_user_id: guest, category, brand, model, price_crc: price, note: str(b.note, 500, false), status: 'abierta', ...(photos.length ? { photos } : {}), ...(source_url ? { source_url } : {}) };
       for (let i = 0; i < 5; i++) {
         const code = inviteCode();

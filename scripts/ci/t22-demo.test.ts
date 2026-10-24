@@ -35,7 +35,8 @@ export async function run(t: T) {
   t.check('(1) vendedor crea link -> creado', o.afterCreate === 'creado' && /^demo\d\d$/.test(o.slug));
   t.check('(2) comprador paga -> fondeado, PIN de 6 dígitos devuelto una vez, sin filtrarse en el pedido público', o.status2 === 'fondeado' && o.pinLen === 6 && o.pinLeak === false);
   t.check('(2) contrato y comprobante con formato Stellar', o.contractLen === 56 && o.fundedTxLen === 64);
-  t.check('(3) vendedor marca enviado', o.status3 === 'enviado');
+  t.check('(3) sin foto de la cámara no se marca enviado (ship_photo_required)', o.shipNoPhoto === 'ship_photo_required', String(o.shipNoPhoto));
+  t.check('(3) vendedor marca enviado con la foto de la cámara (token de un uso)', o.status3 === 'enviado');
   t.check('(4) PIN incorrecto rechazado; PIN correcto libera con comprobante', o.badPin === 'bad_pin' && o.status4 === 'liberado' && o.releasedTxLen === 64);
   t.check('(4) saldo del vendedor sube con el cobro', Number(o.balance) > 120, o.balance);
   t.check('(5) disputa abierta', o.status5 === 'en_disputa');

@@ -1,28 +1,55 @@
-// Envío simple (demo): el vendedor toca "Ya lo envié" (foto y número de guía opcionales) y el comprador ve su código
-// de entrega SOLO después del envío, junto con "Va en camino" y la foto.
+// Envío simple (demo): el vendedor toma la foto del envío con la cámara de la app (OBLIGATORIA, cámara simulada en el demo,
+// sin selector de archivos), toca "Ya lo envié" (número de guía opcional) y el comprador ve su código de entrega SOLO después
+// del envío, junto con "Va en camino" y la foto.
 import { test, expect, type Page } from '@playwright/test';
-import { open, seed, orderStatus, DEMO_PIN, PAID, PHOTO, expectNoScroll, openSellerRow, expectInputs16 } from './helpers';
+import { open, seed, orderStatus, DEMO_PIN, PAID, takePhoto, expectNoScroll, openSellerRow, expectInputs16 } from './helpers';
 
 const SHOTS = process.env.SHIP_SHOTS; // carpeta para capturas (opcional, p. ej. /workspace/out)
 const shot = async (page: Page, name: string) => { if (SHOTS) { await page.waitForTimeout(400); await page.screenshot({ path: `${SHOTS}/ship-${name}.png` }); } };
 const st = (page: Page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1') || '{}'));
 
-test('SHP-01 vendedor: "Ya lo envié" en un toque, sin campo obligatorio', async ({ page }) => {
+test('SHP-01 vendedor: "Ya lo envié" bloqueado sin la foto de la cámara; con la foto se marca enviado', async ({ page }) => {
   await open(page, '/', 'seller', true);
   const slug = await seed(page, 'fondeado');
   await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
   await expect(page.getByText('Marcar como enviado')).toHaveCount(0);
   await expect(page.getByPlaceholder('Número de guía (opcional)')).toHaveCount(0); // discreto: plegado
-  await expect(page.getByText('Ya lo envié', { exact: true }).last()).toBeEnabled();
-  await shot(page, 'vendedor-antes');
+  await expect(page.getByTestId('ship-photo-required')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ya lo envié/ }).last()).toBeDisabled();
+  expect(await orderStatus(page, slug)).toBe('fondeado');
+  await shot(page, 'vendedor-bloqueado');
+  // Nunca se abre un selector de archivos: solo la cámara de la app.
+  let chooser = false; page.on('filechooser', () => { chooser = true; });
+  await takePhoto(page, 'Tomar foto del envío');
+  expect(chooser).toBe(false);
+  await expect(page.getByTestId('ship-photo-preview')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Ya lo envié/ }).last()).toBeEnabled();
   await page.getByText('Ya lo envié', { exact: true }).last().click();
   await expect.poll(() => orderStatus(page, slug)).toBe('enviado');
   const ev = (await st(page)).orders[slug].evidence;
   expect(ev.at).toBeTruthy();
-  expect(ev.photo).toBeUndefined();
+  expect(ev.photo).toMatch(/^data:image\/jpeg/);
+  expect(ev.purpose).toBe('ship');
+  expect(ev.token_id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(Date.parse(ev.captured_at)).toBeGreaterThan(0);
 });
 
-test('SHP-02 comprador ve su código solo después del envío; el vendedor adjunta una foto opcional', async ({ page }) => {
+test('SHP-03 cámara sin permiso: explica cómo activarla y no ofrece el carrete', async ({ page }) => {
+  await open(page, '/', 'seller', true);
+  await seed(page, 'fondeado');
+  await page.evaluate(() => sessionStorage.setItem('meteorito:fake-camera', 'denied'));
+  await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+  await page.getByLabel('Tomar foto del envío', { exact: true }).click();
+  await expect(page.getByTestId('camera-denied')).toBeVisible();
+  await expect(page.getByText('Necesitamos tu cámara para tomar la foto')).toBeVisible();
+  await expect(page.getByText('Reintentar', { exact: true })).toBeVisible();
+  await expect(page.locator('input[type=file]')).toHaveCount(0);
+  await shot(page, 'camara-denegada');
+  await page.getByText('Cancelar', { exact: true }).click();
+  await expect(page.getByRole('button', { name: /Ya lo envié/ }).last()).toBeDisabled();
+});
+
+test('SHP-02 comprador ve su código solo después del envío; el vendedor toma la foto con la cámara', async ({ page }) => {
   await open(page, '/', 'seller', true);
   const prod = await seed(page, 'creado');
   await open(page, `/p/${prod}?buyer=A`, 'buyer');
@@ -39,8 +66,7 @@ test('SHP-02 comprador ve su código solo después del envío; el vendedor adjun
 
   // Vendedor: foto del comprobante + "Ya lo envié"
   await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
-  const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByLabel('Agregar foto del envío').click()]);
-  await fc.setFiles(PHOTO);
+  await takePhoto(page, 'Tomar foto del envío');
   await expect(page.getByTestId('ship-photo-preview')).toBeVisible();
   await page.getByText('Agregar número de guía (opcional)').click();
   await expectInputs16(page);

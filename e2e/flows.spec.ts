@@ -1,7 +1,7 @@
 // Flujos completos en modo demo (lib/demo.ts simula el API igual que producción: producto permanente, pedido por
 // comprador, invitación reservada, PIN con bloqueo, liberación automática, resolución de disputa).
 import { test, expect, type Page } from '@playwright/test';
-import { open, seed, orderStatus, DEMO_PIN, PAID, PHOTO, expectNoScroll, openSellerRow } from './helpers';
+import { open, seed, orderStatus, DEMO_PIN, PAID, takePhoto, expectNoScroll, openSellerRow } from './helpers';
 
 const demo = (page: Page, fn: string, ...args: unknown[]) => page.evaluate(([f, a]) => (window as any).__meteoritoDemo[f as string](...(a as unknown[])), [fn, args] as const);
 const st = (page: Page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1') || '{}'));
@@ -96,8 +96,7 @@ test.describe('Invitaciones', () => {
     if (!(await title.inputValue())) await title.fill('iPhone 13');
     const price = page.getByPlaceholder('0');
     if (await price.isEditable() && !(await price.inputValue())) await price.fill('250000');
-    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Agregar', { exact: true }).click()]);
-    await fc.setFiles(PHOTO);
+    await takePhoto(page);
     await page.getByText('Generar link').click();
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
     const s = await st(page);
@@ -129,8 +128,7 @@ test.describe('Invitaciones', () => {
     if (!(await title.inputValue())) await title.fill('iPhone 13');
     const price = page.getByPlaceholder('0');
     if (await price.isEditable() && !(await price.inputValue())) await price.fill('250000');
-    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Agregar', { exact: true }).click()]);
-    await fc.setFiles(PHOTO);
+    await takePhoto(page);
     await page.getByText('Generar link').click();
     await expect(page.getByText(/propia invitación/)).toBeVisible();
   });
@@ -192,8 +190,7 @@ test.describe('PIN, liberación automática y disputas', () => {
     await open(page, `/p/${slug}`, 'buyer');
     await page.getByText('Tengo un problema').first().click();
     await page.getByText('No funciona', { exact: true }).click();
-    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByLabel('Agregar foto').click()]);
-    await fc.setFiles(PHOTO);
+    await takePhoto(page);
     await expect(page.getByText('Fotos (1/4)')).toBeVisible();
     await page.getByText('Reportar problema', { exact: true }).click();
     await expect.poll(() => orderStatus(page, slug)).toBe('en_disputa');
@@ -234,6 +231,7 @@ test.describe('Calificaciones y push (demo)', () => {
     const prod = await seed(page, 'creado');
     const slug = await buyerPays(page, prod, 'A'); // pagó en este navegador: aquí puede calificar
     await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+    await takePhoto(page, 'Tomar foto del envío'); // obligatoria, con la cámara de la app
     await page.getByText('Ya lo envié', { exact: true }).last().click();
     await expect.poll(() => orderStatus(page, slug)).toBe('enviado');
     await open(page, `/p/${slug}?buyer=A`, 'buyer');

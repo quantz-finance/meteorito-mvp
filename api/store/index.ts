@@ -16,7 +16,8 @@
 //                                                 -> avisos push de los pedidos de esa identidad (migración 011)
 //  POST { action:'import_facebook', url }         (Bearer Cavos o X-Guest-Key del comprador que invita) -> lee un anuncio PÚBLICO de Facebook Marketplace (solo
 //                                                 facebook.com / fb.me) para precargar Vender: título, precio en colones,
-//                                                 descripción y foto (data URL). Nunca crea nada: quien importa revisa y
+//                                                 descripción y foto (data URL + photo_urls: la misma foto guardada por el
+//                                                 servidor en import-<clave>-<uuid>, la única que no viene de la cámara). Nunca crea nada: quien importa revisa y
 //                                                 confirma (link de pago en Vender o invitación en Comprar).
 import { db, fail, json, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
@@ -26,6 +27,8 @@ import { deleteSubscription, isMissingTable, parseSubscription, saveSubscription
 import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
 import { checkFacebookUrl } from '../_lib/fbparse';
 import { clientIp, FB_GUEST_IP_PER_MIN, importFacebookListing, fbRateLimited } from '../_lib/fbimport';
+import { storeImportedPhotos } from '../_lib/capture';
+import { MAX_PHOTO_BYTES } from '../_lib/photos';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
@@ -153,7 +156,12 @@ export default async function handler(req: any, res: any) {
         throw Object.assign(new HttpError(429, 'Espera un momento antes de importar otro anuncio.'), { code: 'fb_rate_limited' });
       }
       res.setHeader?.('Cache-Control', 'no-store');
-      return json(res, 200, await importFacebookListing(chk.url, { rate: env.crcUsdcRate() }));
+      const r = await importFacebookListing(chk.url, { rate: env.crcUsdcRate() });
+      // La foto del anuncio queda guardada por el servidor (import-<clave del link>-<uuid>): es la única que no se toma con
+      // la cámara, y solo vale en un producto o invitación que mande este mismo source_url.
+      const source_url = chk.url;
+      const photo_urls = r.photos.length ? await storeImportedPhotos(db().storage, r.photos, who.cavos?.sub ?? who.guest!, MAX_PHOTO_BYTES, source_url) : [];
+      return json(res, 200, { ...r, photo_urls, source_url });
     }
 
     const user = await requireCavosUser(req);

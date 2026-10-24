@@ -57,7 +57,7 @@ export async function run(t: T) {
   const r = res(); await upload(req(await token({ sub: 'intruso' }), { draftId: '44444444-4444-4444-8444-444444444444', index: 0, mime: 'image/jpeg', size: 1000, sub: 'seller', path: 'seller/x.jpg' }), r);
   t.check('upload-url: path siempre bajo listings/<sub del token>/', r.code === 200 && db.uploads.length === 1 && db.uploads[0].startsWith('intruso/') && r.body.publicUrl.startsWith(publicPrefix('intruso')), `${r.code} ${db.uploads[0]}`);
   // create: fotos de la carpeta de OTRO usuario -> 400; dispute: evidencia de otra carpeta -> 400.
-  const photo = publicPrefix('seller') + '44444444-4444-4444-8444-444444444444/0.jpg';
+  const photo = publicPrefix('seller') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg';
   const c = await go(create, 'intruso', { proof: proof('create', 'new'), category: 'celular', brand: 'a', model: 'b', condition: 'c', price_crc: 5000, photos: [photo] }, 'creado');
   t.check('create: fotos de carpeta ajena -> 400, sin insert', c.code === 400 && c.db.tables.orders.length === 1, `${c.code} ${c.err}`);
   const c2 = await go(create, 'seller', { proof: proof('create', 'new'), category: 'celular', brand: 'a', model: 'b', condition: 'c', price_crc: 5000, photos: [photo] }, 'creado');
