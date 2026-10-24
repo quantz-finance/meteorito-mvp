@@ -16,6 +16,8 @@ import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { track } from '@/lib/analytics';
 import { formatCRC } from '@/lib/orders';
 import { FEED_ERROR, getFeed, type FeedItem, type VerifiedFilter } from '@/lib/store';
+import { useAuth } from '@/lib/cavos';
+import { followsSome, loadFollowing } from '@/lib/follows';
 import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
 
 export const SEARCH_DEBOUNCE_MS = 300;
@@ -38,6 +40,9 @@ export function Feed({ header }: { header: ReactElement }) {
   const [example, setExample] = useState(false);
   const req = useRef(0);
   const viewed = useRef(false);
+  const auth = useAuth();
+  // Algoritmo: si sigues a alguien, el feed se pide personalizado (sus productos suben); si no, el mismo para todos.
+  const personal = async () => { await loadFollowing(auth); return followsSome() ? auth : null; };
 
   // Debounce del buscador (~300 ms): no se pide nada por cada tecla.
   useEffect(() => { const id = setTimeout(() => setQ(text.trim()), SEARCH_DEBOUNCE_MS); return () => clearTimeout(id); }, [text]);
@@ -46,7 +51,7 @@ export function Feed({ header }: { header: ReactElement }) {
     const id = ++req.current;
     setPhase('loading'); setItems([]); setCursor(null);
     try {
-      const page = await getFeed({ q, verified: filter, limit: PAGE });
+      const page = await getFeed({ q, verified: filter, limit: PAGE, personal: await personal() });
       if (id !== req.current) return;
       setItems(page.items); setCursor(page.next_cursor); setPhase('ready');
       if (q) track('feed_search', { results: page.items.length, more: !!page.next_cursor, filter, q_len: q.length });
@@ -59,7 +64,7 @@ export function Feed({ header }: { header: ReactElement }) {
     if (!cursor || more || phase !== 'ready') return;
     const id = req.current; setMore(true);
     try {
-      const page = await getFeed({ q, verified: filter, cursor, limit: PAGE });
+      const page = await getFeed({ q, verified: filter, cursor, limit: PAGE, personal: await personal() });
       if (id !== req.current) return;
       setItems((prev) => [...prev, ...page.items.filter((i) => !prev.some((p) => p.slug === i.slug))]); setCursor(page.next_cursor);
     } catch { /* se reintenta al seguir bajando */ } finally { if (id === req.current) setMore(false); }

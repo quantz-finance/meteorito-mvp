@@ -41,7 +41,7 @@ test.describe('Comprar: feed y perfil', () => {
     await search.fill('zzzz nada');
     await expect(page.getByText(/No encontramos/)).toBeVisible();
     await page.getByRole('button', { name: 'Limpiar búsqueda' }).first().click();
-    await expect(page.getByText('Lo más nuevo')).toBeVisible();
+    await expect(page.getByText('Para ti')).toBeVisible();
     await noHScroll(page);
     expect(await page.locator('body').innerText()).not.toMatch(VOSEO);
   });

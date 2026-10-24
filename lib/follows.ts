@@ -60,5 +60,8 @@ export function useFollowing(auth: Auth, storeSlug: string): boolean {
   useSyncExternalStore(subscribe, () => version, () => version);
   return slugs.has(storeSlug);
 }
+/** ¿Sigue a alguien? (el feed se pide personalizado solo en ese caso). */
+export const followsSome = () => slugs.size > 0;
+export const followedSlugs = () => [...slugs];
 /** Solo tests. */
 export const __resetFollows = () => { slugs = new Set(); loadedFor = null; loading = null; emit(); };
