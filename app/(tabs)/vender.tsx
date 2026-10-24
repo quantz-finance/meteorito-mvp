@@ -12,7 +12,7 @@ import { userMessage } from '@/lib/cavosSession';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { checkListingUrl, detectProvider, importFromLink, importNotice, importProps, IMPORT_FAILED, PROVIDER_ICON, SUPPORTED, supportedLabel, type ListingImport } from '@/lib/listingImport';
+import { blockedNotice, checkListingUrl, detectProvider, importFromLink, importNotice, importProps, IMPORT_FAILED, PROVIDER_ICON, SUPPORTED, supportedLabel, type ListingImport } from '@/lib/listingImport';
 import { useStableWindow } from '@/lib/viewport';
 import { ui } from '@/components/ui';
 import { BetaNotice, RulesHint } from '@/components/RulesLink';
@@ -343,7 +343,7 @@ function VenderForm() {
       </Sheet>
 
       <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de un link"
-        footer={<PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim()} onPress={runImport} />}>
+        footer={<PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim() || !!detected?.blocked} onPress={runImport} />}>
         <Text style={T.callout}>Abre tu anuncio, toca Compartir y copia el link. Pégalo aquí: llenamos el nombre, el precio y las fotos para que solo revises.</Text>
         <View style={s.provRow} testID="import-providers">
           {SUPPORTED.slice(0, 5).map((p) => <View key={p.id} style={s.provBadge} accessibilityLabel={p.name}><Icon name={PROVIDER_ICON[p.id] as IconName} size={16} color={C.lilac} /></View>)}
@@ -362,6 +362,7 @@ function VenderForm() {
             <View style={{ flexDirection: 'row', gap: S.sm }}>{[0, 1, 2].map((i) => <Skeleton key={i} w={48} h={48} r={R.sm} />)}</View>
           </View>
         ) : fbErr ? <ErrorText>{fbErr}</ErrorText>
+          : detected?.blocked ? <View style={s.detected} testID="import-provider"><Icon name="alert-circle" size={16} color={C.orange} /><Text style={[T.footnote, { color: C.orange, flex: 1 }]} numberOfLines={2}>{blockedNotice(detected.name)}</Text></View>
           : detected ? <View style={s.detected} testID="import-provider"><Icon name={detected.icon as IconName} size={16} color={C.lilac} /><Text style={[T.footnote, { color: C.text, flex: 1 }]} numberOfLines={1}>Anuncio de {detected.name}</Text></View>
           : <Text style={T.footnote}>Solo anuncios públicos. Tú confirmas el precio final.</Text>}
       </Sheet>

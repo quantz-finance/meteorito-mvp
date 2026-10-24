@@ -20,10 +20,12 @@ export const PROVIDER_ICON: Record<ProviderId, string> = {
   walmart: 'cart', shopee: 'bag-handle', olx: 'storefront', falabella: 'storefront', temu: 'bag-handle', web: 'globe-outline',
 };
 /** Proveedor del texto pegado (o null si todavía no es un link). */
-export function detectProvider(raw: string): { id: ProviderId; name: string; icon: string } | null {
+export function detectProvider(raw: string): { id: ProviderId; name: string; icon: string; blocked: boolean } | null {
   const c = checkListingUrl(raw);
-  return c.ok ? { id: c.provider.id, name: c.provider.id === 'web' ? new URL(c.url).hostname.replace(/^www\./, '') : c.provider.name, icon: PROVIDER_ICON[c.provider.id] } : null;
+  return c.ok ? { id: c.provider.id, name: c.provider.id === 'web' ? new URL(c.url).hostname.replace(/^www\./, '') : c.provider.name, icon: PROVIDER_ICON[c.provider.id], blocked: c.provider.status === 'blocked' } : null;
 }
+/** Proveedor que no deja leer sus anuncios desde nuestros servidores: se avisa al pegar, sin intentar. */
+export const blockedNotice = (name: string) => `Todavía no podemos leer anuncios de ${name}; súbelo con la cámara.`;
 
 export async function importFromLink(auth: MeteoritoAuth, raw: string): Promise<ListingImport> {
   const chk = checkListingUrl(raw);

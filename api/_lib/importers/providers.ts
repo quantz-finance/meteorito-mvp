@@ -1,6 +1,6 @@
 // Proveedores de "Importar de un link" (PURO: sin red ni node:*; lo usan el API y el cliente para mostrar el proveedor
 // apenas se pega el link). Cada proveedor declara sus dominios base; los subdominios cuentan (articulo.mercadolibre.com.mx).
-// Probado contra links reales el 2026-10-24 (ver docs/marketplace-import.md). `status`:
+// Probado contra links reales el 2026-10-24 DESDE PRODUCCIÓN (IPs de Vercel; ver docs/marketplace-import.md). `status`:
 //  - 'ok': se lee sin credenciales desde el servidor.
 //  - 'blocked': el sitio exige verificación o bloquea servidores (403 / "verifica tu identidad"). No se muestra como
 //    soportado ni se intenta: el vendedor ve el mensaje amable y sube las fotos con la cámara.
@@ -10,11 +10,11 @@ export interface Provider { id: ProviderId; name: string; hosts: string[]; short
 const MELI_TLDS = ['com.mx', 'com.ar', 'com.co', 'cl', 'com.pe', 'com.uy', 'com.ec', 'com.ve', 'co.cr', 'com.gt', 'com.pa', 'com.do', 'com.bo', 'com.py', 'com.hn', 'com.ni', 'com.sv'];
 export const PROVIDERS: Provider[] = [
   { id: 'facebook', name: 'Facebook', hosts: ['facebook.com'], short: ['fb.me'], status: 'ok' },
-  { id: 'mercadolibre', name: 'Mercado Libre', hosts: [...MELI_TLDS.map((t) => `mercadolibre.${t}`), 'mercadolivre.com.br'], short: ['meli.la'], status: 'ok' },
-  { id: 'encuentra24', name: 'Encuentra24', hosts: ['encuentra24.com'], status: 'ok' },
-  { id: 'amazon', name: 'Amazon', hosts: ['amazon.com', 'amazon.com.mx', 'amazon.com.br', 'amazon.es'], short: ['a.co', 'amzn.to', 'amzn.eu'], status: 'ok' },
-  { id: 'aliexpress', name: 'AliExpress', hosts: ['aliexpress.com', 'aliexpress.us'], short: ['a.aliexpress.com', 's.click.aliexpress.com'], status: 'ok' },
-  { id: 'walmart', name: 'Walmart', hosts: ['walmart.co.cr', 'walmart.com.mx'], status: 'ok' },
+  { id: 'mercadolibre', name: 'Mercado Libre', hosts: [...MELI_TLDS.map((t) => `mercadolibre.${t}`), 'mercadolivre.com.br'], short: ['meli.la'], status: 'blocked' },
+  { id: 'encuentra24', name: 'Encuentra24', hosts: ['encuentra24.com'], status: 'blocked' },
+  { id: 'amazon', name: 'Amazon', hosts: ['amazon.com', 'amazon.com.mx', 'amazon.com.br', 'amazon.es'], short: ['a.co', 'amzn.to', 'amzn.eu'], status: 'blocked' },
+  { id: 'aliexpress', name: 'AliExpress', hosts: ['aliexpress.com', 'aliexpress.us'], short: ['a.aliexpress.com', 's.click.aliexpress.com'], status: 'blocked' },
+  { id: 'walmart', name: 'Walmart', hosts: ['walmart.co.cr'], status: 'ok' }, // walmart.com.mx bloquea servidores (/blocked): queda como página genérica
   { id: 'shopee', name: 'Shopee', hosts: ['shopee.com.br', 'shopee.com.mx', 'shopee.com.co', 'shopee.cl'], short: ['shope.ee'], status: 'blocked' },
   { id: 'olx', name: 'OLX', hosts: ['olx.com.br'], status: 'blocked' },
   { id: 'falabella', name: 'Falabella', hosts: ['falabella.com', 'falabella.com.co', 'falabella.com.pe'], status: 'blocked' },

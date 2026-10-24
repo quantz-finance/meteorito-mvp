@@ -332,7 +332,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       await new Promise((r) => setTimeout(r, 900)); // deja ver el skeleton
       const p = chk.provider; const name = p.id === 'web' ? new URL(chk.url).hostname.replace(/^www\./, '') : p.name;
       if (p.status === 'blocked' || /no-existe|\/item\/1\/|login/.test(chk.url)) return { result: 'failed', provider: p.id, provider_name: name, source_url: chk.url, title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: IMPORT_FAILED, code: 'unreadable' };
-      const usd = p.id === 'amazon' || p.id === 'aliexpress'; const mxn = p.id === 'mercadolibre';
+      const usd = p.id === 'web' && /\.us$/.test(name); const mxn = p.id === 'web' && /\.mx$/.test(name); // tiendas genéricas: precio en otra moneda -> sugerido en colones
       return { result: 'success', provider: p.id, provider_name: name, source_url: chk.url, title: 'Bicicleta de montaña aro 29',
         price_crc: mxn ? 197400 : usd ? 151500 : 185000, price_source: mxn ? { amount: 7238.99, currency: 'MXN' } : usd ? { amount: 300, currency: 'USD' } : { amount: 185000, currency: 'CRC' }, converted: mxn || usd,
         description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], photo_urls: ['/demo-fb-import.jpg'], missing: [] };

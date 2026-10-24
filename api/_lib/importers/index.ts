@@ -22,9 +22,15 @@ const MAX_IMAGE = 4 * 1024 * 1024;
 /** Bytes de imagen real (JPEG, PNG o WebP: lo que acepta el bucket), no lo que diga el content-type. */
 export const isImageBytes = (b: Uint8Array) => (b[0] === 0xff && b[1] === 0xd8) || (b[0] === 0x89 && b[1] === 0x50) || (b[0] === 0x52 && b[1] === 0x49 && b[8] === 0x57 && b[9] === 0x45);
 /** Muro de verificación / login: la página existe pero no deja ver el anuncio. */
-const isWall = (url: string, html: string) => /\/(account-verification|login|signin|captcha|blocked)\b/i.test(new URL(url).pathname) || /<title>\s*(Verifica tu identidad|Attention Required|Robot Check)/i.test(html);
+const isWall = (url: string, html: string) => /\/(account-verification|login|signin|captcha|blocked)\b/i.test(new URL(url).pathname) || /<title>\s*(Verifica tu identidad|Attention Required|Robot Check)/i.test(html)
+  || /action="[^"]*\/errors\/validateCaptcha/i.test(html); // captcha de Amazon desde IPs de datacenter (título "Amazon.com.mx")
+/** Título que solo es el nombre del sitio ("Amazon.com.mx", "Walmart"): no es el producto. */
+export const siteOnlyTitle = (title: string, url: string, name: string) => { const t = title.trim().toLowerCase(); const h = new URL(url).hostname.replace(/^www\./, '');
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(t) || t === h || t === name.toLowerCase(); };
 /** Link guardado en el producto: sin query ni fragmento (rastreadores, afiliados). */
 const canonical = (u: string) => { const x = new URL(u); x.search = ''; x.hash = ''; return x.toString(); };
+
+const parseClean = (p: Provider, html: string, url: string) => { const r = parseFor(p.id, html, url); return r.title && siteOnlyTitle(r.title, url, p.name) ? { ...r, title: null } : r; };
 
 let testNet: NetDeps | null = null;
 /** Solo tests: red simulada (resolver + requester), nunca en runtime. */
@@ -33,7 +39,8 @@ export const __setImportNetForTests = (d: NetDeps | null) => { testNet = d; };
 const failed = (p: Provider, code: string, source_url: string | null = null): ListingImport => ({ result: 'failed', provider: p.id, provider_name: p.name, source_url,
   title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'], message: IMPORT_FAILED, code });
 
-export async function importListing(input: unknown, deps: { rate: number; timeoutMs?: number; net?: NetDeps }): Promise<ListingImport> {
+/** `ignoreStatus`: solo tests, para seguir probando los extractores de proveedores excluidos (por si vuelven a abrir). */
+export async function importListing(input: unknown, deps: { rate: number; timeoutMs?: number; net?: NetDeps; ignoreStatus?: boolean }): Promise<ListingImport> {
   const chk = checkListingUrl(input);
   if (!chk.ok) return failed(WEB_PROVIDER, 'bad_url');
   let provider = chk.provider;
@@ -43,7 +50,7 @@ export async function importListing(input: unknown, deps: { rate: number; timeou
     const r = await importFacebookListing(fb.url, { rate: deps.rate });
     return { ...r, provider: 'facebook', provider_name: 'Facebook', source_url: canonical(fb.url), ...(r.result === 'failed' ? { message: IMPORT_FAILED, code: 'unreadable' } : {}) };
   }
-  if (provider.status === 'blocked') return failed(provider, 'provider_blocked');
+  if (provider.status === 'blocked' && !deps.ignoreStatus) return failed(provider, 'provider_blocked');
   const net = deps.net ?? testNet ?? {};
   const ms = deps.timeoutMs ?? 8000;
   const t0 = Date.now(); const left = () => Math.max(500, ms - (Date.now() - t0));
@@ -55,17 +62,17 @@ export async function importListing(input: unknown, deps: { rate: number; timeou
       const finalHost = new URL(r.url).hostname;
       const p2 = providerForHost(finalHost);
       if (p2 && p2.id !== provider.id) provider = p2; // link corto o redirección a otro proveedor conocido
-      if (provider.status === 'blocked') return failed(provider, 'provider_blocked');
+      if (provider.status === 'blocked' && !deps.ignoreStatus) return failed(provider, 'provider_blocked');
       if (isWall(r.url, html)) { code = 'wall'; continue; }
-      const parsed = parseFor(provider.id, html, r.url);
+      const parsed = parseClean(provider, html, r.url);
       if (parsed.title || parsed.price) { page = { url: r.url, html }; break; }
     } catch (e) {
-      code = e instanceof ImportNetError ? e.code : 'network';
+      code = e instanceof ImportNetError ? (e.code === 'http' && /^\d{3}$/.test(e.message) ? `http_${e.message}` : e.code) : 'network'; // http_403: el sitio rechaza la IP del servidor
       if (e instanceof ImportNetError && ['bad_url', 'blocked_host', 'private_ip', 'dns', 'too_many_redirects'].includes(e.code)) break; // no reintentar
     }
   }
   if (!page) return failed(provider, code, canonical(chk.url));
-  const parsed = parseFor(provider.id, page.html, page.url);
+  const parsed = parseClean(provider, page.html, page.url);
   // Fotos en paralelo: cada una con la misma protección SSRF (pueden estar en otro host/CDN).
   const imgs = await Promise.all(parsed.images.slice(0, MAX_IMPORT_PHOTOS + 2).map(async (u) => {
     try {
