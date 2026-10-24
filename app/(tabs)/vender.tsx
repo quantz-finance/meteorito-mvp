@@ -238,7 +238,7 @@ function VenderForm() {
   return (
     <Screen footerBare title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
       footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={() => submit()} />}>
-      <View style={{ flex: 1, gap: short ? S.sm + 4 : S.md }}>
+      <View style={{ flex: 1, gap: short ? S.sm : S.md }}>{/* iPhone SE: menos aire para que "Entrega y plazo" y el aviso de beta quepan sin scroll */}
       {orphan ? <OrphanWalletCard compact={short} onRestored={(r) => { setOrphan(false); if (title.trim() && photos.length) submit(r); }} /> : null}
       {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {`${invite.brand} ${invite.model}`.trim()} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 

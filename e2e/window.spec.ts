@@ -15,6 +15,9 @@ test('WIN-01 vender: elige cara a cara y 3 días; el link guarda el acuerdo; Ven
   await fc.setFiles(PHOTO);
   await expect(page.getByTestId('agreement-value')).toHaveText('Envío · 7 días'); // default
   await expectNoScroll(page);
+  const n = (await page.getByTestId('beta-notice').boundingBox())!, b = (await page.getByText('Generar link').boundingBox())!;
+  expect(n.y + n.height).toBeLessThanOrEqual(b.y); // la fila nueva no tapa el aviso de beta con el botón
+  await shot(page, 'vender');
   await page.getByLabel('Entrega y plazo').click();
   await page.getByLabel('Cara a cara', { exact: true }).click();
   await expect(page.getByLabel('Plazo 24 h')).toHaveAttribute('aria-checked', 'true'); // default cara a cara
