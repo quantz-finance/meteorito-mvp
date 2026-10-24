@@ -14,6 +14,8 @@ import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, getPublicOrder, orderTitle, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
 import { isBuyerDevice } from '@/lib/guest';
+import { SellerContact } from '@/components/SellerContact';
+import { canShowContact } from '../../api/_lib/contact';
 import { haptic } from '@/components/ds';
 import { rateOrder, ratedStars, rememberRated } from '@/lib/store';
 import { useStamp } from '@/lib/freshness';
@@ -122,6 +124,8 @@ export default function LinkDeVenta() {
         </Card>
       )}
 
+      {/* WhatsApp del vendedor: solo el comprador (su dispositivo) y solo después de pagar; el servidor lo vuelve a validar. */}
+      {canShowContact(order.status) && isBuyerDevice(order.slug) ? <SellerContact slug={order.slug} /> : null}
       {RATABLE.includes(order.status) && isBuyerDevice(order.slug) ? <RateCard slug={order.slug} /> : null}
       {['fondeado', 'enviado', 'en_disputa'].includes(order.status) && isBuyerDevice(order.slug)
         ? <Suspense fallback={null}><PushCard role="buyer" /></Suspense> : null}

@@ -1,8 +1,12 @@
 // Tienda del vendedor + calificaciones (una sola función para no sumar funciones en Vercel).
 //  GET  ?store=<usuario>                         -> tienda pública: nombre, puntuación, productos disponibles (sin datos sensibles)
 //  POST { action:'me' }                          (Bearer Cavos) -> mi tienda (la crea con un usuario único si no existe)
-//  POST { action:'update', store_slug?, display_name?, avatar_url? } (Bearer Cavos) -> cambiar usuario, nombre o foto
-//                                                 (foto: solo una subida a SU carpeta por /api/photos/upload-url; null la quita)
+//  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone? } (Bearer Cavos) -> cambiar usuario, nombre,
+//                                                 foto o WhatsApp de contacto (foto: solo una subida a SU carpeta por
+//                                                 /api/photos/upload-url; null la quita. Teléfono: CR, se guarda +506XXXXXXXX;
+//                                                 '' o null lo quita. Migración 016)
+//  POST { action:'seller_contact', slug }        (X-Guest-Key o Bearer del comprador) -> WhatsApp del vendedor, SOLO al comprador
+//                                                 del pedido y SOLO pagado (fondeado…resuelto). Sin 016 o sin teléfono: null
 //  POST { action:'rate', slug, stars }           (X-Guest-Key o Bearer del comprador) -> 1-5 estrellas, una vez por pedido,
 //                                                 solo con el pedido Entregado o Liberado
 //  POST { action:'payout_get' } / { action:'payout_set', iban, holder_name, sinpe_phone? } (Bearer Cavos)
@@ -23,6 +27,7 @@ import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
 import { checkFacebookUrl } from '../_lib/fbparse';
 import { clientIp, FB_GUEST_IP_PER_MIN, importFacebookListing, fbRateLimited } from '../_lib/fbimport';
 import { env } from '../_lib/env';
+import { canShowContact, normalizeContactPhone } from '../_lib/contact';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -58,6 +63,16 @@ async function myProfile(sub: string, email?: string) {
     if (again) return again; // carrera: otra pestaña la creó
   }
   throw new HttpError(500, 'No pudimos crear tu tienda. Intenta de nuevo.');
+}
+
+/** WhatsApp de contacto del vendedor (migración 016). Sin la columna o ante cualquier error: null (nunca rompe). */
+async function contactPhoneOf(sub: string | null | undefined): Promise<string | null> {
+  if (!sub) return null;
+  try {
+    const { data, error } = await db().from('seller_profiles').select('contact_phone').eq('sub', sub).maybeSingle();
+    if (error) return null;
+    return typeof (data as any)?.contact_phone === 'string' ? (data as any).contact_phone : null;
+  } catch { return null; }
 }
 
 /** Mi tienda (dueño): productos activos y en pausa (012). Sin la migración: lo mismo que la tienda pública. */
@@ -117,6 +132,16 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { ok: true });
     }
 
+    if (b.action === 'seller_contact') {
+      // Contacto del vendedor para coordinar el envío o reclamar después: solo quien pagó este pedido, nunca antes del pago.
+      const order = await orderBySlug(b.slug);
+      const who = await requireBuyerIdentity(req);
+      if (!isBuyerOf(order, who)) throw Object.assign(new HttpError(403, 'Solo quien compró puede ver el contacto del vendedor.'), { code: 'not_buyer' });
+      if (!canShowContact(order.status)) throw Object.assign(new HttpError(409, 'Verás el contacto del vendedor cuando pagues.'), { code: 'not_paid' });
+      res.setHeader?.('Cache-Control', 'no-store');
+      return json(res, 200, { contact_phone: await contactPhoneOf(order.seller_user_id) });
+    }
+
     if (b.action === 'import_facebook') {
       // Vendedor (Bearer Cavos) o comprador sin cuenta que invita al vendedor desde el anuncio (X-Guest-Key).
       const who = await requireBuyerIdentity(req);
@@ -163,7 +188,8 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'me') {
       const p = await myProfile(user.sub, user.email);
-      return json(res, 200, await ownerStore(user.sub, p));
+      const [mine, contact_phone] = await Promise.all([ownerStore(user.sub, p), contactPhoneOf(user.sub)]);
+      return json(res, 200, { ...mine, contact_phone });
     }
     if (b.action === 'listing_set') {
       if (!LISTING_STATUSES.includes(b.status)) throw new HttpError(400, 'Estado inválido.');
@@ -189,13 +215,21 @@ export default async function handler(req: any, res: any) {
         if (b.avatar_url !== null && !url) throw Object.assign(new HttpError(400, 'No pudimos usar esa foto. Elige otra imagen e intenta de nuevo.'), { code: 'bad_avatar' });
         patch.avatar_url = url;
       }
+      if (b.contact_phone !== undefined) {
+        const phone = normalizeContactPhone(b.contact_phone);
+        if (phone === 'invalid') throw Object.assign(new HttpError(400, 'Escribe un número de Costa Rica: 8 dígitos (ej. 8888 1234).'), { code: 'bad_phone' });
+        patch.contact_phone = phone;
+      }
       const { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub); // solo el perfil del dueño
       if (error?.code === '23505') throw Object.assign(new HttpError(409, 'Ese nombre de usuario ya está en uso. Prueba otro.'), { code: 'store_slug_taken' });
+      if (error && 'contact_phone' in patch && missingColumn(error) && (!('avatar_url' in patch) || /contact_phone/.test(String(error.message ?? ''))))
+        throw Object.assign(new HttpError(503, 'Todavía no puedes guardar tu WhatsApp. Intenta más tarde.'), { code: 'phone_unavailable' });
       if (error && 'avatar_url' in patch && missingColumn(error)) throw Object.assign(new HttpError(503, 'Todavía no puedes poner foto a tu tienda. Intenta más tarde.'), { code: 'avatar_unavailable' });
       if (error) storeDbErr(error);
       const slug = (patch.store_slug as string) ?? cur.store_slug;
       const fresh = (await publicStore(slug)) ?? { store_slug: slug, display_name: (patch.display_name as string) ?? cur.display_name, avatar_url: null, rating_avg: null, rating_count: 0, items: [] };
-      return json(res, 200, 'avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh);
+      const contact_phone = 'contact_phone' in patch ? patch.contact_phone as string | null : await contactPhoneOf(user.sub);
+      return json(res, 200, { ...('avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh), contact_phone });
     }
     throw new HttpError(400, 'acción inválida');
   } catch (e) { return fail(res, e); }

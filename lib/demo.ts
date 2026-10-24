@@ -19,6 +19,7 @@ export function demoEnabled(flag: string | undefined, host?: string | null): boo
 export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeof window !== 'undefined' ? window.location?.hostname : null);
 
 import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe } from '../api/_lib/payout'; // pura y chica (~1 KB)
+import { canShowContact, normalizeContactPhone } from '../api/_lib/contact'; // pura
 import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
@@ -35,7 +36,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes). */
@@ -242,6 +243,12 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       st.ratings[o.slug] = stars; emit(); return { rated: true, stars };
     }
     if (body.action === 'push_subscribe' || body.action === 'push_unsubscribe') return { ok: true };
+    if (body.action === 'seller_contact') { // igual que el API real: solo el comprador de ESTE pedido y solo pagado
+      need('buyer'); const o = get(String(body.slug));
+      if (!o.buyer || o.buyer !== me()) throw err(403, 'not_buyer', 'Solo quien compró puede ver el contacto del vendedor.');
+      if (!canShowContact(o.status)) throw err(409, 'not_paid', 'Verás el contacto del vendedor cuando pagues.');
+      return { contact_phone: st.store?.phone ?? null };
+    }
     if (body.action === 'import_facebook') { // misma forma que el API real (vendedor o comprador invitado); sin red (foto propia del demo)
       if (!checkFacebookUrl(body.url).ok) throw err(400, 'fb_url_invalid', FB_URL_INVALID);
       await new Promise((r) => setTimeout(r, 400));
@@ -274,6 +281,11 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
         if (body.avatar_url !== null && !/^data:image\/(jpeg|png|webp);base64,/.test(String(body.avatar_url))) throw err(400, 'bad_avatar', 'No pudimos usar esa foto. Elige otra imagen e intenta de nuevo.');
         st.store.avatar = body.avatar_url;
       }
+      if (body.contact_phone !== undefined) {
+        const ph = normalizeContactPhone(body.contact_phone);
+        if (ph === 'invalid') throw err(400, 'bad_phone', 'Escribe un número de Costa Rica: 8 dígitos (ej. 8888 1234).');
+        st.store.phone = ph;
+      }
       emit();
     }
     return demoGetStore(st.store.slug, true);
@@ -287,7 +299,7 @@ export function demoGetStore(slug: string, owner = false) {
   if (slug !== store.slug) return null;
   const r = Object.values(st.ratings ?? {});
   return {
-    store_slug: store.slug, display_name: store.name, avatar_url: store.avatar ?? null,
+    store_slug: store.slug, display_name: store.name, avatar_url: store.avatar ?? null, ...(owner ? { contact_phone: store.phone ?? null } : {}),
     rating_avg: r.length ? Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100) / 100 : null, rating_count: r.length,
     // Igual que public_store_items: productos activos sin comprador (Mi tienda también ve los pausados).
     items: Object.values(st.orders).filter((o) => o.status === 'creado' && !o.listing_slug && !o.invite_code
