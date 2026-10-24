@@ -110,19 +110,19 @@ export async function run(t: T) {
     ...['escrow_creado', 'fondeado', 'enviado', 'en_disputa', 'entregado', 'liberado', 'resuelto', 'cancelado'].flatMap((s) => [purchaseNext({ status: s }), purchaseNext({ status: s, delivery_mode: 'cara_a_cara' }), purchaseStatus({ status: s })])];
   t.check('copy sin palabras prohibidas', !copy.some((c) => BANNED.test(c)), copy.find((c) => BANNED.test(c)));
   t.check('estado vacío amable: este dispositivo o tu cuenta', MY_PURCHASES_EMPTY === 'Aquí van a aparecer las compras que hagas en este dispositivo o con tu cuenta.');
-  const screenSrc = read('app/mis-compras.tsx');
+  const screenSrc = read('app/(tabs)/comprar/compras.tsx');
   const literals = [...screenSrc.matchAll(/(?:title|label)="([^"]+)"|>([^<>{}]*[a-záéíóú][^<>{}]*)</g)].map((m) => m[1] ?? m[2]).filter(Boolean);
   t.check('pantalla sin palabras prohibidas', !literals.some((c) => BANNED.test(c)), literals.find((c) => BANNED.test(c)));
 
   // ---------- Cableado ----------
-  const comprar = read('app/(tabs)/comprar.tsx');
-  t.check('Comprar: botón de icono arriba a la derecha "Mis compras" -> /mis-compras', /right=\{<IconButton icon="bag-handle" label=\{MY_PURCHASES_TITLE\} onPress=\{\(\) => router\.push\('\/mis-compras'\)\}/.test(comprar) && MY_PURCHASES_TITLE === 'Mis compras');
+  const nav = read('lib/comprarViews.ts');
+  t.check('Comprar: icono "Mis compras" arriba a la derecha -> /comprar/compras', /label: MY_PURCHASES_TITLE, href: '\/comprar\/compras', icon: 'bag-check-outline'/.test(nav) && MY_PURCHASES_TITLE === 'Mis compras');
   const pay = read('components/PayBox.tsx');
   t.check('PayBox guarda la compra al iniciar el pago (pedido propio) y al completarlo', /remember\(r\.slug \?\? order\.slug, 'escrow_creado'\)/.test(pay) && /remember\(order\.slug, 'fondeado'\)/.test(pay));
   t.check('cada fila abre su seguimiento /p/<pedido>', /pathname: '\/p\/\[slug\]', params: \{ slug: r\.slug \}/.test(screenSrc));
   t.check('pantalla sin scroll (páginas con GridPager) y cerradas detrás de un selector', /scroll=\{false\}/.test(screenSrc) && /GridPager/.test(screenSrc) && /accessibilityRole="tablist"/.test(screenSrc));
   const layout = read('app/_layout.tsx');
-  t.check('Mis compras visible sin cuenta (comprador invitado) + acceso en la bienvenida si este dispositivo compró', /segments\[0\] === 'mis-compras'/.test(layout) && /hasLocalPurchases\(\)/.test(read('components/Welcome.tsx')));
+  t.check('Mis compras visible sin cuenta (comprador invitado) + acceso en la bienvenida si este dispositivo compró', /\[1\] === 'comprar' && \(segments as string\[\]\)\[2\] === 'compras'/.test(layout) && /hasLocalPurchases\(\)/.test(read('components/Welcome.tsx')));
   const loader = read('lib/myPurchases.ts');
   t.check('servidor por /api/store action buyer_orders (llave y/o sesión), sin función nueva', /guestApi<[^>]+>\(auth, '\/api\/store', \{ action: 'buyer_orders' \}\)/.test(loader));
   const fns: string[] = []; const walk = (d: string) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) { if (f !== '_lib' && f !== 'api') walk(p); } else if (/\.ts$/.test(f) && f !== 'tsconfig.json') fns.push(p); } };

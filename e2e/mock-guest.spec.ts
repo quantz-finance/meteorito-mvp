@@ -578,7 +578,7 @@ test('MCK-MIS-01 sin cuenta: paga, sale del seguimiento y vuelve desde Mis compr
   await expect(page.getByText(PAID).first()).toBeVisible();
   const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
   await page.goto('/t/valeria'); // salió de la página de seguimiento
-  await page.goto('/mis-compras');
+  await page.goto('/comprar/compras');
   const row = page.getByTestId('purchase-row');
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('Bici de montaña');
@@ -598,7 +598,7 @@ test('MCK-MIS-02 recuperación: compras anteriores por la llave y por el PIN gua
     { slug: 'otro44', status: 'enviado', contract_id: 'C4', buyer: OTHER, model: 'De otra persona', price_crc: 1000 },
   ]);
   await page.addInitScript(([k]) => { localStorage.setItem('meteorito:guest:v1', k); localStorage.setItem('meteorito:guest:pin:pin222', '135790'); }, [KEY]);
-  await page.goto('/mis-compras');
+  await page.goto('/comprar/compras');
   const rows = page.getByTestId('purchase-row');
   await expect(rows).toHaveCount(2);
   await expect(page.getByText('iPhone 13')).toBeVisible();
@@ -614,6 +614,6 @@ test('MCK-MIS-02 recuperación: compras anteriores por la llave y por el PIN gua
 
 test('MCK-MIS-03 navegador nuevo: vacío con texto amable', async ({ page, request }) => {
   await reset(request, []);
-  await page.goto('/mis-compras');
+  await page.goto('/comprar/compras');
   await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí van a aparecer las compras que hagas en este dispositivo o con tu cuenta.');
 });

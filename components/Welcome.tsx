@@ -33,7 +33,7 @@ export default function Welcome() {
     <View style={{ flex: 1, backgroundColor: Platform.OS === 'web' ? 'transparent' : C.bg }}>
       <SpaceBackground mode="full" />
       {bought ? <View style={{ position: 'absolute', zIndex: 2, top: insets.top + S.md, right: S.md }}>
-        <IconButton icon="bag-handle" label={MY_PURCHASES_TITLE} onPress={() => router.push('/mis-compras')} />
+        <IconButton icon="bag-check-outline" label={MY_PURCHASES_TITLE} onPress={() => router.push('/comprar/compras')} />
       </View> : null}
       <View style={[s.col, { paddingTop: insets.top + (tiny ? S.md : S.lg), paddingBottom: insets.bottom + S.sm }]}>
         <View style={s.hero}>

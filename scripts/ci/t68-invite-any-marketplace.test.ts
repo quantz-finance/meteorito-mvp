@@ -75,7 +75,7 @@ export async function run(t: T) {
   t.check('mensaje con link de Facebook sigue diciendo Facebook Marketplace', inviteShareMessage({ title: 'X', price_crc: 5000, source_url: LINKS.facebook }, 'l').includes('en Facebook Marketplace'));
 
   // --- pantallas: usan import_listing (no import_facebook), copy en tuteo y sin palabras prohibidas, aviso de beta intacto
-  const nueva = readFileSync('app/i/nueva.tsx', 'utf8'); const code = readFileSync('app/i/[code].tsx', 'utf8'); const comprar = readFileSync('app/(tabs)/comprar.tsx', 'utf8');
+  const nueva = readFileSync('app/i/nueva.tsx', 'utf8'); const code = readFileSync('app/i/[code].tsx', 'utf8'); const comprar = readFileSync('app/(tabs)/comprar/link.tsx', 'utf8');
   t.check('el formulario importa con import_listing (proveedores) y no solo Facebook', /importFromLinkAsBuyer/.test(nueva) && !/checkFacebookUrl|importFromFacebookAsBuyer/.test(nueva));
   t.check('Comprar y el formulario dicen "Importar de un link"', /title="Importar de un link"/.test(comprar) && /Importar de un link/.test(nueva) && !/Importar de Facebook/.test(comprar + nueva));
   t.check('el vendedor ve "Ver anuncio en {proveedor}"', /Ver anuncio en \{where\}/.test(code) && !/Ver anuncio en Facebook/.test(code));

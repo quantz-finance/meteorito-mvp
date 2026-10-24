@@ -80,7 +80,7 @@ function Gate() {
   const auth = useAuth();
   const segments = useSegments();
   const pathname = usePathname();
-  const isPublic = segments[0] === 'p' || segments[0] === 't' || segments[0] === 'i' || segments[0] === 'legal' || segments[0] === 'como-funciona' || segments[0] === 'mis-compras'; // link de pago, tienda, invitaciones de compra, legales, reglas y Mis compras (comprador sin cuenta): visibles sin login
+  const isPublic = segments[0] === 'p' || segments[0] === 't' || segments[0] === 'i' || segments[0] === 'legal' || segments[0] === 'como-funciona' || segments[0] === 'mis-compras' || ((segments as string[])[1] === 'comprar' && (segments as string[])[2] === 'compras'); // link de pago, tienda, invitaciones de compra, legales, reglas y Mis compras (/comprar/compras, comprador sin cuenta): visibles sin login
   const authed = auth.isAuthenticated && !!auth.address;
   useEffect(() => { screen(authed || isPublic ? screenName(pathname) : 'welcome'); }, [pathname, authed]);
   useEffect(() => {
