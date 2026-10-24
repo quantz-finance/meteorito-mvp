@@ -43,6 +43,17 @@ export const COPY = {
     on: 'Cualquiera que vea tu perfil puede escribirte por WhatsApp.', off: 'Tu perfil público no lo muestra.',
   },
   myStore: { confirmIdentity: 'Confirma tu identidad' },
+  store: {
+    share: 'Compartir perfil', shareMine: 'Compartir mi tienda',
+    linkCopied: 'Link copiado',
+    shareText: (name: string) => `Mira el perfil de ${name} en Meteorito: compras sin crear cuenta y con el pago en custodia.`,
+    shareMineText: 'Mira lo que vendo en mi tienda de Meteorito:',
+    ownerTitle: 'Tu tienda', ownerHint: 'Así ven tu tienda tus compradores. Solo tú ves esta sección.',
+    edit: 'Editar nombre o usuario', account: 'Mi cuenta', accountHint: 'Cobros, WhatsApp, correo y sesión',
+    manageHint: 'Toca un producto para pausarlo o copiar su anuncio',
+    paused: 'En pausa',
+    ownerEmpty: 'Todavía no tienes productos disponibles. Crea un link y aparece aquí.',
+  },
 } as const;
 
 /** Palabras que no pueden aparecer en el copy visible (feed, perfil y reseñas). */

@@ -71,7 +71,8 @@ test.describe('Productos permanentes', () => {
     await page.getByText('Archivar', { exact: true }).click();
     await expect.poll(async () => (await st(page)).orders[prod].listing_status).toBe('archivada');
     await open(page, '/mi-tienda', 'seller');
-    await expect(page.getByText(/TUS PRODUCTOS \(0\)/i)).toBeVisible();
+    await expect(page.getByTestId('owner-tools')).toBeVisible();
+    await expect(page.getByText('Bici de montaña')).toHaveCount(0);
     await open(page, '/t/valeria', 'buyer');
     await expect(page.getByText('Bici de montaña')).toHaveCount(0);
     expect(await orderStatus(page, a)).toBe('fondeado');

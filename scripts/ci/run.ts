@@ -60,6 +60,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '60', name: 'Feed de Comprar + buscador: vendedores con producto activo, filtro verificados/sin verificar/todos, cursor, sin datos privados, sin acentos', file: './t60-feed.test.ts', onchain: false },
   { id: '61', name: 'Perfil público del vendedor: verificado, ventas, reseñas, WhatsApp solo si elige mostrarlo, OG para compartir', file: './t61-seller-profile.test.ts', onchain: false },
   { id: '65', name: 'Herramientas del vendedor: plantilla de anuncio (link + acuerdo + custodia) e historial de ventas con resultado', file: './t65-seller-tools.test.ts', onchain: false },
+  { id: '66', name: 'Una sola página de tienda: /t/<usuario> es Mi tienda; herramientas solo para el dueño; compartir siempre', file: './t66-store-page.test.ts', onchain: false },
   { id: '62', name: 'Reseñas: compra liberada, 1-5 + comentario opcional (280, sin links) + nombre corto, una por pedido', file: './t62-reviews.test.ts', onchain: false },
   { id: '64', name: 'WhatsApp en el perfil público: opt-in del vendedor, privado por defecto', file: './t64-whatsapp-public.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
