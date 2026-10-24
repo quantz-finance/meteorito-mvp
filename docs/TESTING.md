@@ -34,7 +34,7 @@ En CI: `.github/workflows/ci.yml` (typecheck, export web, check:cjs, unit + test
 Los IDs (VEN-01, ESC-01…) son los mismos del plan de pruebas (página "Plan de pruebas"): al agregar un caso, usa el siguiente ID y márcalo ahí.
 
 ### Modo demo (cómo el E2E evita Cavos y la red)
-`npm run demo:build` exporta la web con `EXPO_PUBLIC_DEMO_MODE=1` a `dist-demo/`. En ese modo no hay login real ni llamadas al backend: `lib/demo.ts` simula los endpoints con la misma forma de respuesta y guarda el estado en `sessionStorage`. El demo imita producción: los links nuevos son productos permanentes (cada compra crea su propio pedido hijo), con invitaciones, pausa/archivo, PIN bloqueado a los 3 intentos y liberación automática a los 10 min.
+`npm run demo:build` exporta la web con `EXPO_PUBLIC_DEMO_MODE=1` a `dist-demo/`. En ese modo no hay login real ni llamadas al backend: `lib/demo.ts` simula los endpoints con la misma forma de respuesta y guarda el estado en `sessionStorage`. El demo imita producción: los links nuevos son productos permanentes (cada compra crea su propio pedido hijo), con invitaciones, pausa/archivo, PIN bloqueado a los 3 intentos y liberación automática 7 días después de "Ya lo envié" (el reloj del demo se adelanta con `__meteoritoDemo.advance`).
 Parámetros de URL: `role=seller|buyer`, `buyer=<id>` (identidad del comprador invitado; por defecto `A`), `demo_reset=1`, `badge=0`.
 `window.__meteoritoDemo`: `seed('creado'|'fondeado'|'enviado', {single?})`, `setBuyer(id)`, `advance(ms)` (adelanta el reloj simulado), `cron()` (libera los vencidos), `resolve(slug, pctComprador)` (resuelve una disputa), `state()`.
 **Solo a mano en iPhone**: passkey/Face ID real, entrega real de push en iOS, teclado de iOS y splash en frío.

@@ -5,7 +5,8 @@ import { friendlyPayError } from '@/lib/wallet';
 import { useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { DisputeSheet } from '@/components/DisputeSheet';
-import { Text, View } from 'react-native';
+import { Image, Pressable, Text, View } from 'react-native';
+import { deliveryCodeVisible, PAID_WAITING } from '@/lib/shipping';
 import { Card, ErrorText, Icon, PrimaryButton, Sheet, SuccessCheck } from '@/components/ds';
 import { Fonts } from '@/constants/Colors';
 import { C, S, T } from '@/constants/theme';
@@ -34,7 +35,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [pin, setPinState] = useState<string | null>(() => loadPin(order.slug)); // el PIN queda en este navegador (comprador invitado)
   const setPin = (p: string | null) => { setPinState(p); if (p) savePin(order.slug, p); };
   const buyerHere = !!pin || auth.isAuthenticated; // este dispositivo es el del comprador (guardó el PIN) o hay sesión
-  const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'pin' | 'released' | 'dispute' | null>(null);
+  const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'paid' | 'photo' | 'released' | 'dispute' | null>(null);
   const [card, setCard] = useState(false); // el servidor tiene el pago con tarjeta configurado (start -> card)
   // 'inapp' (default): nuestro formulario. 'widget': respaldo con el widget de Lendara (LENDARA_MODE=widget en el servidor).
   const [cardMode, setCardMode] = useState<'inapp' | 'widget'>('inapp');
@@ -44,6 +45,15 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   };
 
   const win = useAutoReleaseWindow();
+  // Foto del envío y número de guía (solo el comprador, por el API; no van a la vista pública).
+  const [ship, setShip] = useState<{ photo: string | null; note: string | null } | null>(null);
+  useEffect(() => {
+    if (order.status !== 'enviado' || !buyerHere) return;
+    let live = true;
+    guestApi<{ shipped: boolean; photo?: string | null; note?: string | null }>(auth, '/api/escrow/pay', { slug: order.slug, step: 'shipment' })
+      .then((r) => { if (live && r?.shipped) setShip({ photo: r.photo ?? null, note: r.note ?? null }); }).catch(() => {});
+    return () => { live = false; };
+  }, [order.status, order.slug, buyerHere]); // eslint-disable-line react-hooks/exhaustive-deps
   // Producto permanente: cada comprador tiene su propio pedido (/p/<pedido>). Al llegar con ?pay=1 se abre el SINPE directo.
   const { pay } = useLocalSearchParams<{ pay?: string }>();
   const mine = order.kind === 'listing' ? myListingOrder(order.slug) : null;
@@ -57,7 +67,8 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     });
   }, [pay, order.status]); // eslint-disable-line react-hooks/exhaustive-deps
   const funded = (r: { pin?: string | null }, method: 'card' | 'sinpe') => {
-    track('payment_funded_client', { method }); if (r.pin) setPin(r.pin); setSheet(r.pin || pin ? 'pin' : null); onChange();
+    // El código de entrega se guarda en este navegador pero NO se muestra todavía: aparece cuando el vendedor lo envía.
+    track('payment_funded_client', { method }); if (r.pin) setPin(r.pin); setSheet(r.pin || pin ? 'paid' : null); onChange();
   };
   // Tarjeta in-app: el servidor cobra (card_pay) y verifica (card_confirm). Número y CVC no salen de CardSheet.
   const payCardInApp = async (p: CardPayInput) => {
@@ -121,17 +132,19 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         <Row icon="information-circle-outline" text='No envíes dinero: toca "Ya pagué" para continuar.' />
       </>}
     </Sheet>
-    <Sheet visible={sheet === 'pin' && !!pin} onClose={() => setSheet(null)}
-      footer={<PrimaryButton title="Listo, lo guardé" onPress={() => setSheet(null)} />}>
+    <Sheet visible={sheet === 'paid'} onClose={() => setSheet(null)}
+      footer={<PrimaryButton title="Entendido" onPress={() => setSheet(null)} />}>
       <SuccessCheck />
-      <Text style={[T.title, { textAlign: 'center' }]}>Pago en custodia</Text>
-      <Card style={{ alignItems: 'center' }}>
-        <Text style={T.caption}>Tu PIN de entrega</Text>
-        <Text style={{ fontFamily: Fonts.black, fontSize: 40, letterSpacing: 8, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
-      </Card>
-      <Text style={[T.callout, { textAlign: 'center' }]}>Dáselo al vendedor solo cuando tengas el producto en la mano y lo hayas revisado.</Text>
-      <Text style={[T.footnote, { textAlign: 'center' }]}>Pagaste sin crear cuenta: este navegador guarda tu acceso a este pedido (PIN y confirmación). Si borras los datos del navegador, no podrás confirmar ni reportar un problema desde aquí. Anota el PIN.</Text>
+      <Text style={[T.title, { textAlign: 'center' }]}>{PAID_WAITING}</Text>
+      <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
+      <Row icon="cube-outline" text="Cuando lo envíe, aquí vas a ver tu código de entrega." />
+      <Text style={[T.footnote, { textAlign: 'center' }]}>Pagaste sin crear cuenta: este navegador guarda tu acceso a este pedido y tu código de entrega. Si borras los datos del navegador, no podrás confirmar ni reportar un problema desde aquí.</Text>
       <ChainLinks order={order} align="center" />
+    </Sheet>
+    <Sheet visible={sheet === 'photo' && !!ship?.photo} onClose={() => setSheet(null)} title="Foto del envío"
+      footer={<PrimaryButton title="Cerrar" variant="secondary" onPress={() => setSheet(null)} />}>
+      {ship?.photo ? <Image testID="ship-photo-full" source={{ uri: ship.photo }} style={{ width: '100%', aspectRatio: 3 / 4, borderRadius: 12 }} resizeMode="contain" accessibilityLabel="Foto del envío" /> : null}
+      {ship?.note ? <Text style={[T.callout, { textAlign: 'center' }]} selectable>{ship.note}</Text> : null}
     </Sheet>
     <Sheet visible={sheet === 'released'} onClose={() => setSheet(null)} footer={<PrimaryButton title="Cerrar" onPress={() => setSheet(null)} />}>
       <SuccessCheck celebrate />
@@ -163,17 +176,37 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   } else if (order.status === 'enviado' && !buyerHere) {
     footer = <Text style={[T.callout, { textAlign: 'center' }]}>Pedido enviado. El comprador confirma la recepción desde el mismo navegador donde pagó.</Text>;
   } else if (order.status === 'enviado') {
+    const left = order.auto_release_at ? timeLeft(order.auto_release_at) : win;
     footer = <>
+      <Card style={{ gap: S.sm, paddingVertical: S.sm + 2 }}>
+        <View style={{ flexDirection: 'row', gap: S.sm + 2, alignItems: 'center' }}>
+          {ship?.photo
+            ? <Pressable onPress={() => setSheet('photo')} accessibilityRole="imagebutton" accessibilityLabel="Ver la foto del envío" hitSlop={6}>
+                <Image testID="ship-photo" source={{ uri: ship.photo }} style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: C.lilacBg }} resizeMode="cover" />
+              </Pressable>
+            : <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' }}><Icon name="cube" size={22} color={C.purpleDark} /></View>}
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={T.headline}>Va en camino</Text>
+            {ship?.note ? <Text style={T.footnote} numberOfLines={1} selectable>{ship.note}</Text> : null}
+          </View>
+        </View>
+        {deliveryCodeVisible(order.status) && pin ? <View style={{ alignItems: 'center', gap: 2 }}>
+          <Text style={T.caption}>Tu código de entrega</Text>
+          <Text testID="delivery-code" style={{ fontFamily: Fonts.black, fontSize: 30, letterSpacing: 6, color: C.lilac, fontVariant: ['tabular-nums'] }} selectable>{pin}</Text>
+          <Text style={[T.footnote, { textAlign: 'center' }]}>Dáselo al vendedor cuando lo recibas.</Text>
+        </View> : <Text style={T.footnote}>Tu código de entrega está en el navegador donde pagaste.</Text>}
+      </Card>
       <Text style={[T.footnote, { textAlign: 'center' }]}>
-        Si no reportas un problema, el pago se libera solo{order.auto_release_at ? ` en ${timeLeft(order.auto_release_at)} (${new Date(order.auto_release_at).toLocaleString()})` : win ? ` en ${win}` : ' al vencer el plazo de liberación automática'}.
+        El pago se libera solo{left ? ` en ${left}` : ' 7 días después del envío'} si no reportas un problema.
       </Text>
       {err && <ErrorText>{err}</ErrorText>}
       <PrimaryButton title="Recibí y está bien" icon="checkmark-circle" loading={busy}
         onPress={() => run(async () => { await guestApi(auth, '/api/escrow/confirm', { slug: order.slug, reason: 'buyer_confirm' }); setSheet('released'); onChange(); })} />
     </>;
   } else if (order.status === 'fondeado') {
-    footer = pin ? <PrimaryButton title="Ver mi PIN de entrega" icon="keypad" variant="secondary" onPress={() => setSheet('pin')} />
-      : <Text style={[T.callout, { textAlign: 'center' }]}>Pago en custodia. Esperando que el vendedor lo envíe.</Text>;
+    footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
+      <Icon name="time-outline" size={20} color={C.lilac} /><Text style={[T.callout, { textAlign: 'center', flexShrink: 1 }]}>{PAID_WAITING}</Text>
+    </View>;
   } else if (order.status === 'liberado' || order.status === 'resuelto' || order.status === 'entregado') {
     footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
       <Icon name="checkmark-circle" size={22} color={C.success} /><Text style={[T.headline, { color: C.success }]}>{resolvedLabel(order)}</Text>

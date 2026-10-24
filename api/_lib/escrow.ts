@@ -1,12 +1,34 @@
 import { Keypair, Networks, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
 import { feeBumpAndSend, validateEscrowTx } from './feebump';
 import { createHash, randomInt } from 'node:crypto';
-import { env } from './env';
+import { env, releaseDueAt } from './env';
+import { ownPhotoUrl } from './photos';
 import { db, advance, logEvent } from './db';
 import { HttpError } from './auth';
 import * as tw from './tw';
 import { assertReceiverReady, SELLER_NOT_READY } from './wallet';
 import { tightenTimebounds } from './timebounds';
+
+/** Llamadas on-chain que usan el envío y la liberación. Los tests las reemplazan (sin red). */
+type Chain = Pick<typeof tw, 'releaseGuard' | 'approveMilestone' | 'getBalance' | 'releaseFunds' | 'changeMilestoneStatus' | 'changeMilestoneStatusXdr'>;
+let testChain: Partial<Chain> | null = null;
+export const __setChainForTests = (c: Partial<Chain> | null) => { testChain = c; };
+export const chain = (): Chain => (testChain ? { ...tw, ...testChain } : tw) as Chain;
+
+/** Evidencia de "Ya lo envié": todo opcional. {at} siempre (hora del servidor); photo solo de la carpeta propia del vendedor
+ *  (subida por /api/photos/upload-url); note (número de guía) recortada. Lanza 400 si la foto no es propia. */
+export function shipEvidence(raw: any, sellerSub: string): { at: string; photo?: string; note?: string } {
+  const ev: { at: string; photo?: string; note?: string } = { at: new Date().toISOString() };
+  if (raw != null && typeof raw !== 'object') throw new HttpError(400, 'evidencia inválida');
+  if (raw?.photo != null && raw.photo !== '') {
+    const url = ownPhotoUrl(raw.photo, sellerSub);
+    if (!url) throw Object.assign(new HttpError(400, 'No pudimos usar esa foto. Elige otra e intenta de nuevo.'), { code: 'bad_ship_photo' });
+    ev.photo = url;
+  }
+  const note = typeof raw?.note === 'string' ? raw.note.trim().slice(0, 200) : '';
+  if (note) ev.note = note;
+  return ev;
+}
 
 const pub = (secret: string) => Keypair.fromSecret(secret).publicKey();
 
@@ -119,9 +141,12 @@ export async function approveAndRelease(order: any, reason: ApproveReason) {
   // PIN bloqueado (3 intentos fallidos del vendedor): el plazo NO libera solo; queda para revisión o confirmación del comprador.
   if (reason === 'timeout' && (order.pin_attempts ?? 0) >= 3) throw Object.assign(new HttpError(423, 'PIN bloqueado: el pago no se libera solo; lo revisamos.'), { code: 'pin_locked' });
   if (order.dispute_tx || order.disputed_at) throw new HttpError(409, 'pedido en disputa');
+  // Plazo: nunca antes de 7 días (o la ventana vigente) desde "Ya lo envié", aunque auto_release_at sea viejo y corto.
+  if (reason === 'timeout' && order.status === 'enviado' && Date.parse(releaseDueAt(order)) > Date.now())
+    throw Object.assign(new HttpError(425, 'Todavía no vence el plazo de liberación automática.'), { code: 'not_due', dueAt: releaseDueAt(order) });
   // Verificación ON-CHAIN (contrato directo, no indexador de TW) antes de aprobar y antes de liberar.
   const assertOpen = async () => {
-    const g = await tw.releaseGuard(order.contract_id);
+    const g = await chain().releaseGuard(order.contract_id);
     if (g.disputed || g.released || g.resolved) {
       await logEvent(order.id, 'release_refused', { reason, onchain: { disputed: g.disputed, released: g.released, resolved: g.resolved } });
       throw new HttpError(409, 'escrow en disputa o cerrado (on-chain)');
@@ -130,17 +155,17 @@ export async function approveAndRelease(order: any, reason: ApproveReason) {
   };
   if (order.status === 'enviado') {
     await assertOpen();
-    const ap = await tw.approveMilestone(order.contract_id, env.approverSecret());
+    const ap = await chain().approveMilestone(order.contract_id, env.approverSecret());
     await advance(order.id, 'enviado', { approved_tx: ap.hash, approval_reason: reason, delivered_at: new Date().toISOString(), status: 'entregado' });
     await logEvent(order.id, 'approved', { hash: ap.hash, reason });
   }
   const g = await assertOpen();
   if (!g.approved) throw new HttpError(409, 'hito no aprobado on-chain');
-  const bal = await tw.getBalance(order.contract_id);
+  const bal = await chain().getBalance(order.contract_id);
   const rc = releaseCheck(bal, Number(order.amount_usdc));
   if (!rc.ok) { await logEvent(order.id, 'release_refused', { reason: rc.reason }); throw new HttpError(409, `sin fondos on-chain (${bal})`); }
   if (rc.excess > 0) console.warn(`[release] ${order.id}: excedente ${rc.excess} USDC queda en el contrato (TW libera solo escrow.amount)`);
-  const rel = await tw.releaseFunds(order.contract_id, env.releaseSignerSecret());
+  const rel = await chain().releaseFunds(order.contract_id, env.releaseSignerSecret());
   await advance(order.id, 'entregado', { released_tx: rel.hash, released_at: new Date().toISOString(), status: 'liberado' });
   await logEvent(order.id, 'released', { hash: rel.hash, reason, hours_to_release: order.funded_at ? Math.round((Date.now() - Date.parse(order.funded_at)) / 36e5 * 10) / 10 : undefined });
   return { releasedTx: rel.hash };

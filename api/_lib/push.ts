@@ -12,8 +12,8 @@ const itemName = (o: PushOrder) => (`${o.brand ?? ''} ${o.model ?? ''}`.replace(
 export function pushMessages(o: PushOrder): PushMsg[] {
   const it = itemName(o);
   const T: Record<string, { seller?: [string, string]; buyer?: [string, string] }> = {
-    fondeado: { seller: ['¡Te pagaron!', `El dinero de ${it} está en custodia. Ya puedes hacer el envío.`], buyer: ['Pago recibido', `Tu pago de ${it} quedó en custodia hasta que lo recibas.`] },
-    enviado: { buyer: ['¡Va en camino!', `${it} ya fue enviado. Confirma cuando lo recibas.`] },
+    fondeado: { seller: ['¡Te pagaron!', `El dinero de ${it} está en custodia. Envíalo y toca "Ya lo envié".`], buyer: ['Pago recibido', `Tu pago de ${it} quedó en custodia. Te avisamos cuando el vendedor lo envíe.`] },
+    enviado: { buyer: ['¡Va en camino!', `${it} ya fue enviado. Abre el pedido para ver tu código de entrega y dáselo al vendedor cuando lo recibas.`] },
     entregado: { seller: ['Entregado', `El comprador recibió ${it}. El pago se libera en breve.`] },
     liberado: { seller: ['¡Pago liberado!', `El dinero de ${it} ya es tuyo.`], buyer: ['Compra completada', `Gracias por comprar ${it}. Cuéntanos cómo te fue.`] },
     en_disputa: { seller: ['Disputa abierta', `El comprador reportó un problema con ${it}. Revisa el pedido.`], buyer: ['Disputa abierta', `Recibimos tu reporte de ${it}. Te avisamos cuando se resuelva.`] },

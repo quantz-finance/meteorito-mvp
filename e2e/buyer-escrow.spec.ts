@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { open, seed, orderStatus, DEMO_PIN, expectNoScroll, openSellerRow } from './helpers';
+import { open, seed, orderStatus, DEMO_PIN, PAID, expectNoScroll, openSellerRow } from './helpers';
 
 test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
   test('COM-01 paga por SINPE con "Ya pagué" y ve su PIN', async ({ page }) => {
@@ -11,7 +11,8 @@ test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
     await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
     await expect(page.getByText(/Referencia MET-DEMO\d+/)).toBeVisible();
     await page.getByText('Ya pagué', { exact: true }).click();
-    await expect(page.getByText(DEMO_PIN)).toBeVisible();
+    await expect(page.getByText(PAID).first()).toBeVisible();
+    await expect(page.getByText(DEMO_PIN)).toHaveCount(0);
     // Producto permanente (como producción): el comprador queda en su propio pedido; el producto sigue disponible
     const mine = page.url().match(/\/p\/(demo\d+)/)![1];
     expect(mine).not.toBe(slug);
@@ -28,7 +29,8 @@ test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
     await page.reload(); // la URL del pedido propio trae ?pay=1: la hoja SINPE se vuelve a abrir sola
     await expect(page.getByText('Esperando pago').first()).toBeVisible();
     await page.getByText('Ya pagué', { exact: true }).click();
-    await expect(page.getByText(DEMO_PIN)).toBeVisible();
+    await expect(page.getByText(PAID).first()).toBeVisible();
+    await expect(page.getByText(DEMO_PIN)).toHaveCount(0);
     const mine = page.url().match(/\/p\/(demo\d+)/)![1];
     expect(await orderStatus(page, mine)).toBe('fondeado');
     const n = await page.evaluate(() => Object.keys(JSON.parse(sessionStorage.getItem('meteorito:demo:v1')!).orders).length);
@@ -38,9 +40,8 @@ test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
   test('ESC-01 ciclo completo: pagado → enviado → PIN → liberado', async ({ page }) => {
     await open(page, '/', 'seller', true);
     const slug = await seed(page, 'fondeado');
-    await openSellerRow(page, 'Pagado · fondos apartados', 'Encuentro, envío, número de guía…');
-    await page.getByPlaceholder('Encuentro, envío, número de guía…').fill('Entrega en Escazú');
-    await page.getByText('Marcar como enviado').last().click();
+    await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+    await page.getByText('Ya lo envié', { exact: true }).last().click();
     await expect.poll(() => orderStatus(page, slug)).toBe('enviado');
     await openSellerRow(page, /Enviado|En disputa/, '••••••');
     await page.getByPlaceholder('••••••').fill(DEMO_PIN);

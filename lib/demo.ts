@@ -38,8 +38,8 @@ export interface DemoInvite { code: string; category: string; brand: string; mod
 interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
-/** Igual que producción (/api/health -> autoReleaseMinutes). */
-export const DEMO_AUTO_RELEASE_MINUTES = 10;
+/** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
+export const DEMO_AUTO_RELEASE_MINUTES = 10080;
 const RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510);
 const STORE_KEY = 'meteorito:demo:v1';
 const START_BALANCE_USDC = 120;
@@ -207,12 +207,23 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       o.status = 'fondeado'; o.funded_tx = demoTxHash('fund:' + o.slug); o.funded_at = now(); o.pin = DEMO_PIN; o.pinShown = true;
       emit(); return { funded: true, fundedTx: o.funded_tx, pin: DEMO_PIN }; // el PIN se devuelve una sola vez
     }
+    if (body.step === 'shipment') { // como el API: solo el comprador ve la foto del envío y la nota
+      if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador de este pedido');
+      if (!o.shipped_at) return { shipped: false };
+      const ev = (o.evidence ?? {}) as { at?: string; photo?: string; note?: string };
+      return { shipped: true, at: ev.at ?? o.shipped_at, photo: ev.photo ?? null, note: ev.note ?? null };
+    }
     throw err(400, 'bad_step', 'paso inválido');
   }
   if (p === '/api/escrow/ship') {
     need('seller'); const o = get(String(body.slug));
     if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.');
-    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.auto_release_at = iso(nowMs() + DEMO_AUTO_RELEASE_MINUTES * 60_000); o.evidence = body.evidence ?? null; emit();
+    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.auto_release_at = iso(nowMs() + DEMO_AUTO_RELEASE_MINUTES * 60_000);
+    // Igual que el API: evidencia opcional {at, photo?, note?}; en demo la foto es una data URL local.
+    const raw = body.evidence ?? {}; const ev: { at: string; photo?: string; note?: string } = { at: now() };
+    if (raw.photo) { if (!/^data:image\/(jpeg|png|webp);base64,/.test(String(raw.photo))) throw err(400, 'bad_ship_photo', 'No pudimos usar esa foto. Elige otra e intenta de nuevo.'); ev.photo = String(raw.photo); }
+    if (typeof raw.note === 'string' && raw.note.trim()) ev.note = raw.note.trim().slice(0, 200);
+    o.evidence = ev; emit();
     return { shippedTx: o.shipped_tx, evidenceHash: demoTxHash('ev:' + o.slug) };
   }
   if (p === '/api/escrow/confirm') {
@@ -331,7 +342,7 @@ export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviad
   // Igual que la pantalla única de vender: solo título, precio y fotos. Devuelve el producto (creado) o el pedido del comprador.
   let { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [], ...(opts.single ? { single: true } : {}) });
   if (upTo !== 'creado') { set('buyer'); slug = (await demoApi('/api/escrow/pay', { slug, step: 'start' })).slug; await demoApi('/api/escrow/pay', { slug, step: 'confirm_sinpe' }); }
-  if (upTo === 'enviado') { set('seller'); await demoApi('/api/escrow/ship', { slug, evidence: { note: 'Entrega en persona, Escazú', at: new Date().toISOString() } }); }
+  if (upTo === 'enviado') { set('seller'); await demoApi('/api/escrow/ship', { slug }); }
   set(prev); emit(); return slug;
 }
 

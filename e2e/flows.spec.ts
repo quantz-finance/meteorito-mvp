@@ -1,7 +1,7 @@
 // Flujos completos en modo demo (lib/demo.ts simula el API igual que producción: producto permanente, pedido por
 // comprador, invitación reservada, PIN con bloqueo, liberación automática, resolución de disputa).
 import { test, expect, type Page } from '@playwright/test';
-import { open, seed, orderStatus, DEMO_PIN, PHOTO, expectNoScroll, openSellerRow } from './helpers';
+import { open, seed, orderStatus, DEMO_PIN, PAID, PHOTO, expectNoScroll, openSellerRow } from './helpers';
 
 const demo = (page: Page, fn: string, ...args: unknown[]) => page.evaluate(([f, a]) => (window as any).__meteoritoDemo[f as string](...(a as unknown[])), [fn, args] as const);
 const st = (page: Page) => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1') || '{}'));
@@ -10,7 +10,8 @@ async function buyerPays(page: Page, product: string, buyer: string): Promise<st
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page).toHaveURL(/\/p\/demo\d+\?/);
   await page.getByText('Ya pagué', { exact: true }).click();
-  await expect(page.getByText(DEMO_PIN)).toBeVisible();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+    await expect(page.getByText(DEMO_PIN)).toHaveCount(0);
   return page.url().match(/\/p\/(demo\d+)/)![1];
 }
 
@@ -111,7 +112,8 @@ test.describe('Invitaciones', () => {
     await page.getByText('Ir a pagar en custodia').click();
     await page.getByText(/Pagar en custodia/).last().click();
     await page.getByText('Ya pagué', { exact: true }).click();
-    await expect(page.getByText(DEMO_PIN)).toBeVisible();
+    await expect(page.getByText(PAID).first()).toBeVisible();
+    await expect(page.getByText(DEMO_PIN)).toHaveCount(0);
     expect(await orderStatus(page, slug)).toBe('fondeado');
   });
 
@@ -163,12 +165,12 @@ test.describe('PIN, liberación automática y disputas', () => {
     expect(await orderStatus(page, slug)).toBe('enviado');
   });
 
-  test('PIN-03 + ESC-05 vencido el plazo (10 min) se libera solo, salvo con PIN bloqueado', async ({ page }) => {
+  test('PIN-03 + ESC-05 vencido el plazo (7 días) se libera solo, salvo con PIN bloqueado', async ({ page }) => {
     await open(page, '/', 'seller', true);
     const ok = await seed(page, 'enviado');
     const locked = await seed(page, 'enviado', 'Guitarra');
     await page.evaluate((s) => { const d = (window as any).__meteoritoDemo; d.state().orders[s].pin_attempts = 3; }, locked);
-    await demo(page, 'advance', 9 * 60_000);
+    await demo(page, 'advance', 7 * 86_400_000 - 60_000);
     expect(await demo(page, 'cron')).toEqual([]);
     await demo(page, 'advance', 2 * 60_000);
     expect(await demo(page, 'cron')).toEqual([ok]);
@@ -177,11 +179,11 @@ test.describe('PIN, liberación automática y disputas', () => {
     await expect(page.getByText('Pago liberado').first()).toBeVisible();
   });
 
-  test('ESC-04 la página del comprador muestra el plazo real de liberación (10 min)', async ({ page }) => {
+  test('ESC-04 la página del comprador muestra el plazo real de liberación (7 días)', async ({ page }) => {
     await open(page, '/', 'seller', true);
     const slug = await seed(page, 'enviado');
     await open(page, `/p/${slug}`, 'buyer');
-    await expect(page.getByText(/se libera solo en (10|9) min/)).toBeVisible();
+    await expect(page.getByText(/se libera solo en (7 días|6 días 23 h) si no reportas un problema/)).toBeVisible();
   });
 
   test('DIS-07 la disputa con fotos de evidencia guarda las fotos', async ({ page }) => {
@@ -231,9 +233,8 @@ test.describe('Calificaciones y push (demo)', () => {
     await open(page, '/', 'seller', true);
     const prod = await seed(page, 'creado');
     const slug = await buyerPays(page, prod, 'A'); // pagó en este navegador: aquí puede calificar
-    await openSellerRow(page, 'Pagado · fondos apartados', 'Encuentro, envío, número de guía…');
-    await page.getByPlaceholder('Encuentro, envío, número de guía…').fill('En persona');
-    await page.getByText('Marcar como enviado').last().click();
+    await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+    await page.getByText('Ya lo envié', { exact: true }).last().click();
     await expect.poll(() => orderStatus(page, slug)).toBe('enviado');
     await open(page, `/p/${slug}?buyer=A`, 'buyer');
     await page.getByText('Recibí y está bien', { exact: true }).click();

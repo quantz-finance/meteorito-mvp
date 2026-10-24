@@ -6,3 +6,12 @@ export const PHOTO_MIME: Record<string, string> = { 'image/jpeg': 'jpg', 'image/
 /** Carpeta del usuario en el bucket: el sub de Cavos si es seguro para rutas, si no un hash estable. */
 export const userDir = (sub: string) => (/^[A-Za-z0-9_-]{1,64}$/.test(sub) ? sub : 'h' + createHash('sha256').update(sub).digest('hex').slice(0, 40));
 export const publicPrefix = (sub: string) => `${env.supabaseUrl()}/storage/v1/object/public/listings/${userDir(sub)}/`;
+
+/** Foto ya subida por /api/photos/upload-url a la carpeta del propio usuario (<bucket público>/<su carpeta>/<uuid>/0.jpg|png|webp).
+ *  Cualquier otra URL -> null. La usan la foto de la tienda y la foto del envío. */
+export function ownPhotoUrl(raw: unknown, sub: string): string | null {
+  if (typeof raw !== 'string' || raw.length > 400) return null;
+  const prefix = publicPrefix(sub);
+  if (!raw.startsWith(prefix)) return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/0\.(jpg|png|webp)$/.test(raw.slice(prefix.length)) ? raw : null;
+}

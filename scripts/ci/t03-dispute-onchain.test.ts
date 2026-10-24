@@ -11,7 +11,8 @@ const usdc = async (a: string) => Number((await H.loadAccount(a)).balances.find(
 export async function run(t: T, N: Testnet) {
   const tw = await import('../../api/_lib/tw');
   __setDbForTests(fakeDb());
-  const fake = (cid: string, status: string) => ({ id: '55555555-5555-4555-8555-555555555555', slug: 'dsp002', contract_id: cid, status, amount_usdc: 1 });
+  const fake = (cid: string, status: string) => ({ id: '55555555-5555-4555-8555-555555555555', slug: 'dsp002', contract_id: cid, status, amount_usdc: 1,
+    shipped_at: new Date(Date.now() - 8 * 86_400_000).toISOString(), auto_release_at: new Date(Date.now() - 86_400_000).toISOString() }); // plazo de 7 días ya vencido
   const a = await makeEscrow(N, 'dispute-A');
   const dA = await disputeOnChain(a.contractId); console.log(`    dispute (fee-bump) ${dA}`);
   t.check('on-chain disputed=true tras disputa', (await tw.releaseGuard(a.contractId)).disputed);

@@ -2,9 +2,11 @@
 //  - Batch (pg_cron cada 5 min, Authorization: Bearer CRON_SECRET): libera pedidos 'enviado' con plazo vencido
 //    (reason=timeout) y reintenta 'entregado' sin liberar.
 //  - Respaldo sin auth: GET ?slug=xxxxxx (la página pública lo llama al cargar). Solo procesa ESE pedido y solo si ya venció.
+// Plazo real = releaseDueAt (nunca antes de shipped_at + 7 días): si auto_release_at quedó corto (env viejo de 10 min),
+// se corrige en la fila y no se libera. Disputa y PIN bloqueado congelan la liberación (approveAndRelease).
 // Idempotente: lock por fila (release_lock_until) + updates condicionados al status. Verificación on-chain en approveAndRelease.
-import { db, json, fail } from '../_lib/db';
-import { env } from '../_lib/env';
+import { db, json, fail, logEvent } from '../_lib/db';
+import { env, releaseDueAt } from '../_lib/env';
 import { approveAndRelease } from '../_lib/escrow';
 
 async function claim(id: string): Promise<boolean> {
@@ -15,6 +17,16 @@ async function claim(id: string): Promise<boolean> {
 }
 
 async function processOrder(o: any) {
+  if (o.status === 'enviado') {
+    const due = releaseDueAt(o);
+    if (Date.parse(due) > Date.now()) { // plazo viejo/corto: se corrige y se espera
+      if (due !== o.auto_release_at) {
+        await db().from('orders').update({ auto_release_at: due }).eq('id', o.id).eq('status', 'enviado');
+        await logEvent(o.id, 'auto_release_extended', { from: o.auto_release_at ?? null, to: due });
+      }
+      return { slug: o.slug, due: false, dueAt: due };
+    }
+  } else if (o.status !== 'entregado') return { slug: o.slug, skipped: o.status };
   if (!(await claim(o.id))) return { slug: o.slug, skipped: 'locked' };
   try { return { slug: o.slug, ...(await approveAndRelease(o, 'timeout')) }; }
   catch (e: any) { return { slug: o.slug, error: e.message }; }

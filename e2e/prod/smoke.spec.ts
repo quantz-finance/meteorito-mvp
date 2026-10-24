@@ -78,7 +78,7 @@ test.describe('Producción: solo lectura', () => {
 test.describe('Producción: compra de invitado (testnet, SINPE simulado)', () => {
   test.skip(process.env.PROD_BUY !== '1', 'PROD_BUY=1 para crear un pedido de prueba (SINPE simulado en testnet)');
 
-  test(`PROD-07 invitado paga ${PRODUCT} con "Ya pagué" y recibe su PIN`, async ({ page }) => {
+  test(`PROD-07 invitado paga ${PRODUCT} con "Ya pagué" (el código aparece hasta el envío)`, async ({ page }) => {
     await page.addInitScript((k) => localStorage.setItem('meteorito:guest:v1', k), E2E_GUEST_KEY);
     await page.goto(`/p/${PRODUCT}`);
     await page.getByText(/Pagar en custodia/).last().click();
@@ -92,7 +92,7 @@ test.describe('Producción: compra de invitado (testnet, SINPE simulado)', () =>
     mkdirSync(dirname(LOG) || '.', { recursive: true });
     appendFileSync(LOG, `${new Date().toISOString()} E2E-PROD guestKey=sha256(meteorito-e2e-prod-smoke) product=${PRODUCT} order=${child} step=start\n`);
     await page.getByText('Ya pagué', { exact: true }).click();
-    await expect(page.getByText(/^\d{6}$/).first()).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByText(/Pagado\. Esperando que el vendedor lo envíe/).first()).toBeVisible({ timeout: 120_000 });
     appendFileSync(LOG, `${new Date().toISOString()} E2E-PROD product=${PRODUCT} order=${child} step=fondeado\n`);
     const pub = await (await page.request.get(`/p/${child}`)).status();
     expect(pub).toBe(200);

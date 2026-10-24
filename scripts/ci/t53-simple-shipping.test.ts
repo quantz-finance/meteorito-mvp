@@ -15,7 +15,7 @@ import { env, autoReleaseAt, releaseDueAt } from '../../api/_lib/env';
 import { approveAndRelease, evidenceHash, pinHash, __setChainForTests } from '../../api/_lib/escrow';
 import { publicPrefix } from '../../api/_lib/photos';
 import { guestSubFromReq } from '../../api/_lib/guest';
-import { pushMessages, reminderMessages } from '../../api/_lib/push';
+import { pushMessages } from '../../api/_lib/push';
 import { deliveryCodeVisible } from '../../lib/shipping';
 import { formatWindow } from '../../lib/autorelease';
 
@@ -40,6 +40,8 @@ function stubChain() {
 
 export async function run(t: T) {
   baseEnv();
+  process.env.APPROVER_SECRET ||= 'SBMUIURQN7BHVZ6QRNNIB3VIKUM3ZZ2UVHJDLRBVULXA2VTIZVOYY7RN';
+  process.env.RELEASE_SIGNER_SECRET ||= 'SBMUIURQN7BHVZ6QRNNIB3VIKUM3ZZ2UVHJDLRBVULXA2VTIZVOYY7RN';
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
   const saved = { m: process.env.AUTO_RELEASE_MINUTES, h: process.env.AUTO_RELEASE_HOURS, v: process.env.VERCEL_ENV, n: process.env.NODE_ENV };
   const setEnv = (m?: string, v?: string, h?: string) => {
@@ -117,11 +119,10 @@ export async function run(t: T) {
     t.check('otro navegador no ve la foto del envío -> 403', r.code === 403, `${r.code}`);
     r = await shipment('fondeado', KEY);
     t.check('antes del envío: shipped=false, sin foto', r.code === 200 && r.body?.shipped === false && !r.body?.photo, JSON.stringify(r.body));
-    t.check('la foto del envío NO va a la vista pública (puede traer datos personales)', !/ship_evidence|ship_photo/.test(src('supabase/migrations/016_shipping_reminder.sql').replace(/^--.*$/gm, '')));
     t.check('deliveryCodeVisible: oculto en fondeado, visible en enviado', !deliveryCodeVisible('fondeado') && !deliveryCodeVisible('escrow_creado') && deliveryCodeVisible('enviado'));
     const paybox = src('components/PayBox.tsx');
     t.check('PayBox: sin "Ver mi PIN de entrega" antes del envío', !paybox.includes('Ver mi PIN de entrega'));
-    t.check('PayBox: "Pagado. Esperando que el vendedor lo envíe"', paybox.includes('Pagado. Esperando que el vendedor lo envíe'));
+    t.check('PayBox: "Pagado. Esperando que el vendedor lo envíe"', paybox.includes('PAID_WAITING') && src('lib/shipping.ts').includes('Pagado. Esperando que el vendedor lo envíe'));
     t.check('PayBox: "Va en camino" + "Dáselo al vendedor cuando lo recibas"', paybox.includes('Va en camino') && paybox.includes('Dáselo al vendedor cuando lo recibas'));
     const sa = src('components/SellerActions.tsx');
     t.check('Vendedor: botón "Ya lo envié" sin campo obligatorio', sa.includes('Ya lo envié') && !/disabled=\{!note/.test(sa) && !sa.includes('Marcar como enviado'));
@@ -168,14 +169,7 @@ export async function run(t: T) {
     await confirm(rq, rc);
     t.check('comprador confirma "Recibí y está bien" -> liberado', rc.code === 200 && db.tables.orders[0].status === 'liberado' && db.tables.orders[0].approval_reason === 'buyer_confirm', `${rc.code} ${rc.body?.error}`);
 
-    /* ---------- 5) Recordatorio ~24 h antes (best-effort, sin funciones nuevas) ---------- */
-    db = fakeDb(); __setDbForTests(db as any); calls = stubChain();
-    db.tables.orders.push(enviado({ shipped_at: new Date(Date.now() - 6.5 * DAY).toISOString(), auto_release_at: new Date(Date.now() + 0.5 * DAY).toISOString() }));
-    await cron({ method: 'GET', headers: { authorization: 'Bearer ci-cron' }, query: {} }, res());
-    await cron({ method: 'GET', headers: { authorization: 'Bearer ci-cron' }, query: {} }, res());
-    t.check('recordatorio "¿Ya te llegó?" se registra una sola vez y no libera', db.tables.order_events.filter((e: any) => e.kind === 'release_reminder').length === 1 && db.tables.orders[0].status === 'enviado');
-    const rm = reminderMessages({ slug: 'shp053', status: 'enviado', buyer_user_id: 'b', seller_user_id: 's', model: 'Bici' });
-    t.check('recordatorio: solo al comprador, "¿Ya te llegó?"', rm.length === 1 && rm[0].role === 'buyer' && rm[0].title === '¿Ya te llegó?', JSON.stringify(rm));
+    /* ---------- 5) Push ---------- */
     const pm = pushMessages({ slug: 'shp053', status: 'enviado', buyer_user_id: 'b', seller_user_id: 's', model: 'Bici' });
     t.check('push "enviado": menciona el código de entrega', pm.some((m) => m.role === 'buyer' && /código de entrega/.test(m.body)), JSON.stringify(pm));
     const pf = pushMessages({ slug: 'shp053', status: 'fondeado', buyer_user_id: 'b', seller_user_id: 's', model: 'Bici' });

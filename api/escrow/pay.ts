@@ -1,4 +1,4 @@
-// POST /api/escrow/pay { slug, step: 'start'|'confirm_sinpe'|'card_pay'|'card_session'|'card_confirm', proof }  (Bearer JWT Cavos o llave de invitado)
+// POST /api/escrow/pay { slug, step: 'start'|'confirm_sinpe'|'shipment'|'card_pay'|'card_session'|'card_confirm', proof }  (Bearer JWT Cavos o llave de invitado)
 // start: despliega el escrow (si no existe) y devuelve los datos del SINPE simulado (monto desde DB).
 // confirm_sinpe ("Ya pagué"): ramp-provider.mock fondea el escrow. Devuelve el PIN de entrega UNA vez.
 // card_pay (formulario propio, Lendara headless) / card_session (widget, respaldo) / card_confirm: pago con tarjeta vía Lendara (api/_lib/lendara.ts, docs/lendara-card.md). Verificado en
@@ -71,6 +71,12 @@ export default async function handler(req: any, res: any) {
       const { signedXdr } = req.body ?? {};
       if (typeof signedXdr !== 'string' || signedXdr.length > 20000) throw new HttpError(400, 'XDR inválido');
       return json(res, 200, await fundDirect(order.id, signedXdr));
+    }
+    // shipment: el comprador ve la foto del envío y el número de guía (solo él: puede traer datos personales; no va a public_orders).
+    if (step === 'shipment') {
+      if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
+      const ev = order.shipped_at || ['enviado', 'entregado', 'liberado', 'en_disputa', 'resuelto'].includes(order.status) ? order.ship_evidence ?? {} : null;
+      return json(res, 200, ev ? { shipped: true, at: ev.at ?? order.shipped_at ?? null, photo: ev.photo ?? null, note: ev.note ?? null } : { shipped: false });
     }
     throw new HttpError(400, 'step inválido');
   } catch (e) { return fail(res, e); }

@@ -5,6 +5,8 @@ function req(name: string): string {
   return v;
 }
 const list = (v: string) => v.split(',').map((x) => x.trim()).filter(Boolean);
+export const DEFAULT_AUTO_RELEASE_MINUTES = 10080; // 7 días
+export const MIN_PROD_AUTO_RELEASE_MINUTES = 1440; // 24 h
 export type SpMode = 'seller' | 'backend';
 export const env = {
   network: () => { const n = process.env.STELLAR_NETWORK ?? 'testnet'; if (n !== 'testnet') throw new Error('solo testnet'); return n; },
@@ -27,12 +29,14 @@ export const env = {
   usdcIssuer: () => process.env.USDC_ISSUER ?? 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
   crcUsdcRate: () => Number(process.env.CRC_USDC_RATE ?? '510'),
   spMode: (): SpMode => (process.env.SERVICE_PROVIDER_MODE === 'backend' ? 'backend' : 'seller'),
-  /** Ventana de liberación automática tras el envío, en minutos. AUTO_RELEASE_MINUTES (default 1440 = 24 h).
-   *  Compat: AUTO_RELEASE_HOURS si no hay MINUTES. Valor inválido -> default. Rango 1..43200 (30 días). */
+  /** Ventana de liberación automática tras "Ya lo envié", en minutos. AUTO_RELEASE_MINUTES (default 10080 = 7 días).
+   *  Compat: AUTO_RELEASE_HOURS si no hay MINUTES. Valor inválido -> default. Rango 1..43200 (30 días).
+   *  Producción: un valor < 1440 (p. ej. un env viejo de 10 min) se ignora y se usa el default; demo/CI/preview pueden usar plazos cortos. */
   autoReleaseMinutes: (): number => {
     const m = process.env.AUTO_RELEASE_MINUTES, h = process.env.AUTO_RELEASE_HOURS;
-    const v = m != null && m !== '' ? Number(m) : h != null && h !== '' ? Number(h) * 60 : 1440;
-    return Number.isFinite(v) && v >= 1 && v <= 43200 ? Math.round(v) : 1440;
+    const v = m != null && m !== '' ? Number(m) : h != null && h !== '' ? Number(h) * 60 : DEFAULT_AUTO_RELEASE_MINUTES;
+    const ok = Number.isFinite(v) && v >= 1 && v <= 43200 ? Math.round(v) : DEFAULT_AUTO_RELEASE_MINUTES;
+    return env.isProduction() && ok < MIN_PROD_AUTO_RELEASE_MINUTES ? DEFAULT_AUTO_RELEASE_MINUTES : ok;
   },
   cronSecret: () => req('CRON_SECRET'),
   pinPepper: () => req('PIN_PEPPER'),
@@ -51,3 +55,11 @@ export const env = {
 
 /** Fecha de liberación automática a partir de ahora (ISO). Única fuente del cálculo. */
 export const autoReleaseAt = (from = Date.now()) => new Date(from + env.autoReleaseMinutes() * 60_000).toISOString();
+
+/** Cuándo vence de verdad la liberación automática de un pedido 'enviado': nunca antes de auto_release_at NI antes de
+ *  shipped_at + la ventana vigente. Así los pedidos enviados con un plazo viejo (10 min) esperan los 7 días. */
+export function releaseDueAt(o: { shipped_at?: string | null; funded_at?: string | null; created_at?: string | null; auto_release_at?: string | null }): string {
+  const base = Date.parse(o.shipped_at ?? o.funded_at ?? o.created_at ?? '') || Date.now();
+  const due = Math.max(base + env.autoReleaseMinutes() * 60_000, Date.parse(o.auto_release_at ?? '') || 0);
+  return new Date(due).toISOString();
+}

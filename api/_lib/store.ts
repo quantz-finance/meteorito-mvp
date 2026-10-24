@@ -2,7 +2,7 @@
 // Si la migración no está aplicada, todo responde 503 'store_unavailable' y el resto de la app sigue igual.
 import { randomBytes } from 'node:crypto';
 import { HttpError } from './auth';
-import { publicPrefix } from './photos';
+import { ownPhotoUrl } from './photos';
 
 export const STORE_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
 /** Rutas y palabras que no pueden ser usuario de tienda. */
@@ -41,9 +41,4 @@ export function storeDbErr(e: any): never {
 
 /** Foto de la tienda: SOLO una imagen ya subida por /api/photos/upload-url a la carpeta del propio vendedor
  *  (<bucket público>/<su carpeta>/<uuid>/0.jpg|png|webp). Cualquier otra URL -> null (se rechaza). */
-export function avatarUrlOf(raw: unknown, sub: string): string | null {
-  if (typeof raw !== 'string' || raw.length > 400) return null;
-  const prefix = publicPrefix(sub);
-  if (!raw.startsWith(prefix)) return null;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/0\.(jpg|png|webp)$/.test(raw.slice(prefix.length)) ? raw : null;
-}
+export function avatarUrlOf(raw: unknown, sub: string): string | null { return ownPhotoUrl(raw, sub); }

@@ -75,18 +75,17 @@ const role = (page: Page, r: 'seller' | 'buyer') => page.evaluate((x) => (window
   await page.getByText('Ya pagué', { exact: true }).waitFor();
   await shot(page, '02b-sinpe'); await beat(page, 2500);
   await tap(page, 'Ya pagué', 2500);
-  await page.getByText('Pago de prueba en custodia').waitFor();
-  await page.getByText('Tu PIN de entrega').waitFor();
-  await shot(page, '02c-pin-visible'); await beat(page, 4000);   // PIN visible UNA vez
-  await tap(page, 'Listo, lo guardé', 2000);
+  await page.getByText(/Pagado\. Esperando que el vendedor lo envíe/).first().waitFor(); // el código aparece tras el envío
+  await shot(page, '02c-pagado'); await beat(page, 3000);
+  await tap(page, 'Entendido', 2000);
   await shot(page, '02d-fondeado'); await beat(page, 2000);
 
   // (3) Vendedor marca "Enviado"
   await role(page, 'seller'); await page.goto(`${BASE}/pedidos?${badge.slice(1)}`);
   await tap(page, /iPhone 13/, 1800);
-  await page.getByPlaceholder('Encuentro, envío, número de guía…').pressSequentially('Entrega en persona, Escazú', { delay: 60 });
-  await beat(page, 800); await shot(page, '03a-marcar-enviado');
-  await tap(page, 'Marcar como enviado', 2500);
+  await page.getByText('Ya lo envié', { exact: true }).waitFor();
+  await beat(page, 800); await shot(page, '03a-ya-lo-envie');
+  await tap(page, 'Ya lo envié', 2500);
   await page.getByText('Marcado como enviado').waitFor();
   await shot(page, '03-enviado'); await beat(page, 2000);
 

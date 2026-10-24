@@ -10,7 +10,7 @@
 5. El vendedor sigue usando Cavos (necesita wallet para cobrar). Si el vendedor abre su propio link con sesión iniciada, el servidor responde `self_purchase` (409).
 
 ## Límites (a propósito, y por qué son aceptables en testnet)
-- **La llave es un secreto portador**: quien la copie actúa como comprador de ese pedido. Si el navegador borra sus datos, se pierde el acceso (confirmar/disputar) y el PIN guardado; por eso la hoja del PIN pide anotarlo. El auto-release (`AUTO_RELEASE_MINUTES`) libera igual si no hay disputa.
+- **La llave es un secreto portador**: quien la copie actúa como comprador de ese pedido. Si el navegador borra sus datos, se pierde el acceso (confirmar/disputar) y el código de entrega (PIN) guardado, que se muestra recién cuando el vendedor toca "Ya lo envié". El auto-release (`AUTO_RELEASE_MINUTES`, 7 días; en producción nunca menos de 24 h) libera igual si no hay disputa ni PIN bloqueado.
 - **Reembolsos de disputas**: como el `buyer_address` es la wallet `platform`, el resolvedor (script manual) envía la parte del comprador a `platform` y el equipo la devuelve por fuera. No existe reembolso automático al invitado.
 - **Sin pago directo en USDC** para invitados (necesita wallet propia); SINPE simulado o **tarjeta** (Lendara sandbox, ver `docs/lendara-card.md`).
 - **Sin fotos de evidencia** en disputas de invitados (la subida exige cuenta); describen el problema en texto.
