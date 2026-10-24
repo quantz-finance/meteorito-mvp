@@ -22,7 +22,7 @@ export async function run(t: T) {
   __setHorizonForTests(() => ({ loadAccount: async (a: string) => ({ id: a, balances: [{ asset_code: 'USDC', asset_issuer: env.usdcIssuer() }] }) }));
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
   const db = fakeDb(); __setDbForTests(db as any);
-  const kp = Keypair.random(); const photo = publicPrefix('seller1') + '44444444-4444-4444-8444-444444444444/0.jpg';
+  const kp = Keypair.random(); const photo = publicPrefix('seller1') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg';
 
   let r = await call({ proof: signProof(kp), title: 'Bicicleta de montaña', price_crc: 85000, photos: [photo] });
   const row = db.tables.orders[0];

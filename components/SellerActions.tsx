@@ -1,18 +1,23 @@
-// Vendedor: "Ya lo envié" en un toque (evidencia {at, photo?, note?} -> hash en Supabase y en TW) e "Ingresar PIN del comprador".
-// La foto (paquete o comprobante de Correos de Costa Rica) y el número de guía son opcionales.
-// Cara a cara: no hay "Ya lo envié"; en 'fondeado' el vendedor ingresa el PIN del comprador y cobra al instante.
+// Vendedor: "Ya lo envié" (evidencia {at, photo, captured_at, token_id, purpose, note?} -> hash en Supabase y en TW) e
+// "Ingresar PIN del comprador". La FOTO del paquete o del comprobante de Correos es OBLIGATORIA y solo con la cámara de la
+// app en ese momento (CameraCapture + token de captura de un uso); nunca del carrete. El número de guía sigue opcional.
+// Cara a cara: no hay "Ya lo envié" ni foto; en 'fondeado' el vendedor ingresa el PIN del comprador y cobra al instante.
 // Con el plazo corriendo, "Pedir más tiempo" / responder la solicitud del comprador (ExtensionBox).
 import { useState } from 'react';
 import { userMessage } from '@/lib/cavosSession';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ErrorText, Icon, PrimaryButton, SuccessCheck } from '@/components/ds';
-import { compressPhoto, newDraftId, uploadCompressed } from '@/lib/photos';
+import { CameraCapture } from '@/components/CameraCapture';
+import type { CapturedPhoto } from '@/lib/capture';
 import { ui } from '@/components/ui';
-import { C, S, T } from '@/constants/theme';
+import { C, R, S, T } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/cavos';
 import { ExtensionBox } from '@/components/ExtensionBox';
+
+/** "Ya lo envié" solo se puede tocar con la foto de la cámara ya subida. */
+export const canShip = (photo: CapturedPhoto | null) => !!photo?.url && !!photo.token;
 
 export function SellerActions({ slug, status, order, onChange }: { slug: string; status: string; onChange: () => void;
   /** Pedido público (acuerdo de entrega y extensión pendiente). Sin él: envío. */
@@ -21,19 +26,8 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
   const auth = useAuth();
   const [note, setNote] = useState('');
   const [noteOpen, setNoteOpen] = useState(false);
-  const [photo, setPhoto] = useState<{ uri: string; blob: Blob | null } | null>(null);
-  const [photoBusy, setPhotoBusy] = useState(false);
-  const pickPhoto = async () => {
-    setErr(null);
-    const ImagePicker = await import('expo-image-picker');
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1 });
-    if (res.canceled || !res.assets?.[0]) return;
-    const a = res.assets[0];
-    setPhoto({ uri: a.uri, blob: null }); setPhotoBusy(true);
-    try { const blob = await compressPhoto({ uri: a.uri, width: a.width, height: a.height }); setPhoto({ uri: a.uri, blob }); }
-    catch { setPhoto(null); setErr('No pudimos usar esa foto. Elige otra o envía sin foto.'); }
-    finally { setPhotoBusy(false); }
-  };
+  const [photo, setPhoto] = useState<CapturedPhoto | null>(null);
+  const [camOpen, setCamOpen] = useState(false);
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -61,32 +55,39 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
   if (status === 'fondeado' && f2f) return pinForm('Cara a cara: cuando el comprador revise el producto, pídele su código.');
 
   if (status === 'fondeado') return <View style={{ gap: S.sm }}>
-    <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
-      {photo ? <View>
-        <Image testID="ship-photo-preview" source={{ uri: photo.uri }} style={st.thumb} resizeMode="cover" accessibilityLabel="Foto del envío" />
-        {photoBusy ? <View style={[StyleSheet.absoluteFill, st.busy]}><ActivityIndicator color="#fff" /></View> : null}
-      </View> : null}
-      <Pressable onPress={photo ? () => setPhoto(null) : pickPhoto} disabled={busy} accessibilityRole="button"
-        accessibilityLabel={photo ? 'Quitar la foto del envío' : 'Agregar foto del envío'} style={({ pressed }) => [st.link, pressed && { opacity: 0.7 }]}>
-        <Icon name={photo ? 'close-circle-outline' : 'camera-outline'} size={20} color={C.lilac} />
-        <Text style={[T.callout, { color: C.lilac, flexShrink: 1 }]}>{photo ? 'Quitar foto' : 'Foto del paquete o comprobante (opcional)'}</Text>
-      </Pressable>
-    </View>
+    {photo ? <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
+      <Image testID="ship-photo-preview" source={{ uri: photo.uri }} style={st.thumb} resizeMode="cover" accessibilityLabel="Foto del envío" />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={1}>Foto del envío lista</Text>
+        <Pressable onPress={() => { setErr(null); setCamOpen(true); }} disabled={busy} accessibilityRole="button" accessibilityLabel="Tomar otra foto del envío" hitSlop={6}>
+          <Text style={[T.footnote, { color: C.lilac }]}>Tomar otra</Text>
+        </Pressable>
+      </View>
+    </View> : <Pressable onPress={() => { setErr(null); setCamOpen(true); }} disabled={busy} accessibilityRole="button" accessibilityLabel="Tomar foto del envío"
+      style={({ pressed }) => [st.take, pressed && { opacity: 0.8 }]}>
+      <Icon name="camera" size={22} color={C.lilac} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[T.headline, { color: C.lilac, fontSize: 15 }]} numberOfLines={1}>Tomar foto del paquete</Text>
+        <Text style={T.footnote} numberOfLines={2}>Obligatoria: el paquete o el comprobante, con la cámara en este momento.</Text>
+      </View>
+    </Pressable>}
     {noteOpen
       ? <TextInput style={ui.input} placeholder="Número de guía (opcional)" placeholderTextColor={C.textDim} value={note} onChangeText={setNote} maxLength={200} autoFocus />
       : <Pressable onPress={() => setNoteOpen(true)} accessibilityRole="button" style={({ pressed }) => [st.link, pressed && { opacity: 0.7 }]}>
           <Icon name="document-text-outline" size={20} color={C.textDim} />
           <Text style={[T.footnote]}>Agregar número de guía (opcional)</Text>
         </Pressable>}
-    <PrimaryButton title="Ya lo envié" icon="paper-plane" loading={busy} disabled={photoBusy}
+    <PrimaryButton title="Ya lo envié" icon="paper-plane" loading={busy} disabled={!canShip(photo)}
       onPress={() => run(async () => {
-        const evidence: { photo?: string; note?: string } = {};
-        if (photo?.blob) evidence.photo = await uploadCompressed(auth, photo.blob, newDraftId(), 0);
+        if (!photo) throw new Error('Toma la foto del envío con la cámara.');
+        const evidence: Record<string, string> = { photo: photo.url, capture_token: photo.token, captured_at: photo.captured_at };
         if (note.trim()) evidence.note = note.trim();
         const r = await api(auth, '/api/escrow/ship', { slug, evidence });
         if (r.unsignedXdr) await api(auth, '/api/tx/submit', { slug, action: 'ship', signedXdr: await auth.signXdr(r.unsignedXdr) });
       }, 'Marcado como enviado')} />
+    {!photo && !err ? <Text testID="ship-photo-required" style={[T.footnote, { textAlign: 'center' }]}>Toma la foto para poder marcarlo como enviado.</Text> : null}
     {err && <ErrorText>{err}</ErrorText>}
+    <CameraCapture visible={camOpen} purpose="ship" refId={slug} onClose={() => setCamOpen(false)} onDone={(p) => { setPhoto(p); setCamOpen(false); }} />
   </View>;
 
   if (status === 'enviado') return pinForm();
@@ -95,6 +96,6 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
 
 const st = StyleSheet.create({
   thumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: C.lilacBg },
-  busy: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  take: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 56, paddingHorizontal: S.md, paddingVertical: S.sm, borderRadius: R.md, borderWidth: 1, borderStyle: 'dashed', borderColor: C.lilac, backgroundColor: C.lilacBg },
   link: { flexDirection: 'row', alignItems: 'center', gap: S.xs + 2, minHeight: 44, flexShrink: 1 },
 });

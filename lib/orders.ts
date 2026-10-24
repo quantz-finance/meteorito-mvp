@@ -40,6 +40,8 @@ export interface NewOrder {
   invite?: string;
   /** Acuerdo de entrega (migración 017; el servidor valida 24 h a 30 días). */
   delivery_mode?: 'envio' | 'cara_a_cara'; protection_minutes?: number;
+  /** Link del anuncio importado (no se guarda): permite usar las fotos que el servidor guardó al importarlo. */
+  source_url?: string;
 }
 
 export async function createOrder(auth: MeteoritoAuth, o: Omit<NewOrder, 'seller_address' | 'seller_email'>): Promise<string> {

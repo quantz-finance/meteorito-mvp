@@ -1,6 +1,6 @@
 // (53) Envío simple + liberación segura (TDD):
-//  - "Ya lo envié" en un toque: la evidencia es opcional ({at, photo?, note?}) y se sigue hasheando.
-//  - Foto del envío solo de la carpeta propia del vendedor; el comprador la ve por el API (no en la vista pública).
+//  - "Ya lo envié": número de guía opcional; la foto es OBLIGATORIA y solo de la cámara de la app (t58). Todo se hashea.
+//  - Foto del envío solo de la carpeta del token del vendedor; el comprador la ve por el API (no en la vista pública).
 //  - El código de entrega (PIN) del comprador no se muestra antes del envío.
 //  - Liberación: PIN correcto o confirmación del comprador. Si nadie hace nada, 7 días después del envío, salvo disputa o PIN bloqueado.
 //  - Producción: AUTO_RELEASE_MINUTES < 1440 se ignora (10080). Pedidos viejos con plazo corto: el cron recalcula desde shipped_at.
@@ -14,6 +14,7 @@ import { __setDbForTests } from '../../api/_lib/db';
 import { env, autoReleaseAt, releaseDueAt } from '../../api/_lib/env';
 import { approveAndRelease, evidenceHash, pinHash, __setChainForTests } from '../../api/_lib/escrow';
 import { publicPrefix } from '../../api/_lib/photos';
+import { capturePath, captureUrl, signCaptureToken } from '../../api/_lib/capture';
 import { guestSubFromReq } from '../../api/_lib/guest';
 import { pushMessages } from '../../api/_lib/push';
 import { deliveryCodeVisible } from '../../lib/shipping';
@@ -77,33 +78,36 @@ export async function run(t: T) {
     t.check('releaseDueAt: pedido viejo de 10 min -> shipped_at + 7 días', releaseDueAt(old) === new Date(now - DAY + 7 * DAY).toISOString(), releaseDueAt(old));
     t.check('releaseDueAt: nunca antes que auto_release_at', releaseDueAt({ shipped_at: shipped, auto_release_at: new Date(now + 30 * DAY).toISOString() }) === new Date(now + 30 * DAY).toISOString());
 
-    /* ---------- 2) "Ya lo envié" sin nota obligatoria ---------- */
+    /* ---------- 2) "Ya lo envié": número de guía opcional; la foto de la cámara es obligatoria (t58) ---------- */
     const ship = (await import('../../api/escrow/ship')).default;
     const seller = await token({ sub: 'seller-53' });
     const base = { id: '53535353-5353-4535-8535-535353535353', slug: 'shp053', status: 'fondeado', seller_user_id: 'seller-53', buyer_user_id: guestSubFromReq({ headers: { 'x-guest-key': KEY } }),
       seller_address: 'GSELLER', contract_id: 'CNOTUSED', amount_usdc: 1, pin_attempts: 0, delivery_pin_hash: '' };
     base.delivery_pin_hash = pinHash(base.id, '246810');
+    /** Foto tomada con la cámara de la app (token 'ship' de este pedido) y ya subida a Storage. */
+    const cam = () => { const c = signCaptureToken({ p: 'ship', ref: 'shp053', sub: 'seller-53' }); return { photo: captureUrl(c.claims), capture_token: c.token, captured_at: new Date().toISOString(), path: capturePath(c.claims) }; };
     const shipWith = async (body: any, over: any = {}) => {
       const db = fakeDb(); __setDbForTests(db as any); db.tables.orders.push({ ...base, sp_mode: 'seller', ...over });
+      if (body.evidence?.path) { db.objects.add(body.evidence.path); delete body.evidence.path; }
       const calls = stubChain();
       const r = res(); await ship(req(seller, { slug: 'shp053', ...body }), r);
       return { r, db, o: db.tables.orders[0], calls };
     };
     let s = await shipWith({});
-    t.check('sin evidencia ni nota -> 200 (un toque)', s.r.code === 200, `${s.r.code} ${s.r.body?.error}`);
-    t.check('evidencia mínima {at} guardada y hasheada', !!s.o.ship_evidence?.at && s.o.ship_evidence_hash === evidenceHash(s.o.ship_evidence) && s.r.body?.evidenceHash === s.o.ship_evidence_hash);
+    t.check('sin foto -> 400 ship_photo_required (la foto de la cámara es obligatoria)', s.r.code === 400 && s.r.body?.code === 'ship_photo_required' && !s.o.ship_evidence, `${s.r.code} ${s.r.body?.code}`);
+    s = await shipWith({ evidence: cam() });
+    t.check('foto de la cámara sin número de guía -> 200, evidencia hasheada', s.r.code === 200 && !!s.o.ship_evidence?.at && !('note' in s.o.ship_evidence) && s.o.ship_evidence_hash === evidenceHash(s.o.ship_evidence) && s.r.body?.evidenceHash === s.o.ship_evidence_hash, `${s.r.code} ${s.r.body?.error}`);
     t.check('el hash va al milestone "Enviado" (XDR del vendedor)', s.calls.includes('shipxdr:' + s.o.ship_evidence_hash), s.calls.join(','));
-    s = await shipWith({ evidence: { note: '' } });
-    t.check('nota vacía -> 200 y sin nota guardada', s.r.code === 200 && !('note' in (s.o.ship_evidence ?? {})), JSON.stringify(s.o.ship_evidence));
-    const photo = publicPrefix('seller-53') + '0b6f1f0a-1111-4222-8333-444455556666/0.jpg';
-    s = await shipWith({ evidence: { photo, note: '  Guía CR123456789  ' } });
-    t.check('foto propia + número de guía opcional -> guardados', s.r.code === 200 && s.o.ship_evidence?.photo === photo && s.o.ship_evidence?.note === 'Guía CR123456789', JSON.stringify(s.o.ship_evidence));
-    s = await shipWith({ evidence: { photo: 'https://evil.example/x.jpg' } });
+    const ev1 = cam();
+    s = await shipWith({ evidence: { ...ev1, note: '  Guía CR123456789  ' } });
+    const photo = ev1.photo;
+    t.check('foto de la cámara + número de guía opcional -> guardados', s.r.code === 200 && s.o.ship_evidence?.photo === photo && s.o.ship_evidence?.note === 'Guía CR123456789', JSON.stringify(s.o.ship_evidence));
+    s = await shipWith({ evidence: { ...cam(), photo: 'https://evil.example/x.jpg' } });
     t.check('foto de otra URL -> 400 y no cambia nada', s.r.code === 400 && !s.o.ship_evidence && s.o.status === 'fondeado', `${s.r.code}`);
-    s = await shipWith({ evidence: { photo: publicPrefix('otro-vendedor') + '0b6f1f0a-1111-4222-8333-444455556666/0.jpg' } });
+    s = await shipWith({ evidence: { ...cam(), photo: publicPrefix('otro-vendedor') + 'ship-0b6f1f0a-1111-4222-8333-444455556666/0.jpg' } });
     t.check('foto de la carpeta de otro usuario -> 400', s.r.code === 400);
     process.env.SERVICE_SECRET ??= 'SBMUIURQN7BHVZ6QRNNIB3VIKUM3ZZ2UVHJDLRBVULXA2VTIZVOYY7RN';
-    s = await shipWith({}, { sp_mode: 'backend' });
+    s = await shipWith({ evidence: cam() }, { sp_mode: 'backend' });
     t.check('modo backend: enviado con auto_release_at = shipped_at + 7 días (aunque el env diga 10 min)', s.o.status === 'enviado' && Date.parse(s.o.auto_release_at) - Date.parse(s.o.shipped_at) === 7 * DAY, `${s.r.code} ${s.r.body?.error} ${s.o.shipped_at} -> ${s.o.auto_release_at}`);
 
     /* ---------- 3) Comprador: foto del envío por el API, código solo tras el envío ---------- */
@@ -126,7 +130,7 @@ export async function run(t: T) {
     t.check('PayBox: "Va en camino" + "Dáselo al vendedor cuando lo recibas"', paybox.includes('Va en camino') && paybox.includes('Dáselo al vendedor cuando lo recibas'));
     const sa = src('components/SellerActions.tsx');
     t.check('Vendedor: botón "Ya lo envié" sin campo obligatorio', sa.includes('Ya lo envié') && !/disabled=\{!note/.test(sa) && !sa.includes('Marcar como enviado'));
-    t.check('Vendedor: foto opcional con el pipeline de fotos (uploadCompressed)', /uploadCompressed|uploadPhoto/.test(sa) && /opcional/i.test(sa));
+    t.check('Vendedor: foto del envío obligatoria con la cámara de la app (CameraCapture), número de guía opcional', /CameraCapture/.test(sa) && /Número de guía \(opcional\)/.test(sa) && !/\(opcional\)'\}<\/Text>\s*<\/Pressable>\s*<\/View>\s*\{noteOpen/.test(sa));
 
     /* ---------- 4) Liberación: PIN, confirmación, plazo de 7 días, disputa ---------- */
     setEnv('10', 'production');

@@ -9,7 +9,7 @@ export { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/
 export type FbImportResultKind = 'success' | 'partial' | 'failed';
 export interface FbImport {
   result: FbImportResultKind; title: string | null; price_crc: number | null; price_source: { amount: number; currency: string } | null;
-  converted: boolean; description: string | null; photos: string[]; missing: ('title' | 'price' | 'photos')[]; message?: string;
+  converted: boolean; description: string | null; photos: string[]; /** la misma foto guardada por el servidor (import-<clave>-<uuid>), en el mismo orden; null si no se pudo */ photo_urls?: (string | null)[]; /** link canónico importado: mandarlo al crear para usar photo_urls */ source_url?: string; missing: ('title' | 'price' | 'photos')[]; message?: string;
 }
 
 export async function importFromFacebook(auth: MeteoritoAuth, raw: string): Promise<FbImport> {

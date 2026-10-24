@@ -74,7 +74,7 @@ export async function run(t: T) {
 
   // --- la invitación guarda el link original del anuncio
   const KEY_A = key('a'); const buyer = guestSubFromReq({ headers: { 'x-guest-key': KEY_A } })!;
-  const buyerPhoto = publicPrefix(buyer) + '55555555-5555-4555-8555-555555555555/0.jpg';
+  const buyerPhoto = publicPrefix(buyer) + 'listing-55555555-5555-4555-8555-555555555555/0.jpg';
   const base = { op: 'create', title: 'Grutov 800 piezas Clips de retención', price_crc: 18000, photos: [buyerPhoto] };
   let r = await call(invites, { guest: KEY_A, body: { ...base, source_url: 'https://evil.com/marketplace/item/1/' } });
   t.check('source_url que no es de Facebook Marketplace -> 400', r.code === 400 && db.tables.invitations.length === 0, `${r.code}`);
@@ -104,7 +104,7 @@ export async function run(t: T) {
   t.check('fotos de la carpeta del comprador SIN invitación -> 400 (solo las propias)', r.code === 400 && db.tables.orders.length === 0, `${r.code}`);
   r = await call(create, { tok, body: body([publicPrefix(buyer) + 'otra/9.jpg']) });
   t.check('foto del comprador que no está en la invitación -> 400', r.code === 400 && db.tables.orders.length === 0, `${r.code}`);
-  r = await call(create, { tok, body: body([buyerPhoto, publicPrefix('seller49') + '66666666-6666-4666-8666-666666666666/0.jpg']) });
+  r = await call(create, { tok, body: body([buyerPhoto, publicPrefix('seller49') + 'listing-66666666-6666-4666-8666-666666666666/0.jpg']) });
   t.check('vendedor publica con la foto de la invitación (+ una propia) y la acepta', r.code === 200 && db.tables.orders[0]?.photos?.[0] === buyerPhoto && db.tables.invitations.find((i: any) => i.code === code)?.status === 'aceptada', `${r.code} ${r.body?.error}`);
 
   // --- mensaje para Messenger (tuteo, con el link y el precio)

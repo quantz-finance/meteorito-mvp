@@ -7,6 +7,16 @@ import { BETA_NOTICE } from '../lib/rules';
 export const withoutBetaNotice = (text: string) => text.split(BETA_NOTICE).join('');
 export const PHOTO = resolve(__dirname, '../scripts/demo/assets/producto-demo.png');
 export const DEMO_PIN = '482915';
+/** Fotos "solo cámara": abre la cámara de la app (simulada en el demo), dispara y usa la foto. Nunca hay selector de archivos. */
+export async function takePhoto(page: Page, label: string | RegExp = 'Tomar foto') {
+  await page.getByLabel(label, { exact: typeof label === 'string' }).last().click();
+  await expect(page.getByTestId('camera-capture')).toBeVisible();
+  await expect(page.getByTestId('camera-shutter')).toBeEnabled();
+  await page.getByTestId('camera-shutter').click();
+  await expect(page.getByTestId('camera-shot')).toBeVisible();
+  await page.getByText('Usar foto', { exact: true }).click();
+  await expect(page.getByTestId('camera-capture')).toHaveCount(0);
+}
 /** Tras pagar: el código de entrega NO se muestra hasta que el vendedor toca "Ya lo envié". */
 export const PAID = /Pagado\. Esperando que el vendedor lo envíe/;
 type Role = 'seller' | 'buyer';

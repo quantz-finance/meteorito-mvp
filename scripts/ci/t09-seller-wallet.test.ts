@@ -33,7 +33,7 @@ export async function run(t: T) {
   try {
     // create: vendedor sin cuenta -> 409, no inserta.
     const db = fakeDb(); __setDbForTests(db as any);
-    const photo = publicPrefix('seller') + '44444444-4444-4444-8444-444444444444/0.jpg';
+    const photo = publicPrefix('seller') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg';
     let r = res(); await create(req(await token({ sub: 'seller' }), { proof: signProof(seller, 'create', 'new'), category: 'celular', brand: 'a', model: 'b', condition: 'c', price_crc: 5000, photos: [photo] }), r);
     t.check('create sin trustline -> 409 accionable, no publica', r.code === 409 && db.tables.orders.length === 0 && /activ/i.test(r.body.error), `${r.code} ${r.body?.error}`);
 

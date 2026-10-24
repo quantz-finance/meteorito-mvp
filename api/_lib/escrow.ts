@@ -3,7 +3,7 @@ import { feeBumpAndSend, validateEscrowTx } from './feebump';
 import { createHash, randomInt } from 'node:crypto';
 import { env, releaseBlockedUntil } from './env';
 import { deliveryModeOf, isFaceToFace, protectionOf } from './agreement';
-import { ownPhotoUrl } from './photos';
+import { cameraPhoto, captureTime, captureUrl, checkCaptureToken } from './capture';
 import { db, advance, logEvent } from './db';
 import { HttpError } from './auth';
 import * as tw from './tw';
@@ -16,16 +16,19 @@ let testChain: Partial<Chain> | null = null;
 export const __setChainForTests = (c: Partial<Chain> | null) => { testChain = c; };
 export const chain = (): Chain => (testChain ? { ...tw, ...testChain } : tw) as Chain;
 
-/** Evidencia de "Ya lo envié": todo opcional. {at} siempre (hora del servidor); photo solo de la carpeta propia del vendedor
- *  (subida por /api/photos/upload-url); note (número de guía) recortada. Lanza 400 si la foto no es propia. */
-export function shipEvidence(raw: any, sellerSub: string): { at: string; photo?: string; note?: string } {
-  const ev: { at: string; photo?: string; note?: string } = { at: new Date().toISOString() };
+export interface ShipEvidence { at: string; photo: string; captured_at: string; token_id: string; purpose: 'ship'; note?: string }
+/** Evidencia de "Ya lo envié": la FOTO ES OBLIGATORIA y solo de la cámara de la app (token de captura 'ship' de ESTE pedido y
+ *  de este vendedor; la foto en la carpeta del token). {at} = hora del servidor; {captured_at, token_id, purpose} de la captura;
+ *  note (número de guía) opcional, recortada. Todo entra al hash de evidencia. Lanza 400 si falta o no es de la cámara. */
+export function shipEvidence(raw: any, sellerSub: string, slug: string): ShipEvidence {
   if (raw != null && typeof raw !== 'object') throw new HttpError(400, 'evidencia inválida');
-  if (raw?.photo != null && raw.photo !== '') {
-    const url = ownPhotoUrl(raw.photo, sellerSub);
-    if (!url) throw Object.assign(new HttpError(400, 'No pudimos usar esa foto. Elige otra e intenta de nuevo.'), { code: 'bad_ship_photo' });
-    ev.photo = url;
-  }
+  if (raw?.photo == null || raw.photo === '') throw Object.assign(new HttpError(400, 'Toma la foto del paquete o del comprobante con la cámara para marcarlo como enviado.'), { code: 'ship_photo_required' });
+  let c;
+  try { c = checkCaptureToken(raw.capture_token, { purpose: 'ship', subs: [sellerSub], ref: slug, allowExpired: true }); }
+  catch (e: any) { throw Object.assign(new HttpError(400, e.message), { code: e.code === 'capture_token_required' ? 'ship_photo_required' : e.code }); }
+  const cam = cameraPhoto(raw.photo, sellerSub);
+  if (!cam || cam.purpose !== 'ship' || cam.id !== c.id || raw.photo !== captureUrl(c)) throw Object.assign(new HttpError(400, 'Toma la foto del paquete o del comprobante con la cámara de Meteorito.'), { code: 'bad_ship_photo' });
+  const ev: ShipEvidence = { at: new Date().toISOString(), photo: raw.photo, captured_at: captureTime(raw.captured_at, c), token_id: c.id, purpose: 'ship' };
   const note = typeof raw?.note === 'string' ? raw.note.trim().slice(0, 200) : '';
   if (note) ev.note = note;
   return ev;

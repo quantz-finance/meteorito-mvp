@@ -39,14 +39,7 @@ export function newDraftId(): string {
   return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`;
 }
 
-/** Comprime y sube una foto. index 0..3 dentro del borrador. Devuelve la URL pública. */
-export async function uploadPhoto(auth: MeteoritoAuth, p: PickedPhoto & { mime?: string }, draftId: string, index: number): Promise<string> {
-  let blob: Blob;
-  try { blob = await compressPhoto(p); } catch (e) { throw Object.assign(tagPhotoError('compress', e), { photoMime: p.mime ?? null }); }
-  return uploadCompressed(auth, blob, draftId, index);
-}
-
-/** Sube un JPEG ya comprimido (p. ej. comprimido al elegir la foto). */
+/** Sube un JPEG ya comprimido por la vía vieja: SOLO la foto de la tienda (productos, envíos y disputas usan uploadCaptured). */
 export async function uploadCompressed(auth: MeteoritoAuth, blob: Blob, draftId: string, index: number): Promise<string> {
   if (DEMO_ENABLED) return blobToDataUrl(blob); // demo: sin Storage; la foto queda local como data URL
   let r: { path: string; token: string; publicUrl: string };
@@ -63,12 +56,34 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(String(fr.result)); fr.onerror = () => reject(fr.error); fr.readAsDataURL(blob); });
 }
 
-/** Comprador invitado (sin cuenta): fotos opcionales de su invitación, con su llave de invitado. */
-export async function uploadGuestPhoto(auth: Pick<MeteoritoAuth, 'getAuthToken'>, blob: Blob, draftId: string, index: number): Promise<string> {
-  if (DEMO_ENABLED) return blobToDataUrl(blob);
-  const { guestApi } = await import('./api');
-  const r = await guestApi<{ path: string; token: string; publicUrl: string }>(auth, '/api/photos/upload-url', { as: 'guest', draftId, index, mime: 'image/jpeg', size: blob.size });
-  const { error } = await (await supabase()).storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' });
-  if (error) throw new Error(`No se pudo subir la foto: ${error.message}`);
+// ---- Cámara de la app (fotos "solo cámara": envío, producto nuevo, disputa) ----
+export const CAMERA_MAX_SIDE = MAX_SIDE;
+/** Cuadro de la cámara (canvas ya con la marca de fecha) -> JPEG con el mismo objetivo que compressPhoto (≤300 KB). */
+export async function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob> {
+  let last: Blob | null = null;
+  for (const q of [0.8, 0.7, 0.55, 0.4]) {
+    last = await new Promise<Blob | null>((res) => canvas.toBlob((b) => res(b), 'image/jpeg', q));
+    if (!last) break;
+    if (last.size <= TARGET_BYTES) break;
+  }
+  if (!last) { // Safari viejo sin toBlob: data URL
+    const d = canvas.toDataURL('image/jpeg', 0.6);
+    last = await (await fetch(d)).blob();
+  }
+  return last.type === 'image/jpeg' ? last : new Blob([await last.arrayBuffer()], { type: 'image/jpeg' });
+}
+
+/** Sube una foto de la cámara con su token de captura (un uso, 5 min). La firma solo sale con un token válido. */
+export async function uploadCaptured(auth: MeteoritoAuth, blob: Blob, cap: { token: string; purpose: 'ship' | 'listing' | 'dispute' }, asGuest: boolean): Promise<string> {
+  const { api, guestApi } = await import('./api');
+  const body = { purpose: cap.purpose, capture_token: cap.token, mime: 'image/jpeg', size: blob.size, ...(asGuest && cap.purpose === 'listing' ? { as: 'guest' } : {}) };
+  let r: { path: string; token: string; publicUrl: string };
+  try { r = asGuest ? await guestApi(auth, '/api/photos/upload-url', body) : await api(auth, '/api/photos/upload-url', body); }
+  catch (e) { throw tagPhotoError('sign', e); }
+  if (DEMO_ENABLED) return blobToDataUrl(blob); // demo: el token se valida igual (simulado); la foto queda local
+  let error: any;
+  try { ({ error } = await (await supabase()).storage.from('listings').uploadToSignedUrl(r.path, r.token, blob, { contentType: 'image/jpeg' })); }
+  catch (e) { throw tagPhotoError('storage', e); }
+  if (error) throw Object.assign(tagPhotoError('storage', new Error(`No se pudo subir la foto: ${error.message}`)), { code: 'storage_' + String(error.statusCode ?? error.name ?? 'error'), status: Number(error.statusCode) || undefined });
   return r.publicUrl;
 }

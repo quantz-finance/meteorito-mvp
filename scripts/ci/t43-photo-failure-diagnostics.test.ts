@@ -14,8 +14,9 @@ export async function run(t: T) {
   t.check('la primera etapa se conserva', photoFailureProps(tagPhotoError('storage', tagPhotoError('sign', new Error('a')))).stage === 'sign');
   t.check('nunca manda el mensaje crudo', !JSON.stringify(photoFailureProps(sess)).includes('venció'));
   t.check('no-Error y null no rompen', photoFailureProps(null).stage === 'unknown' && photoFailureProps('x').code === 'unknown');
-  const v = readFileSync(new URL('../../app/(tabs)/vender.tsx', import.meta.url), 'utf8');
-  t.check('vender.tsx manda etapa y código en photo_upload_failed', /track\('photo_upload_failed', \{[^}]*\.\.\.photoFailureProps\(e\)/.test(v));
+  // Las fotos de producto, envío y disputa se suben desde la cámara de la app (CameraCapture) al tomarlas.
+  const v = readFileSync(new URL('../../components/CameraCapture.tsx', import.meta.url), 'utf8');
+  t.check('CameraCapture manda etapa y código en photo_upload_failed', /track\('photo_upload_failed', \{[^}]*\.\.\.photoFailureProps\(e\)/.test(v));
   const p = readFileSync(new URL('../../lib/photos.ts', import.meta.url), 'utf8');
-  t.check('photos.ts etiqueta compress / sign / storage', ["tagPhotoError('compress'", "tagPhotoError('sign'", "tagPhotoError('storage'"].every((s) => p.includes(s)));
+  t.check('photos.ts etiqueta sign / storage (cámara y foto de la tienda)', ["tagPhotoError('sign'", "tagPhotoError('storage'"].every((s) => p.includes(s)) && /uploadCaptured[\s\S]*tagPhotoError\('sign'/.test(p));
 }
