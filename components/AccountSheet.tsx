@@ -3,6 +3,7 @@ import { lazy, Suspense, useState } from 'react';
 import { Text } from 'react-native';
 import { Card, ErrorText, PrimaryButton, Sheet, SkeletonCard } from '@/components/ds';
 import { AnalyticsToggle, LegalLinks } from '@/components/LegalLinks';
+import { RulesLink } from '@/components/RulesLink';
 import { T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { logoutSafely } from '@/lib/wallet';
@@ -16,6 +17,7 @@ export function AccountSheet({ visible, onClose, products }: { visible: boolean;
       footer={<PrimaryButton title="Cerrar sesión" icon="log-out-outline" variant="secondary" onPress={async () => { const m = await logoutSafely(auth); if (m) { setLogoutMsg(m); return; } setLogoutMsg(null); onClose(); }} />}>
       {logoutMsg ? <ErrorText>{logoutMsg}</ErrorText> : null}
       {visible ? <Suspense fallback={<SkeletonCard />}><ProfileCard products={products} /></Suspense> : null}
+      <Card><RulesLink from="account" onNavigate={onClose} /></Card>
       <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{auth.email ?? '—'}</Text></Card>
       <Card><AnalyticsToggle /></Card>
       <LegalLinks onNavigate={onClose} />
