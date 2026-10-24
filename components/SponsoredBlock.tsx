@@ -1,4 +1,4 @@
-// Bloque "Patrocinado" del feed de Comprar: productos de vendedores que pagaron por mostrarlos aquí (migración 023).
+// Bloque "Patrocinado" del feed de Comprar: productos de vendedores que pagaron por mostrarlos aquí (migración 024).
 // Publicidad identificable (Ley 7472): bloque propio con título "Patrocinado" y la etiqueta en CADA tarjeta; nunca
 // mezclado con lo orgánico. Sin patrocinios activos no se muestra. Métricas: sponsored_impression / sponsored_clicked
 // (PostHog, sin montos ni datos de la persona). Carrusel horizontal DENTRO del bloque: la página no se desborda.

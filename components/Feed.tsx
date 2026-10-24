@@ -38,7 +38,7 @@ export function Feed({ header }: { header: ReactElement }) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [more, setMore] = useState(false);
-  const [sponsored, setSponsored] = useState<SponsoredItem[]>([]); // bloque Patrocinado (023): solo si hay activos
+  const [sponsored, setSponsored] = useState<SponsoredItem[]>([]); // bloque Patrocinado (024): solo si hay activos
   const [example, setExample] = useState(false);
   const req = useRef(0);
   const viewed = useRef(false);

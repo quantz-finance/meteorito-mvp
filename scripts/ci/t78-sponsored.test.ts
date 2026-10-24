@@ -1,4 +1,4 @@
-// (78) Bloque "Patrocinado": solo patrocinios reales activos (023), identificable (Ley 7472: bloque propio + etiqueta en
+// (78) Bloque "Patrocinado": solo patrocinios reales activos (024), identificable (Ley 7472: bloque propio + etiqueta en
 //      cada tarjeta), respeta filtro y búsqueda, solo en la 1.ª página, rota por hora, sin montos ni notas, sin la tabla
 //      no hay bloque; métricas de impresión/clic; "Promocionar este producto" sin cobro. Sin red.
 import type { T } from './setup';
@@ -28,9 +28,9 @@ export async function run(t: T) {
   db.tables.orders = [L('bici01', 's-v', { model: 'Bici de montaña' }), L('cama01', 's-u', { model: 'Cámara Canon' }), L('paus01', 's-v', { listing_status: 'pausada' }),
     L('uno001', 's-v', { kind: 'single' }), L('ocul01', 's-h'), L('otro01', 's-u'), L('vend01', 's-v', { status: 'liberado' })];
 
-  // Sin la migración 023: el feed funciona y no hay bloque.
+  // Sin la migración 024: el feed funciona y no hay bloque.
   let r = await call({ query: { feed: '1', order: 'rank', verified: 'all' } });
-  t.check('sin 023 (sin tabla): feed 200 y sponsored = [] (sin bloque)', r.code === 200 && Array.isArray(r.body?.sponsored) && r.body.sponsored.length === 0 && r.body.items.length === 3, JSON.stringify(r.body?.sponsored));
+  t.check('sin 024 (sin tabla): feed 200 y sponsored = [] (sin bloque)', r.code === 200 && Array.isArray(r.body?.sponsored) && r.body.sponsored.length === 0 && r.body.items.length === 3, JSON.stringify(r.body?.sponsored));
 
   const S = (id: number, slug: string, seller: string, o: Record<string, unknown> = {}) => ({ id, order_slug: slug, seller_user_id: seller, starts_at: at(24), ends_at: at(-24), status: 'activa', amount_paid_crc: 5113, notes: 'SINPE ref 998877', ...o });
   db.tables.sponsored_listings = [
@@ -85,8 +85,8 @@ export async function run(t: T) {
   t.check('íconos, no emojis', !/\p{Extended_Pictographic}/u.test(block + tools));
   const flat = JSON.stringify(Object.values(COPY.sponsored).map((v: any) => typeof v === 'function' ? v('Bici') : v));
   t.check('copy de Patrocinado sin palabras prohibidas', !BANNED_COPY.test(flat) && !/proteg/i.test(flat), flat);
-  const mig = readFileSync(new URL('../../supabase/migrations/023_sponsored_listings.sql', import.meta.url), 'utf8');
-  t.check('migración 023 idempotente: tabla, índices, RLS sin grants públicos', /create table if not exists public\.sponsored_listings/.test(mig) && /create unique index if not exists/.test(mig)
+  const mig = readFileSync(new URL('../../supabase/migrations/024_sponsored_listings.sql', import.meta.url), 'utf8');
+  t.check('migración 024 idempotente: tabla, índices, RLS sin grants públicos', /create table if not exists public\.sponsored_listings/.test(mig) && /create unique index if not exists/.test(mig)
     && /enable row level security/.test(mig) && /revoke all on public\.sponsored_listings from anon, authenticated/.test(mig)
     && ['order_slug', 'seller_user_id', 'starts_at', 'ends_at', 'status', 'amount_paid_crc', 'notes'].every((c) => mig.includes(c)));
 }

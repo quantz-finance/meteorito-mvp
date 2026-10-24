@@ -1,4 +1,4 @@
--- 023: bloque "Patrocinado" del feed de Comprar. Idempotente: se puede correr más de una vez.
+-- 024: bloque "Patrocinado" del feed de Comprar. Idempotente: se puede correr más de una vez.
 -- Publicidad identificable (Ley 7472): la app SIEMPRE los muestra con la etiqueta "Patrocinado", en su propio bloque.
 -- Todavía no hay pago del vendedor en la app: un admin activa cada patrocinio por SQL (ver ejemplos abajo).
 -- Sin esta tabla, o sin patrocinios activos, el bloque no aparece (nunca hay anuncios de relleno).

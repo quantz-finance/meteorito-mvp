@@ -1,4 +1,4 @@
-// Bloque "Patrocinado" del feed de Comprar (migración 023, tabla sponsored_listings). Publicidad IDENTIFICABLE (Ley 7472):
+// Bloque "Patrocinado" del feed de Comprar (migración 024, tabla sponsored_listings). Publicidad IDENTIFICABLE (Ley 7472):
 // la app los muestra siempre en su propio bloque con la etiqueta "Patrocinado", nunca mezclados como si fueran orgánicos.
 // Solo patrocinios reales: status 'activa' y dentro de [starts_at, ends_at). Sin la tabla o sin activos: [] (no hay bloque).
 // Respeta el filtro (Identidad confirmada / Sin confirmar) y la búsqueda. Nunca sale lo que pagó el vendedor ni las notas.

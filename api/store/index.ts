@@ -4,7 +4,7 @@
 //                                                 -> feed de Comprar (y buscador): productos activos de vendedores, lo más
 //                                                 nuevo primero, paginado por cursor. Sin datos privados. Caché corta.
 //       [&order=rank]                            -> con el algoritmo (api/_lib/feedRank.ts), sin personalizar (caché pública)
-//                                                 + sponsored: bloque Patrocinado (023), solo en la 1.ª página, [] si no hay
+//                                                 + sponsored: bloque Patrocinado (024), solo en la 1.ª página, [] si no hay
 //  POST { action:'feed', q?, verified?, cursor?, limit? } (X-Guest-Key y/o Bearer) -> el mismo feed con el algoritmo y el
 //                                                 impulso de los vendedores que SIGUE quien pide (022). Sin caché.
 //  GET  ?profile=<usuario>                        -> perfil público del vendedor (/t/<usuario>): tienda + verificado, ventas,
@@ -167,7 +167,7 @@ async function ogPage(req: any, res: any) {
   res.send(injectMeta(appHtml, meta, url));
 }
 
-/** Bloque Patrocinado (023): solo en la primera página del feed con el algoritmo, con el mismo filtro y búsqueda. */
+/** Bloque Patrocinado (024): solo en la primera página del feed con el algoritmo, con el mismo filtro y búsqueda. */
 async function withSponsored<P extends { verified: any }>(page: P, q: any): Promise<P & { sponsored?: unknown[] }> {
   if ((q.cursor != null && q.cursor !== '') || (q.order !== 'rank' && q.action !== 'feed')) return page;
   return { ...page, sponsored: await sponsoredFor({ verified: parseVerified(q.verified), tokens: searchTokens(q.q) }) };
