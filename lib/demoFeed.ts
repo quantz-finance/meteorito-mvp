@@ -70,16 +70,21 @@ function all(): FeedItem[] {
   const now = Date.now();
   return ITEMS.map((i) => ({ slug: i.slug, title: i.title, price_crc: i.price_crc, photo: i.photo, created_at: new Date(now - i.ago * H).toISOString(), seller: pub(sellerOf(i.seller)) }));
 }
-export async function demoFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }): Promise<FeedPage> {
+export async function demoFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number; view?: 'for_you' | 'following' }): Promise<FeedPage> {
   await new Promise((r) => setTimeout(r, 350)); // se ven los skeletons
+  if (o.view === 'following') { // Siguiendo: solo las tiendas que sigues en este dispositivo; sin ejemplos ni Patrocinado
+    const mine = new Set(followedSlugs());
+    const p = await basePage(o, (i) => mine.has(i.seller.store_slug));
+    return { ...p, sponsored: [] };
+  }
   if (!ejemplos()) return basePage(o);
   const { decodeDemoCursor, demoPage, mergeDemo } = await ej();
   const dc = decodeDemoCursor(o.cursor);
   return dc ? { ...demoPage({ q: o.q, verified: o.verified, cursor: dc, limit: o.limit }), sponsored: [] } : mergeDemo(await basePage(o), { q: o.q, verified: o.verified, limit: o.limit });
 }
-async function basePage(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }): Promise<FeedPage> {
+async function basePage(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }, only: (i: FeedItem) => boolean = () => true): Promise<FeedPage> {
   const tokens = searchTokens(o.q);
-  const list = all().filter((i) => (o.verified === 'all' || String(i.seller.verified) === o.verified)
+  const list = all().filter((i) => only(i) && (o.verified === 'all' || String(i.seller.verified) === o.verified)
     && (!tokens.length || matchesTokens(`${i.title} ${i.seller.display_name}`, tokens)));
   // El mismo algoritmo que la API (api/_lib/feedRank.ts), con los vendedores que sigues en este dispositivo.
   const cur = decodeRankCursor(o.cursor);

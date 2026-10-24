@@ -111,11 +111,14 @@ export const FEED_ERROR = 'No pudimos cargar las publicaciones. Revisa tu conexi
 
 /** Feed con el algoritmo (order=rank). `personal`: quien sigue a alguien pide su feed por POST (impulso de los que
  *  sigue, sin caché pública); si no, GET cacheado igual para todos. */
-export async function getFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number; personal?: Pick<MeteoritoAuth, 'getAuthToken'> | null }): Promise<FeedPage> {
+export type FeedView = 'for_you' | 'following';
+/** `view: 'following'` (Siguiendo): SOLO las tiendas que sigue esta persona, siempre por POST con su identidad (la misma
+ *  de seguir: cuenta y/o llave del dispositivo); sin ejemplos ni Patrocinado. */
+export async function getFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number; personal?: Pick<MeteoritoAuth, 'getAuthToken'> | null; view?: FeedView }): Promise<FeedPage> {
   if (DEMO_ENABLED) { const { demoFeed } = await import('./demoFeed'); return demoFeed(o); }
   let j: any;
   if (o.personal) {
-    try { j = await guestApi(o.personal, '/api/store', { action: 'feed', verified: o.verified, ...(o.q?.trim() ? { q: o.q.trim() } : {}), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }); }
+    try { j = await guestApi(o.personal, '/api/store', { action: 'feed', ...(o.view === 'following' ? { view: 'following' } : {}), verified: o.verified, ...(o.q?.trim() ? { q: o.q.trim() } : {}), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }); }
     catch (e: any) { throw new Error(e?.status >= 500 || !e?.status ? FEED_ERROR : e.message || FEED_ERROR); }
   } else {
     const qs = new URLSearchParams({ feed: '1', verified: o.verified, order: 'rank' });

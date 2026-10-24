@@ -1,4 +1,6 @@
 // Feed de Comprar (tipo red social): publicaciones de los vendedores en una cuadrícula de 2 columnas, lo más nuevo primero,
+// Arriba, dos vistas en una pestaña delgada: Para ti (por defecto, el feed con el algoritmo) y Siguiendo (SOLO las tiendas
+// que sigues, con la misma identidad que el botón Seguir; buscador y filtro aplican igual; sin ejemplos ni Patrocinado).
 // con buscador, filtro por identidad en dos mitades iguales (Identidad confirmada por defecto / Sin confirmar; textos en
 // lib/copy.ts), paginación infinita por cursor, skeletons y estados vacíos. Lecturas públicas: GET /api/store?feed.
 // Ventas cerradas: hoy solo EJEMPLOS ficticios con un iconito (i) discreto (lib/feedSales.ts, FEED_DEMO_SALES), 1 de cada 6.
@@ -21,7 +23,7 @@ import { Fonts } from '@/constants/Colors';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { track } from '@/lib/analytics';
 import { formatCRC } from '@/lib/orders';
-import { FEED_ERROR, getFeed, type FeedItem, type SponsoredItem, type VerifiedFilter } from '@/lib/store';
+import { FEED_ERROR, getFeed, type FeedItem, type FeedView, type SponsoredItem, type VerifiedFilter } from '@/lib/store';
 import { useAuth } from '@/lib/cavos';
 import { followsSome, loadFollowing } from '@/lib/follows';
 import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
@@ -33,10 +35,18 @@ const FILTERS: { key: VerifiedFilter; label: string }[] = [
   { key: 'true', label: COPY.filters.confirmed }, { key: 'false', label: COPY.filters.unconfirmed },
 ];
 const other = (f: VerifiedFilter) => FILTERS.find((x) => x.key !== f)!;
+/** Vistas del feed (iconos, no emojis). */
+const VIEWS: { key: FeedView; label: string; icon: IconName }[] = [
+  { key: 'for_you', label: COPY.feed.forYou, icon: 'sparkles-outline' }, { key: 'following', label: COPY.feed.following, icon: 'people-outline' },
+];
+/** Siguiendo: nada de ejemplos (productos ej-… ni tiendas de ejemplo). */
+const real = (i: FeedItem) => !i.demo && !i.seller.demo && !i.slug.startsWith('ej-');
 type Cell = FeedItem | SalePost | { kind: 'filler'; id: string };
 
 export function Feed({ header }: { header: ReactElement }) {
   const [filter, setFilter] = useState<VerifiedFilter>('true');
+  const [view, setView] = useState<FeedView>('for_you');
+  const [followsNone, setFollowsNone] = useState(false); // Siguiendo sin seguir a nadie: estado vacío sin pedir nada
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   const [items, setItems] = useState<FeedItem[]>([]);
@@ -54,34 +64,54 @@ export function Feed({ header }: { header: ReactElement }) {
   // Debounce del buscador (~300 ms): no se pide nada por cada tecla.
   useEffect(() => { const id = setTimeout(() => setQ(text.trim()), SEARCH_DEBOUNCE_MS); return () => clearTimeout(id); }, [text]);
 
+  const following = view === 'following';
+  const fetchPage = async (c: string | null) => {
+    if (!following) return getFeed({ q, verified: filter, cursor: c, limit: PAGE, personal: await personal() });
+    const page = await getFeed({ q, verified: filter, cursor: c, limit: PAGE, personal: auth, view: 'following' });
+    return { ...page, items: page.items.filter(real), sponsored: [] };
+  };
   const load = useCallback(async () => {
     const id = ++req.current;
-    setPhase('loading'); setItems([]); setCursor(null); setSponsored([]);
+    setPhase('loading'); setItems([]); setCursor(null); setSponsored([]); setFollowsNone(false);
     try {
-      const page = await getFeed({ q, verified: filter, limit: PAGE, personal: await personal() });
+      if (following) { await loadFollowing(auth); if (id !== req.current) return; if (!followsSome()) { setFollowsNone(true); setPhase('ready'); return; } }
+      const page = await fetchPage(null);
       if (id !== req.current) return;
       setItems(page.items); setCursor(page.next_cursor); setSponsored(page.sponsored ?? []); setPhase('ready');
       if (q) track('feed_search', { results: page.items.length, more: !!page.next_cursor, filter, q_len: q.length });
       else if (!viewed.current) { viewed.current = true; track('feed_viewed', { items: page.items.length, filter }); }
     } catch { if (id === req.current) setPhase('error'); }
-  }, [q, filter]);
+  }, [q, filter, view]);
   useEffect(() => { load(); }, [load]);
 
   const loadMore = async () => {
     if (!cursor || more || phase !== 'ready') return;
     const id = req.current; setMore(true);
     try {
-      const page = await getFeed({ q, verified: filter, cursor, limit: PAGE, personal: await personal() });
+      const page = await fetchPage(cursor);
       if (id !== req.current) return;
       setItems((prev) => [...prev, ...page.items.filter((i) => !prev.some((p) => p.slug === i.slug))]); setCursor(page.next_cursor);
     } catch { /* se reintenta al seguir bajando */ } finally { if (id === req.current) setMore(false); }
   };
   const clear = () => { setText(''); setQ(''); };
   const pick = (f: VerifiedFilter) => { if (f === filter) return; haptic.tap(); setFilter(f); };
+  const pickView = (v: FeedView) => { if (v === view) return; haptic.tap(); setView(v); track('feed_view_changed', { view: v, filter }); };
 
   const top = (
     <View style={{ gap: S.md, paddingBottom: S.md }}>
       {header}
+      <View style={s.views} accessibilityRole="tablist" accessibilityLabel={COPY.feed.viewsLabel} testID="feed-view">
+        {VIEWS.map((v) => {
+          const on = v.key === view;
+          return (
+            <Pressable key={v.key} onPress={() => pickView(v.key)} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} accessibilityLabel={v.label}
+              testID={`feed-view-${v.key}`} style={({ pressed }) => [s.viewBtn, on && s.viewOn, pressed && { opacity: 0.8 }]}>
+              <Icon name={v.icon} size={18} color={on ? C.text : C.textDim} />
+              <Text style={[s.viewText, on && { color: C.text }]} numberOfLines={1}>{v.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
       <View style={s.search}>
         <Icon name="search" size={20} color={C.textDim} />
         <TextInput style={s.searchInput} value={text} onChangeText={setText} placeholder={COPY.feed.searchPlaceholder} placeholderTextColor={C.textDim}
@@ -101,14 +131,18 @@ export function Feed({ header }: { header: ReactElement }) {
           );
         })}
       </View>
-      {phase === 'ready' && sponsored.length ? <SponsoredBlock items={sponsored} filter={filter} /> : null}
-      <Text style={T.caption}>{q ? COPY.feed.results : COPY.feed.latest}</Text>
+      {phase === 'ready' && !following && sponsored.length ? <SponsoredBlock items={sponsored} filter={filter} /> : null}
+      {q ? <Text style={T.caption}>{COPY.feed.results}</Text> : null}
     </View>
   );
 
   let empty: ReactElement | null = null;
   if (phase === 'loading') empty = <View style={{ gap: S.md }}><FeedSkeleton /><FeedSkeleton /></View>;
   else if (phase === 'error') empty = <EmptyState icon="cloud-offline-outline" title="No pudimos cargar el feed" text={FEED_ERROR} actions={<PrimaryButton title="Reintentar" icon="refresh" variant="secondary" onPress={load} />} />;
+  else if (following && followsNone) empty = (
+    <EmptyState icon="people-outline" title={COPY.feed.followingEmptyTitle} text={COPY.feed.followingEmptyText} testID="feed-following-empty"
+      actions={<PrimaryButton title={COPY.feed.seeForYou} icon="sparkles-outline" variant="secondary" onPress={() => pickView('for_you')} />} />
+  );
   else if (q) empty = (
     <EmptyState icon="search" title={`No encontramos “${q.length > 24 ? q.slice(0, 24) + '…' : q}”`}
       text="Puede que esté en la otra lista. También puedes probar con una palabra más general, por ejemplo “consola” o “bici”."
@@ -116,6 +150,13 @@ export function Feed({ header }: { header: ReactElement }) {
         <PrimaryButton title={COPY.feed.searchOther(other(filter).label)} icon="swap-horizontal" onPress={() => setFilter(other(filter).key)} />
         <PrimaryButton title={COPY.feed.clear} icon="close" variant="secondary" onPress={clear} />
         <PrimaryButton title="Pídeselo a un vendedor" icon="paper-plane-outline" variant="ghost" onPress={() => router.push('/i/nueva')} />
+      </>} />
+  );
+  else if (following) empty = (
+    <EmptyState icon="people-outline" title={COPY.feed.followingNoneTitle} text={COPY.feed.followingNoneText(FILTERS.find((f) => f.key === filter)!.label)}
+      actions={<>
+        <PrimaryButton title={filter === 'true' ? COPY.feed.seeUnconfirmed : COPY.feed.seeConfirmed} icon="swap-horizontal" onPress={() => setFilter(other(filter).key)} />
+        <PrimaryButton title={COPY.feed.seeForYou} icon="sparkles-outline" variant="secondary" onPress={() => pickView('for_you')} />
       </>} />
   );
   else if (filter === 'true') empty = (
@@ -134,7 +175,8 @@ export function Feed({ header }: { header: ReactElement }) {
 
   // Ventas cerradas de ejemplo mezcladas (1 de cada 6, mismo filtro); relleno invisible si queda una sola en la última fila.
   const acts = useActivity(items.map((i) => i.seller.store_slug)); // última conexión: aparte y sin caché
-  const mixed: Cell[] = phase === 'ready' ? mixFeed<FeedItem>(items, filter, q) : [];
+  // Siguiendo: sin ventas de ejemplo mezcladas (solo publicaciones de las tiendas que sigues).
+  const mixed: Cell[] = phase !== 'ready' ? [] : following ? items : mixFeed<FeedItem>(items, filter, q);
   const cells: Cell[] = mixed.length % 2 ? [...mixed, { kind: 'filler', id: 'filler' }] : mixed;
   return (
     <>
@@ -231,9 +273,9 @@ export function FeedSkeleton() {
   return <View style={s.row}>{half}{half}</View>;
 }
 
-function EmptyState({ icon, title, text, actions }: { icon: IconName; title: string; text: string; actions?: ReactElement }) {
+function EmptyState({ icon, title, text, actions, testID }: { icon: IconName; title: string; text: string; actions?: ReactElement; testID?: string }) {
   return (
-    <View style={s.empty} testID="feed-empty">
+    <View style={s.empty} testID={testID ?? 'feed-empty'}>
       <View style={s.emptyIcon}><Icon name={icon} size={34} color={C.lilac} /></View>
       <Text style={[T.title, { textAlign: 'center' }]}>{title}</Text>
       <Text style={[T.callout, { textAlign: 'center' }]}>{text}</Text>
@@ -243,6 +285,11 @@ function EmptyState({ icon, title, text, actions }: { icon: IconName; title: str
 }
 
 const s = StyleSheet.create({
+  // Vistas Para ti / Siguiendo: pestañas delgadas con subrayado (sin caja), 16 px, área táctil de 44.
+  views: { flexDirection: 'row', gap: S.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: C.line, marginTop: -S.xs },
+  viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: TOUCH, paddingHorizontal: 2, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -StyleSheet.hairlineWidth },
+  viewOn: { borderBottomColor: C.lilac },
+  viewText: { fontFamily: Fonts.bold, fontSize: 16, color: C.textDim },
   search: { flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.surface, borderRadius: R.md, paddingLeft: S.md, minHeight: TOUCH + 4, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   searchInput: { flex: 1, minWidth: 0, color: C.text, fontFamily: Fonts.regular, fontSize: 16, minHeight: TOUCH + 4, paddingVertical: 0, outlineStyle: 'none' } as any,
   clear: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
