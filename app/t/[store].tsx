@@ -1,10 +1,15 @@
 // Perfil público del vendedor: pago.meteorito.app/t/<usuario>. Se ve sin cuenta y se comparte (meta OG vía /api/store?og).
 // Foto, nombre, identidad confirmada, estrellas, ventas y cómo salieron (sin montos), miembro desde, WhatsApp (solo si el vendedor lo puso), productos y reseñas
 // de compras liberadas. Textos en lib/copy.ts. Lectura pública: GET /api/store?profile (caché corta, sin datos privados).
+// Es también "Mi tienda": con la sesión del dueño viendo su propia tienda (isOwnerView) se agregan sus herramientas
+// (OwnerTools) y sus productos en pausa. Visitantes e invitados nunca las ven. Compartir siempre visible.
 import { COPY } from '@/lib/copy';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { OwnerTools } from '@/components/OwnerTools';
+import { useAuth } from '@/lib/cavos';
+import { isOwnerView, shareLink } from '@/lib/storePage';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
 import { haptic, Icon, IconButton, PrimaryButton, Screen, Skeleton, st, toast, type IconName } from '@/components/ds';
 import { BackButton } from '@/components/BackButton';
@@ -13,7 +18,7 @@ import { SalesOutcomeLine, StarRow, VerifiedBadge } from '@/components/SellerBit
 import { pressTransition } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
 import { formatCRC } from '@/lib/orders';
-import { getSellerProfile, storeLink, type SellerProfile } from '@/lib/store';
+import { getMyStore, getSellerProfile, storeLink, type SellerProfile, type Store, type StoreItem } from '@/lib/store';
 import { memberSince, timeAgo } from '@/lib/timeago';
 import { track } from '@/lib/analytics';
 
@@ -21,6 +26,16 @@ export default function PerfilVendedor() {
   const { store: slug } = useLocalSearchParams<{ store: string }>();
   const [p, setP] = useState<SellerProfile | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const auth = useAuth();
+  const [mine, setMine] = useState<Store | null>(null); // tienda de la sesión (solo para saber si es el dueño)
+  const [managing, setManaging] = useState<StoreItem | null>(null);
+  useEffect(() => {
+    if (!auth.isAuthenticated) { setMine(null); return; }
+    let live = true;
+    getMyStore(auth).then((x) => live && setMine(x)).catch(() => live && setMine(null));
+    return () => { live = false; };
+  }, [auth.isAuthenticated, auth.address]);
+  const owner = !!p && isOwnerView(auth, mine?.store_slug, slug);
   useEffect(() => {
     if (!slug) return;
     let live = true;
@@ -37,29 +52,26 @@ export default function PerfilVendedor() {
   return (
     <Screen space="calm">
       <View style={st.rowBetween}>
-        <BackButton fallback="/comprar" />
-        {p ? <IconButton icon="share-outline" label="Compartir perfil" onPress={() => shareProfile(p)} /> : null}
+        <BackButton fallback={owner ? '/vender' : '/comprar'} />
+        {p ? <IconButton icon="share-outline" label={owner ? COPY.store.shareMine : COPY.store.share} onPress={() => shareProfile(p, owner)} /> : null}
       </View>
       {error ? <Notice icon="cloud-offline-outline" title="No pudimos abrir este perfil" text={error} />
         : p === null ? <Notice icon="storefront-outline" title="Este perfil no existe" text="Revisa el link o pídele al vendedor que te lo mande de nuevo." />
-        : p === undefined ? <ProfileSkeleton /> : <Profile p={p} />}
+        : p === undefined ? <ProfileSkeleton /> : <Profile p={owner && mine ? { ...p, display_name: mine.display_name, avatar_url: mine.avatar_url ?? null } : p}
+          owner={owner} mine={mine} onMine={setMine} onManage={setManaging}
+          tools={owner && mine ? <OwnerTools store={mine} onStore={setMine} managing={managing} onCloseManage={() => setManaging(null)} /> : null} />}
     </Screen>
   );
 }
 
-async function shareProfile(p: SellerProfile) {
+async function shareProfile(p: SellerProfile, owner = false) {
   const url = storeLink(p.store_slug);
-  const text = `Mira el perfil de ${p.display_name} en Meteorito: compras sin crear cuenta y con el pago en custodia.`;
+  const text = owner ? COPY.store.shareMineText : COPY.store.shareText(p.display_name);
   const nav = Platform.OS === 'web' ? (globalThis.navigator as Navigator | undefined) : undefined;
-  const method = Platform.OS !== 'web' ? 'native_share' : nav?.share ? 'web_share' : 'copy';
-  track('seller_profile_shared', { method, verified: p.verified });
-  if (Platform.OS !== 'web') { await Share.share({ message: `${text} ${url}`, url }); return; }
-  if (nav?.share) {
-    try { await nav.share({ title: `${p.display_name} en Meteorito`, text, url }); return; }
-    catch (e: any) { if (e?.name === 'AbortError') return; }
-  }
-  try { await Clipboard.setStringAsync(url); } catch { /* sin portapapeles */ }
-  haptic.success(); toast('Link del perfil copiado');
+  if (Platform.OS !== 'web') { track('seller_profile_shared', { method: 'native_share', verified: p.verified, owner }); await Share.share({ message: `${text} ${url}`, url }); return; }
+  const method = await shareLink({ url, title: `${p.display_name} en Meteorito`, text }, nav?.share ? { share: (d) => nav.share!(d) } : undefined, (u) => Clipboard.setStringAsync(u).then(() => undefined));
+  track('seller_profile_shared', { method, verified: p.verified, owner });
+  if (method === 'copy') { haptic.success(); toast(COPY.store.linkCopied); }
 }
 function openWhatsApp(p: SellerProfile) {
   if (!p.whatsapp) return;
@@ -68,14 +80,17 @@ function openWhatsApp(p: SellerProfile) {
   Linking.openURL(`${p.whatsapp}?text=${msg}`).catch(() => {});
 }
 
-function Profile({ p }: { p: SellerProfile }) {
+function Profile({ p, owner, mine, onMine, onManage, tools }: { p: SellerProfile; owner: boolean; mine: Store | null; onMine: (s: Store) => void; onManage: (it: StoreItem) => void; tools: ReactNode }) {
+  // Dueño: sus productos de la sesión (incluye los en pausa) y tocar uno lo gestiona; visitante: los activos y tocar abre la ficha.
+  const managed = new Set(owner && mine ? mine.items.map((i) => i.slug) : []);
+  const items: StoreItem[] = owner && mine ? [...mine.items, ...p.items.filter((i) => !managed.has(i.slug))] : p.items;
   const rated = p.rating_count > 0 && p.rating_avg != null;
   const avg = rated ? Math.round(p.rating_avg! * 10) / 10 : 0;
   return (
     <View style={{ gap: S.lg }}>
       <View style={s.hero} testID="profile-hero">
         <View style={s.cover}><View style={s.orb1} /><View style={s.orb2} /></View>
-        <View style={s.avatarRing}><StoreAvatar store={p} size={92} /></View>
+        <View style={s.avatarRing}>{owner && mine ? <StoreAvatar store={mine} size={92} editable onChange={onMine} /> : <StoreAvatar store={p} size={92} />}</View>
         <View style={{ alignItems: 'center', gap: 2, paddingHorizontal: S.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
             <Text style={[T.title, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={2} accessibilityRole="header">{p.display_name}</Text>
@@ -98,31 +113,34 @@ function Profile({ p }: { p: SellerProfile }) {
 
       <View style={{ gap: S.sm }}>
         {p.whatsapp ? <PrimaryButton title="Escribir por WhatsApp" icon="logo-whatsapp" onPress={() => openWhatsApp(p)} /> : null}
-        <PrimaryButton title="Compartir perfil" icon="share-outline" variant={p.whatsapp ? 'secondary' : 'primary'} onPress={() => shareProfile(p)} />
+        <PrimaryButton testID="share-store" title={owner ? COPY.store.shareMine : COPY.store.share} icon="share-outline" variant={p.whatsapp && !owner ? 'secondary' : 'primary'} onPress={() => shareProfile(p, owner)} />
         <View style={[s.metaRow, { justifyContent: 'center' }]}>
           <Icon name="lock-closed" size={13} color={C.textDim} />
           <Text style={[T.footnote, { textAlign: 'center', flexShrink: 1 }]}>{COPY.profile.escrowNote}</Text>
         </View>
       </View>
 
+      {tools}
+
       <View style={{ gap: S.sm }}>
-        <Text style={T.caption}>Productos ({p.items.length})</Text>
-        {p.items.length ? (
+        <Text style={T.caption}>Productos ({items.length})</Text>
+        {items.length ? (
           <View style={s.grid}>
-            {p.items.map((it) => (
+            {items.map((it) => (
               <Pressable key={it.slug} accessibilityRole="link" accessibilityLabel={`${it.title}, ${formatCRC(it.price_crc)}`}
-                onPress={() => { haptic.tap(); router.push({ pathname: '/p/[slug]', params: { slug: it.slug } }); }}
+                onPress={() => { haptic.tap(); if (managed.has(it.slug)) onManage(it); else router.push({ pathname: '/p/[slug]', params: { slug: it.slug } }); }}
                 style={({ pressed }) => [s.tile, pressTransition, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }]}>
                 {it.photo ? <Image source={{ uri: it.photo }} style={s.tilePhoto} resizeMode="cover" accessibilityIgnoresInvertColors />
                   : <View style={[s.tilePhoto, s.noPhoto]}><Icon name="image-outline" size={28} color={C.lilac} /></View>}
                 <View style={{ padding: S.sm, gap: 2 }}>
                   <Text style={[T.body, { fontSize: 14, lineHeight: 19 }]} numberOfLines={2}>{it.title}</Text>
                   <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
+                  {owner && it.listing_status === 'pausada' ? <View style={s.metaRow}><Icon name="pause-circle-outline" size={13} color={C.textDim} /><Text style={T.footnote}>{COPY.store.paused}</Text></View> : null}
                 </View>
               </Pressable>
             ))}
           </View>
-        ) : <Empty icon="pricetags-outline" text="Este vendedor no tiene productos disponibles en este momento." />}
+        ) : <Empty icon="pricetags-outline" text={owner ? COPY.store.ownerEmpty : 'Este vendedor no tiene productos disponibles en este momento.'} />}
       </View>
 
       <View style={{ gap: S.sm }} testID="reviews">

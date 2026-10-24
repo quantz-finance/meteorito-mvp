@@ -365,7 +365,8 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       if (!o || o.kind !== 'listing') throw err(404, 'not_listing', 'Este link es de un solo uso: no se puede pausar.');
       o.listing_status = body.status; emit(); return demoGetStore(st.store.slug, true);
     }
-    if (body.action === 'me') return demoGetStore(st.store.slug, true);
+    // La tienda es de la sesión del vendedor: el comprador del demo es otra cuenta, así que no es dueño de /t/valeria.
+    if (body.action === 'me') { if (st.role !== 'seller') throw err(404, 'no_store', 'Todavía no tienes tienda.'); return demoGetStore(st.store.slug, true); }
     if (body.action === 'update') {
       if (body.store_slug != null) { const s2 = String(body.store_slug).toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, ''); if (!/^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/.test(s2)) throw err(400, 'bad_store_slug', 'Usa de 3 a 30 letras o números (sin espacios).'); st.store.slug = s2; }
       if (body.display_name != null && String(body.display_name).trim()) st.store.name = String(body.display_name).trim().slice(0, 40);
