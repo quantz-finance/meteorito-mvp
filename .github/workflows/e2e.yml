@@ -1,40 +1,191 @@
 name: E2E
 # Playwright contra el build web en modo demo y el build real con API simulado (sin Cavos, sin backend, sin testnet, sin secretos).
+# Mismos tests que `npm run test:e2e` (todos los proyectos de playwright.config.ts):
+#   build (demo | mock, en paralelo, una sola vez) -> 6 jobs de test en paralelo -> job final `e2e`.
+# Jobs de test: los proyectos de dispositivo + api repartidos en 4 shards (--shard=N/4), y los dos proyectos mock-*
+# cada uno en su propio runner (son en serie y largos: juntos en un shard lo volvían el rezagado). En local
+# mock-chromium depende de mock-iphone-se solo para no compartir a la vez el backend simulado (cada test hace
+# reset); en CI cada uno tiene su propio mock-server, así que corre con --no-deps.
+# El job final `e2e` junta los reportes, verifica que corrió el mismo total de tests que `playwright test --list`
+# (si se agrega un proyecto nuevo y no se reparte aquí, falla) y es el único check a mirar/requerir.
+#
+# Navegadores: los shards corren dentro de la imagen oficial de Playwright (misma versión que package-lock.json), que
+# ya trae WebKit + Chromium y todas sus dependencias del sistema. Así no se ejecuta `playwright install --with-deps`,
+# cuyo apt-get (update + ~180 paquetes de WebKit) tardaba de 2 a más de 15 min y a veces agotaba el timeout.
 on:
   push:
     branches: [main]
   pull_request:
 
+# PRs: un push nuevo cancela la corrida anterior del mismo PR. main: cada commit corre completo (grupo único por run).
 concurrency:
-  group: e2e-${{ github.ref }}
-  cancel-in-progress: true
+  group: e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
+env:
+  CI: 'true'
+  TESTNET: skip
+
 jobs:
-  e2e:
+  # Versión exacta de @playwright/test según el lockfile -> tag de la imagen de Playwright.
+  prep:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      CI: 'true'
-      TESTNET: skip
+    timeout-minutes: 3
+    outputs:
+      pw: ${{ steps.v.outputs.pw }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: package-lock.json
+          sparse-checkout-cone-mode: false
+      - id: v
+        run: echo "pw=$(jq -r '.packages["node_modules/@playwright/test"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
+
+  # Los dos builds web una sola vez, cada uno en su runner (en el mismo runner compiten por CPU: ~170 s c/u vs ~85 s).
+  build:
+    name: e2e-build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: demo
+            cmd: npm run -s demo:build
+            out: dist-demo
+          - target: mock
+            cmd: node scripts/e2e/build-mock.mjs
+            out: dist-e2e
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Navegadores (WebKit + Chromium)
-        run: npx playwright install --with-deps webkit chromium
-      - name: E2E (API + iPhone SE + iPhone 13 + Chromium + build real con API simulado)
-        run: npm run test:e2e
+      - name: Cache node_modules
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: nm-host-node22-${{ hashFiles('package-lock.json', 'scripts/patch-cavos-kit.mjs') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Build ${{ matrix.out }}
+        run: ${{ matrix.cmd }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: ${{ matrix.out }}/
+          include-hidden-files: true
+          retention-days: 1
+
+  shard:
+    name: e2e-shard (${{ matrix.name }})
+    needs: [prep, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.prep.outputs.pw }}-noble
+      options: --ipc=host
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { id: dev-1, name: 1/4, args: '--project=api --project=webkit-iphone-se --project=webkit-iphone-13 --project=chromium --shard=1/4' }
+          - { id: dev-2, name: 2/4, args: '--project=api --project=webkit-iphone-se --project=webkit-iphone-13 --project=chromium --shard=2/4' }
+          - { id: dev-3, name: 3/4, args: '--project=api --project=webkit-iphone-se --project=webkit-iphone-13 --project=chromium --shard=3/4' }
+          - { id: dev-4, name: 4/4, args: '--project=api --project=webkit-iphone-se --project=webkit-iphone-13 --project=chromium --shard=4/4' }
+          - { id: mock-iphone-se, name: mock-iphone-se, args: '--project=mock-iphone-se' }
+          - { id: mock-chromium, name: mock-chromium, args: '--project=mock-chromium --no-deps' }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # node_modules completo (ya con el postinstall aplicado): con hit se salta `npm ci`.
+      - name: Cache node_modules
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: nm-pwcontainer-${{ needs.prep.outputs.pw }}-node22-${{ hashFiles('package-lock.json', 'scripts/patch-cavos-kit.mjs') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-demo
+          path: dist-demo
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-e2e
+          path: dist-e2e
+
+      - name: E2E ${{ matrix.name }}
+        run: npx playwright test ${{ matrix.args }} --reporter=list,blob
+        env:
+          PLAYWRIGHT_BLOB_OUTPUT_NAME: report-${{ matrix.id }}.zip
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: blob-report-${{ matrix.id }}
+          path: blob-report/
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-report
-          path: |
-            playwright-report/
-            test-results/
+          name: test-results-${{ matrix.id }}
+          path: test-results/
           retention-days: 7
+
+  # Check único y estable: se llama `e2e` como antes (branch protection / costumbre).
+  e2e:
+    name: e2e
+    if: ${{ always() }}
+    needs: [prep, build, shard]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache node_modules
+        id: nm
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: nm-host-node22-${{ hashFiles('package-lock.json', 'scripts/patch-cavos-kit.mjs') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+      - name: Reporte unificado (HTML + JSON)
+        continue-on-error: true
+        run: PLAYWRIGHT_JSON_OUTPUT_NAME=merged.json npx playwright merge-reports --reporter=html,list,json ./all-blob-reports
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+      - name: Resultado
+        run: |
+          echo "prep: ${{ needs.prep.result }} · build: ${{ needs.build.result }} · tests: ${{ needs.shard.result }}"
+          [ "${{ needs.prep.result }}" = success ] && [ "${{ needs.build.result }}" = success ] && [ "${{ needs.shard.result }}" = success ]
+          # Cobertura: el total ejecutado en los jobs debe ser exactamente el de `playwright test --list`.
+          expected=$(npx playwright test --list | sed -nE 's/^Total: ([0-9]+) tests? in.*/\1/p')
+          ran=$(node -e "const s=require('./merged.json').stats; console.log(s.expected+s.unexpected+s.flaky+s.skipped)")
+          echo "tests esperados: $expected · ejecutados: $ran"
+          [ -n "$expected" ] && [ "$expected" = "$ran" ]
