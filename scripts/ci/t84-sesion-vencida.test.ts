@@ -1,4 +1,4 @@
-// (82) "Tu sesión venció" del vendedor (42 de 71 error_shown en PostHog). Causa raíz: el id_token de Cavos dura ~1 h y el
+// (84) "Tu sesión venció" del vendedor (42 de 71 error_shown en PostHog). Causa raíz: el id_token de Cavos dura ~1 h y el
 // kit NO lo renueva; al reabrir la PWA se le reponía al SDK un token vencido "en gracia" y Cavos (vault/registro) lo
 // rechaza: 401 "Invalid user token" (13 de 13 aperturas). Además, varios caminos decían "Vuelve a cargar la página", que
 // nunca lo resuelve. Arreglo: (1) solo tokens vigentes y de la misma cuenta al SDK; con uno vencido, "Entrar de nuevo" de

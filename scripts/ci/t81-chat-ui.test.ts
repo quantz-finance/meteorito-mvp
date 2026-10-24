@@ -19,7 +19,7 @@ export async function run(t: T) {
 
   // Entradas
   const store = read('app/t/[store].tsx');
-  t.check('/t/<usuario>: "Enviar mensaje" solo si no es el dueño, ligado a la tienda', /\{!owner \? <ChatButton as="buyer" target=\{\{ store_slug: p\.store_slug \}\} source="store"/.test(store));
+  t.check('/t/<usuario>: "Enviar mensaje" solo si no es el dueño, ligado a la tienda', /\{!owner(?: && !p\.demo)? \? <ChatButton as="buyer" target=\{\{ store_slug: p\.store_slug \}\} source="store"/.test(store));
   const ficha = read('app/p/[slug].tsx');
   t.check('/p/<slug>: "Preguntar al vendedor" solo antes de pagar, con tienda + producto', /seller && \(order\.status === 'creado' \|\| order\.status === 'escrow_creado'\) \? <AskSellerButton storeSlug=\{seller\.store_slug\} itemSlug=\{order\.slug\}/.test(ficha));
   t.check('/p/<slug>: chat de la compra solo pagado + en el dispositivo del comprador', /canShowContact\(order\.status\) && isBuyerDevice\(order\.slug\) \? <OrderChatCard slug=\{order\.slug\}/.test(ficha));

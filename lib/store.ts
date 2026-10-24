@@ -6,7 +6,7 @@ import { PUBLIC_BASE_URL } from './orders';
 import type { MeteoritoAuth } from './types';
 export { ratingLabel } from './rating';
 
-export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
+export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Producto de EJEMPLO (ficticio, no se puede pagar). */ demo?: boolean; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
 export interface Store { store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null;
   /** Solo Mi tienda (dueño): WhatsApp de contacto +506XXXXXXXX (migración 016); null = sin teléfono. Nunca en la tienda pública. */ contact_phone?: string | null;
   /** Solo Mi tienda: el vendedor eligió mostrar su WhatsApp en el perfil público (migración 020). */ whatsapp_public?: boolean; /** Solo Mi tienda: muestra su última conexión (solo con consentimiento; apagada por defecto). */ show_last_seen?: boolean;
@@ -92,8 +92,9 @@ export async function uploadStoreAvatar(auth: MeteoritoAuth, p: { uri: string; w
 
 /* ---------- Feed de Comprar + perfil público (GET /api/store?feed / ?profile) ---------- */
 export type VerifiedFilter = 'true' | 'false' | 'all';
-export interface FeedSeller { store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; rating_avg: number | null; rating_count: number }
-export interface FeedItem { slug: string; title: string; price_crc: number; photo: string | null; created_at: string; seller: FeedSeller }
+export interface FeedSeller { store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; rating_avg: number | null; rating_count: number; /** Tienda de EJEMPLO (ficticia). */ demo?: boolean }
+export interface FeedItem { slug: string; title: string; price_crc: number; photo: string | null; created_at: string; seller: FeedSeller;
+  /** Producto de EJEMPLO (api/_lib/demoProducts.ts): etiqueta "Ejemplo", ficha sin pago. */ demo?: boolean }
 /** Producto del bloque Patrocinado (migración 024): un vendedor pagó para mostrarlo ahí. */
 export interface SponsoredItem { id: number; slug: string; title: string; price_crc: number; photo: string | null; seller: FeedSeller }
 export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[] }

@@ -21,6 +21,7 @@ export function baseEnv() {
     STELLAR_NETWORK: 'testnet', SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test',
     CI_NETWORK_RETRY: '1', CI_OWN_CONTRACTS_ONLY: '1', // reintentos con backoff SOLO en CI para red testnet (api/_lib/retry.ts)
     PIN_PEPPER: 'ci-pepper', CRON_SECRET: 'ci-cron', SERVICE_PROVIDER_MODE: 'seller', VERCEL_ENV: 'production',
+    FEED_DEMO_PRODUCTS: '0', // productos de ejemplo del feed apagados en los tests viejos; t82 los prende
   });
 }
 

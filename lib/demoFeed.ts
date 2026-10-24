@@ -1,10 +1,15 @@
 // Modo demo: feed de Comprar y perfiles públicos simulados (misma forma que GET /api/store?feed / ?profile). Sin red.
-// Las fotos de ejemplo (/demo-feed/*.jpg) son opcionales: si no están en el build, la tarjeta muestra el ícono de producto.
+// Fotos: public/demo-feed/p-*.jpg (las mismas de los productos de ejemplo, generadas, sin marcas ni personas).
 // ?feed=empty en la URL simula un feed vacío (para ver el estado vacío).
+// ?ejemplos=1 agrega los productos de EJEMPLO del feed de producción (api/_lib/demoProducts.ts) igual que el API:
+// después de estos, con etiqueta "Ejemplo", y sus tiendas /t/<usuario> (para probar y fotografiar esa vista sin backend).
 import type { Activity } from './activity';
 import { foldText, matchesTokens, searchTokens, type VerifiedFilter } from '../api/_lib/feedText';
 import { demoGetStore, demoStoreSlug } from './demo';
 import { decodeRankCursor, encodeRankCursor, rankFeed } from '../api/_lib/feedRank';
+import { demoProductsOn } from '../api/_lib/demoFlag';
+// Los datos de ejemplo se cargan en diferido (mismo chunk que usa la ficha /p/ej-…; un import estático aquí los duplicaba).
+const ej = () => import('../api/_lib/demoProducts');
 import { followedSlugs } from './follows';
 import type { FeedItem, FeedPage, SellerProfile } from './store';
 
@@ -17,14 +22,14 @@ const SELLERS: DemoSeller[] = [
   { store_slug: 'carlos-bikes', display_name: 'Carlos Bikes', verified: false, rating_avg: 4.5, rating_count: 4, avatar_url: null, sales: 6, since: '2026-08-20T00:00:00Z', wa: 'https://wa.me/50660004321', seen: { k: 'h', n: 3 } },
 ];
 const ITEMS: { slug: string; seller: string; title: string; price_crc: number; photo: string | null; ago: number }[] = [
-  { slug: 'dmf001', seller: 'jose-games', title: 'PlayStation 3 con control', price_crc: 95000, photo: '/demo-feed/playstation.jpg', ago: 2 },
-  { slug: 'dmf002', seller: 'valeria', title: 'Cámara Canon EOS 400D', price_crc: 120000, photo: '/demo-feed/camera.jpg', ago: 5 },
-  { slug: 'dmf003', seller: 'carlos-bikes', title: 'Bicicleta de montaña aro 29', price_crc: 185000, photo: '/demo-feed/bicycle.jpg', ago: 26 },
-  { slug: 'dmf004', seller: 'ana-solis', title: 'iPhone 13 Pro 128 GB', price_crc: 340000, photo: '/demo-feed/iphone.jpg', ago: 50 },
-  { slug: 'dmf005', seller: 'jose-games', title: 'Nintendo Switch con base', price_crc: 165000, photo: '/demo-feed/switch.jpg', ago: 74 },
-  { slug: 'dmf006', seller: 'ana-solis', title: 'Tenis Vans talla 42', price_crc: 28000, photo: '/demo-feed/sneakers.jpg', ago: 140 },
-  { slug: 'dmf007', seller: 'jose-games', title: 'Control de PlayStation 4', price_crc: 22000, photo: null, ago: 200 },
-  { slug: 'dmf008', seller: 'carlos-bikes', title: 'Casco de ciclismo talla M', price_crc: 18000, photo: null, ago: 300 },
+  { slug: 'dmf001', seller: 'jose-games', title: 'PlayStation 5 Digital con control', price_crc: 255000, photo: '/demo-feed/p-ps5digital.jpg', ago: 2 },
+  { slug: 'dmf002', seller: 'valeria', title: 'Cámara réflex con lente 18-55', price_crc: 220000, photo: '/demo-feed/p-camara.jpg', ago: 5 },
+  { slug: 'dmf003', seller: 'carlos-bikes', title: 'Bicicleta de montaña aro 29', price_crc: 185000, photo: '/demo-feed/p-bicimtb.jpg', ago: 26 },
+  { slug: 'dmf004', seller: 'ana-solis', title: 'iPhone 13 Pro 128 GB', price_crc: 300000, photo: '/demo-feed/p-iphone14pro.jpg', ago: 50 },
+  { slug: 'dmf005', seller: 'jose-games', title: 'Nintendo Switch con base', price_crc: 165000, photo: '/demo-feed/p-switcholed.jpg', ago: 74 },
+  { slug: 'dmf006', seller: 'ana-solis', title: 'Tenis blancos talla 42', price_crc: 28000, photo: '/demo-feed/p-tenisblancos.jpg', ago: 140 },
+  { slug: 'dmf007', seller: 'jose-games', title: 'Control de PlayStation 5', price_crc: 35000, photo: '/demo-feed/p-control.jpg', ago: 200 },
+  { slug: 'dmf008', seller: 'carlos-bikes', title: 'Scooter eléctrico plegable', price_crc: 240000, photo: '/demo-feed/p-scooter.jpg', ago: 300 },
 ];
 const REVIEWS = [
   { stars: 5, comment: 'Todo perfecto, llegó igual que en las fotos. Muy recomendada.', buyer_name: 'María R.', h: 30 },
@@ -35,6 +40,15 @@ const REVIEWS = [
 const DEMO_ADS = ['dmf003', 'dmf005', 'dmf004'];
 const ads = () => { try { return new URLSearchParams(window.location.search).get('ads') === '1'; } catch { return false; } };
 const empty = () => { try { return new URLSearchParams(window.location.search).get('feed') === 'empty'; } catch { return false; } };
+const EJ_KEY = 'meteorito:demo-ejemplos';
+/** ?ejemplos=1 queda activo en la pestaña (sessionStorage) aunque la navegación cambie la URL. */
+const ejemplos = () => {
+  try {
+    if (!demoProductsOn()) return false;
+    if (new URLSearchParams(window.location.search).get('ejemplos') === '1') window.sessionStorage.setItem(EJ_KEY, '1');
+    return window.sessionStorage.getItem(EJ_KEY) === '1';
+  } catch { return false; }
+};
 const valeria = (): DemoSeller => {
   const s = demoGetStore(demoStoreSlug(), true); // con show_last_seen (solo lo usamos para el nombre, foto, puntuación y la última conexión)
   return { store_slug: s?.store_slug ?? 'valeria', display_name: s?.display_name ?? 'Valeria', verified: true,
@@ -58,6 +72,12 @@ function all(): FeedItem[] {
 }
 export async function demoFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }): Promise<FeedPage> {
   await new Promise((r) => setTimeout(r, 350)); // se ven los skeletons
+  if (!ejemplos()) return basePage(o);
+  const { decodeDemoCursor, demoPage, mergeDemo } = await ej();
+  const dc = decodeDemoCursor(o.cursor);
+  return dc ? { ...demoPage({ q: o.q, verified: o.verified, cursor: dc, limit: o.limit }), sponsored: [] } : mergeDemo(await basePage(o), { q: o.q, verified: o.verified, limit: o.limit });
+}
+async function basePage(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }): Promise<FeedPage> {
   const tokens = searchTokens(o.q);
   const list = all().filter((i) => (o.verified === 'all' || String(i.seller.verified) === o.verified)
     && (!tokens.length || matchesTokens(`${i.title} ${i.seller.display_name}`, tokens)));
@@ -75,6 +95,10 @@ export async function demoFeed(o: { q?: string; cursor?: string | null; verified
   return { items: page, next_cursor: end < ranked.length ? encodeRankCursor(end, now) : null, sponsored };
 }
 export async function demoProfile(slug: string): Promise<SellerProfile | null> {
+  if (demoProductsOn()) { // tienda de ejemplo (productos de ejemplo del feed)
+    const m = await ej();
+    if (m.isDemoStoreSlug(slug)) return m.demoProfile(slug);
+  }
   const s = slug === valeria().store_slug ? valeria() : SELLERS.find((x) => x.store_slug === foldText(slug));
   if (!s) return null;
   const now = Date.now();
