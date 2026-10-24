@@ -14,7 +14,7 @@ const PIN = '135790';
 const VAPID = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString('base64url');
 
 let S;
-const fresh = (orders = [], card = false) => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], ph: [], subs: [], ratings: {}, fail: [], seq: 0, card, lendara: {} });
+const fresh = (orders = [], card = false, cardMode = 'inapp') => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], ph: [], subs: [], ratings: {}, fail: [], seq: 0, card, cardMode, lendara: {} });
 const base = (o) => ({ kind: 'single', listing_slug: null, listing_status: 'activa', status: 'creado', category: 'otro', brand: '', model: 'Bici de montaña', condition: '', price_crc: 150000,
   description: null, photos: [], identifier_masked: null, checks_summary: [], created_at: new Date().toISOString(), amount_usdc: null, contract_id: null, funded_tx: null, shipped_tx: null,
   released_tx: null, approval_reason: null, auto_release_at: null, disputed_at: null, dispute_tx: null, resolved_tx: null, resolution: null, buyer: null, pin_attempts: 0, ...o });
@@ -68,7 +68,7 @@ async function api(req, path, q, b) {
       if (o.buyer && o.buyer !== guest) throw E(403, 'este pedido ya tiene comprador', 'taken');
       if (!['creado', 'escrow_creado'].includes(o.status)) throw E(409, 'Este pedido ya no está disponible.', 'bad_state');
       Object.assign(o, { buyer: guest, status: 'escrow_creado', contract_id: o.contract_id ?? 'C' + 'E2E'.padEnd(55, 'A'), amount_usdc: Math.round(o.price_crc / 510 * 100) / 100 });
-      return { slug: o.slug, contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` }, card: S.card, guest: true };
+      return { slug: o.slug, contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` }, card: S.card, cardMode: S.cardMode, guest: true };
     }
     if (b.step === 'confirm_sinpe') {
       if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
@@ -78,6 +78,22 @@ async function api(req, path, q, b) {
     }
     // Pago con tarjeta (Lendara simulado): el widget es /__mock/lendara/widget/<id> (mismo origen), igual que el real postea
     // { transaction } al padre. card_confirm decide con el estado guardado (como el servidor real con Lendara + Horizon).
+    // Tarjeta in-app (card_pay): como api/_lib/lendara.ts cardPay. Aprobada: 1 consulta "pending" y luego completed;
+    // demorada: 3 consultas "pending". Rechazada / no recibida: error inmediato con el mensaje real.
+    if (b.step === 'card_pay') {
+      if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
+      if (!S.card) throw E(503, 'El pago con tarjeta no está disponible por ahora. Paga por SINPE Móvil.', 'card_unavailable');
+      if (Object.keys(b).some((k) => /^(card|cardnumber|card_number|number|pan|cvc|cvv|csc|exp|expiry)$/i.test(k))) throw E(400, 'Solicitud inválida.', 'card_input');
+      if (o.status !== 'escrow_creado') throw E(409, 'Este pedido ya está pagado o ya no se puede pagar.', 'bad_state');
+      if (!['approved', 'kyc_rejected', 'payment_not_received', 'delayed'].includes(b.scenario)) throw E(400, 'Tarjeta no aceptada. Prueba con otra o paga por SINPE Móvil.', 'card_input');
+      if (!b.name || !/@/.test(b.email ?? '')) throw E(400, 'Revisa tu correo.', 'card_input');
+      if (Object.values(S.lendara).some((x) => x.slug === o.slug && x.status === 'pending_anchor')) return { pending: true };
+      const id = `lnd-${Object.keys(S.lendara).length + 1}`;
+      if (b.scenario === 'kyc_rejected') { S.lendara[id] = { slug: o.slug, status: 'kyc_rejected' }; throw E(402, 'Tu tarjeta fue rechazada. Prueba con otra tarjeta o paga por SINPE Móvil.', 'card_kyc_rejected'); }
+      if (b.scenario === 'payment_not_received') { S.lendara[id] = { slug: o.slug, status: 'expired' }; throw E(402, 'No pudimos procesar el pago con tu tarjeta. Vuelve a intentarlo o paga por SINPE Móvil.', 'card_expired'); }
+      S.lendara[id] = { slug: o.slug, status: 'pending_anchor', polls: b.scenario === 'delayed' ? 3 : 1, buyer: { name: b.name, email: b.email } };
+      return { pending: true };
+    }
     if (b.step === 'card_session' || b.step === 'card_confirm') {
       if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
       if (!S.card) throw E(503, 'El pago con tarjeta no está disponible por ahora. Paga por SINPE Móvil.', 'card_unavailable');
@@ -87,6 +103,8 @@ async function api(req, path, q, b) {
       const done = mine.find(([, x]) => x.status === 'completed');
       const fund = () => { Object.assign(o, { status: 'fondeado', funded_tx: 'c'.repeat(64) }); return { fundedTx: o.funded_tx, pin: PIN }; };
       if (done) return fund();
+      const inapp = mine.find(([, x]) => x.status === 'pending_anchor' && x.polls != null);
+      if (inapp && b.step === 'card_confirm') { if (--inapp[1].polls <= 0) { inapp[1].status = 'completed'; return fund(); } return { pending: true }; }
       if (mine.some(([, x]) => x.status === 'pending_anchor')) return { pending: true };
       if (b.step === 'card_session') {
         const id = `lnd-${Object.keys(S.lendara).length + 1}`; S.lendara[id] = { slug: o.slug, status: 'incomplete' };
@@ -94,8 +112,8 @@ async function api(req, path, q, b) {
       }
       const last = mine[0]?.[1];
       if (!last) throw E(409, 'Todavía no hay un pago con tarjeta para este pedido. Toca "Pagar con tarjeta".', 'card_no_session');
-      if (last.status === 'kyc_rejected') throw E(402, 'No pudimos verificar tu identidad con esa tarjeta. Prueba con otra tarjeta o paga por SINPE Móvil.', 'card_kyc_rejected');
-      if (last.status === 'expired') throw E(402, 'El pago con tarjeta no se completó a tiempo. Vuelve a intentarlo o paga por SINPE Móvil.', 'card_expired');
+      if (last.status === 'kyc_rejected') throw E(402, 'Tu tarjeta fue rechazada. Prueba con otra tarjeta o paga por SINPE Móvil.', 'card_kyc_rejected');
+      if (last.status === 'expired') throw E(402, 'No pudimos procesar el pago con tu tarjeta. Vuelve a intentarlo o paga por SINPE Móvil.', 'card_expired');
       return { pending: true };
     }
     throw E(400, 'step inválido');
@@ -158,7 +176,7 @@ createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   if (u.pathname.startsWith('/__mock/')) {
     const b = await body(req);
-    if (u.pathname === '/__mock/reset') { S = fresh(b.orders ?? [], !!b.card); return send(res, 200, { ok: true }); }
+    if (u.pathname === '/__mock/reset') { S = fresh(b.orders ?? [], !!b.card, b.cardMode ?? 'inapp'); return send(res, 200, { ok: true }); }
     const lw = u.pathname.match(/^\/__mock\/lendara\/widget\/([\w-]+)$/);
     if (lw) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(lendaraWidget(lw[1])); }
     const ls = u.pathname.match(/^\/__mock\/lendara\/([\w-]+)\/(completed|kyc_rejected|expired|pending_anchor)$/);
@@ -183,7 +201,7 @@ createServer(async (req, res) => {
   if (u.pathname.startsWith('/sb/')) return send(res, 404, { message: 'no simulado' });
   if (u.pathname.startsWith('/api/')) {
     const b = req.method === 'POST' ? await body(req) : {};
-    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, guest: !!req.headers['x-guest-key'], at: Date.now() });
+    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, guest: !!req.headers['x-guest-key'], at: Date.now(), ...(b.step === 'card_pay' ? { body: b } : {}) });
     const f = S.fail.find((x) => x.path === u.pathname && (x.step == null || x.step === b.step) && x.times > 0);
     if (f) { f.times--; if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs)); if (f.status) return send(res, f.status, { error: f.error ?? 'Error del servidor de prueba', code: f.code }); }
     try { return send(res, 200, await api(req, u.pathname, u.searchParams, b)); }

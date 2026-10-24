@@ -1,6 +1,6 @@
 import { timeLeft, useAutoReleaseWindow } from '@/lib/autorelease';
 import { friendlyPayError } from '@/lib/wallet';
-// Comprador: Pagar en custodia -> tarjeta (Lendara) o SINPE simulado ("Ya pagué") -> fondos en escrow TW testnet. Luego "Recibí".
+// Comprador: Pagar en custodia -> tarjeta (formulario propio, components/CardSheet.tsx) o SINPE simulado ("Ya pagué") -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
 import { useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -19,8 +19,12 @@ import { track, trackError } from '@/lib/analytics';
 import { DEMO_ENABLED } from '@/lib/demo';
 import { ChainLinks } from '@/components/ChainLinks';
 import { openCardWidget } from '@/lib/cardPay';
+import { CardSheet, type CardPayInput } from '@/components/CardSheet';
 
 const CARD_PROCESSING = 'Tu pago con tarjeta se está procesando. Vuelve a tocar "Pagar con tarjeta" en unos segundos.';
+const CARD_PROCESSING_INAPP = 'Tu pago se está procesando. Vuelve a tocar "Pagar" en unos segundos: no se te cobra dos veces.';
+const CARD_POLL_MS = 2500, CARD_POLL_MAX_MS = 120_000; // "demorada": ~30 s en Lendara
+const sleep = (ms: number) => new Promise((ok) => setTimeout(ok, ms));
 
 export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () => void }) {
   const auth = useAuth();
@@ -30,9 +34,14 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [pin, setPinState] = useState<string | null>(() => loadPin(order.slug)); // el PIN queda en este navegador (comprador invitado)
   const setPin = (p: string | null) => { setPinState(p); if (p) savePin(order.slug, p); };
   const buyerHere = !!pin || auth.isAuthenticated; // este dispositivo es el del comprador (guardó el PIN) o hay sesión
-  const [sheet, setSheet] = useState<'method' | 'sinpe' | 'pin' | 'released' | 'dispute' | null>(null);
+  const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'pin' | 'released' | 'dispute' | null>(null);
   const [card, setCard] = useState(false); // el servidor tiene el pago con tarjeta configurado (start -> card)
-  const payOpen = (r: any) => { setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference }); setCard(!!r.card); setSheet(r.card ? 'method' : 'sinpe'); };
+  // 'inapp' (default): nuestro formulario. 'widget': respaldo con el widget de Lendara (LENDARA_MODE=widget en el servidor).
+  const [cardMode, setCardMode] = useState<'inapp' | 'widget'>('inapp');
+  const payOpen = (r: any) => {
+    setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference }); setCard(!!r.card);
+    setCardMode(r.cardMode === 'inapp' ? 'inapp' : 'widget'); setSheet(r.card ? 'method' : 'sinpe');
+  };
 
   const win = useAutoReleaseWindow();
   // Producto permanente: cada comprador tiene su propio pedido (/p/<pedido>). Al llegar con ?pay=1 se abre el SINPE directo.
@@ -50,7 +59,18 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const funded = (r: { pin?: string | null }, method: 'card' | 'sinpe') => {
     track('payment_funded_client', { method }); if (r.pin) setPin(r.pin); setSheet(r.pin || pin ? 'pin' : null); onChange();
   };
-  // Tarjeta: sesión en el servidor -> widget de Lendara (iframe) -> el servidor verifica y fondea (card_confirm).
+  // Tarjeta in-app: el servidor cobra (card_pay) y verifica (card_confirm). Número y CVC no salen de CardSheet.
+  const payCardInApp = async (p: CardPayInput) => {
+    track('card_pay_submitted');
+    try {
+      let r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_pay', name: p.name, email: p.email, scenario: p.scenario });
+      const t0 = Date.now();
+      while (r.pending && Date.now() - t0 < CARD_POLL_MAX_MS) { await sleep(CARD_POLL_MS); r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_confirm' }); }
+      if (r.pending) throw new Error(CARD_PROCESSING_INAPP);
+      funded(r, 'card');
+    } catch (e) { trackError('card_pay', e); throw new Error(friendlyPayError((e as Error).message)); }
+  };
+  // Tarjeta (respaldo widget): sesión en el servidor -> widget de Lendara (iframe) -> el servidor verifica y fondea (card_confirm).
   const payCard = () => run(async () => {
     track('card_pay_tapped');
     const s = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_session' });
@@ -71,7 +91,8 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     <Sheet visible={sheet === 'method' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Elige cómo pagar"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
-        <PrimaryButton title="Pagar con tarjeta" icon="card" loading={busy} onPress={payCard} />
+        <PrimaryButton title="Pagar con tarjeta" icon="card" loading={busy}
+          onPress={cardMode === 'inapp' ? () => { track('card_pay_tapped'); setErr(null); setSheet('card'); } : payCard} />
         <PrimaryButton title="Pagar por SINPE Móvil" icon="phone-portrait-outline" variant="secondary" disabled={busy} onPress={() => { setErr(null); setSheet('sinpe'); }} />
       </>}>
       {sinpe && <>
@@ -82,6 +103,8 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
       </>}
     </Sheet>
+    <CardSheet visible={sheet === 'card' && !!sinpe && order.status === 'escrow_creado'} amountCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
+      onClose={() => setSheet('method')} onPay={payCardInApp} onSinpe={() => { setErr(null); setSheet('sinpe'); }} />
     <Sheet visible={sheet === 'sinpe' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Paga por SINPE Móvil"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}

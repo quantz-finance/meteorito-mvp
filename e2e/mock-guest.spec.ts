@@ -267,58 +267,108 @@ test('MCK-UTM-03 con opt-out no se guarda ni se envía nada', async ({ page, req
   expect(await page.evaluate(() => localStorage.getItem('meteorito:first-touch:v1'))).toBeNull();
 });
 
-// ---- Pago con tarjeta (Lendara): el widget real (@lendara/widget, iframe) abre un widget simulado del mismo origen
-// (scripts/e2e/mock-server.mjs) que postea { transaction } como el de Lendara. Mismo archivo: el mock guarda estado (serie).
+// ---- Pago con tarjeta: NUESTRO formulario (components/CardSheet.tsx). El servidor cobra con Lendara headless (card_pay);
+// aquí el backend simulado responde igual que api/_lib/lendara.ts. Número y CVC no deben salir del navegador.
+const CVC = '913';
+const NUM = { approved: '4242 4242 4242 4242', rejected: '4000 0000 0000 0002', notReceived: '4000 0000 0000 9995', delayed: '4000 0000 0000 0077' };
 
 async function openMethods(page: Page) {
   await page.goto('/p/prod01');
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page.getByText('Elige cómo pagar')).toBeVisible();
 }
-async function payWithCard(page: Page, number: string) {
+async function openCardForm(page: Page) {
   await page.getByText('Pagar con tarjeta', { exact: true }).click();
-  const w = page.frameLocator('iframe.lendara-frame');
-  await w.locator('#n').fill(number);
-  await w.getByText('Pagar', { exact: true }).click();
+  await expect(page.getByTestId('card-number')).toBeVisible();
 }
+async function fillCard(page: Page, number: string, o: { exp?: string; cvc?: string; name?: string; email?: string } = {}) {
+  await page.getByTestId('card-number').fill(number);
+  await page.getByTestId('card-exp').fill(o.exp ?? '12/30');
+  await page.getByTestId('card-cvc').fill(o.cvc ?? CVC);
+  await page.getByTestId('card-name').fill(o.name ?? 'Ana Pérez');
+  await page.getByTestId('card-email').fill(o.email ?? 'ana@example.com');
+}
+/** Todas las requests del navegador (URL + cuerpo) para verificar que el número y el CVC no salen. */
+function recordNetwork(page: Page) {
+  const reqs: { url: string; body: string }[] = [];
+  page.on('request', (r) => { const b = r.postDataBuffer(); reqs.push({ url: r.url(), body: b ? b.toString('latin1') : '' }); });
+  return reqs;
+}
+async function expectNoCardLeak(request: any, reqs: { url: string; body: string }[]) {
+  const digitsOnly = (x: string) => x.replace(/\D/g, '');
+  expect(reqs.some((r) => r.body.includes('"card_pay"'))).toBe(true); // sí se registró el tráfico del pago
+  for (const r of reqs) {
+    expect(new URL(r.url).hostname, r.url).not.toMatch(/lendara/i); // nada del navegador a Lendara
+    for (const n of Object.values(NUM)) {
+      expect(r.url.includes(digitsOnly(n)) || r.url.includes(n) || r.url.includes(encodeURIComponent(n)), r.url).toBe(false);
+      expect(r.body.includes(digitsOnly(n)) || r.body.includes(n), `cuerpo de ${r.url}`).toBe(false);
+    }
+    if (/\/api\//.test(r.url) && r.body) { // JSON propio: ni claves de tarjeta ni el CVC como valor
+      const j = JSON.parse(r.body);
+      expect(Object.keys(j).filter((k) => /card|number|pan|cvc|cvv|csc|exp/i.test(k))).toEqual([]);
+      expect(Object.values(j)).not.toContain(CVC);
+    }
+  }
+  const ph = JSON.stringify((await state(request)).ph);
+  for (const n of Object.values(NUM)) expect(ph.includes(digitsOnly(n)) || ph.includes(n)).toBe(false);
+  expect(ph).not.toContain(`"${CVC}"`);
+}
+const NO_TEST_LABELS = /lendara|sandbox|modo prueba|prueba|test card|4242/i;
 
-test('MCK-CARD-01 invitado paga con tarjeta aprobada: PIN y pedido en custodia', async ({ page, request }) => {
+test('MCK-CARD-01 invitado paga con tarjeta aprobada en nuestro formulario: procesando -> PIN; número y CVC no salen', async ({ page, request }) => {
   await reset(request, [listing], true);
+  const reqs = recordNetwork(page);
   await openMethods(page);
-  // Sin scroll en iPhone SE: las dos opciones se ven completas
   await expect(page.getByText('Pagar con tarjeta', { exact: true })).toBeInViewport();
   await expect(page.getByText('Pagar por SINPE Móvil', { exact: true })).toBeInViewport();
-  await expect(page.getByText(/modo prueba|4242/i)).toHaveCount(0); // sin etiquetas de prueba en la UI
-  await payWithCard(page, '4242 4242 4242 4242');
-  await expect(page.getByText(MOCK_PIN)).toBeVisible();
-  await expect(page.locator('iframe.lendara-frame')).toHaveCount(0);
+  await openCardForm(page);
+  await expect(page.getByText(NO_TEST_LABELS)).toHaveCount(0); // sin etiquetas de prueba ni del proveedor
+  await expect(page.locator('iframe')).toHaveCount(0);
+  await fillCard(page, NUM.approved);
+  await expect(page.getByTestId('card-number')).toHaveValue('4242 4242 4242 4242'); // espacios automáticos
+  await expect(page.getByLabel('VISA')).toBeVisible(); // ícono de marca
+  await failNext(request, { path: '/api/escrow/pay', step: 'card_pay', delayMs: 1200 }); // ver el estado "procesando"
+  await page.getByTestId('card-pay').click();
+  await expect(page.getByTestId('card-processing')).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toBeVisible({ timeout: 15_000 });
   const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
   expect((await state(request)).orders[slug].status).toBe('fondeado');
-  expect(await calls(request, '/api/escrow/pay', 'card_session')).toHaveLength(1);
-  expect(await calls(request, '/api/escrow/pay', 'card_confirm')).toHaveLength(1);
+  const pays = await calls(request, '/api/escrow/pay', 'card_pay');
+  expect(pays).toHaveLength(1);
+  expect(Object.keys(pays[0].body).sort()).toEqual(['email', 'name', 'scenario', 'slug', 'step']);
+  expect(pays[0].body).toMatchObject({ name: 'Ana Pérez', email: 'ana@example.com', scenario: 'approved' });
+  expect((await calls(request, '/api/escrow/pay', 'card_confirm')).length).toBeGreaterThanOrEqual(1);
+  expect(await calls(request, '/api/escrow/pay', 'card_session')).toHaveLength(0);
   expect(await calls(request, '/api/escrow/pay', 'confirm_sinpe')).toHaveLength(0);
+  await expectNoCardLeak(request, reqs);
 });
 
-test('MCK-CARD-02 KYC rechazado: mensaje claro y puede pagar por SINPE', async ({ page, request }) => {
+test('MCK-CARD-02 tarjeta rechazada: "Tu tarjeta fue rechazada" y puede pagar por SINPE', async ({ page, request }) => {
   await reset(request, [listing], true);
+  const reqs = recordNetwork(page);
   await openMethods(page);
-  await payWithCard(page, '4000 0000 0000 0002');
-  await page.frameLocator('iframe.lendara-frame').getByText('Cerrar', { exact: true }).click();
-  await expect(page.getByText(/No pudimos verificar tu identidad/)).toBeVisible();
+  await openCardForm(page);
+  await fillCard(page, NUM.rejected);
+  await page.getByTestId('card-pay').click();
+  await expect(page.getByText(/Tu tarjeta fue rechazada/)).toBeVisible();
+  await expect(page.getByTestId('card-cvc')).toHaveValue(''); // el CVC se borra tras un intento fallido
   await page.getByText('Pagar por SINPE Móvil', { exact: true }).click();
-  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  await expect(page.getByText('Paga por SINPE Móvil', { exact: true })).toBeVisible();
   await page.getByText('Ya pagué', { exact: true }).click();
   await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  await expectNoCardLeak(request, reqs);
 });
 
-test('MCK-CARD-03 cerrar el widget sin pagar: vuelve a las opciones, sin error ni confirmación', async ({ page, request }) => {
+test('MCK-CARD-03 tarjeta demorada: procesando varios segundos y luego PIN (sin cobrar dos veces)', async ({ page, request }) => {
   await reset(request, [listing], true);
   await openMethods(page);
-  await page.getByText('Pagar con tarjeta', { exact: true }).click();
-  await page.frameLocator('iframe.lendara-frame').getByText('Cerrar', { exact: true }).click();
-  await expect(page.getByText('Elige cómo pagar')).toBeVisible();
-  await expect(page.getByText(/No pudimos|no se pudo/)).toHaveCount(0);
-  expect(await calls(request, '/api/escrow/pay', 'card_confirm')).toHaveLength(0);
+  await openCardForm(page);
+  await fillCard(page, NUM.delayed);
+  await page.getByTestId('card-pay').click();
+  await expect(page.getByTestId('card-processing')).toBeVisible();
+  await expect(page.getByText(MOCK_PIN)).toBeVisible({ timeout: 20_000 });
+  expect(await calls(request, '/api/escrow/pay', 'card_pay')).toHaveLength(1);
+  expect((await calls(request, '/api/escrow/pay', 'card_confirm')).length).toBeGreaterThanOrEqual(3);
 });
 
 test('MCK-CARD-04 sin pago con tarjeta configurado: directo al SINPE (como antes)', async ({ page, request }) => {
@@ -327,4 +377,69 @@ test('MCK-CARD-04 sin pago con tarjeta configurado: directo al SINPE (como antes
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
   await expect(page.getByText('Pagar con tarjeta', { exact: true })).toHaveCount(0);
+});
+
+test('MCK-CARD-05 validación en el navegador: Luhn, vencida, tarjeta no aceptada (sin llamar al servidor)', async ({ page, request }) => {
+  await reset(request, [listing], true);
+  await openMethods(page);
+  await openCardForm(page);
+  await fillCard(page, '4242 4242 4242 4241');
+  await page.getByTestId('card-pay').click();
+  await expect(page.getByText('Revisa el número de la tarjeta.')).toBeVisible();
+  await fillCard(page, NUM.approved, { exp: '01/20' });
+  await page.getByTestId('card-pay').click();
+  await expect(page.getByText(/vencida/)).toBeVisible();
+  await fillCard(page, '5555 5555 5555 4444');
+  await expect(page.getByLabel('Mastercard')).toBeVisible();
+  await page.getByTestId('card-pay').click();
+  await expect(page.getByText(/Tarjeta no aceptada/)).toBeVisible();
+  expect(await calls(request, '/api/escrow/pay', 'card_pay')).toHaveLength(0);
+});
+
+test('MCK-CARD-06 formulario en iPhone SE: sin scroll, letra ≥16 px, teclado numérico, autocompletar y sin captura de analítica', async ({ page, request }) => {
+  await reset(request, [listing], true);
+  await openMethods(page);
+  await openCardForm(page);
+  for (const id of ['card-number', 'card-exp', 'card-cvc', 'card-name', 'card-email']) await expect(page.getByTestId(id)).toBeInViewport({ ratio: 1 });
+  await expect(page.getByTestId('card-pay')).toBeInViewport({ ratio: 1 });
+  await expect(page.getByText('Pagar por SINPE Móvil', { exact: true })).toBeInViewport({ ratio: 1 });
+  const info = await page.evaluate(() => {
+    const form = document.querySelector('[data-card-form]') as HTMLElement;
+    let scrolls = false;
+    for (let el: HTMLElement | null = form; el; el = el.parentElement) { const st = getComputedStyle(el); if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 1) scrolls = true; }
+    const inputs = Array.from(form.querySelectorAll('input')).map((i) => ({ id: i.dataset.testid, ac: i.getAttribute('autocomplete'), im: i.getAttribute('inputmode'), fs: parseFloat(getComputedStyle(i).fontSize), ph: i.getAttribute('data-ph-no-autocapture') }));
+    return { scrolls, inputs, wrap: form.className, docScroll: document.scrollingElement!.scrollHeight > window.innerHeight + 1 };
+  });
+  expect(info.scrolls).toBe(false);
+  expect(info.docScroll).toBe(false);
+  expect(info.wrap).toMatch(/ph-no-capture/);
+  const by = Object.fromEntries(info.inputs.map((i) => [i.id, i]));
+  expect(by['card-number']).toMatchObject({ ac: 'cc-number', im: 'numeric' });
+  expect(by['card-exp']).toMatchObject({ ac: 'cc-exp', im: 'numeric' });
+  expect(by['card-cvc']).toMatchObject({ ac: 'cc-csc', im: 'numeric' });
+  expect(by['card-name']).toMatchObject({ ac: 'cc-name' });
+  expect(by['card-email']).toMatchObject({ ac: 'email', im: 'email' });
+  for (const i of info.inputs) { expect(i.fs).toBeGreaterThanOrEqual(16); expect(i.ph).toBe('true'); }
+});
+
+test('MCK-CARD-07 pago no recibido: "No pudimos procesar el pago" y SINPE disponible', async ({ page, request }) => {
+  await reset(request, [listing], true);
+  await openMethods(page);
+  await openCardForm(page);
+  await fillCard(page, NUM.notReceived);
+  await page.getByTestId('card-pay').click();
+  await expect(page.getByText(/No pudimos procesar el pago/)).toBeVisible();
+  await expect(page.getByText('Pagar por SINPE Móvil', { exact: true })).toBeVisible();
+});
+
+test('MCK-CARD-08 respaldo LENDARA_MODE=widget: el widget (iframe) sigue funcionando', async ({ page, request }) => {
+  await reset(request, [listing], true, 'widget');
+  await openMethods(page);
+  await page.getByText('Pagar con tarjeta', { exact: true }).click();
+  const w = page.frameLocator('iframe.lendara-frame');
+  await w.locator('#n').fill('4242 4242 4242 4242');
+  await w.getByText('Pagar', { exact: true }).click();
+  await expect(page.getByText(MOCK_PIN)).toBeVisible();
+  expect(await calls(request, '/api/escrow/pay', 'card_session')).toHaveLength(1);
+  expect(await calls(request, '/api/escrow/pay', 'card_pay')).toHaveLength(0);
 });

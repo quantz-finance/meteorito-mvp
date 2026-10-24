@@ -1,0 +1,32 @@
+name: Lendara health
+# Health check diario del pago con tarjeta: el mismo smoke en vivo que scripts/lendara-smoke.ts (código real del servidor,
+# Lendara sandbox + Stellar testnet, tarjeta 4242 aprobada y 0002 rechazada) sobre una tesorería testnet DESECHABLE
+# (friendbot): no gasta USDC de la tesorería de CI ni toca la app. ~20 s. No corre en PRs.
+# Requiere el secreto LENDARA_API_KEY (lnd_test_… del proyecto "Meteorito"); sin él, avisa y sale en verde.
+# Lendara corre en Railway (plan gratis): un primer intento puede fallar por arranque en frío, así que se reintenta una vez.
+on:
+  schedule:
+    - cron: '17 13 * * *' # 07:17 Costa Rica
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lendara:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      LENDARA_API_KEY: ${{ secrets.LENDARA_API_KEY }}
+      SMOKE_ALL: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Smoke Lendara sandbox (card_pay -> card_confirm, Horizon)
+        run: |
+          if [ -z "$LENDARA_API_KEY" ]; then echo "::warning::Falta el secreto LENDARA_API_KEY: health check de Lendara omitido"; exit 0; fi
+          npx tsx scripts/lendara-smoke.ts || { echo "::warning::Primer intento falló (¿arranque en frío?); reintento en 30 s"; sleep 30; npx tsx scripts/lendara-smoke.ts; }

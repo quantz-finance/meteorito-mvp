@@ -49,6 +49,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '49', name: 'Comprar: invitar al vendedor desde un anuncio de Facebook (invitado, límites, link guardado, foto reutilizada)', file: './t49-buyer-facebook-invite.test.ts', onchain: false },
   { id: '50', name: 'Universo v2: estrellas que brillan + planetas discretos (ligero, sin eventos)', file: './t50-universe-planets.test.ts', onchain: false },
   { id: '51', name: 'Pago con tarjeta (Lendara): sesión, aprobado, KYC, vencido, demorado, idempotencia, montos', file: './t51-lendara-card.test.ts', onchain: false },
+  { id: '52', name: 'Tarjeta in-app: Luhn/vencimiento/CVC, tarjeta->escenario, Lendara headless (token, 409, frío), card_pay', file: './t52-card-inapp.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

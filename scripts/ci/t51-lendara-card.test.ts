@@ -115,7 +115,7 @@ export async function run(t: T) {
   { setup(); await call(KEY_A, { slug: 'crd001', step: 'card_session' });
     Object.assign(lnd['lnd-1'], { status: 'error', message: 'KYC rejected (sandbox scenario).' });
     const r = await call(KEY_A, { slug: 'crd001', step: 'card_confirm' });
-    t.check('KYC rechazado -> card_kyc_rejected, mensaje claro, sin fondeo', r.code === 402 && r.body?.code === 'card_kyc_rejected' && /identidad/.test(r.body?.error) && funded.length === 0, `${r.code} ${r.body?.code} ${r.body?.error}`); }
+    t.check('KYC rechazado -> card_kyc_rejected ("Tu tarjeta fue rechazada"), sin fondeo', r.code === 402 && r.body?.code === 'card_kyc_rejected' && /rechazada/.test(r.body?.error) && funded.length === 0, `${r.code} ${r.body?.code} ${r.body?.error}`); }
 
   // --- pago no recibido / vencido (…9995)
   { setup(); await call(KEY_A, { slug: 'crd001', step: 'card_session' });
