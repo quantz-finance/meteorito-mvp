@@ -11,7 +11,7 @@ import { assertReceiverReady, SELLER_NOT_READY } from './wallet';
 import { tightenTimebounds } from './timebounds';
 
 /** Llamadas on-chain que usan el envío y la liberación. Los tests las reemplazan (sin red). */
-type Chain = Pick<typeof tw, 'releaseGuard' | 'approveMilestone' | 'getBalance' | 'releaseFunds' | 'changeMilestoneStatus' | 'changeMilestoneStatusXdr'>;
+type Chain = Pick<typeof tw, 'releaseGuard' | 'approveMilestone' | 'getBalance' | 'releaseFunds' | 'changeMilestoneStatus' | 'changeMilestoneStatusXdr' | 'resolveDispute'>;
 let testChain: Partial<Chain> | null = null;
 export const __setChainForTests = (c: Partial<Chain> | null) => { testChain = c; };
 export const chain = (): Chain => (testChain ? { ...tw, ...testChain } : tw) as Chain;
@@ -240,29 +240,7 @@ export async function disputeOnChain(contractId: string): Promise<string> {
 }
 function signWith(tx: Transaction, secret: string) { tx.sign(Keypair.fromSecret(secret)); return tx; }
 
-/**
- * Resolución (solo script/admin, nunca desde el cliente). buyerPct 0..100 del saldo on-chain.
- * Firma el dispute resolver (secreto fuera de Vercel).
- */
-export async function resolveOrderDispute(order: any, resolverSecret: string, buyerPct: number) {
-  if (!(buyerPct >= 0 && buyerPct <= 100)) throw new HttpError(400, 'buyerPct 0..100');
-  if (order.status !== 'en_disputa') throw new HttpError(409, `status ${order.status}`);
-  const g = await tw.releaseGuard(order.contract_id);
-  if (!g.disputed) throw new HttpError(409, 'el escrow no está en disputa on-chain');
-  const bal = await tw.getBalance(order.contract_id);
-  const { toBuyer, toSeller } = disputeSplit(bal, Number(order.amount_usdc), buyerPct);
-  const distributions = [
-    ...(toBuyer > 0 ? [{ address: order.buyer_address, amount: toBuyer }] : []),
-    ...(toSeller > 0 ? [{ address: order.seller_address, amount: toSeller }] : []),
-  ];
-  const r = await tw.resolveDispute(order.contract_id, resolverSecret, distributions);
-  const resolution = { buyerPct, toBuyer, toSeller, balance: bal };
-  const now = new Date().toISOString();
-  await advance(order.id, 'en_disputa', { resolved_tx: r.hash, resolved_at: now, resolution, status: 'resuelto' });
-  await db().from('disputes').update({ state: 'resolved', resolution, resolved_tx: r.hash, resolved_at: now }).eq('order_id', order.id);
-  await logEvent(order.id, 'dispute_resolved', { hash: r.hash, ...resolution });
-  return { resolvedTx: r.hash, ...resolution };
-}
+// Resolución de disputas: api/_lib/disputeResolve.ts (la usan el script y el panel admin).
 
 const EPS = 1e-7;
 /** Fondeo válido: escrow on-chain por el monto exacto del pedido, el depósito propio cubre el monto (after-before ≥ monto)

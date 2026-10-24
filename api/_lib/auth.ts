@@ -23,7 +23,7 @@ function jwksFor(iss: string): any {
 
 export class HttpError extends Error { constructor(public status: number, msg: string) { super(msg); } }
 
-export interface CavosUser { sub: string; email?: string; iss: string; renewed?: boolean }
+export interface CavosUser { sub: string; email?: string; iss: string; renewed?: boolean; /** claim email_verified del token (si viene) */ emailVerified?: boolean }
 // Nunca "vuelve a cargar la página": recargar no renueva el token de Cavos (era el 59 % de los error_shown).
 export const SESSION_EXPIRED = 'Tu sesión venció. Vuelve a entrar con la misma cuenta para continuar.';
 export const SESSION_OTHER_WALLET = 'Tu sesión pertenece a otra cuenta o billetera. Vuelve a iniciar sesión para continuar.';
@@ -172,7 +172,8 @@ export async function requireCavosUser(req: any): Promise<CavosUser> {
   if (!sub) throw invalid('no_sub', v.iss);
   // El kit Cavos 0.3.0 NO renueva el id_token (~1 h) y su modal no permite re-login sin logout (que borra la llave).
   if (v.expired) await renewExpired(req, sub, v.exp);
-  return { sub, email: (v.payload as any).email, iss: v.iss, renewed: v.expired };
+  const ev = (v.payload as any).email_verified;
+  return { sub, email: (v.payload as any).email, iss: v.iss, renewed: v.expired, emailVerified: ev === undefined ? undefined : ev === true || ev === 'true' };
 }
 
 export interface AddressProof { address: string; publicKey: string; signature: string /* base64 */; message: string }
