@@ -1,6 +1,6 @@
 // (67) Feed de Comprar: ventas cerradas. Hoy SOLO ejemplos ficticios (lib/feedSales.ts), con etiqueta "Ejemplo", sin montos,
 // detrás de FEED_DEMO_SALES, mezclados 1 de cada 6 tarjetas y respetando el filtro de identidad. Ventas reales: no (falta opt-in).
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import type { T } from './setup';
 import { DEMO_SALES, FEED_DEMO_SALES, isSale, mixFeed, SALE_EVERY, saleHeadline, saleLabel, saleStars, type SalePost } from '../../lib/feedSales';
 import { COPY } from '../../lib/copy';
@@ -40,4 +40,17 @@ export async function run(t: T) {
   const src = readFileSync('lib/feedSales.ts', 'utf8');
   t.check('TODO de ventas reales con opt-in (Ley 8968)', /TODO\(ventas reales\)/.test(src) && /opt-in/.test(src) && /8968/.test(src));
   t.check('el feed usa mixFeed, abre la hoja de ejemplo y no navega a nada real', /mixFeed/.test(readFileSync('components/Feed.tsx', 'utf8')) && /COPY\.sales\.sheetTitle/.test(readFileSync('components/Feed.tsx', 'utf8')));
+
+  // Fotos de las ventas de ejemplo: archivos propios en public/demo-feed (JPEG cuadrado ~400 px, ≤ 40 KB) con README.
+  const jpegSize = (b: Buffer) => { for (let o = 2; o < b.length - 9;) { if (b[o] !== 0xff) return null; const m = b[o + 1]; const len = b.readUInt16BE(o + 2);
+    if (m >= 0xc0 && m <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(m)) return { h: b.readUInt16BE(o + 5), w: b.readUInt16BE(o + 7) }; o += 2 + len; } return null; };
+  const bad: string[] = [];
+  for (const sp of DEMO_SALES) {
+    const f = `public${sp.photo ?? ''}`;
+    if (!sp.photo?.startsWith('/demo-feed/') || !existsSync(f)) { bad.push(`${sp.id}: sin foto (${sp.photo})`); continue; }
+    const b = readFileSync(f); const d = jpegSize(b);
+    if (b[0] !== 0xff || b[1] !== 0xd8 || !d || d.w !== d.h || d.w < 300 || d.w > 600 || b.length > 40_000) bad.push(`${sp.id}: ${b.length} B ${d?.w}x${d?.h}`);
+  }
+  t.check('cada venta de ejemplo tiene su foto: JPEG cuadrado ~400 px, ≤ 40 KB, en public/demo-feed', bad.length === 0, bad.join(' | '));
+  t.check('fotos distintas y README con su origen', new Set(DEMO_SALES.map((sp) => sp.photo)).size === DEMO_SALES.length && /generadas/.test(readFileSync('public/demo-feed/README.md', 'utf8')));
 }

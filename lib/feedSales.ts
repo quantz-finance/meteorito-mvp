@@ -18,14 +18,14 @@ export interface SalePost {
 const sale = (id: string, seller_name: string, buyer_name: string, verified: boolean, stars: SalePost['stars'], product: string, icon: string, comment: string | null, photo: string | null = null): SalePost =>
   ({ kind: 'sale', id, example: true, seller_name, buyer_name, verified, stars, comment, product, icon, photo });
 
-/** Ficticios: nombres inventados, productos genéricos. */
+/** Ficticios: nombres inventados, productos genéricos. Fotos: public/demo-feed/venta-*.jpg (generadas, ver su README). */
 export const DEMO_SALES: SalePost[] = [
-  sale('ej-1', 'María R.', 'Carlos M.', true, 5, 'Bicicleta de montaña', 'bicycle', 'Llegó igual que en las fotos.', '/demo-fb-import.jpg'),
-  sale('ej-2', 'Pablo J.', 'Natalia S.', false, 5, 'Control de consola', 'game-controller', 'Muy amable, entregó el mismo día.'),
-  sale('ej-3', 'Laura G.', 'Andrés P.', true, 5, 'Audífonos inalámbricos', 'headset', 'Todo bien, recomendada.'),
-  sale('ej-4', 'Andrea L.', 'Felipe R.', false, 4, 'Chaqueta de mezclilla', 'shirt', 'Buen estado, como lo describió.'),
-  sale('ej-5', 'Sofía V.', 'Daniel C.', true, 4, 'Cámara instantánea', 'camera', null),
-  sale('ej-6', 'Esteban M.', 'Valeria Q.', false, 5, 'Lámpara de escritorio', 'bulb', null),
+  sale('ej-1', 'María R.', 'Carlos M.', true, 5, 'Bicicleta de montaña', 'bicycle', 'Llegó igual que en las fotos.', '/demo-feed/venta-bicicleta.jpg'),
+  sale('ej-2', 'Pablo J.', 'Natalia S.', false, 5, 'Control de consola', 'game-controller', 'Muy amable, entregó el mismo día.', '/demo-feed/venta-control.jpg'),
+  sale('ej-3', 'Laura G.', 'Andrés P.', true, 5, 'Audífonos inalámbricos', 'headset', 'Todo bien, recomendada.', '/demo-feed/venta-audifonos.jpg'),
+  sale('ej-4', 'Andrea L.', 'Felipe R.', false, 4, 'Chaqueta de mezclilla', 'shirt', 'Buen estado, como lo describió.', '/demo-feed/venta-chaqueta.jpg'),
+  sale('ej-5', 'Sofía V.', 'Daniel C.', true, 4, 'Cámara instantánea', 'camera', null, '/demo-feed/venta-camara-instantanea.jpg'),
+  sale('ej-6', 'Esteban M.', 'Valeria Q.', false, 5, 'Lámpara de escritorio', 'bulb', null, '/demo-feed/venta-lampara.jpg'),
 ];
 
 export const saleHeadline = (p: Pick<SalePost, 'seller_name' | 'buyer_name'>) => `${p.seller_name} le vendió a ${p.buyer_name}`;
