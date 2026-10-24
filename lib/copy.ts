@@ -8,13 +8,20 @@ export const COPY = {
     unconfirmed: 'Identidad sin confirmar',   // nota sutil en el perfil
     ogSuffix: 'identidad confirmada',         // título de la vista previa al compartir: "Valeria (identidad confirmada)"
   },
-  filters: { confirmed: 'Identidad confirmada', unconfirmed: 'Sin confirmar', all: 'Todos' },
+  filters: { confirmed: 'Identidad confirmada', unconfirmed: 'Sin confirmar' }, // dos mitades iguales; sin "Todos"
   feed: {
     latest: 'Lo más nuevo', results: 'Resultados', searchLabel: 'Buscar productos', searchPlaceholder: 'Buscar: PlayStation, bici, iPhone…',
     clear: 'Limpiar búsqueda', buy: 'Comprar',
     emptyConfirmedTitle: 'Todavía no hay vendedores con identidad confirmada',
-    emptyConfirmedText: 'Aquí verás a los vendedores con identidad confirmada. Mientras tanto, mira todas las publicaciones: con cualquier vendedor tu pago queda en custodia hasta que recibas.',
-    seeAll: 'Ver todos',
+    emptyConfirmedText: 'Aquí verás a los vendedores con identidad confirmada. Mientras tanto, mira las de Sin confirmar: con cualquier vendedor tu pago queda en custodia hasta que recibas.',
+    seeUnconfirmed: 'Ver Sin confirmar', seeConfirmed: 'Ver Identidad confirmada',
+    searchOther: (label: string) => `Buscar en ${label}`,
+  },
+  sales: {
+    example: 'Ejemplo',                      // etiqueta discreta: estas ventas son ficticias
+    sheetTitle: 'Es un ejemplo',
+    sheetText: 'Así se verán las ventas cerradas en el feed. Los nombres y el producto son ficticios: esta venta no ocurrió.',
+    sheetOk: 'Entendido',
   },
   profile: {
     escrowNote: 'Con cualquier vendedor, tu pago queda en custodia hasta que recibas.',
