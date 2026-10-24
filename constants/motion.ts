@@ -38,6 +38,12 @@ export const MOTION_CSS = `
 [data-anim="ring"]{animation:m-ring 900ms ease-out 2;pointer-events:none}
 [data-anim="skeleton"]{animation:m-pulse 1400ms ease-in-out infinite}
 [data-anim="toast"]{animation:m-toast 260ms ${EASE_OUT} both}
+@keyframes m-dot{0%,70%,100%{opacity:.35;transform:none}35%{opacity:1;transform:translate3d(0,-3px,0)}}
+[data-anim="dot"]{animation:m-dot 1.1s ease-in-out infinite}
+[data-anim="dot"]:nth-child(2){animation-delay:.15s}
+[data-anim="dot"]:nth-child(3){animation-delay:.3s}
+@keyframes m-msg{from{opacity:0;transform:translate3d(0,8px,0) scale(.98)}to{opacity:1;transform:none}}
+[data-anim="msg"]{animation:m-msg 200ms ${EASE_OUT} both}
 @keyframes m-dive{0%,100%{transform:none}50%{transform:translate(2.5%,3%) rotate(3deg)}}
 @keyframes m-f1{0%,100%{transform:none}50%{transform:scaleX(1.08) scaleY(.9) translateY(3.75%)}}
 @keyframes m-f2{0%,100%{transform:none}50%{transform:scaleX(1.15) scaleY(1.1) translateY(-7.7%)}}

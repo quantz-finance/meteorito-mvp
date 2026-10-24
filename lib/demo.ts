@@ -83,7 +83,7 @@ function init(): DemoState {
     try { const raw = window.sessionStorage.getItem(STORE_KEY); if (raw) st = { ...fresh(), ...JSON.parse(raw) }; } catch { /* ignorar */ }
     try {
       const q = new URLSearchParams(window.location.search);
-      if (q.get('demo_reset') === '1') st = fresh();
+      if (q.get('demo_reset') === '1') { st = fresh(); try { window.sessionStorage.removeItem('meteorito:demo:chat:v1'); } catch { /* */ } }
       const role = q.get('role'); if (role === 'seller' || role === 'buyer') st.role = role;
       const buyer = q.get('buyer'); if (buyer && /^[A-Za-z0-9]{1,8}$/.test(buyer)) st.buyer = buyer;
       const badge = q.get('badge'); if (badge === '0' || badge === 'false') st.badge = false; else if (badge === '1' || badge === 'true') st.badge = true;
@@ -96,7 +96,7 @@ const S = () => init();
 
 export const getDemoRole = (): DemoRole => S().role;
 export function setDemoRole(role: DemoRole) { S().role = role; emit(); }
-export function resetDemo() { init(); state = fresh(); emit(); }
+export function resetDemo() { init(); state = fresh(); try { window.sessionStorage.removeItem('meteorito:demo:chat:v1'); } catch { /* */ } emit(); }
 export const demoBadgeVisible = () => S().badge;
 export function setDemoBadge(v: boolean) { S().badge = v; emit(); }
 
@@ -311,6 +311,11 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
     o.status = 'en_disputa'; o.disputed_at = now(); o.dispute = { reason: body.reason, description: body.description ?? null, evidence: Array.isArray(body.evidence) ? body.evidence.slice(0, 4) : [], at: now() }; emit(); return { disputed: true };
   }
   if (p === '/api/store') {
+    if (typeof body.action === 'string' && body.action.startsWith('chat_')) { // chat: lib/demoChat.ts (misma forma que el API real)
+      const [{ demoChatApi }, { demoProfile }] = await Promise.all([import('./demoChat'), import('./demoFeed')]);
+      const store = st.store ?? { slug: 'valeria', name: 'Valeria' };
+      return demoChatApi(body, { role: st.role, buyer: me(), sellerSlug: store.slug, sellerName: store.name, orders: st.orders as any, profile: demoProfile });
+    }
     if (body.action === 'rate') {
       need('buyer'); const o = get(String(body.slug));
       if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo el comprador puede calificar.');

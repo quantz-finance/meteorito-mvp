@@ -158,6 +158,8 @@ async function api(req, path, q, b) {
   }
   if (path === '/api/store') {
     if (req.method === 'GET' && q.get('push') === 'key') return { key: VAPID };
+    if (req.method === 'GET' && q.get('chat') === 'status') return { available: false }; // como producción sin la migración 025
+    if (typeof b.action === 'string' && b.action.startsWith('chat_')) throw E(503, 'El chat todavía no está disponible.', 'chat_unavailable');
     // Feed de Comprar y perfil público (misma forma que GET /api/store?feed / ?profile): productos permanentes activos de Valeria (verificada).
     if (req.method === 'GET' && q.get('feed')) {
       const items = Object.values(S.orders).filter((o) => o.kind === 'listing' && o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa' && q.get('verified') !== 'false')

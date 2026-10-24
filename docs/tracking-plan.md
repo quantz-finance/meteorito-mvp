@@ -35,6 +35,10 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 | `dispute_opened` | DisputeSheet | `reason`, `photos` |
 | `error_shown` | errores de UI | `area`, `code` (texto truncado, ids largos ocultos) |
 | `legal_opened` | links legales | `doc` |
+| `chat_opened` | `/chat` (al cargar) | `role` (buyer/seller), `kind` (store/order), `source` (store, product, order_buyer, order_seller, inbox, push, link), `messages` |
+| `chat_message_sent` | `/chat` | `role`, `kind`, `quick`, `length` (rango), `contact` (si compartió teléfono/link) — nunca el texto |
+| `chat_quick_reply` | `/chat` (chips del comprador) | `reply` (disponible/envios/precio), `role`, `kind` |
+| `chat_blocked` / `chat_reported` / `chat_open_failed` | `/chat`, botones de chat | `blocked` / `reason`, `role` / `source`, `code` |
 | `analytics_opted_out` | antes de apagar | – |
 Todos llevan `platform`, `network: testnet`, `app`.
 
