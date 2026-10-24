@@ -12,7 +12,7 @@
 ## Límites (a propósito, y por qué son aceptables en testnet)
 - **La llave es un secreto portador**: quien la copie actúa como comprador de ese pedido. Si el navegador borra sus datos, se pierde el acceso (confirmar/disputar) y el PIN guardado; por eso la hoja del PIN pide anotarlo. El auto-release (`AUTO_RELEASE_MINUTES`) libera igual si no hay disputa.
 - **Reembolsos de disputas**: como el `buyer_address` es la wallet `platform`, el resolvedor (script manual) envía la parte del comprador a `platform` y el equipo la devuelve por fuera. No existe reembolso automático al invitado.
-- **Sin pago directo en USDC** para invitados (necesita wallet propia); solo el flujo SINPE simulado.
+- **Sin pago directo en USDC** para invitados (necesita wallet propia); SINPE simulado o **tarjeta** (Lendara sandbox, ver `docs/lendara-card.md`).
 - **Sin fotos de evidencia** en disputas de invitados (la subida exige cuenta); describen el problema en texto.
 - **Sin anti-abuso por IP**: cualquiera puede iniciar pagos simulados que consumen treasury de testnet. En mainnet esto exigiría pago real (SINPE/cripto) del propio comprador, verificación de contacto y límites por IP/dispositivo.
 - No se verifica identidad del comprador: no es KYC.

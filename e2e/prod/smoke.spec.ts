@@ -82,7 +82,11 @@ test.describe('Producción: compra de invitado (testnet, SINPE simulado)', () =>
     await page.addInitScript((k) => localStorage.setItem('meteorito:guest:v1', k), E2E_GUEST_KEY);
     await page.goto(`/p/${PRODUCT}`);
     await page.getByText(/Pagar en custodia/).last().click();
-    await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible({ timeout: 90_000 });
+    // Con LENDARA_API_KEY configurada aparece primero "Elige cómo pagar" (tarjeta / SINPE): seguimos por SINPE.
+    const sinpe = page.getByText('Paga por SINPE Móvil'), choose = page.getByText('Pagar por SINPE Móvil', { exact: true });
+    await expect(sinpe.or(choose)).toBeVisible({ timeout: 90_000 });
+    if (await choose.isVisible()) await choose.click();
+    await expect(sinpe).toBeVisible();
     const child = page.url().match(/\/p\/([a-z0-9]+)/)![1];
     expect(child).not.toBe(PRODUCT);
     mkdirSync(dirname(LOG) || '.', { recursive: true });

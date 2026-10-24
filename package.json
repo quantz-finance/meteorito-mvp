@@ -6,6 +6,7 @@
     "@cavos/kit": "^0.3.0",
     "@expo-google-fonts/nunito": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
+    "@lendara/widget": "0.1.0",
     "@stellar/stellar-sdk": "15.1.0",
     "@supabase/supabase-js": "^2.117.3",
     "buffer": "^6.0.3",
