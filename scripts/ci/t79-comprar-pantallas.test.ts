@@ -1,4 +1,4 @@
-// (70) Comprar en 3 pantallas con su propio link: Feed (/comprar, por defecto, solo el feed), Pagar con link
+// (79) Comprar en 3 pantallas con su propio link: Feed (/comprar, por defecto, solo el feed), Pagar con link
 //      (/comprar/link: importar de un link, invitar al vendedor y pagar un link, igual que antes) y Mis compras (/comprar/compras),
 //      con 3 iconos del mismo tamaño arriba a la derecha, estado activo y etiquetas accesibles.
 import { existsSync, readFileSync } from 'node:fs';
