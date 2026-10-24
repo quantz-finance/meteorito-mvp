@@ -1,4 +1,4 @@
-// (58) Herramientas del vendedor: plantilla de anuncio (WhatsApp / Facebook o Marketplace) con el link y el acuerdo de
+// (65) Herramientas del vendedor: plantilla de anuncio (WhatsApp / Facebook o Marketplace) con el link y el acuerdo de
 //      entrega, e historial de ventas con estado, resultado y total cobrado. Sin funciones Vercel nuevas (usa /api/store
 //      action 'orders') y sin palabras prohibidas en el copy nuevo.
 import { readFileSync } from 'node:fs';

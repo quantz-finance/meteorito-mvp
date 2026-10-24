@@ -59,7 +59,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '63', name: 'Importar de un link: proveedores LatAm, SSRF estricto (DNS/IP privada, redirecciones), parsers con HTML real, precio sugerido, source_url', file: './t63-marketplace-import.test.ts', onchain: false },
   { id: '60', name: 'Feed de Comprar + buscador: vendedores con producto activo, filtro verificados/sin verificar/todos, cursor, sin datos privados, sin acentos', file: './t60-feed.test.ts', onchain: false },
   { id: '61', name: 'Perfil público del vendedor: verificado, ventas, reseñas, WhatsApp solo si elige mostrarlo, OG para compartir', file: './t61-seller-profile.test.ts', onchain: false },
-  { id: '58', name: 'Herramientas del vendedor: plantilla de anuncio (link + acuerdo + custodia) e historial de ventas con resultado', file: './t58-seller-tools.test.ts', onchain: false },
+  { id: '65', name: 'Herramientas del vendedor: plantilla de anuncio (link + acuerdo + custodia) e historial de ventas con resultado', file: './t65-seller-tools.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
