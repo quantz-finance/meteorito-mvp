@@ -16,7 +16,9 @@ const call = async (o: { method?: string; body?: any; query?: any; guest?: strin
 
 export async function run(t: T) {
   const db = fakeDb(); __setDbForTests(db as any);
-  const at = (h: number) => new Date(Date.now() - h * 3600e3).toISOString();
+  // Reloj fijo a una hora PAR (sin rotación con 2 activos) y cercana al reloj real, porque el handler HTTP usa Date.now().
+  const now = Math.floor(Date.now() / 7200e3) * 7200e3;
+  const at = (h: number) => new Date(now - h * 3600e3).toISOString();
   db.tables.seller_profiles = [
     { sub: 's-v', store_slug: 'vale', display_name: 'Valeria', verified: true, created_at: at(900) },
     { sub: 's-u', store_slug: 'ana', display_name: 'Ana', verified: false, created_at: at(900) },
@@ -35,13 +37,12 @@ export async function run(t: T) {
   const S = (id: number, slug: string, seller: string, o: Record<string, unknown> = {}) => ({ id, order_slug: slug, seller_user_id: seller, starts_at: at(24), ends_at: at(-24), status: 'activa', amount_paid_crc: 5113, notes: 'SINPE ref 998877', ...o });
   db.tables.sponsored_listings = [
     S(1, 'bici01', 's-v', { amount_paid_crc: 9137 }), S(2, 'cama01', 's-u'),
-    S(3, 'otro01', 's-u', { starts_at: at(-1) }),                // empieza en el futuro
-    S(4, 'otro01', 's-u', { ends_at: at(1) }),                   // ya terminó
+    S(3, 'otro01', 's-u', { starts_at: at(-3) }),                // empieza en el futuro
+    S(4, 'otro01', 's-u', { ends_at: at(3) }),                   // ya terminó
     S(5, 'otro01', 's-u', { status: 'pausada' }),                // pausado por el admin
     S(6, 'paus01', 's-v'), S(7, 'uno001', 's-v'), S(8, 'ocul01', 's-h'), S(9, 'vend01', 's-v'), // producto no disponible / oculto
     S(10, 'otro01', 's-v'),                                      // el producto es de otro vendedor
   ];
-  const now = Date.UTC(2026, 9, 24, 10, 0); // hora par -> sin rotación con 2 activos
   const sp = await sponsoredFor({ verified: 'all', tokens: [] }, now);
   t.check('solo patrocinios activos, vigentes, de productos permanentes disponibles del mismo vendedor', sp.map((x) => x.slug).join() === 'bici01,cama01', sp.map((x) => x.slug).join());
   t.check('orden: lo que más pagó primero; rota cada hora', (await sponsoredFor({ verified: 'all', tokens: [] }, now + 3600e3)).map((x) => x.slug).join() === 'cama01,bici01'
