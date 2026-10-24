@@ -1,6 +1,6 @@
 // Tarjeta "Activa las notificaciones para seguir tu venta": el permiso se pide solo al tocar el botón.
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ErrorText, haptic, Icon, IconButton, PrimaryButton, toast } from '@/components/ds';
 import { anim } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
@@ -15,7 +15,7 @@ const COPY: Record<PushRole, { title: string; body: string }> = {
 };
 
 /** onSessionError: el error de sesión lo muestra la pantalla (una sola vez); la tarjeta se oculta en vez de repetirlo. */
-export default function PushCard({ role, onSessionError, compact }: { role: PushRole; onSessionError?: (msg: string) => void; /** pantallas bajas: sin el texto largo */ compact?: boolean }) {
+export default function PushCard({ role, onSessionError, compact, slim }: { role: PushRole; onSessionError?: (msg: string) => void; /** pantallas bajas: sin el texto largo */ compact?: boolean; /** Home: una sola fila (icono, título, Activar, cerrar) para que el resumen y las listas quepan sin scroll */ slim?: boolean }) {
   const auth = useAuth();
   const [status, setStatus] = useState<PushStatus | null>(null);
   const [hidden, setHidden] = useState(true);
@@ -37,6 +37,21 @@ export default function PushCard({ role, onSessionError, compact }: { role: Push
       })
       .finally(() => setBusy(false));
   };
+  const close = <IconButton icon="close" label="Ahora no" onPress={() => { dismissPush(role); setHidden(true); }} />;
+  if (slim) return (
+    <View style={[s.card, s.slim]} {...anim('enter')} testID="push-card">
+      <View style={[s.icon, s.iconSm]}><Icon name="notifications" size={16} color="#fff" /></View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={[T.footnote, { color: C.text, fontFamily: T.headline.fontFamily }]} numberOfLines={2}>{c.title}</Text>
+        {ios || status === 'denied' ? <Text style={T.footnote} numberOfLines={2}>{ios ? 'En iPhone: toca Compartir y luego "Agregar a inicio".' : 'Las bloqueaste en este navegador. Puedes activarlas en sus ajustes.'}</Text> : null}
+        {err ? <Text style={[T.footnote, { color: C.orange }]} numberOfLines={2}>{err}</Text> : null}
+      </View>
+      {!ios && status !== 'denied' ? <Pressable onPress={onEnable} disabled={busy} accessibilityRole="button" accessibilityLabel="Activar" style={({ pressed }) => [s.slimBtn, (pressed || busy) && { opacity: 0.7 }]}>
+        <Text style={[T.footnote, { color: C.purple, fontFamily: T.headline.fontFamily }]}>Activar</Text>
+      </Pressable> : null}
+      {close}
+    </View>
+  );
   return (
     <View style={s.card} {...anim('enter')}>
       <View style={s.icon}><Icon name="notifications" size={20} color="#fff" /></View>
@@ -46,7 +61,7 @@ export default function PushCard({ role, onSessionError, compact }: { role: Push
         {err ? <ErrorText>{err}</ErrorText> : null}
         {!ios && status !== 'denied' ? <View style={{ alignSelf: 'flex-start', marginTop: 6 }}><PrimaryButton title="Activar" icon="notifications-outline" loading={busy} onPress={onEnable} /></View> : null}
       </View>
-      <IconButton icon="close" label="Ahora no" onPress={() => { dismissPush(role); setHidden(true); }} />
+      {close}
     </View>
   );
 }
@@ -54,4 +69,7 @@ export default function PushCard({ role, onSessionError, compact }: { role: Push
 const s = StyleSheet.create({
   card: { flexDirection: 'row', gap: S.sm + 4, alignItems: 'flex-start', backgroundColor: C.surface, borderRadius: R.lg, padding: S.sm + 4, borderWidth: 1, borderColor: 'rgba(255,138,61,0.35)' },
   icon: { width: 40, height: 40, borderRadius: 14, backgroundColor: C.orange, alignItems: 'center', justifyContent: 'center' },
+  slim: { alignItems: 'center', paddingVertical: 6, gap: S.sm },
+  iconSm: { width: 32, height: 32, borderRadius: 11 },
+  slimBtn: { minHeight: 36, paddingHorizontal: S.md, borderRadius: R.pill, backgroundColor: C.white, alignItems: 'center', justifyContent: 'center' },
 });

@@ -82,6 +82,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '88', name: 'Volver del invitado sin historial: nunca a una ruta con login (va a Mis compras); bienvenida -> feed', file: './t88-volver-invitado.test.ts', onchain: false },
   { id: '85', name: 'Comprador sin cuenta: avisos por WhatsApp/correo/cuenta con consentimiento, link de acceso firmado, vínculo con cuenta, avisos por estado con tope, sin 028 no rompe', file: './t85-contacto-comprador.test.ts', onchain: false },
   { id: '88', name: 'Pago con cripto (USDC o XLM en Stellar): cotización con colchón y vencimiento, SEP-7, detección en Horizon, conversión XLM->USDC, de menos/de más/doble pago, invitado, cron', file: './t88-crypto-pay.test.ts', onchain: false },
+  { id: '89', name: 'Home: resumen real + Tus ventas + Tus compras en filas compactas (sin la UI del proceso), lo que te toca primero, sin scroll, sin función nueva', file: './t89-home.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

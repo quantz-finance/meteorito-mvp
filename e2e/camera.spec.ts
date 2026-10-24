@@ -38,7 +38,7 @@ test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Ap
 test('CAM-02 envío: "Ya lo envié" bloqueado sin foto y permiso denegado con instrucciones', async ({ page }) => {
   await open(page, '/', 'seller', true);
   await seed(page, 'fondeado');
-  await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+  await openSellerRow(page, /Envíalo|Entrégalo/, /Ya lo envié/);
   await expect(page.getByRole('button', { name: /Ya lo envié/ }).last()).toBeDisabled();
   await expect(page.getByText('Toma la foto para poder marcarlo como enviado.')).toBeVisible();
   await shot(page, 'ya-lo-envie-bloqueado');
