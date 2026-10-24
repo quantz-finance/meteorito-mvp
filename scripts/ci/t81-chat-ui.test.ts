@@ -3,6 +3,7 @@
 //      dentro, eventos), copy en tuteo sin palabras prohibidas y línea de privacidad marcada para revisión legal.
 import { existsSync, readFileSync } from 'node:fs';
 import type { T } from './setup';
+import { isPublicRoute } from '../../lib/publicRoutes';
 import { BANNED_COPY, COPY } from '../../lib/copy';
 import { LEGAL } from '../../lib/legal';
 
@@ -31,7 +32,7 @@ export async function run(t: T) {
   const tabs = read('app/(tabs)/_layout.tsx');
   t.check('sin pestaña nueva: siguen 3 (Vender, Comprar, Home)', (tabs.match(/<Tabs\.Screen\b/g) ?? []).filter((x) => x).length <= 4 && !/mensajes|chat/.test(tabs));
   const lay = read('app/_layout.tsx');
-  t.check('/chat y /mensajes visibles sin cuenta (comprador invitado)', /segments\[0\] === 'chat'/.test(lay) && /segments\[0\] === 'mensajes'/.test(lay));
+  t.check('/chat y /mensajes visibles sin cuenta (comprador invitado)', isPublicRoute(['chat']) && isPublicRoute(['mensajes']) && /isPublicRoute\(segments/.test(lay));
 
   // Pantallas
   t.check('pantallas: app/chat.tsx y app/mensajes.tsx', existsSync('app/chat.tsx') && existsSync('app/mensajes.tsx'));

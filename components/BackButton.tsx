@@ -1,7 +1,7 @@
 // Botón "Volver" compartido para pantallas fuera de las tabs: arriba a la izquierda, área táctil ≥ 44 px.
 // Si hay historial hace router.back(); si el link se abrió directo (sin historial) va a `fallback`.
 import { router, type Href } from 'expo-router';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text } from 'react-native';
 import { haptic, Icon } from '@/components/ds';
 import { pressTransition } from '@/constants/motion';
 import { Fonts } from '@/constants/Colors';
@@ -11,10 +11,19 @@ export function goBack(fallback: Href = '/vender') {
   if (router.canGoBack()) router.back(); else router.replace(fallback);
 }
 
-export function BackButton({ fallback = '/vender', label = 'Volver' }: { fallback?: Href; label?: string }) {
+/** Salida a una ruta FUERA de la pila actual (Comprar sin cuenta -> bienvenida). La bienvenida la pinta el Gate en lugar del
+ *  navegador (app/_layout.tsx): router.back() no la alcanza y router.replace() a una ruta con login desmonta el navegador y
+ *  expo-router lo vuelve a montar en la ruta pública (la pantalla no cambiaba). En web se carga la ruta de verdad. */
+export function exitTo(href: Href) {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') window.location.assign(String(href));
+  else router.replace(href);
+}
+
+/** replace: va siempre a `fallback` con exitTo (sin historial de la pila). */
+export function BackButton({ fallback = '/vender', label = 'Volver', replace = false }: { fallback?: Href; label?: string; replace?: boolean }) {
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={6} testID="back-button"
-      onPress={() => { haptic.tap(); goBack(fallback); }}
+      onPress={() => { haptic.tap(); if (replace) exitTo(fallback); else goBack(fallback); }}
       style={({ pressed }) => [s.btn, pressTransition, pressed && { opacity: 0.85, transform: [{ scale: 0.97 }] }]}>
       <Icon name="arrow-back" size={20} color={C.lilac} />
       <Text style={s.t}>{label}</Text>

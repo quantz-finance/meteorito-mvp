@@ -18,7 +18,7 @@ test.describe('Mis compras', () => {
     await btn.click();
     await expect(page).toHaveURL(/\/comprar\/compras/);
     await expect(btn).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí van a aparecer las compras que hagas en este dispositivo o con tu cuenta.');
+    await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí verás tus compras activas.');
     await expectNoScroll(page);
     if (SHOTS && info.project.name === 'webkit-iphone-se') await page.screenshot({ path: `${SHOTS}/mis-compras-vacio.png` });
   });

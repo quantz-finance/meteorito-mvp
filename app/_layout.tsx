@@ -21,6 +21,7 @@ import { setReloginHandler, setReloginWaiter } from '@/lib/api';
 import { needsRelogin } from '@/lib/cavosSession';
 import { DEMO_ENABLED, demoAuthNow, demoLoginOpen } from '@/lib/demo';
 import { markReloginPending, rememberRoute, takeReturnRoute } from '@/lib/returnTo';
+import { isPublicRoute } from '@/lib/publicRoutes';
 import { DemoBadge } from '@/components/DemoBadge';
 import Welcome from '@/components/Welcome';
 import { Brand } from '@/constants/Colors';
@@ -83,7 +84,7 @@ function Gate() {
   const auth = useAuth();
   const segments = useSegments();
   const pathname = usePathname();
-  const isPublic = segments[0] === 'p' || segments[0] === 't' || segments[0] === 'i' || segments[0] === 'legal' || segments[0] === 'como-funciona' || segments[0] === 'mis-compras' || segments[0] === 'chat' || segments[0] === 'mensajes' || ((segments as string[])[1] === 'comprar' && (segments as string[])[2] === 'compras'); // link de pago, tienda, invitaciones de compra, legales, reglas y Mis compras (/comprar/compras, comprador sin cuenta): visibles sin login
+  const isPublic = isPublicRoute(segments as string[]); // links públicos y toda la pestaña Comprar (comprador sin cuenta): lib/publicRoutes.ts
   const authed = auth.isAuthenticated && !!auth.address;
   useEffect(() => { screen(authed || isPublic ? screenName(pathname) : 'welcome'); }, [pathname, authed]);
   useEffect(() => {
