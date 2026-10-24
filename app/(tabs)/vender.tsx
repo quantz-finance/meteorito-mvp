@@ -34,6 +34,7 @@ import { CameraCapture } from '@/components/CameraCapture';
 import type { CapturedPhoto } from '@/lib/capture';
 import { formatPriceInput, parsePrice, TITLE_MAX, validateListing, type ListingErrors } from '@/lib/listing';
 import { supabaseConfigured } from '@/lib/supabase';
+import { loadSellDraft, saveSellDraft } from '@/lib/sellDraft';
 import { priceBucket, track, trackError } from '@/lib/analytics';
 import { agreementSummary, daysToMinutes, DEFAULT_PROTECTION_MIN, DELIVERY_LABEL, PROTECTION_CHIPS, protectionLabel, type DeliveryMode } from '../../api/_lib/agreement';
 
@@ -41,20 +42,6 @@ type PhotoStatus = 'processing' | 'ready' | 'uploading' | 'done' | 'error';
 interface Photo { key: string; uri: string; mime: string; status: PhotoStatus; /** ya subida: cámara de la app, anuncio de Facebook (servidor) o invitación del comprador */ url: string }
 interface Created { slug: string; title: string; price: number; photo: string | null; agreement: string; ad: AdInput }
 let photoSeq = 0;
-
-/** Borrador (solo texto): sobrevive al cambiar de pestaña y a recargas en web. Se descarta al generar el link. */
-interface Draft { owner: string | null; title: string; price: string; description?: string | null }
-const DRAFT_KEY = 'meteorito:sell-draft-v2';
-let memDraft: Draft | null = null;
-function loadDraft(owner: string | null): Draft | null {
-  if (!memDraft) { try { const raw = typeof window !== 'undefined' ? window.sessionStorage?.getItem(DRAFT_KEY) : null; if (raw) memDraft = JSON.parse(raw); } catch { /* sin storage */ } }
-  if (!memDraft || (memDraft.owner && owner && memDraft.owner !== owner)) return null;
-  return memDraft;
-}
-function saveDraft(d: Draft | null) {
-  memDraft = d;
-  try { if (typeof window === 'undefined' || !window.sessionStorage) return; if (d) window.sessionStorage.setItem(DRAFT_KEY, JSON.stringify(d)); else window.sessionStorage.removeItem(DRAFT_KEY); } catch { /* sin storage */ }
-}
 
 // Vender es la pestaña de entrada: (tabs) queda montado debajo de /p, /i, /t… abiertos por link.
 // No se arma el formulario hasta que la pestaña se ve por primera vez (más liviano, sin campos duplicados ocultos).
@@ -68,7 +55,7 @@ export default function Vender() {
 function VenderForm() {
   const auth = useAuth();
   const { address } = auth;
-  const [d0] = useState(() => loadDraft(address));
+  const [d0] = useState(() => loadSellDraft(address)); // borrador: sobrevive al re-login y a que iOS cierre la app
   const [title, setTitle] = useState(d0?.title ?? '');
   const [price, setPrice] = useState(d0?.price ?? '');
   const [description, setDescription] = useState<string | null>(d0?.description ?? null); // solo si vino de un link importado
@@ -78,9 +65,9 @@ function VenderForm() {
   const [fbErr, setFbErr] = useState<string | null>(null);
   const [fbNotice, setFbNotice] = useState<{ title: string; body: string; failed: boolean; icon?: string } | null>(null);
   /** Anuncio importado: source_url canónico (habilita en el servidor las fotos que guardó al importar) y proveedor (migración 019). */
-  const [source, setSource] = useState<{ url: string; provider: string } | null>(null);
+  const [source, setSource] = useState<{ url: string; provider: string } | null>(d0?.source ?? null);
   const detected = detectProvider(fbUrl);
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>(() => (d0?.photos ?? []).slice(0, MAX_PHOTOS).map((p) => ({ key: `p${++photoSeq}`, uri: p.uri ?? p.url, mime: 'image/jpeg', status: 'ready' as const, url: p.url })));
   const [errors, setErrors] = useState<ListingErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -89,8 +76,8 @@ function VenderForm() {
   const [created, setCreated] = useState<Created | null>(null);
   const [adOpen, setAdOpen] = useState(false); // plantilla de anuncio del link recién creado
   // Acuerdo de entrega: envío 7 días por defecto; cara a cara 24 h.
-  const [mode, setMode] = useState<DeliveryMode>('envio');
-  const [windowMin, setWindowMin] = useState<number>(DEFAULT_PROTECTION_MIN.envio);
+  const [mode, setMode] = useState<DeliveryMode>(d0?.mode ?? 'envio');
+  const [windowMin, setWindowMin] = useState<number>(d0?.windowMin ?? DEFAULT_PROTECTION_MIN[d0?.mode ?? 'envio']);
   const [agreeOpen, setAgreeOpen] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [customDays, setCustomDays] = useState('');
@@ -123,7 +110,7 @@ function VenderForm() {
   useEffect(() => { if (auth.wallet?.state === 'needs-approval') setOrphan(true); }, [auth.wallet?.state]);
   const priceNum = parsePrice(price);
   const photosBusy = photos.some((p) => p.status === 'processing');
-  useEffect(() => { saveDraft({ owner: address, title, price, description }); }, [address, title, price, description]);
+  useEffect(() => { if (!created) saveSellDraft({ owner: address, title, price, description, photos: photos.map((p) => ({ url: p.url, uri: p.uri })), mode, windowMin, source }); }, [address, title, price, description, photos, mode, windowMin, source, created]);
   const clearErr = (k: keyof ListingErrors) => setErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
 
   const [camOpen, setCamOpen] = useState(false);
@@ -194,7 +181,7 @@ function VenderForm() {
       setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null, agreement: agreementSummary(mode, windowMin),
         ad: { title: t, price_crc: priceNum, link: orderLink(slug), description, delivery_mode: mode, protection_minutes: windowMin } });
       setMode('envio'); setWindowMin(DEFAULT_PROTECTION_MIN.envio); setCustomOpen(false); setCustomDays('');
-      setTitle(''); setPrice(''); setPhotos([]); setInvite(null); setDescription(null); setFbNotice(null); setSource(null); saveDraft(null);
+      setTitle(''); setPrice(''); setPhotos([]); setInvite(null); setDescription(null); setFbNotice(null); setSource(null); saveSellDraft(null);
       if (inviteParam) router.setParams({ invite: undefined });
     } catch (e: any) {
       haptic.error(); trackError('create_listing', e);

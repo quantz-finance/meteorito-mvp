@@ -113,6 +113,8 @@ export function walletErrorNotice(e: any): string {
   console.error('[wallet] error', e?.code ?? 'desconocido', e?.message, e?.cause?.message ?? '', e);
   if (e?.code === 'session_relogin_required') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
   if (e?.code === 'session_wallet_mismatch' || e?.code === 'session_expired') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión para continuar.';
+  // Token rechazado por el servidor (inválido o ausente): se resuelve volviendo a entrar, no con el aviso genérico.
+  if (e?.code === 'auth_invalid' || e?.code === 'auth_missing') return 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
   if (needsDeviceStep(e)) return DEVICE_STEP;
   if (e?.code === 'device_restore_cancelled') return DEVICE_STEP_CANCELLED;
   if (e?.code === 'device_not_authorized' || e?.code === 'device_restore_no_backup' || e?.code === 'device_restore_failed' || ORPHAN_RE.test(String(e?.message ?? '')) || ORPHAN_RE.test(String(e?.cause?.message ?? ''))) return DEVICE_NOT_AUTHORIZED;

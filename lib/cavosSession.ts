@@ -5,10 +5,10 @@
 // no se carga, HttpWalletRegistry.lookup falla con "registry lookup skipped: no login token".
 // Solución: espejamos el token en localStorage y, ANTES de montar el SDK, lo reponemos en sessionStorage.
 //
-// "Refresh": el kit no tiene refresh token (id_token de Google/Firebase, ~1 h, sin renovación). El equivalente es el de
-// nuestro backend: un token vencido hace ≤ SESSION_GRACE_DAYS (7) se acepta SOLO con una prueba fresca firmada por la
-// billetera ligada (lib/api.ts, X-Meteorito-Proof). Así, token vencido + dentro de gracia = sigue entrando en silencio.
-// Pasado eso, la sesión se descarta y se muestra "Entrar de nuevo".
+// "Refresh": el kit no tiene refresh token (id_token de Google/Firebase, ~1 h, sin renovación; tampoco en 0.4.x). Con la
+// app ABIERTA, nuestro backend acepta un token vencido hace ≤ SESSION_GRACE_DAYS (7) SOLO con una prueba fresca firmada
+// por la billetera ligada (lib/api.ts, X-Meteorito-Proof): sigue en silencio. Al REABRIR, en cambio, el SDK necesita un
+// token vigente para reconectar (Cavos lo valida): con uno vencido se pide "Entrar de nuevo" (ver rehydrateCavosToken).
 // Riesgo acotado: es el mismo token que el SDK ya deja legible para el JS de esta página; nunca sale del origen, se borra al
 // superar la ventana de gracia y en logout. Sin firma de la billetera un token vencido no sirve en el servidor.
 import { CAVOS_APP_ID } from './config';
@@ -51,33 +51,71 @@ export const hadSessionOnOpen = () => identityOnOpen;
 export const markSessionSettled = () => { identityOnOpen = false; expiredOnOpen = false; };
 export const __resetForTests = () => { expiredOnOpen = false; identityOnOpen = false; };
 
-/** Llamar ANTES de montar CavosProvider (reabrir PWA, recargar, pestaña nueva). Nunca lanza. */
-export function rehydrateCavosToken(): 'present' | 'restored' | 'renewable' | 'expired' | 'none' {
+// Causa raíz de "Tu sesión venció" / "Tu sesión terminó" al reabrir (PostHog cavos_session_restore, oct 2026): un token
+// VENCIDO repuesto al SDK nunca reconecta. El SDK (vault + registro de Cavos) valida el token con Cavos y responde
+// 401 "Invalid user token" (13 de 13 aperturas con token vencido fallaron; 0 se recuperaron). La gracia de 7 días solo
+// vale para NUESTRO API (prueba firmada por la billetera), no para Cavos. Por eso:
+//  - al SDK solo se le repone un token vigente (con margen de reloj) y de la MISMA cuenta que la identidad guardada;
+//  - con token vencido no se intenta una reconexión condenada (hasta 45 s): se muestra "Entrar de nuevo" de una vez,
+//    el borrador y la pantalla se conservan (lib/returnTo.ts) y, al volver a entrar, la billetera reconecta sola.
+/** Margen de reloj del teléfono (s): un token vencido hace menos que esto aún se intenta. */
+export const CLOCK_SKEW_S = 300;
+interface Claims { sub?: string; iat?: number; exp?: number }
+function claimsOf(token: string | null | undefined): Claims {
+  if (!token) return {};
+  try {
+    const p = token.split('.')[1];
+    const j = JSON.parse(atob(p.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(p.length / 4) * 4, '=')));
+    return { sub: j.sub ?? j.user_id ?? j.uid, iat: typeof j.iat === 'number' ? j.iat : undefined, exp: typeof j.exp === 'number' ? j.exp : undefined };
+  } catch { return {}; }
+}
+/** ¿Cavos (vault/registro) todavía acepta este token? Vigente, con margen de reloj. */
+export function sdkUsable(token: string | null | undefined, now = Date.now() / 1000): token is string {
+  const e = jwtExp(token); return !!e && e > now - CLOCK_SKEW_S;
+}
+const newer = (a: string, b: string) => { const A = claimsOf(a), B = claimsOf(b); return (A.iat ?? A.exp ?? 0) > (B.iat ?? B.exp ?? 0); };
+function identityUser(ls: Storage): string | null {
+  try { const v = ls.getItem(SDK_IDENTITY_KEY()); return v ? String(JSON.parse(v).userId ?? '') || null : null; } catch { return null; }
+}
+const sameUser = (token: string, user: string | null) => { const s = claimsOf(token).sub; return !user || !s || String(s) === user; };
+
+/** Llamar ANTES de montar CavosProvider (reabrir PWA, recargar, pestaña nueva). Nunca lanza.
+ *  present/restored: token vigente en el SDK. stale: había sesión pero el token venció (Cavos ya no lo acepta) ->
+ *  "Entrar de nuevo" de inmediato. expired: además fuera de la gracia. none: sin sesión. */
+export function rehydrateCavosToken(): 'present' | 'restored' | 'stale' | 'expired' | 'none' {
   try {
     const ss = window.sessionStorage, ls = window.localStorage;
-    identityOnOpen = !!ls.getItem(SDK_IDENTITY_KEY());
+    const user = identityUser(ls);
+    identityOnOpen = !!user;
     const cur = ss.getItem(SDK_TOKEN_KEY());
     const saved = ls.getItem(PERSIST_KEY());
-    // Pestaña con token propio: lo usamos salvo que el guardado sea más nuevo (re-login en otra pestaña).
-    if (cur && !(saved && usable(saved) && (jwtExp(saved) ?? 0) > (jwtExp(cur) ?? 0))) return 'present';
-    if (!saved) return cur ? 'present' : 'none';
-    const st = tokenState(saved);
-    if (st === 'fresh' || st === 'renewable') { ss.setItem(SDK_TOKEN_KEY(), saved); return st === 'fresh' ? 'restored' : 'renewable'; }
-    // Fuera de la gracia: el servidor ya no la acepta. Quitamos la identidad guardada para que el SDK NO reconecte a medias
-    // (entraría sin poder operar) y mostramos "Entrar de nuevo". La llave del dispositivo (IndexedDB) NO se toca: al volver
-    // a entrar con la misma cuenta, el SDK la carga y es la misma billetera.
-    ls.removeItem(PERSIST_KEY()); ls.removeItem(SDK_IDENTITY_KEY()); expiredOnOpen = true; return 'expired';
+    // Copia guardada de OTRA cuenta (re-login con otro correo): nunca se repone ni se queda.
+    if (saved && !sameUser(saved, user)) ls.removeItem(PERSIST_KEY());
+    const ok = [cur, saved].filter((t): t is string => !!t && sdkUsable(t) && sameUser(t, user));
+    const best = ok.reduce<string | null>((b, t) => (!b || newer(t, b) ? t : b), null);
+    if (best) { if (best !== cur) ss.setItem(SDK_TOKEN_KEY(), best); return best === cur ? 'present' : 'restored'; }
+    if (!user) return cur ? 'present' : 'none';
+    if (!cur && !saved) return 'none'; // identidad sin token: el SDK decide (p. ej. reconecta con la caché de dirección)
+    // Sesión con token vencido: no se repone (Cavos respondería 401). Quitamos la identidad para que el SDK no intente
+    // reconectar a medias. La llave del dispositivo (vault / IndexedDB) NO se toca: al entrar con la misma cuenta, es la
+    // misma billetera y reconecta sola.
+    const stale = [cur, saved].some((t) => tokenState(t) === 'renewable');
+    if (cur) ss.removeItem(SDK_TOKEN_KEY());
+    ls.removeItem(PERSIST_KEY());
+    ls.removeItem(SDK_IDENTITY_KEY()); expiredOnOpen = true;
+    return stale ? 'stale' : 'expired';
   } catch { return 'none'; }
 }
 
-/** Copia el token del SDK a localStorage tras login/re-login (solo si es usable y no más viejo que el guardado). */
+/** Copia el token del SDK a localStorage tras login/re-login: el de esta pestaña es el vivo. Solo si Cavos aún lo acepta
+ *  y no es más viejo (por emisión, `iat`) que uno guardado de la MISMA cuenta. Otra cuenta: se reemplaza. */
 export function persistCavosToken() {
   try {
     const t = window.sessionStorage.getItem(SDK_TOKEN_KEY());
-    if (!usable(t)) return;
+    if (!sdkUsable(t)) return;
     const saved = window.localStorage.getItem(PERSIST_KEY());
     if (saved === t) return;
-    if (saved && usable(saved) && (jwtExp(saved) ?? 0) > (jwtExp(t) ?? 0)) return;
+    if (saved && sdkUsable(saved) && claimsOf(saved).sub === claimsOf(t).sub && newer(saved, t)) return;
     window.localStorage.setItem(PERSIST_KEY(), t);
     expiredOnOpen = false;
   } catch { /* storage bloqueado */ }

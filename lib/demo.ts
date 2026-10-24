@@ -40,7 +40,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -111,17 +111,34 @@ const nowMs = () => Date.now() + (S().clock ?? 0); // reloj simulable (liberaci�
 const iso = (ms = nowMs()) => new Date(ms).toISOString();
 const ident = (role: DemoRole) => (role === 'seller' ? DEMO_SELLER : DEMO_BUYER);
 
-export function useDemoAuth(): MeteoritoAuth {
-  const { role } = useDemoState();
+// Sesión simulada: el demo puede "vencer" la sesión (__meteoritoDemo.expireSession) para probar el re-login sin perder
+// el borrador: openLogin simula el login de Cavos (abierto ~0,9 s) y deja un token nuevo; la acción se reintenta una vez.
+const b64 = (o: object) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+const sess = () => (S().session ??= { gen: 0, expired: false, loginOpen: false });
+const demoToken = (gen: number) => `${b64({ alg: 'none' })}.${b64({ sub: 'demo', iat: 1_700_000_000 + gen, exp: 4_102_444_800 })}.demo`;
+export const demoLoginOpen = () => sess().loginOpen;
+export function demoExpireSession() { sess().expired = true; emit(); }
+function demoOpenLogin() {
+  const ss = sess(); if (ss.loginOpen) return;
+  ss.loginOpen = true; emit();
+  setTimeout(() => { const s2 = sess(); s2.gen++; s2.expired = false; s2.loginOpen = false; emit(); }, 900);
+}
+function demoAuthFor(role: DemoRole): MeteoritoAuth {
   const who = ident(role);
   return {
     configured: true, isAuthenticated: true, isLoading: false, email: who.email, address: who.address, error: null,
-    openLogin: () => {}, logout: () => {},
-    getAuthToken: () => 'demo-token',
+    openLogin: demoOpenLogin, logout: () => {},
+    getAuthToken: () => demoToken(sess().gen),
     signMessage: async () => ({ publicKey: who.address, signature: 'ZGVtbw==' }),
     signXdr: async () => 'AAAA-demo-xdr',
     wallet: { state: 'ready', recoveryProtected: true, hasPasskey: true, approveDevice: async () => {}, enrollPasskey: async () => {} },
   };
+}
+/** Sesión demo actual sin hook (para el waiter del re-login). */
+export const demoAuthNow = () => demoAuthFor(S().role);
+export function useDemoAuth(): MeteoritoAuth {
+  const { role } = useDemoState();
+  return demoAuthFor(role);
 }
 
 const err = (status: number, code: string, msg: string) => Object.assign(new Error(msg), { status, code });
@@ -139,8 +156,10 @@ const DEMO_CAPTURE_TTL = 5 * 60_000;
 const DEMO_SHIP_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
 
 /** Reemplazo de los endpoints /api/*: misma forma de respuesta, sin red. */
-export async function demoApi(path: string, body: any = {}): Promise<any> {
+export async function demoApi(path: string, body: any = {}, token?: string | null): Promise<any> {
   const st = S(); const p = path.split('?')[0];
+  // Sesión vencida simulada: como producción, el token viejo ya no sirve y se pide volver a entrar (sin perder nada).
+  if (st.session?.expired && token !== undefined) throw err(401, 'session_relogin_required', 'Tu sesión venció. Vuelve a entrar con la misma cuenta para continuar.');
   const need = (role: DemoRole) => { if (st.role !== role) throw err(403, 'demo_wrong_role', role === 'buyer' ? 'Esta acción es del comprador. Cambia a la vista comprador.' : 'Esta acción es del vendedor. Cambia a la vista vendedor.'); };
   const get = (slug: string) => { const o = st.orders[slug]; if (!o) throw err(404, 'not_found', 'Pedido no encontrado'); return o; };
   const now = () => new Date().toISOString();
@@ -475,7 +494,7 @@ if (DEMO_ENABLED && hasWindow()) {
   (window as any).__meteoritoDemo = {
     setRole: setDemoRole, getRole: getDemoRole, reset: resetDemo, seed: demoSeed, setBadge: setDemoBadge, DEMO_PIN,
     setBuyer: (b: string) => { S().buyer = b; emit(); }, advance: (ms: number) => { S().clock = (S().clock ?? 0) + ms; emit(); },
-    cron: demoRunCron, resolve: demoResolve, state: () => S(),
+    cron: demoRunCron, resolve: demoResolve, state: () => S(), expireSession: demoExpireSession,
   };
 }
 
