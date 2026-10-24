@@ -8,7 +8,7 @@ export { ratingLabel } from './rating';
 export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
 export interface Store { store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null;
   /** Solo Mi tienda (dueño): WhatsApp de contacto +506XXXXXXXX (migración 016); null = sin teléfono. Nunca en la tienda pública. */ contact_phone?: string | null;
-  /** Solo Mi tienda: el vendedor eligió mostrar su WhatsApp en el perfil público (migración 019). */ whatsapp_public?: boolean; rating_avg: number | null; rating_count: number; items: StoreItem[] }
+  /** Solo Mi tienda: el vendedor eligió mostrar su WhatsApp en el perfil público (migración 020). */ whatsapp_public?: boolean; rating_avg: number | null; rating_count: number; items: StoreItem[] }
 
 export const storeLink = (slug: string) => `${PUBLIC_BASE_URL}/t/${slug}`;
 export const STORE_UNAVAILABLE = 'La tienda todavía no está disponible. Tus links de venta funcionan igual.';

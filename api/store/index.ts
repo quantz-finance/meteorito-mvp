@@ -14,7 +14,7 @@
 //                                                 foto o WhatsApp de contacto (foto: solo una subida a SU carpeta por
 //                                                 /api/photos/upload-url; null la quita. Teléfono: CR, se guarda +506XXXXXXXX;
 //                                                 '' o null lo quita. Migración 016. whatsapp_public: mostrarlo en el
-//                                                 perfil público, opt-in, requiere número; migración 019)
+//                                                 perfil público, opt-in, requiere número; migración 020)
 //  POST { action:'seller_contact', slug }        (X-Guest-Key o Bearer del comprador) -> WhatsApp del vendedor, SOLO al comprador
 //                                                 del pedido y SOLO pagado (fondeado…resuelto). Sin 016 o sin teléfono: null
 //  POST { action:'rate', slug, stars, comment?, buyer_name? } (X-Guest-Key o Bearer del comprador) -> reseña de compra
@@ -85,7 +85,7 @@ async function myProfile(sub: string, email?: string) {
   throw new HttpError(500, 'No pudimos crear tu tienda. Intenta de nuevo.');
 }
 
-/** ¿El vendedor eligió mostrar su WhatsApp en el perfil público? (migración 019). Sin la columna o ante error: false. */
+/** ¿El vendedor eligió mostrar su WhatsApp en el perfil público? (migración 020). Sin la columna o ante error: false. */
 async function whatsappPublicOf(sub: string): Promise<boolean> {
   try {
     const { data, error } = await db().from('seller_profiles').select('whatsapp_public').eq('sub', sub).maybeSingle();
@@ -337,7 +337,7 @@ export default async function handler(req: any, res: any) {
       let { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub); // solo el perfil del dueño
       if (error && 'whatsapp_public' in patch && missingColumn(error) && /whatsapp_public/.test(String(error.message ?? ''))) {
         if (!implicitWa) throw Object.assign(new HttpError(503, 'Todavía no puedes mostrar tu WhatsApp en el perfil. Intenta más tarde.'), { code: 'whatsapp_public_unavailable' });
-        delete patch.whatsapp_public; // sin 019 no hay nada que apagar
+        delete patch.whatsapp_public; // sin 020 no hay nada que apagar
         ({ error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub));
       }
       if (error?.code === '23505') throw Object.assign(new HttpError(409, 'Ese nombre de usuario ya está en uso. Prueba otro.'), { code: 'store_slug_taken' });

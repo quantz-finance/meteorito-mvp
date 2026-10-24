@@ -1,4 +1,4 @@
--- 019: banderas del perfil del vendedor + índices del buscador del feed.
+-- 020: banderas del perfil del vendedor + índices del buscador del feed.
 -- listed_in_feed: moderación. false = el vendedor no sale en el feed de Comprar (su perfil y links siguen funcionando).
 -- whatsapp_public: el vendedor eligió mostrar su WhatsApp (contact_phone, 016) en su perfil público. Por defecto NO:
 --   sin opt-in el número solo lo ve quien ya pagó (acción seller_contact).

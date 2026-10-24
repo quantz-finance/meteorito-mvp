@@ -62,6 +62,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '65', name: 'Herramientas del vendedor: plantilla de anuncio (link + acuerdo + custodia) e historial de ventas con resultado', file: './t65-seller-tools.test.ts', onchain: false },
   { id: '62', name: 'Reseñas: compra liberada, 1-5 + comentario opcional (280, sin links) + nombre corto, una por pedido', file: './t62-reviews.test.ts', onchain: false },
   { id: '63', name: 'WhatsApp en el perfil público: opt-in del vendedor, privado por defecto', file: './t63-whatsapp-public.test.ts', onchain: false },
+  { id: '64', name: 'WhatsApp en el perfil público: opt-in del vendedor, privado por defecto', file: './t64-whatsapp-public.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

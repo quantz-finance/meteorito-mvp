@@ -1,4 +1,4 @@
-// (63) WhatsApp en el perfil público: opt-in del vendedor (whatsapp_public, migración 019). Por defecto NO se muestra;
+// (64) WhatsApp en el perfil público: opt-in del vendedor (whatsapp_public, migración 020). Por defecto NO se muestra;
 //      solo el dueño lo activa, solo con número guardado; sin la migración: leer -> false, guardar -> 503 amable. Sin red.
 import type { T } from './setup';
 import { COPY } from '../../lib/copy';
@@ -42,7 +42,7 @@ export async function run(t: T) {
   t.check('quitar el número también lo saca del perfil', r.code === 200 && sp().whatsapp_public === false && (await profile())?.whatsapp === null, JSON.stringify(sp()));
   t.check('el perfil público nunca trae el teléfono crudo', !JSON.stringify(await profile()).includes('+506'));
 
-  // Sin la migración 019: la columna no existe.
+  // Sin la migración 020: la columna no existe.
   const orig = db.from.bind(db);
   (db as any).from = (table: string) => {
     const q: any = orig(table);
@@ -57,11 +57,11 @@ export async function run(t: T) {
   delete sp().whatsapp_public;
   await call({ tok, body: { action: 'update', contact_phone: '8888 1234' } });
   r = await call({ tok, body: { action: 'update', whatsapp_public: true } });
-  t.check('sin migración 019: activar -> 503 amable, nada se publica', r.code === 503 && r.body?.code === 'whatsapp_public_unavailable' && (await profile())?.whatsapp === null, `${r.code} ${JSON.stringify(r.body)}`);
+  t.check('sin migración 020: activar -> 503 amable, nada se publica', r.code === 503 && r.body?.code === 'whatsapp_public_unavailable' && (await profile())?.whatsapp === null, `${r.code} ${JSON.stringify(r.body)}`);
   (db as any).from = orig;
 
   const ui = readFileSync('components/Payout.tsx', 'utf8');
   t.check('Mi tienda: interruptor "Mostrar en mi perfil público" y textos honestos', /COPY\.whatsappPublic\.label/.test(ui) && COPY.whatsappPublic.label === 'Mostrar en mi perfil público' && /whatsapp_public/.test(ui) && !/nunca lo muestra/.test(ui));
-  const mig = readFileSync('supabase/migrations/019_seller_profile_flags.sql', 'utf8');
-  t.check('migración 019: whatsapp_public default false, listed_in_feed default true, pg_trgm', /whatsapp_public boolean not null default false/.test(mig) && /listed_in_feed boolean not null default true/.test(mig) && /pg_trgm/.test(mig));
+  const mig = readFileSync('supabase/migrations/020_seller_profile_flags.sql', 'utf8');
+  t.check('migración 020: whatsapp_public default false, listed_in_feed default true, pg_trgm', /whatsapp_public boolean not null default false/.test(mig) && /listed_in_feed boolean not null default true/.test(mig) && /pg_trgm/.test(mig));
 }
