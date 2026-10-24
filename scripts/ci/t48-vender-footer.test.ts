@@ -13,5 +13,5 @@ export async function run(t: T) {
   t.check('ds: Screen pasa footerBare al StickyFooter', /footerBare\s*\?\s*:\s*boolean/.test(ds) && /<StickyFooter bare=\{footerBare\}>/.test(ds));
   const screens = [...vender.matchAll(/<Screen\b[^>]*footer=/g)].map((m) => m[0]);
   t.check('Vender: todas las pantallas con footer usan footerBare (formulario y link listo)', screens.length >= 2 && screens.every((x) => /\bfooterBare\b/.test(x)), `${screens.length}`);
-  t.check('Vender: "Generar link" sigue siendo el botón primario (blanco, texto morado)', /<PrimaryButton title="Generar link" icon="link"/.test(vender) && !/title="Generar link"[^>]*variant=/.test(vender));
+  t.check('Vender: "Generar link" es el círculo (LaunchButton), sin fondo morado propio', /<LaunchButton label="Generar link"/.test(vender) && !/title="Generar link"/.test(vender));
 }

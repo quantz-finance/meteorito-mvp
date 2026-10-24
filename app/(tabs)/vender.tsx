@@ -32,7 +32,8 @@ import { getInvite, type Invite } from '@/lib/invites';
 import { MAX_PHOTOS } from '@/lib/photos';
 import { CameraCapture } from '@/components/CameraCapture';
 import type { CapturedPhoto } from '@/lib/capture';
-import { formatPriceInput, parsePrice, TITLE_MAX, validateListing, type ListingErrors } from '@/lib/listing';
+import { formatPriceInput, isListingValid, parsePrice, TITLE_MAX, validateListing, type ListingErrors } from '@/lib/listing';
+import { LaunchButton } from '@/components/LaunchButton';
 import { supabaseConfigured } from '@/lib/supabase';
 import { loadSellDraft, saveSellDraft } from '@/lib/sellDraft';
 import { priceBucket, track, trackError } from '@/lib/analytics';
@@ -110,6 +111,11 @@ function VenderForm() {
   useEffect(() => { if (auth.wallet?.state === 'needs-approval') setOrphan(true); }, [auth.wallet?.state]);
   const priceNum = parsePrice(price);
   const photosBusy = photos.some((p) => p.status === 'processing');
+  // Con un aviso arriba (importado, invitación, confirmar dispositivo) hay menos espacio: "Ver reglas" baja junto al círculo y en
+  // iPhone SE se aprieta un poco más (fotos y espacios), para que el aviso de beta nunca quede bajo el círculo.
+  const extra = !!fbNotice || !!invite || orphan;
+  const tight = short || extra, tiny = short && extra;
+  const ready = isListingValid({ title, price: priceNum, photos: photos.length, photosBusy }); // el círculo se enciende cuando todo está listo
   useEffect(() => { if (!created) saveSellDraft({ owner: address, title, price, description, photos: photos.map((p) => ({ url: p.url, uri: p.uri })), mode, windowMin, source }); }, [address, title, price, description, photos, mode, windowMin, source, created]);
   const clearErr = (k: keyof ListingErrors) => setErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
 
@@ -228,8 +234,12 @@ function VenderForm() {
 
   return (
     <Screen footerBare title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
-      footer={<PrimaryButton title="Generar link" icon="link" loading={busy} disabled={photosBusy} onPress={() => submit()} />}>
-      <View style={{ flex: 1, gap: short ? S.sm : S.md }}>{/* iPhone SE: menos aire para que "Entrega y plazo" y el aviso de beta quepan sin scroll */}
+      footer={<View style={s.dock}>{/* el círculo al centro; en iPhone SE "Ver reglas" a su izquierda (no cabe arriba sin scroll) */}
+        <View style={s.dockSide}>{tight ? <RulesHint text={SELL_SUMMARY} from="sell" compact /> : null}</View>
+        <LaunchButton label="Generar link" ready={ready} busy={busy} short={short} onPress={() => submit()} />
+        <View style={s.dockSide} />
+      </View>}>
+      <View style={{ flex: 1, gap: tiny ? 6 : short ? S.sm : S.md }}>{/* iPhone SE: menos aire para que "Entrega y plazo" y el aviso de beta quepan sin scroll */}
       {orphan ? <OrphanWalletCard compact={short} onRestored={(r) => { setOrphan(false); if (title.trim() && photos.length) submit(r); }} /> : null}
       {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {`${invite.brand} ${invite.model}`.trim()} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
@@ -257,19 +267,23 @@ function VenderForm() {
         </Pressable>
       )}
 
-      <View style={{ gap: S.xs }}>
-        <Text style={T.caption}>Nombre del producto</Text>
-        <TextInput style={[ui.input, s.input, errors.title && s.inputErr]} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim}
-          value={title} onChangeText={(v) => { setTitle(v); clearErr('title'); }} maxLength={TITLE_MAX} returnKeyType="next" accessibilityLabel="Nombre del producto" />
+      <View style={{ gap: S.xs }}>{/* etiqueta dentro del campo: mismo texto, menos alto (el círculo cabe sin scroll) */}
+        <View style={[s.field, title.trim() ? s.fieldOn : null, errors.title && s.inputErr]}>
+          <Text style={s.fieldLabel}>Nombre del producto</Text>
+          <TextInput style={s.fieldInput} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim}
+            value={title} onChangeText={(v) => { setTitle(v); clearErr('title'); }} maxLength={TITLE_MAX} returnKeyType="next" accessibilityLabel="Nombre del producto" />
+        </View>
         {errors.title ? <ErrorText>{errors.title}</ErrorText> : null}
       </View>
 
       <View style={{ gap: S.xs }}>
-        <Text style={T.caption}>Precio en colones</Text>
-        <View style={[s.priceWrap, errors.price && s.inputErr, invite && { opacity: 0.7 }]}>
-          <Text style={s.currency}>₡</Text>
-          <TextInput style={s.priceInput} placeholder="0" placeholderTextColor={C.textDim} keyboardType="number-pad" inputMode="numeric"
-            value={formatPriceInput(price)} onChangeText={(v) => { setPrice(v); clearErr('price'); }} editable={!invite} accessibilityLabel="Precio en colones" />
+        <View style={[s.field, priceNum > 0 ? s.fieldOn : null, errors.price && s.inputErr, invite && { opacity: 0.7 }]}>
+          <Text style={s.fieldLabel}>Precio en colones</Text>
+          <View style={s.priceRow}>
+            <Text style={s.currency}>₡</Text>
+            <TextInput style={s.priceInput} placeholder="0" placeholderTextColor={C.textDim} keyboardType="number-pad" inputMode="numeric"
+              value={formatPriceInput(price)} onChangeText={(v) => { setPrice(v); clearErr('price'); }} editable={!invite} accessibilityLabel="Precio en colones" />
+          </View>
         </View>
         {errors.price ? <ErrorText>{errors.price}</ErrorText> : null}
       </View>
@@ -280,9 +294,9 @@ function VenderForm() {
           {photos.length > 0 && !errors.photos ? <Text style={T.footnote}>Toca una para quitarla</Text> : null}
         </View>
         <View style={s.grid}>
-          {photos.map((p, i) => <PhotoTile key={p.key} photo={p} index={i} total={photos.length} onRemove={busy ? undefined : removePhoto} />)}
+          {photos.map((p, i) => <PhotoTile key={p.key} photo={p} index={i} total={photos.length} small={short} tiny={tiny} onRemove={busy ? undefined : removePhoto} />)}
           {photos.length < MAX_PHOTOS && (
-            <Pressable onPress={() => { haptic.tap(); setCamOpen(true); }} accessibilityRole="button" accessibilityLabel="Tomar foto" style={({ pressed }) => [s.photo, s.photoAdd, errors.photos && { borderColor: C.orange }, pressed && { opacity: 0.8 }]}>
+            <Pressable onPress={() => { haptic.tap(); setCamOpen(true); }} accessibilityRole="button" accessibilityLabel="Tomar foto" style={({ pressed }) => [s.photo, short && s.photoSm, tiny && s.photoXs, s.photoAdd, errors.photos && { borderColor: C.orange }, pressed && { opacity: 0.8 }]}>
               <Icon name="camera" size={24} color={C.lilac} />
               <Text style={[T.footnote, { color: C.lilac }]}>Tomar</Text>
             </Pressable>
@@ -299,8 +313,8 @@ function VenderForm() {
         <Icon name="chevron-forward" size={16} color={C.textDim} />
       </Pressable>
       {error && <ErrorText>{error}</ErrorText>}
-      {short ? null : <Text style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>}
-      {short && fbNotice ? null : <RulesHint text={SELL_SUMMARY} from="sell" compact={short} /* iPhone SE: solo "Ver reglas" para dejar espacio al aviso de beta; con el aviso de importación se oculta (el aviso de beta ya enlaza "Ver cómo funciona") */ />}
+      {tight ? null : <Text style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>}
+      {tight ? null : <RulesHint text={SELL_SUMMARY} from="sell" /* iPhone SE o con aviso: "Ver reglas" va junto al círculo, abajo */ />}
       <BetaNotice from="sell" />
       </View>
 
@@ -367,11 +381,11 @@ function VenderForm() {
 }
 
 /** Foto con su propio estado. Memo: no se re-renderiza al teclear. */
-const PhotoTile = memo(function PhotoTile({ photo, index, total, onRemove }: { photo: Photo; index: number; total: number; onRemove?: (key: string) => void }) {
+const PhotoTile = memo(function PhotoTile({ photo, index, total, small, tiny, onRemove }: { photo: Photo; index: number; total: number; small?: boolean; tiny?: boolean; onRemove?: (key: string) => void }) {
   const [loaded, setLoaded] = useState(false);
   const busy = photo.status === 'processing' || photo.status === 'uploading' || !loaded;
   return (
-    <Pressable style={s.photo} accessibilityLabel="Quitar foto" disabled={!onRemove || photo.status === 'uploading'} onPress={() => onRemove?.(photo.key)}>
+    <Pressable style={[s.photo, small && s.photoSm, tiny && s.photoXs]} accessibilityLabel="Quitar foto" disabled={!onRemove || photo.status === 'uploading'} onPress={() => onRemove?.(photo.key)}>
       <Image source={{ uri: photo.uri }} style={StyleSheet.absoluteFill} onLoad={() => setLoaded(true)} onError={() => setLoaded(true)} />
       {busy || photo.status === 'error' ? (
         <View style={s.photoOverlay}>
@@ -391,9 +405,18 @@ const s = StyleSheet.create({
   photoOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(26,11,61,0.6)', alignItems: 'center', justifyContent: 'center', gap: 2 },
   photoX: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center' },
   input: { minHeight: 46 },
-  priceWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: C.surface, borderRadius: R.md, paddingHorizontal: S.md, minHeight: 48, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
-  currency: { fontFamily: Fonts.black, fontSize: 22, color: C.textDim, marginRight: S.xs },
-  priceInput: { flex: 1, minWidth: 0, fontFamily: Fonts.black, fontSize: 22, color: C.text, paddingVertical: 6, fontVariant: ['tabular-nums'], outlineStyle: 'none' } as object,
+  // Campo con la etiqueta adentro (cápsula de vidrio); se ilumina en naranja suave cuando ya tiene valor.
+  field: { backgroundColor: 'rgba(45,20,102,0.72)', borderRadius: R.md, paddingHorizontal: S.md, paddingTop: 7, paddingBottom: 3, borderWidth: 1, borderColor: 'rgba(201,182,255,0.22)' },
+  fieldOn: { borderColor: 'rgba(255,170,110,0.55)' },
+  fieldLabel: { fontFamily: Fonts.bold, fontSize: 11, lineHeight: 14, letterSpacing: 0.6, textTransform: 'uppercase', color: C.textDim },
+  fieldInput: { fontFamily: Fonts.bold, fontSize: 17, color: C.text, paddingVertical: 5, minHeight: 32, outlineStyle: 'none' } as object,
+  priceRow: { flexDirection: 'row', alignItems: 'center' },
+  currency: { fontFamily: Fonts.black, fontSize: 22, color: C.orange, marginRight: S.xs },
+  priceInput: { flex: 1, minWidth: 0, fontFamily: Fonts.black, fontSize: 22, color: C.text, paddingVertical: 2, minHeight: 32, fontVariant: ['tabular-nums'], outlineStyle: 'none' } as object,
+  photoSm: { width: 64 },
+  photoXs: { width: 56 },
+  dock: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  dockSide: { flex: 1, minWidth: 0 },
   inputErr: { borderColor: C.orange, borderWidth: 1 },
   fbBtn: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44, paddingHorizontal: S.md, borderRadius: R.md, borderWidth: 1, borderColor: C.lilac, backgroundColor: C.lilacBg },
   fbNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, padding: S.sm + 2, borderWidth: 1, borderColor: C.lilac },
