@@ -10,6 +10,7 @@ import { HttpError } from './auth';
 import { missingColumn } from './listings';
 import { storeDbErr } from './store';
 import { waLink } from './contact';
+import { followerCount } from './follows';
 
 import { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, parseVerified, searchTokens, FEED_DEFAULT, FEED_MAX, type VerifiedFilter } from './feedText';
 export { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, parseVerified, searchTokens };
@@ -132,7 +133,7 @@ async function reviewsOf(sub: string): Promise<{ data: any[] }> {
   if (error && missingColumn(error)) ({ data, error } = await q('stars, created_at'));
   return { data: error ? [] : data ?? [] };
 }
-/** Perfil público del vendedor: lo de la tienda + reseñas, ventas, miembro desde y WhatsApp (solo si eligió mostrarlo). */
+/** Perfil público del vendedor: lo de la tienda + reseñas, ventas, seguidores (solo el número), miembro desde y WhatsApp (solo si eligió mostrarlo). */
 export async function sellerProfile(slug: string) {
   let row: any = null;
   // whatsapp_public (020): el vendedor elige mostrar su WhatsApp en el perfil. Hasta entonces el número solo lo ve el
@@ -144,11 +145,12 @@ export async function sellerProfile(slug: string) {
     row = data; break;
   }
   if (!row) return null;
-  const [{ data: st }, { data: items, error: e2 }, sales, { data: rv }] = await Promise.all([
+  const [{ data: st }, { data: items, error: e2 }, sales, { data: rv }, followers] = await Promise.all([
     db().from('public_stores').select('rating_avg, rating_count').eq('store_slug', slug).maybeSingle(),
     db().from('public_store_items').select('slug, title, price_crc, photo, created_at').eq('store_slug', slug).order('created_at', { ascending: false }).limit(60),
     salesOutcome(row.sub),
     reviewsOf(row.sub),
+    followerCount(row.sub), // solo el número (migración 022); null sin la tabla: la app no lo muestra
   ]);
   if (e2) storeDbErr(e2);
   const phone = row.whatsapp_public === true && typeof row.contact_phone === 'string' && row.contact_phone ? row.contact_phone : null;
@@ -156,7 +158,7 @@ export async function sellerProfile(slug: string) {
     store_slug: row.store_slug, display_name: row.display_name, avatar_url: row.avatar_url ?? null,
     verified: row.verified === true, bio: null as string | null, location: null as string | null,
     rating_avg: st?.rating_avg == null ? null : Number(st.rating_avg), rating_count: Number(st?.rating_count ?? 0),
-    sales_completed: sales.completed, sales,
+    sales_completed: sales.completed, sales, followers,
     member_since: row.created_at ?? null,
     whatsapp: phone ? waLink(phone) : null,
     items: (items ?? []).map((i: any) => ({ slug: i.slug, title: i.title || 'Artículo', price_crc: Number(i.price_crc), photo: i.photo ?? null, created_at: i.created_at ?? null })),

@@ -27,6 +27,10 @@
 //  GET  ?push=key                                 -> llave pública VAPID (o null si no hay push configurado)
 //  POST { action:'push_subscribe'|'push_unsubscribe', subscription } (Bearer Cavos y/o X-Guest-Key)
 //                                                 -> avisos push de los pedidos de esa identidad (migración 011)
+//  POST { action:'follow'|'unfollow', store_slug }   (X-Guest-Key y/o Bearer Cavos) -> seguir o dejar de seguir a un vendedor
+//                                                 (migración 022). Privado: devuelve { following, followers } (solo el número).
+//                                                 Anti-spam: FOLLOW_PER_MIN por identidad (+ por IP sin cuenta), tope 500.
+//  POST { action:'following' }                    (X-Guest-Key y/o Bearer Cavos) -> { store_slugs }: a quién sigo YO. Sin 022: [].
 //  POST { action:'import_facebook', url }         (Bearer Cavos o X-Guest-Key del comprador que invita) -> lee un anuncio PÚBLICO de Facebook Marketplace (solo
 //                                                 facebook.com / fb.me) para precargar Vender: título, precio en colones,
 //                                                 descripción y foto (data URL + photo_urls: la misma foto guardada por el
@@ -50,6 +54,7 @@ import { checkListingUrl } from '../_lib/importers/providers';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
 import { buyerOrders } from '../_lib/purchases';
+import { FOLLOW_IP_PER_MIN, followingSlugs, followRateLimited, setFollow } from '../_lib/follows';
 import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
@@ -265,6 +270,21 @@ export default async function handler(req: any, res: any) {
       const who = await requireBuyerIdentity(req);
       res.setHeader?.('Cache-Control', 'no-store');
       return json(res, 200, { orders: await buyerOrders(db(), who.ids) });
+    }
+    if (b.action === 'follow' || b.action === 'unfollow') {
+      const slug = normalizeStoreSlug(b.store_slug);
+      if (!validStoreSlug(slug)) throw new HttpError(400, 'Usuario inválido.');
+      const who = await requireBuyerIdentity(req);
+      const ip = who.cavos ? null : clientIp(req);
+      if (followRateLimited(`f:${who.ids[0]}`) || (ip && followRateLimited(`fip:${ip}`, Date.now(), FOLLOW_IP_PER_MIN)))
+        throw Object.assign(new HttpError(429, 'Espera un momento antes de seguir a más vendedores.'), { code: 'follow_rate_limited' });
+      res.setHeader?.('Cache-Control', 'no-store');
+      return json(res, 200, await setFollow(who, slug, b.action === 'follow'));
+    }
+    if (b.action === 'following') {
+      const who = await requireBuyerIdentity(req);
+      res.setHeader?.('Cache-Control', 'no-store');
+      return json(res, 200, { store_slugs: await followingSlugs(who.ids) });
     }
 
     const user = await requireCavosUser(req);

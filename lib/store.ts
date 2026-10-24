@@ -94,6 +94,7 @@ export interface Review { stars: number; comment: string | null; /** Nombre cort
 export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
 export interface SellerProfile extends FeedSeller {
   bio: string | null; location: string | null; sales_completed: number; sales?: SalesOutcome; member_since: string | null;
+  /** Número de seguidores (migración 022). Nunca quiénes. null/ausente = no disponible: no se muestra. */ followers?: number | null;
   /** https://wa.me/506… solo si el vendedor puso su WhatsApp; null si no. */ whatsapp: string | null;
   items: (StoreItem & { created_at?: string | null })[]; reviews: Review[];
 }

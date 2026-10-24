@@ -8,6 +8,7 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactElement } fro
 import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { haptic, Icon, PrimaryButton, Sheet, Skeleton, type IconName } from '@/components/ds';
 import { StoreAvatar } from '@/components/StoreAvatar';
+import { FollowButton } from '@/components/FollowButton';
 import { StarRow, VerifiedBadge } from '@/components/SellerBits';
 import { pressTransition } from '@/constants/motion';
 import { Fonts } from '@/constants/Colors';
@@ -164,6 +165,7 @@ export const FeedCard = memo(function FeedCard({ item: it, index, filter }: { it
           <Text style={T.moneySm} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
         </View>
       </Pressable>
+      <View style={s.follow}><FollowButton store={it.seller} source="feed" size="sm" /></View>
       <Pressable onPress={() => openSeller(it, index, filter)} accessibilityRole="link" accessibilityLabel={`Ver el perfil de ${it.seller.display_name}`}
         hitSlop={4} style={({ pressed }) => [s.who, pressed && { opacity: 0.8 }]}>
         <StoreAvatar store={it.seller} size={22} />
@@ -239,6 +241,7 @@ const s = StyleSheet.create({
   who: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: S.sm, paddingBottom: S.sm, minHeight: 32 },
   photo: { width: '100%', aspectRatio: 1, backgroundColor: C.lilacBg },
   noPhoto: { alignItems: 'center', justifyContent: 'center' },
+  follow: { position: 'absolute', top: 6, right: 6 },
   cardBody: { gap: 2, paddingHorizontal: S.sm, paddingTop: S.sm, paddingBottom: S.xs + 2 },
   title: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 19, color: C.text },
   example: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: R.pill, backgroundColor: 'rgba(20,10,40,0.72)' },

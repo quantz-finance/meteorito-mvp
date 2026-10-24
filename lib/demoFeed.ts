@@ -63,7 +63,7 @@ export async function demoProfile(slug: string): Promise<SellerProfile | null> {
   const items = [...own, ...all().filter((i) => i.seller.store_slug === s.store_slug || (s.store_slug === valeria().store_slug && i.seller.store_slug === 'valeria'))
     .map((i) => ({ slug: i.slug, title: i.title, price_crc: i.price_crc, photo: i.photo, created_at: i.created_at }))];
   return {
-    ...pub(s), bio: null, location: null, sales_completed: s.sales, sales: outcome(s.sales), member_since: s.since, whatsapp: s.wa, items,
+    ...pub(s), bio: null, location: null, sales_completed: s.sales, sales: outcome(s.sales), followers: Math.round(s.sales * 2.5) + s.rating_count, member_since: s.since, whatsapp: s.wa, items,
     reviews: s.rating_count && !empty() ? REVIEWS.slice(0, Math.min(3, s.rating_count)).map((r) => ({ stars: r.stars, comment: r.comment, buyer_name: r.buyer_name, created_at: new Date(now - r.h * H).toISOString() })) : [],
   };
 }

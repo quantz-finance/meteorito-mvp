@@ -8,6 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OwnerTools } from '@/components/OwnerTools';
+import { FollowButton } from '@/components/FollowButton';
 import { useAuth } from '@/lib/cavos';
 import { isOwnerView, shareLink } from '@/lib/storePage';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
@@ -17,6 +18,7 @@ import { StoreAvatar } from '@/components/StoreAvatar';
 import { SalesOutcomeLine, StarRow, VerifiedBadge } from '@/components/SellerBits';
 import { pressTransition } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
+import { Fonts } from '@/constants/Colors';
 import { formatCRC } from '@/lib/orders';
 import { getMyStore, getSellerProfile, storeLink, type SellerProfile, type Store, type StoreItem } from '@/lib/store';
 import { memberSince, timeAgo } from '@/lib/timeago';
@@ -86,6 +88,9 @@ function Profile({ p, owner, mine, onMine, onManage, tools }: { p: SellerProfile
   const items: StoreItem[] = owner && mine ? [...mine.items, ...p.items.filter((i) => !managed.has(i.slug))] : p.items;
   const rated = p.rating_count > 0 && p.rating_avg != null;
   const avg = rated ? Math.round(p.rating_avg! * 10) / 10 : 0;
+  // Seguidores: solo el número (privado: nunca quiénes). null = todavía no disponible (sin migración 022): no se muestra.
+  const [followers, setFollowers] = useState<number | null>(typeof p.followers === 'number' ? p.followers : null);
+  useEffect(() => { setFollowers(typeof p.followers === 'number' ? p.followers : null); }, [p.store_slug, p.followers]);
   return (
     <View style={{ gap: S.lg }}>
       <View style={s.hero} testID="profile-hero">
@@ -97,10 +102,14 @@ function Profile({ p, owner, mine, onMine, onManage, tools }: { p: SellerProfile
             {p.verified ? <VerifiedBadge size={20} /> : null}
           </View>
           <Text style={T.callout} numberOfLines={1}>@{p.store_slug}</Text>
+          {followers != null ? <Text style={T.footnote} testID="followers-count"><Text style={{ color: C.text, fontFamily: Fonts.bold }}>{followers}</Text> {COPY.follow.followers(followers)}</Text> : null}
           {p.bio ? <Text style={[T.body, { textAlign: 'center', marginTop: S.xs }]} numberOfLines={4}>{p.bio}</Text> : null}
           {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
           {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{COPY.identity.unconfirmed}</Text></View> : null}
         </View>
+        {!owner ? <View style={{ alignItems: 'center', marginTop: 2 }}>
+          <FollowButton store={p} source="profile" onFollowers={(n, on) => setFollowers((cur) => (n != null ? n : cur == null ? null : Math.max(0, cur + (on ? 1 : -1))))} />
+        </View> : null}
         <View style={s.stats}>
           <Stat icon="star" iconColor="#FFD84D" value={rated ? avg.toFixed(1) : 'Nuevo'} label={rated ? `${p.rating_count} reseña${p.rating_count === 1 ? '' : 's'}` : 'sin reseñas'} />
           <View style={s.statSep} />
