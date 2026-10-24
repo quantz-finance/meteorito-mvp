@@ -6,7 +6,8 @@ import type { MeteoritoAuth } from './types';
 export { ratingLabel } from './rating';
 
 export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
-export interface Store { store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null; rating_avg: number | null; rating_count: number; items: StoreItem[] }
+export interface Store { store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null;
+  /** Solo Mi tienda (dueño): WhatsApp de contacto +506XXXXXXXX (migración 016); null = sin teléfono. Nunca en la tienda pública. */ contact_phone?: string | null; rating_avg: number | null; rating_count: number; items: StoreItem[] }
 
 export const storeLink = (slug: string) => `${PUBLIC_BASE_URL}/t/${slug}`;
 export const STORE_UNAVAILABLE = 'La tienda todavía no está disponible. Tus links de venta funcionan igual.';
@@ -25,7 +26,7 @@ export async function getStore(slug: string): Promise<Store | null> {
 export async function getMyStore(auth: MeteoritoAuth): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'me' }));
 }
-export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null }): Promise<Store> {
+export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null; contact_phone?: string | null }): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'update', ...patch }));
 }
 /** Calificación del comprador (llave de invitado o sesión), una vez por pedido. */
@@ -35,7 +36,16 @@ export async function rateOrder(auth: Pick<MeteoritoAuth, 'getAuthToken'>, slug:
 }
 async function friendly<T>(f: () => Promise<T>): Promise<T> {
   try { return await f(); }
-  catch (e: any) { if (e?.code === 'avatar_unavailable' || e?.code === 'bad_avatar') throw e; if (e?.code === 'store_unavailable' || e?.status === 503 || e?.status === 404 && e?.code === 'http_404') throw Object.assign(new Error(STORE_UNAVAILABLE), { code: 'store_unavailable' }); throw e; }
+  catch (e: any) { if (['avatar_unavailable', 'bad_avatar', 'phone_unavailable', 'bad_phone'].includes(e?.code)) throw e; if (e?.code === 'store_unavailable' || e?.status === 503 || e?.status === 404 && e?.code === 'http_404') throw Object.assign(new Error(STORE_UNAVAILABLE), { code: 'store_unavailable' }); throw e; }
+}
+
+/** WhatsApp del vendedor para el comprador de ESTE pedido (llave de invitado o sesión), solo con el pedido pagado.
+ *  null si el vendedor no lo agregó, si todavía no está disponible o ante cualquier error (nunca rompe la página). */
+export async function getSellerContact(auth: Pick<MeteoritoAuth, 'getAuthToken'>, slug: string): Promise<string | null> {
+  try {
+    const r = DEMO_ENABLED ? await demoApi('/api/store', { action: 'seller_contact', slug }) : await guestApi<{ contact_phone: string | null }>(auth, '/api/store', { action: 'seller_contact', slug });
+    return typeof r?.contact_phone === 'string' ? r.contact_phone : null;
+  } catch { return null; }
 }
 
 const RATED = (slug: string) => `meteorito:rated:${slug}`;

@@ -1,4 +1,4 @@
-// "Arma un gran perfil": progreso del perfil + cuenta IBAN para cobrar. Se carga diferido (React.lazy) desde
+// "Arma un gran perfil": progreso del perfil + cuenta IBAN para cobrar + WhatsApp de contacto (opcional). Se carga diferido (React.lazy) desde
 // Mi cuenta y Mi tienda: no pesa en la bienvenida ni en /p/.
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -7,7 +7,8 @@ import { ui } from '@/components/ui';
 import { pressTransition } from '@/constants/motion';
 import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
-import { getMyStore, type Store } from '@/lib/store';
+import { getMyStore, updateMyStore, type Store } from '@/lib/store';
+import { contactPhoneError, formatContactPhone, normalizeContactPhone } from '../api/_lib/contact';
 import { StoreAvatar } from '@/components/StoreAvatar';
 import { crIbanError, formatIban, getPayout, maskIban, maskPhone, normalizeIban, normalizeSinpe, profilePct, profileSteps, savePayout, type PayoutView } from '@/lib/payout';
 import { userMessage } from '@/lib/cavosSession';
@@ -41,7 +42,7 @@ function Progress({ pct }: { pct: number }) {
 /** Tarjeta completa para Mi cuenta: % del perfil, pasos y la cuenta para cobrar. */
 export function ProfileCard({ products = 0 }: { products?: number }) {
   const { store, setStore, payout, setPayout, payoutErr } = useProfile();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); const [contactOpen, setContactOpen] = useState(false);
   const [photoErr, setPhotoErr] = useState<string | null>(null);
   const steps = profileSteps({ name: store?.display_name, storeSlug: store?.store_slug, payout: !!payout, products: Math.max(products, store?.items.length ?? 0) });
   const pct = profilePct(steps);
@@ -67,7 +68,61 @@ export function ProfileCard({ products = 0 }: { products?: number }) {
       </View>
       <PayoutRow payout={payout} error={payoutErr} onPress={() => setOpen(true)} />
       <PayoutSheet visible={open} onClose={() => setOpen(false)} payout={payout ?? null} onSaved={(p) => { setPayout(p); setOpen(false); }} />
+      {store ? <ContactRow phone={store.contact_phone ?? null} onPress={() => setContactOpen(true)} /> : null}
+      <ContactSheet visible={contactOpen} onClose={() => setContactOpen(false)} phone={store?.contact_phone ?? null}
+        onSaved={(st) => { setStore((cur) => (cur ? { ...cur, contact_phone: st.contact_phone ?? null } : st)); setContactOpen(false); }} />
     </View>
+  );
+}
+
+const CONTACT_HINT = 'Agrega tu WhatsApp para que tus compradores te contacten';
+/** WhatsApp o teléfono de contacto: sugerencia discreta si falta; si está, el número y "Cambiar". */
+function ContactRow({ phone, onPress }: { phone: string | null; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={phone ? 'Cambiar tu WhatsApp de contacto' : CONTACT_HINT} testID="contact-row"
+      onPress={() => { haptic.tap(); onPress(); }}
+      style={({ pressed }) => [s.contactRow, pressTransition, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
+      <Icon name="logo-whatsapp" size={20} color={phone ? C.success : C.lilac} />
+      <Text style={[T.footnote, { flex: 1, color: phone ? C.text : C.lilac }]} numberOfLines={2}>
+        {phone ? `${formatContactPhone(phone)} · lo ven tus compradores después de pagar` : CONTACT_HINT}
+      </Text>
+      <Text style={[T.footnote, { color: C.lilac }]}>{phone ? 'Cambiar' : ''}</Text>
+      <Icon name="chevron-forward" size={16} color={C.lilac} />
+    </Pressable>
+  );
+}
+
+function ContactSheet({ visible, onClose, phone, onSaved }: { visible: boolean; onClose: () => void; phone: string | null; onSaved: (s: Store) => void }) {
+  const auth = useAuth();
+  const [v, setV] = useState(''); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (visible) { setV(phone ? formatContactPhone(phone).replace(/^\+506 /, '') : ''); setErr(null); } }, [visible]);
+  const n = normalizeContactPhone(v);
+  const bad = n === 'invalid' && v.replace(/\D/g, '').length >= 8 ? contactPhoneError(v) : null;
+  async function save(next: string | null) {
+    setBusy(true); setErr(null);
+    try { const st = await updateMyStore(auth, { contact_phone: next }); haptic.success(); toast(next ? 'WhatsApp guardado' : 'WhatsApp quitado'); onSaved({ ...st, contact_phone: st.contact_phone ?? next }); }
+    catch (e) { haptic.error(); setErr(userMessage((e as Error).message)); }
+    finally { setBusy(false); }
+  }
+  return (
+    <Sheet visible={visible} onClose={onClose} title="WhatsApp o teléfono"
+      footer={<>
+        <PrimaryButton title="Guardar" icon="checkmark" loading={busy} disabled={n === null || n === 'invalid'} onPress={() => save(n as string)} />
+        {phone ? <PrimaryButton title="Quitar" variant="ghost" disabled={busy} onPress={() => save(null)} /> : null}
+      </>}>
+      <Text style={T.callout}>Tus compradores lo ven solo después de pagar, para coordinar el envío o escribirte si algo sale mal.</Text>
+      <Text style={T.caption}>WhatsApp o teléfono (opcional)</Text>
+      <View style={[ui.input, s.inRow, bad ? { borderColor: C.orange } : n && n !== 'invalid' ? { borderColor: C.success } : null]}>
+        <Text style={[T.body, { color: C.textDim }]}>+506</Text>
+        <TextInput style={inputPlain} value={v} onChangeText={(x) => setV(x.replace(/^\s*\(?\+506\)?\s*/, '').replace(/[^\d +\-]/g, '').slice(0, 16))} keyboardType="phone-pad" inputMode="tel"
+          placeholder="8888 1234" placeholderTextColor={C.textDim} accessibilityLabel="WhatsApp o teléfono, opcional" autoComplete="tel-national" testID="contact-phone-input"
+          onSubmitEditing={() => { if (n && n !== 'invalid') save(n); }} />
+        {n && n !== 'invalid' ? <Icon name="checkmark-circle" size={20} color={C.success} /> : null}
+      </View>
+      {bad ? <ErrorText>{bad}</ErrorText> : null}
+      {err ? <ErrorText>{err}</ErrorText> : null}
+      <Text style={T.footnote}>Tu tienda pública nunca lo muestra.</Text>
+    </Sheet>
   );
 }
 
@@ -159,5 +214,6 @@ const s = StyleSheet.create({
   payRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm + 4, backgroundColor: C.surface, borderRadius: R.md, padding: S.sm + 4, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   payRowEmpty: { borderColor: C.orange, borderWidth: 1, borderStyle: 'dashed' },
   payIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: C.orange, alignItems: 'center', justifyContent: 'center' },
+  contactRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: S.xs, minHeight: 44 },
   inRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
 });
