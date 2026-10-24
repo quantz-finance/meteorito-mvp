@@ -212,7 +212,7 @@ export async function openDispute(order: any, buyerSub: string, input: { reason:
   // Lock de release: que el cron no libere mientras abrimos la disputa.
   await db().from('orders').update({ release_lock_until: new Date(Date.now() + 120_000).toISOString() }).eq('id', order.id);
   try {
-    let g = await tw.releaseGuard(order.contract_id);
+    let g = await chain().releaseGuard(order.contract_id); // chain(): los tests la reemplazan (sin red)
     if (g.released || g.resolved) throw new HttpError(409, 'el pago ya fue liberado');
     let hash: string | null = null;
     if (!g.disputed) hash = await disputeOnChain(order.contract_id);

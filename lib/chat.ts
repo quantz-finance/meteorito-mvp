@@ -19,7 +19,8 @@ export interface ChatConversation {
   item: { slug: string; price_crc: number | null } | null; order: { slug: string; status: string; price_crc: number | null } | null; paid: boolean;
   other: { name: string; store_slug: string | null; avatar_url: string | null };
 }
-export interface ChatRead { role: ChatRole; blocked: boolean; other_read_at: string | null; other_typing: boolean; has_more: boolean; messages: ChatMsg[]; conversation?: ChatConversation }
+export interface ChatRead { role: ChatRole; blocked: boolean; other_read_at: string | null; other_typing: boolean; has_more: boolean; messages: ChatMsg[]; conversation?: ChatConversation;
+  /** Solo con full y para el vendedor: false si hay una compra en curso o una disputa abierta entre los dos. */ can_block?: boolean }
 export interface ChatListItem { token: string; role: ChatRole; kind: 'store' | 'order'; order_slug: string | null; subject: string | null; photo: string | null; name: string; last_preview: string; last_sender: ChatRole | null; last_message_at: string; unread: boolean; blocked: boolean }
 
 const call = <T,>(auth: Auth, as: ChatRole, body: Record<string, unknown>) =>

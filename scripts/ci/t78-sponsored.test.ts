@@ -80,11 +80,13 @@ export async function run(t: T) {
     && /<Text style=\{s\.title\}>\{COPY\.sponsored\.label\}<\/Text>/.test(block) && /<View style=\{s\.tag\}><Text style=\{s\.tagText\}>\{COPY\.sponsored\.label\}/.test(block) && /COPY\.sponsored\.a11y\(it\.title\)/.test(block));
   t.check('se esconde sin patrocinios', /if \(!items\.length\) return null;/.test(block) && /sponsored\.length \? <SponsoredBlock items=\{sponsored\} filter=\{filter\} \/> : null/.test(feed));
   t.check('métricas en PostHog: sponsored_impression y sponsored_clicked (id del patrocinio, posición, filtro; sin montos)', /track\('sponsored_impression', \{ sponsored_id: it\.id, position: i, filter/.test(block) && /track\('sponsored_clicked', \{ sponsored_id: it\.id, position: i, filter/.test(block) && !/price|amount/.test((block.match(/track\([^)]*\)/g) ?? []).join()));
-  t.check('"Promocionar este producto" en Mi tienda: solo una hoja "Pronto podrás…", sin cobro ni llamada al API', /title=\{COPY\.sponsored\.promote\}/.test(tools) && /COPY\.sponsored\.promoteText/.test(tools)
-    && /^Pronto podrás promocionar tus productos/.test(COPY.sponsored.promoteText) && !/api\(|guestApi|fetch\(/.test(tools.slice(tools.indexOf('setPromote(true)') - 300, tools.indexOf('setPromote(true)') + 300)));
+  t.check('"Promocionar este producto" en Mi tienda: solo una hoja "Todavía no puedes…", sin cobro ni llamada al API', /title=\{COPY\.sponsored\.promote\}/.test(tools) && /COPY\.sponsored\.promoteText/.test(tools)
+    && COPY.sponsored.promoteText === 'Todavía no puedes promocionar tus productos. Por ahora no se cobra nada y no tienes que hacer nada.' && !/api\(|guestApi|fetch\(/.test(tools.slice(tools.indexOf('setPromote(true)') - 300, tools.indexOf('setPromote(true)') + 300)));
   t.check('demo: anuncios solo con ?ads=1 (no hay anuncios de relleno por defecto)', /get\('ads'\) === '1'/.test(demo) && /!cur && ads\(\)/.test(demo));
   t.check('íconos, no emojis', !/\p{Extended_Pictographic}/u.test(block + tools));
   const flat = JSON.stringify(Object.values(COPY.sponsored).map((v: any) => typeof v === 'function' ? v('Bici') : v));
+  t.check('infoText (copy final, Neo): mismo inicio; custodia con PIN o por tiempo; patrocinado no significa que Meteorito verifique', COPY.sponsored.infoText.startsWith('Estos vendedores pagaron para mostrar sus productos en este bloque. Lo demás del feed no es publicidad. ')
+    && COPY.sponsored.infoText.endsWith('Comprar un producto patrocinado funciona igual: el pago queda en custodia y se libera con tu PIN de entrega, o por tiempo si no abres una disputa antes. Que sea patrocinado no significa que Meteorito verifique el producto.'), COPY.sponsored.infoText);
   t.check('copy de Patrocinado sin palabras prohibidas', !BANNED_COPY.test(flat) && !/proteg/i.test(flat), flat);
   const mig = readFileSync(new URL('../../supabase/migrations/024_sponsored_listings.sql', import.meta.url), 'utf8');
   t.check('migración 024 idempotente: tabla, índices, RLS sin grants públicos', /create table if not exists public\.sponsored_listings/.test(mig) && /create unique index if not exists/.test(mig)

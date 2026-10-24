@@ -120,11 +120,41 @@ test('CHAT-02 chat dentro de una compra: comprador en el seguimiento, vendedor e
   await expect(page).toHaveURL(/\/chat\?c=.+&r=s/);
   await expect(page.getByTestId('chat-context')).toContainText('Bici de montaña');
   await expect(page.getByTestId('bubble-theirs').filter({ hasText: 'cuándo me lo envías' })).toBeVisible();
-  // Opciones del vendedor: Reportar y Bloquear
+  // Opciones del vendedor: Reportar sí; Bloquear NO mientras la compra está en curso (deshabilitado, con la explicación)
   await page.getByRole('button', { name: 'Opciones de la conversación' }).click();
   await expect(page.getByText('Reportar', { exact: true })).toBeVisible();
+  const locked = page.getByTestId('chat-block-locked');
+  await expect(locked).toBeVisible();
+  await expect(locked).toContainText('No puedes bloquear mientras haya una compra en curso o una disputa abierta. Si hay un problema, repórtalo.');
+  await expect(locked.getByRole('button')).toHaveCount(0); // deshabilitado: no se puede tocar
+  await expect(page.getByText('Bloqueaste esta conversación. Nadie puede escribir.')).toHaveCount(0);
+  await noHScroll(page);
+  await cleanCopy(page);
+  await shot(page, 'block-locked');
+});
+
+test('CHAT-04 sin compra el vendedor bloquea; si después hay una compra, el comprador igual puede abrir su disputa', async ({ page }) => {
+  await open(page, '/t/valeria', 'buyer', true);
+  await page.getByTestId('store-chat').click();
+  await expect(page.getByTestId('chat-empty')).toContainText('Escríbele a Valeria. Su respuesta aparecerá aquí.');
+  await page.getByTestId('chat-quick').getByText('¿Sigue disponible?', { exact: true }).click();
+  await delivered(page);
+  // Vendedor: sin compra en curso ni disputa -> puede bloquear
+  await open(page, '/mensajes?as=s', 'seller');
+  await page.getByTestId('inbox-row').first().click();
+  await expect(page.getByTestId('bubble-theirs').filter({ hasText: '¿Sigue disponible?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Opciones de la conversación' }).click();
+  await expect(page.getByTestId('chat-block-locked')).toHaveCount(0);
   await page.getByText('Bloquear conversación', { exact: true }).click();
   await expect(page.getByText('Bloqueaste esta conversación. Nadie puede escribir.')).toBeVisible();
+  // Comprador: la conversación está cerrada, pero la disputa de su compra no depende del chat
+  await open(page, '/comprar/compras', 'buyer');
+  const slug = await seed(page, 'fondeado', 'Bici de montaña');
+  await page.evaluate((s) => localStorage.setItem(`meteorito:guest:pin:${s}`, '482915'), slug);
+  await open(page, `/p/${slug}`, 'buyer');
+  await expect(page.getByRole('button', { name: /Tengo un problema/ })).toBeVisible();
+  await page.getByRole('button', { name: /Tengo un problema/ }).click();
+  await expect(page.getByText('No llegó', { exact: false }).first()).toBeVisible();
 });
 
 test('CHAT-03 producto sin pagar: "Preguntar al vendedor" abre el chat ligado al producto', async ({ page }) => {

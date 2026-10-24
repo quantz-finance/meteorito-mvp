@@ -67,3 +67,15 @@ export function chatPollDelay(o: { visible: boolean; idleMs: number }): number |
 }
 /** Bandeja / insignia: cada 45 s con la pantalla visible; nada en segundo plano. */
 export const CHAT_BADGE_MS = 45_000;
+
+/** Estados finales de un pedido (mismo criterio que api/_lib/relink.ts). Cualquier otro = compra en curso. */
+export const ORDER_FINAL: readonly string[] = ['liberado', 'resuelto', 'cancelado'];
+/** Mismo texto que COPY.chat.blockLocked (t80 lo compara). */
+export const CHAT_BLOCK_LOCKED = 'No puedes bloquear mientras haya una compra en curso o una disputa abierta. Si hay un problema, repórtalo.';
+/** ¿Por qué el vendedor NO puede bloquear? Pura: recibe los pedidos entre ESE comprador y ESE vendedor (con su disputa si la hay).
+ *  'dispute' si hay una disputa abierta; 'order' si hay una compra que no terminó; null si puede bloquear. */
+export function blockLock(orders: readonly { status?: string | null; dispute_state?: string | null }[]): 'dispute' | 'order' | null {
+  if (orders.some((o) => o.status === 'en_disputa' || o.dispute_state === 'open' || o.dispute_state === 'pending')) return 'dispute';
+  if (orders.some((o) => !ORDER_FINAL.includes(String(o.status ?? '')))) return 'order';
+  return null;
+}

@@ -8,7 +8,8 @@ import { __setDbForTests } from '../../api/_lib/db';
 import { fakeDb } from './fakedb';
 import invites from '../../api/invites/index';
 import { inviteShareMessage, sourceName } from '../../lib/inviteShare';
-import { detectProvider, inviteCanRead, inviteDetectedLabel, inviteImportNotice, inviteMarketsLabel, INVITE_MARKETS, type ListingImport } from '../../lib/listingImport';
+import { detectProvider, inviteCanRead, inviteDetectedLabel, inviteImportNotice, inviteMarketsLabel, INVITE_MARKETS, INVITE_UNREAD, type ListingImport } from '../../lib/listingImport';
+import { COPY } from '../../lib/copy';
 
 const call = async (h: any, o: { method?: string; body?: any; query?: any; guest?: string | null }) => {
   const r = res(); const rq: any = { method: o.method ?? 'POST', headers: { ...(o.guest ? { 'x-guest-key': o.guest } : {}) }, body: o.body ?? {}, query: o.query ?? {} };
@@ -31,8 +32,8 @@ export async function run(t: T) {
   t.check('detecta Facebook, Walmart, Mercado Libre, Amazon, Encuentra24 y AliExpress', Object.entries(LINKS).every(([id, u]) => d(u)?.id === id), JSON.stringify(Object.values(LINKS).map((u) => d(u)?.id)));
   t.check('se intenta leer Facebook, Walmart y tiendas genéricas', inviteCanRead(d(LINKS.facebook)) && inviteCanRead(d(LINKS.walmart)) && inviteCanRead(d('https://tienda.example.com/producto/1')));
   t.check('NO se pide Mercado Libre, Amazon, Encuentra24 ni AliExpress (bloquean nuestros servidores)', ['mercadolibre', 'amazon', 'encuentra24', 'aliexpress'].every((k) => !inviteCanRead(d((LINKS as any)[k]))));
-  t.check('al pegar: "Anuncio de {proveedor}" sin error; solo promete leer donde funciona',
-    inviteDetectedLabel(d(LINKS.mercadolibre)) === 'Anuncio de Mercado Libre: tú escribes el nombre y el precio.'
+  t.check('al pegar: proveedor que no se lee -> "No pudimos leer ese anuncio. Escribe el nombre y el precio." (copy final, sin nombrar al proveedor); solo promete leer donde funciona',
+    inviteDetectedLabel(d(LINKS.mercadolibre)) === 'No pudimos leer ese anuncio. Escribe el nombre y el precio.' && inviteDetectedLabel(d(LINKS.amazon)) === INVITE_UNREAD
     && inviteDetectedLabel(d(LINKS.facebook)) === 'Anuncio de Facebook: llenamos el nombre, el precio y la foto.'
     && inviteDetectedLabel(d(LINKS.walmart)).startsWith('Anuncio de Walmart: llenamos')
     && inviteDetectedLabel(d('https://www.tienda.example.com/p/1')) === 'Anuncio de tienda.example.com'
@@ -43,12 +44,13 @@ export async function run(t: T) {
   const n1 = inviteImportNotice(d(LINKS.walmart), ok);
   t.check('leído: "Importado de Walmart" y ajustar el precio acordado', n1.title === 'Importado de Walmart' && /Ajusta el precio/.test(n1.body), JSON.stringify(n1));
   const n2 = inviteImportNotice(d(LINKS.mercadolibre), null);
-  t.check('proveedor que no se lee: "Anuncio de Mercado Libre", sin error, el link va al vendedor', n2.title === 'Anuncio de Mercado Libre' && /vendedor verá el link/.test(n2.body) && !/No pudimos|error/i.test(n2.title + n2.body), JSON.stringify(n2));
+  t.check('proveedor que no se lee: "No pudimos leer ese anuncio." + escribe nombre y precio; el link va al vendedor', n2.title === 'No pudimos leer ese anuncio.' && n2.body.startsWith('Escribe el nombre y el precio.') && /vendedor verá el link/.test(n2.body) && !/Mercado Libre|error/i.test(n2.title + n2.body), JSON.stringify(n2));
   const n3 = inviteImportNotice(d(LINKS.facebook), { ...ok, provider: 'facebook', provider_name: 'Facebook', result: 'failed', title: null, price_crc: null, photos: [], missing: ['title', 'price', 'photos'] });
-  t.check('Facebook privado o borrado: mismo aviso neutro (no bloquea la invitación)', n3.title === 'Anuncio de Facebook' && !/No pudimos/.test(n3.title), JSON.stringify(n3));
+  t.check('Facebook privado o borrado: mismo aviso (no bloquea la invitación)', n3.title === 'No pudimos leer ese anuncio.' && n3.body === n2.body, JSON.stringify(n3));
   const n4 = inviteImportNotice(d('https://tienda.example.us/p/1'), { ...ok, provider: 'web', provider_name: 'tienda.example.us', converted: true, price_source: { amount: 300, currency: 'USD' } });
   t.check('precio en otra moneda: se dice que es sugerido', /US\$300/.test(n4.body) && /confírmalo/.test(n4.body), n4.body);
-  t.check('marketplaces de la hoja: Facebook, Mercado Libre, Amazon y más (iconos)', INVITE_MARKETS.length === 5 && inviteMarketsLabel === 'Facebook, Mercado Libre, Amazon y más');
+  t.check('hoja: iconos de marketplaces + "Pega el link del anuncio" (copy final)', INVITE_MARKETS.length === 5 && inviteMarketsLabel === 'Pega el link del anuncio');
+  t.check('plantilla de anuncio: "Paga aquí, sin crear cuenta: {link}"', COPY.adTemplate.payHere('https://x/p/1') === 'Paga aquí, sin crear cuenta: https://x/p/1');
 
   // --- la invitación acepta el link de cualquier marketplace (incluso los que no se leen) y rechaza lo que no es un link público
   const db = fakeDb(); __setDbForTests(db as any);
