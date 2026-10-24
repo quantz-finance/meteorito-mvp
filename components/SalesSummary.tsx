@@ -24,7 +24,7 @@ export function SalesSummary({ orders, compact, onHistory }: { orders: SellerOrd
         <LivelyMascot size={m} parallax={0} />
       </View>
       <View style={s.head}>
-        <Text style={[T.caption, { color: C.lilac }]}>Tus ventas</Text>
+        <Text style={[T.caption, { color: C.lilac, flexShrink: 0 }]} numberOfLines={1}>Tus ventas</Text>{/* una línea: con "Historial" al lado no debe crecer el cuadro */}
         {compact ? null : <Text style={[T.footnote, { color: C.lilac, flexShrink: 1 }]} numberOfLines={1}>Cobras en tu banco o SINPE</Text>}
         {onHistory ? <Pressable onPress={() => { haptic.tap(); onHistory(); }} accessibilityRole="button" accessibilityLabel="Ver historial de ventas" hitSlop={12}
           style={({ pressed }) => [s.hist, pressed && { opacity: 0.7 }]}>
