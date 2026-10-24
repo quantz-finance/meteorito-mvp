@@ -12,7 +12,8 @@ export async function run(t: T, N: Testnet) {
   const amount = grossUsdc(PRICE);
   const e = await makeEscrow(N, 'round', { fund: true, ship: true, amount });
   const id = '66666666-6666-4666-8666-666666666666';
-  const order = { id, slug: 'rnd001', status: 'enviado', contract_id: e.contractId, amount_usdc: amount };
+  const order = { id, slug: 'rnd001', status: 'enviado', contract_id: e.contractId, amount_usdc: amount,
+    shipped_at: new Date(Date.now() - 8 * 86_400_000).toISOString(), auto_release_at: new Date(Date.now() - 86_400_000).toISOString() }; // plazo de 7 días vencido
   db.tables.orders.push({ ...order });
   const seller = Keypair.fromSecret(N.S.TESTNET_SELLER_SECRET).publicKey();
   const usdc = async () => Number(((await new Horizon.Server(env.horizon()).loadAccount(seller)).balances as any[]).find((b) => b.asset_code === 'USDC')?.balance ?? 0);
