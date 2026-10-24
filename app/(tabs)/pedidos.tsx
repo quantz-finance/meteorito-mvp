@@ -19,6 +19,8 @@ import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { Freshness } from '@/components/Freshness';
 import { SalesSummary } from '@/components/SalesSummary';
 import { AccountSheet } from '@/components/AccountSheet';
+import { AdTemplateButton, AdTemplateSheet } from '@/components/AdTemplateSheet';
+import type { AdInput } from '@/lib/sellerTools';
 import { RulesLink } from '@/components/RulesLink';
 import { useStableWindow } from '@/lib/viewport';
 import { useStamp } from '@/lib/freshness';
@@ -50,6 +52,7 @@ export default function Pedidos() {
   const [sessionError, setSessionError] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null);
   const [account, setAccount] = useState(false);
+  const [ad, setAd] = useState<AdInput | null>(null); // plantilla de anuncio (se abre al cerrar la hoja del pedido)
   const short = useStableWindow().height < 740;
   const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
 
@@ -86,7 +89,7 @@ export default function Pedidos() {
         <IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />
       </>}>
       <View style={{ flex: 1, gap: S.sm }}>
-      <SalesSummary orders={orders} compact={short} />
+      <SalesSummary orders={orders} compact={short} onHistory={() => router.push('/ventas')} />
       <RulesLink from="home" />
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : error ? <ErrorText>{error}</ErrorText> : null}
@@ -104,6 +107,7 @@ export default function Pedidos() {
             renderItem={(o) => <OrderCard order={o} timeline={!short} fill onPress={() => setOpenSlug(o.slug)} />} />}
       </View>
 
+      <AdTemplateSheet visible={!!ad} onClose={() => setAd(null)} ad={ad} />
       <AccountSheet visible={account} onClose={() => setAccount(false)} products={(orders ?? []).length} />
       <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? orderTitle(open) : ''}
         footer={open ? <PrimaryButton title="Compartir link" icon="share-outline" variant="secondary"
@@ -118,6 +122,11 @@ export default function Pedidos() {
             <Text style={T.callout}>{(detail?.slug === open.slug && detail?.delivery_mode === 'cara_a_cara' && F2F_HINT[open.status]) || NEXT_HINT[open.status] || ''}</Text>
           </Card>
           <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />
+          {open.status === 'creado' ? <AdTemplateButton onPress={() => {
+            const d = detail?.slug === open.slug ? detail : null;
+            setAd({ title: orderTitle(open), price_crc: open.price_crc, link: orderLink(open.slug), description: d?.description ?? null, delivery_mode: d?.delivery_mode ?? open.delivery_mode, protection_minutes: d?.protection_minutes ?? null });
+            setOpenSlug(null);
+          }} /> : null}
           <View style={{ gap: S.xs }}>
             <Text style={T.caption}>Detalles</Text>
             <Text style={T.footnote} selectable>{orderLink(open.slug)}</Text>

@@ -9,13 +9,11 @@ export const orderLink = (slug: string) => `${PUBLIC_BASE_URL}/p/${slug}`;
 export const CRC_USDC_RATE = Number(process.env.EXPO_PUBLIC_CRC_USDC_RATE ?? 510); // debe igualar CRC_USDC_RATE del server
 export const TW_FEE = 0.003; // Trustless Work cobra 0.3%
 
-export const formatCRC = (n: number) => '₡' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+export { formatCRC, STATUS_LABEL } from './labels'; // puros (sin red ni RN): también los usan los tests
+import { formatCRC } from './labels';
 export const formatUSD = (crc: number) => `≈ ${(crc / CRC_USDC_RATE).toFixed(2)} USDC`;
 export const formatUSDC = (n: number) => `${n.toFixed(2)} USDC`;
 
-export const STATUS_LABEL: Record<string, string> = {
-  creado: 'Disponible', escrow_creado: 'Esperando pago', fondeado: 'Pagado · fondos apartados', enviado: 'Enviado', entregado: 'Recibido', liberado: 'Pago liberado', en_disputa: 'En disputa', resuelto: 'Resuelto', cancelado: 'Cancelado',
-};
 
 const ALPHA = 'abcdefghijklmnopqrstuvwxyz0123456789';
 export function randomSlug(len = 6): string {
@@ -80,6 +78,8 @@ export interface SellerOrder {
   kind?: 'single' | 'listing'; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada';
   /** Migración 017: tipo de entrega (cara a cara no tiene paso "Enviado"). */
   delivery_mode?: 'envio' | 'cara_a_cara' | null;
+  /** Historial de ventas: cuándo se cerró y, si hubo disputa, qué porcentaje volvió al comprador. */
+  released_at?: string | null; resolved_at?: string | null; resolution?: { buyerPct?: number | null } | null;
 }
 /** Pedidos del vendedor: por la API con su sesión (solo los suyos). La RPC pública seller_orders se revoca en la 013. */
 export async function getSellerOrders(auth: MeteoritoAuth): Promise<SellerOrder[]> {
