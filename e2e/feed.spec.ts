@@ -100,12 +100,13 @@ test.describe('Comprar: feed y perfil', () => {
     expect(boxes[0].width).toBeGreaterThan(vw * 0.4);
     expect(boxes[2].y).toBeGreaterThan(boxes[0].y + boxes[0].height - 1); // la tercera, en la fila siguiente
     await noHScroll(page);
-    // Venta cerrada de ejemplo: etiqueta "Ejemplo", estrellas, sin montos; tocarla abre la hoja que lo explica.
+    // Venta cerrada de ejemplo: iconito discreto (sin etiqueta "Ejemplo"), estrellas, sin montos; tocarla abre la hoja que lo explica.
     const sale = page.getByTestId('feed-sale').first();
     await sale.scrollIntoViewIfNeeded();
     await expect(sale).toContainText('le vendió a');
     await expect(sale).toContainText(/ganó \d estrellas?/);
-    await expect(sale.getByTestId('feed-sale-example')).toHaveText('Ejemplo');
+    await expect(sale.getByTestId('feed-sale-info')).toBeVisible();
+    await expect(sale).not.toContainText('Ejemplo');
     await expect(sale).not.toContainText('₡');
     // La foto de la venta de ejemplo carga (archivo propio en public/demo-feed).
     await expect.poll(() => sale.locator('img').first().evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth > 0).catch(() => false)).toBe(true);

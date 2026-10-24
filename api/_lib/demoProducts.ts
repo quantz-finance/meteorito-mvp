@@ -2,7 +2,7 @@
 // no se vea vacío se muestran estos, TODOS FICTICIOS: vendedores, nombres de usuario, reseñas, textos y fotos inventados
 // (no se copió ningún anuncio, nombre ni foto real). Fotos: public/demo-feed/p-*.jpg, generadas, sin marcas ni personas.
 // Reglas:
-//  - Siempre marcados: demo: true -> etiqueta "Ejemplo" en la tarjeta, en la tienda y en la ficha.
+//  - Siempre marcados: demo: true -> iconito (i) discreto con popup en la tarjeta, la tienda y la ficha.
 //  - Nunca se pagan: no existen en la base (no hay pedido); la ficha /p/ej-… dice que es un ejemplo y no tiene botón de
 //    pago; orderBySlug rechaza estos slugs (409 demo_product) en todo el API de pagos.
 //  - No están en la base: se agregan al feed DESPUÉS de los productos reales (los reales siempre primero) en el API

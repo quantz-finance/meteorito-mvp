@@ -1,9 +1,9 @@
 // Feed de Comprar (tipo red social): publicaciones de los vendedores en una cuadrícula de 2 columnas, lo más nuevo primero,
 // con buscador, filtro por identidad en dos mitades iguales (Identidad confirmada por defecto / Sin confirmar; textos en
 // lib/copy.ts), paginación infinita por cursor, skeletons y estados vacíos. Lecturas públicas: GET /api/store?feed.
-// Ventas cerradas: hoy solo EJEMPLOS ficticios con etiqueta "Ejemplo" (lib/feedSales.ts, FEED_DEMO_SALES), 1 de cada 6.
+// Ventas cerradas: hoy solo EJEMPLOS ficticios con un iconito (i) discreto (lib/feedSales.ts, FEED_DEMO_SALES), 1 de cada 6.
 // Productos de ejemplo (demo: true, api/_lib/demoProducts.ts, FEED_DEMO_PRODUCTS): llegan del API después de los reales,
-// con etiqueta "Ejemplo" y sin botón Seguir; su ficha (/p/ej-…) no permite pagar.
+// con un iconito (i) discreto que abre un popup (components/DemoInfo.tsx) y sin botón Seguir; su ficha (/p/ej-…) no permite pagar.
 import { COPY } from '@/lib/copy';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
@@ -11,6 +11,7 @@ import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextIn
 import { haptic, Icon, PrimaryButton, Sheet, Skeleton, type IconName } from '@/components/ds';
 import { StoreAvatar } from '@/components/StoreAvatar';
 import { FollowButton } from '@/components/FollowButton';
+import { DemoInfo, DemoMark } from '@/components/DemoInfo';
 import { SponsoredBlock } from '@/components/SponsoredBlock';
 import { ActivityLine, StarRow, VerifiedBadge } from '@/components/SellerBits';
 import { useActivity } from '@/lib/useActivity';
@@ -174,12 +175,12 @@ export const FeedCard = memo(function FeedCard({ item: it, index, filter, activi
         {it.photo && !broken
           ? <Image source={{ uri: it.photo }} style={s.photo} resizeMode="cover" onError={() => setBroken(true)} accessibilityIgnoresInvertColors />
           : <View style={[s.photo, s.noPhoto]}><Icon name="image-outline" size={32} color={C.lilac} /></View>}
-        {it.demo ? <View style={s.example} testID="feed-demo-tag"><Text style={s.exampleText}>{COPY.demoProducts.tag}</Text></View> : null}
         <View style={s.cardBody}>
           <Text style={s.title} numberOfLines={2}>{it.title}</Text>
           <Text style={T.moneySm} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
         </View>
       </Pressable>
+      {it.demo ? <DemoInfo style={s.demoInfo} /> : null}
       {it.demo || it.seller.demo ? null : <View style={s.follow}><FollowButton store={it.seller} source="feed" size="sm" /></View>}
       <Pressable onPress={() => openSeller(it, index, filter)} accessibilityRole="link" accessibilityLabel={`Ver el perfil de ${it.seller.display_name}`}
         hitSlop={4} style={({ pressed }) => [s.who, pressed && { opacity: 0.8 }]}>
@@ -202,7 +203,7 @@ export const SaleCard = memo(function SaleCard({ post: p, onPress }: { post: Sal
         {p.photo && !broken
           ? <Image source={{ uri: p.photo }} style={s.photo} resizeMode="cover" onError={() => setBroken(true)} accessibilityIgnoresInvertColors />
           : <View style={[s.photo, s.noPhoto]}><Icon name={p.icon as IconName} size={40} color={C.lilac} /></View>}
-        <View style={s.example} testID="feed-sale-example"><Text style={s.exampleText}>{COPY.sales.example}</Text></View>
+        <DemoMark style={s.demoInfo} testID="feed-sale-info" />
       </View>
       <View style={s.cardBody}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -261,8 +262,7 @@ const s = StyleSheet.create({
   follow: { position: 'absolute', top: 6, right: 6 },
   cardBody: { gap: 2, paddingHorizontal: S.sm, paddingTop: S.sm, paddingBottom: S.xs + 2 },
   title: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 19, color: C.text },
-  example: { position: 'absolute', top: 6, left: 6, paddingHorizontal: 7, paddingVertical: 2, borderRadius: R.pill, backgroundColor: 'rgba(20,10,40,0.72)' },
-  exampleText: { fontFamily: Fonts.bold, fontSize: 12, color: C.text, letterSpacing: 0.3 },
+  demoInfo: { position: 'absolute', top: 6, right: 6 }, // iconito (i) de ejemplo: esquina, no tapa la foto
   empty: { alignItems: 'center', gap: S.sm, paddingVertical: S.lg, paddingHorizontal: S.sm },
   emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center', marginBottom: S.xs },
 });
