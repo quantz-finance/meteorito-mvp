@@ -58,7 +58,7 @@ export default function Welcome() {
             </View>
           ) : error ? <ErrorText>{error}</ErrorText> : null}
           <PrimaryButton title={relogin ? 'Entrar de nuevo' : 'Entrar'} loading={busy} disabled={!configured} onPress={() => { track('login_started'); openLogin(); }} />
-          <PrimaryButton title={width < 350 ? 'Comprar sin cuenta' : 'Quiero comprar (sin cuenta)'} variant="secondary" icon="paper-plane-outline" onPress={() => { track('invite_start_tapped'); router.push('/i/nueva'); }} />
+          <PrimaryButton title={width < 350 ? 'Comprar sin cuenta' : 'Quiero comprar (sin cuenta)'} variant="secondary" icon="paper-plane-outline" onPress={() => { track('buyer_start_tapped'); router.push('/comprar'); }} />
           <PrimaryButton title="¿Cómo funciona?" variant="ghost" icon="help-circle-outline" onPress={() => { track('learn_cta_tapped'); setLearn(true); }} />
           <View style={s.footer}>
             <Text style={s.hint}>Entras con Google, Apple o tu correo.</Text>

@@ -59,6 +59,12 @@ export default function AdminDisputas() {
       {data ? <Text testID="admin-flags" style={T.footnote}>
         Auto-resolución: {data.flags.autoResolve ? 'encendida' : 'apagada'} · IA: {caps?.ai ? 'disponible' : 'no disponible'} · On-chain: {caps?.executeOnchain ? 'desde el panel' : 'con el script'}{caps?.responses ? '' : ' · Respuesta del vendedor: falta la migración 027'}
       </Text> : null}
+      <Pressable testID="admin-pagos-link" accessibilityRole="link" onPress={() => { haptic.tap(); router.push('/admin/pagos' as never); }}
+        style={({ pressed }) => [s.line, { minHeight: 44 }, pressed && { opacity: 0.8 }]}>
+        <Icon name="card" size={18} color={C.lilac} />
+        <Text style={[T.footnote, { color: C.lilac, flex: 1 }]}>Pagos a Cuenta IBAN</Text>
+        <Icon name="chevron-forward" size={16} color={C.lilac} />
+      </Pressable>
       {err ? <ErrorText>{err}</ErrorText> : null}
       {admin === null || (!data && !err) ? <><SkeletonCard /><SkeletonCard /></>
         : rows.length === 0 ? <Card style={{ alignItems: 'center', paddingVertical: S.lg }}><Text testID="admin-empty" style={T.callout}>No hay disputas aquí.</Text></Card>

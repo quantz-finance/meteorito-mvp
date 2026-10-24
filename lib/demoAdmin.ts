@@ -9,6 +9,7 @@ export interface DemoAdminCtx {
   audit: Record<string, any[]>; responses: Record<string, { body: string; photo: string | null; created_at: string }>;
   caps: Map<string, { id: string; purpose: string; ref: string; exp: number; used: boolean }>;
   resolve: (slug: string, buyerPct: number) => void; emit: () => void;
+  /** cola de pagos a Cuenta IBAN (029) */ payouts?: any[];
 }
 const err = (status: number, code: string, msg: string) => Object.assign(new Error(msg), { status, code });
 const disputeOf = (o: any) => ({ reason: o.dispute?.reason ?? 'otro', description: o.dispute?.description ?? null, evidence: o.dispute?.evidence ?? [], opened_at: o.dispute?.at ?? o.disputed_at ?? null, state: o.status === 'resuelto' ? 'resolved' : 'open' });
@@ -80,5 +81,26 @@ export function demoAdminApi(c: DemoAdminCtx, body: any): any {
     Object.assign(d, { guest_refund: 'devuelto', guest_refund_note: String(body.note ?? '').slice(0, 500) || null, guest_refunded_at: new Date().toISOString() }); c.emit();
     return { done: true };
   }
+  if (a === 'admin_payouts') {
+    const ps = c.payouts ?? [];
+    return { available: true, payouts: ps, counts: { pendiente: ps.filter((x) => x.state === 'pendiente').length, pagado: ps.filter((x) => x.state === 'pagado').length } };
+  }
+  if (a === 'admin_payout_paid') {
+    const note = String(body.note ?? '').trim();
+    if (note.length < 3) throw err(400, 'note_required', 'Escribe una nota (por ejemplo, el número de transferencia).');
+    const x = (c.payouts ?? []).find((p) => p.slug === body.slug); if (!x) throw err(404, 'not_found', 'No encontramos ese pago pendiente.');
+    if (x.state === 'pagado') return { done: true, already: true, paid_at: x.paid_at };
+    Object.assign(x, { state: 'pagado', paid_at: new Date().toISOString(), paid_by: 'admin@demo.meteorito.app', note: note.slice(0, 500) }); c.emit();
+    return { done: true, already: false, paid_at: x.paid_at };
+  }
   throw err(400, 'bad_action', 'acción inválida');
+}
+/** Cola de ejemplo del demo (?admin=1): dos ventas liberadas a 'platform' que falta pagar al IBAN y una ya pagada. */
+export function demoPayoutSeed(at = Date.now()): any[] {
+  const iso = (h: number) => new Date(at - h * 3_600_000).toISOString();
+  return [
+    { slug: 'pay001', state: 'pendiente', amount_usdc: 293.24, amount_crc: 150000, iban: 'CR05015202001026284066', holder_name: 'Valeria Mora', released_tx: 'a'.repeat(64), created_at: iso(3), paid_at: null, paid_by: null, note: null, product: 'Apple iPhone 13' },
+    { slug: 'pay002', state: 'pendiente', amount_usdc: 58.65, amount_crc: 30000, iban: 'CR05015202001026284066', holder_name: 'Valeria Mora', released_tx: 'b'.repeat(64), created_at: iso(26), paid_at: null, paid_by: null, note: null, product: 'Guitarra acústica' },
+    { slug: 'pay003', state: 'pagado', amount_usdc: 97.75, amount_crc: 50000, iban: 'CR05015202001026284066', holder_name: 'Valeria Mora', released_tx: 'c'.repeat(64), created_at: iso(72), paid_at: iso(50), paid_by: 'admin@demo.meteorito.app', note: 'Transferencia 88412', product: 'Bicicleta aro 29' },
+  ];
 }

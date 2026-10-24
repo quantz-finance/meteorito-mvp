@@ -8,7 +8,7 @@ export default function LegalDoc() {
   const { doc } = useLocalSearchParams<{ doc: string }>();
   const d = LEGAL[(doc === 'terminos' ? 'terminos' : 'privacidad')];
   return (
-    <Screen back="/vender" title={d.title} space="calm">
+    <Screen back="/vender" guestBack="/" title={d.title} space="calm">
       <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
         <Chip label="BORRADOR · pendiente de revisión legal" tone="warn" icon="document-text-outline" />
       </View>

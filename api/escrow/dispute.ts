@@ -13,6 +13,7 @@
 //                                                  -> auditoría + resolución on-chain (si el servidor tiene DISPUTE_RESOLVER_SECRET;
 //                                                     si no, queda 'pending_onchain' con el comando del script)
 //   { action:'admin_guest_refund', slug, note? }   -> marca como hecha la devolución por fuera al comprador invitado
+//   { action:'admin_payouts' } / { action:'admin_payout_paid', slug, note } -> cola de pagos a Cuenta IBAN (029; sin ella available:false)
 //  Vendedor del pedido (Bearer Cavos):
 //   { action:'seller_response_get', slug }         -> { available, open, response, deadline, can_respond }
 //   { action:'seller_respond', slug, body, photo?, capture? } -> su versión (texto + foto de la cámara, token 'dispute' propio)
@@ -25,6 +26,7 @@ import { cameraRequired, captureUrl, checkCaptureToken } from '../_lib/capture';
 import { requireAdmin } from '../_lib/admin';
 import { adminAi, adminDetail, adminList, sellerRespond, sellerResponseGet } from '../_lib/disputeAdmin';
 import { decideDispute, markGuestRefunded, validateDecision } from '../_lib/disputeResolve';
+import { adminPayouts, markPayoutPaid } from '../_lib/payoutChoice';
 
 async function action(req: any, res: any, a: string) {
   res.setHeader?.('Cache-Control', 'no-store');
@@ -46,6 +48,9 @@ async function action(req: any, res: any, a: string) {
     return json(res, 200, await decideDispute(order, { sub: admin.sub, email: admin.email, source: 'admin' }, input));
   }
   if (a === 'admin_guest_refund') return json(res, 200, await markGuestRefunded(await orderBySlug(b.slug), admin, b.note));
+  // Cola manual de pagos a Cuenta IBAN (029): el escrow liberó a 'platform'; el equipo transfiere y la marca como pagada.
+  if (a === 'admin_payouts') return json(res, 200, await adminPayouts());
+  if (a === 'admin_payout_paid') return json(res, 200, await markPayoutPaid(b.slug, admin, b.note));
   throw new HttpError(400, 'acción inválida');
 }
 

@@ -28,7 +28,7 @@ export async function run(t: T) {
   const tabs = read('app/(tabs)/_layout.tsx');
   t.check('invitado: sin barra de pestañas (Vender/Home piden entrar); con cuenta, la barra normal', /const guest = useIsGuest\(\)/.test(tabs) && /tabBar=\{\(p\) => \(guest \? null : <TabBar \{\.\.\.p\} \/>\)\}/.test(tabs));
   const nav = read('components/ComprarNav.tsx');
-  t.check('useIsGuest = sin sesión Cavos con dirección', /return !\(auth\.isAuthenticated && auth\.address\)/.test(nav) && /GUEST_BACK = '\/'/.test(nav));
+  t.check('useIsGuest = sin sesión Cavos con dirección', /return !\(auth\.isAuthenticated && auth\.address\)/.test(read('lib/useIsGuest.ts')) && /export \{ useIsGuest \}/.test(nav) && /GUEST_BACK = '\/'/.test(nav));
   for (const [f, active] of [['index', 'feed'], ['link', 'link'], ['compras', 'compras']] as const) {
     const s = read(`app/(tabs)/comprar/${f}.tsx`);
     t.check(`${f}: invitado con "Volver" arriba a la izquierda + el mismo selector de 3 iconos`, /const guest = useIsGuest\(\)/.test(s) && /<Screen back=\{guest \? GUEST_BACK : undefined\} backTop /.test(s) && s.includes(`<ComprarNav active="${active}" />`));
@@ -36,7 +36,7 @@ export async function run(t: T) {
   const ds = read('components/ds.tsx');
   t.check('Screen backTop: Volver encima del título (no compite con los 3 iconos)', /const backBtn = back && \(!title \|\| backTop\) \? <BackButton fallback=\{back\} replace=\{backTop\} \/>/.test(ds) && /back=\{backTop \? undefined : back\}/.test(ds));
 
-  t.check('Volver del invitado va directo a la bienvenida (la bienvenida no está en la pila: router.back() no hacía nada)', /if \(replace\) exitTo\(fallback\); else goBack\(fallback\)/.test(read('components/BackButton.tsx')) && /window\.location\.assign\(String\(href\)\)/.test(read('components/BackButton.tsx')));
+  t.check('Volver del invitado va directo a la bienvenida (la bienvenida no está en la pila: router.back() no hacía nada)', /if \(exit\) return exitTo\(to\)/.test(read('components/BackButton.tsx')) && /window\.location\.assign\(String\(href\)\)/.test(read('components/BackButton.tsx')));
 
   // ---------- Vacío amable + seguimiento con push ----------
   t.check('vacío: "Aquí verás tus compras activas." + link al feed', MY_PURCHASES_EMPTY === 'Aquí verás tus compras activas.' && MY_PURCHASES_TO_FEED === 'Ver productos');

@@ -15,6 +15,7 @@ import { isGuestSub } from './guest';
 import { isMissingTable } from './push';
 import type { Outcome, RuleResult } from './disputeRules';
 import { pctOf } from './disputeRules';
+import { enqueueIbanPayout, netUsdc, sellerPayee } from './payoutChoice';
 
 /** Reparto on-chain + actualización de pedido y disputa. buyerPct 0..100 del monto del pedido (excedente al comprador). */
 export async function resolveOrderDispute(order: any, resolverSecret: string, buyerPct: number) {
@@ -26,7 +27,7 @@ export async function resolveOrderDispute(order: any, resolverSecret: string, bu
   const { toBuyer, toSeller } = disputeSplit(bal, Number(order.amount_usdc), buyerPct);
   const distributions = [
     ...(toBuyer > 0 ? [{ address: order.buyer_address, amount: toBuyer }] : []),
-    ...(toSeller > 0 ? [{ address: order.seller_address, amount: toSeller }] : []),
+    ...(toSeller > 0 ? [{ address: sellerPayee(order), amount: toSeller }] : []),
   ];
   const r = await chain().resolveDispute(order.contract_id, resolverSecret, distributions);
   const resolution = { buyerPct, toBuyer, toSeller, balance: bal };
@@ -35,6 +36,11 @@ export async function resolveOrderDispute(order: any, resolverSecret: string, bu
   await advance(order.id, 'en_disputa', { resolved_tx: r.hash, resolved_at: now, resolution, status: 'resuelto' });
   await db().from('disputes').update({ state: 'resolved', resolution, resolved_tx: r.hash, resolved_at: now }).eq('order_id', order.id);
   await logEvent(order.id, 'dispute_resolved', { hash: r.hash, ...resolution });
+  // Vendedor con Cuenta IBAN: su parte llegó a 'platform' -> cola manual de pagos (como en la liberación normal).
+  if (toSeller > 0 && order.payout_method === 'iban') {
+    const net = netUsdc(toSeller); const fx = Number(order.fx_crc_per_usdc) || env.crcUsdcRate();
+    await enqueueIbanPayout(order, { amountUsdc: net, amountCrc: Math.round(net * fx), tx: r.hash }).catch((e) => console.warn('[payout] cola', e?.message));
+  }
   return { resolvedTx: r.hash as string, ...resolution };
 }
 

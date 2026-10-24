@@ -53,10 +53,10 @@ test.describe('Vendedor (demo)', () => {
 
   test('VEN-05 Mi cuenta: IBAN inválido se rechaza, válido se guarda enmascarado', async ({ page }) => {
     await open(page, '/mi-tienda', 'seller', true);
-    await page.getByText('Agrega tu cuenta IBAN').click();
+    await page.getByText('Elige dónde cobrar').click(); // con 029 (el demo la simula): Cuenta IBAN por defecto
     const iban = page.getByPlaceholder('CR00 0000 0000 0000 0000 00');
     const save = page.getByRole('button', { name: /Guardar cuenta/ });
-    await page.getByPlaceholder('Como aparece en el banco').fill('Valeria Mora');
+    await page.getByPlaceholder('Como aparece en tu cuenta').fill('Valeria Mora');
     await iban.fill('CR05015202001026284067'); // dígito de control mod-97 malo
     await expect(save).toBeDisabled();
     await iban.fill('CR05015202001026284066');

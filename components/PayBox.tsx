@@ -1,6 +1,6 @@
 import { timeLeft, useAutoReleaseWindow } from '@/lib/autorelease';
 import { friendlyPayError } from '@/lib/wallet';
-// Comprador: Pagar en custodia -> tarjeta (formulario propio, components/CardSheet.tsx) o SINPE simulado ("Ya pagué") -> fondos en escrow TW testnet. Luego "Recibí".
+// Comprador: Pagar en custodia -> tarjeta (formulario propio, components/CardSheet.tsx), cripto discreto (components/CryptoSheet.tsx) o SINPE simulado ("Ya pagué") -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
 import { useEffect, useRef, useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -25,6 +25,8 @@ import { DEMO_ENABLED } from '@/lib/demo';
 import { ChainLinks } from '@/components/ChainLinks';
 import { openCardWidget } from '@/lib/cardPay';
 import { CardSheet, type CardPayInput } from '@/components/CardSheet';
+import { CryptoSheet } from '@/components/CryptoSheet';
+import { pressTransition } from '@/constants/motion';
 import { BetaNotice } from '@/components/RulesLink';
 
 const CARD_PROCESSING = 'Tu pago con tarjeta se está procesando. Vuelve a tocar "Pagar con tarjeta" en unos segundos.';
@@ -41,13 +43,14 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const setPin = (p: string | null) => { setPinState(p); if (p) savePin(order.slug, p); };
   const granted = !!loadGrant(order.slug); // abrió un link de acceso (correo / WhatsApp) en este dispositivo
   const buyerHere = !!pin || granted || auth.isAuthenticated; // este dispositivo es el del comprador (PIN o link de acceso) o hay sesión
-  const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'paid' | 'photo' | 'released' | 'dispute' | null>(null);
+  const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'crypto' | 'paid' | 'photo' | 'released' | 'dispute' | null>(null);
   const [card, setCard] = useState(false); // el servidor tiene el pago con tarjeta configurado (start -> card)
+  const [crypto, setCrypto] = useState(false); // pago con cripto (USDC/XLM en Stellar) disponible (start -> crypto)
   // 'inapp' (default): nuestro formulario. 'widget': respaldo con el widget de Lendara (LENDARA_MODE=widget en el servidor).
   const [cardMode, setCardMode] = useState<'inapp' | 'widget'>('inapp');
   const payOpen = (r: any) => {
-    setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference }); setCard(!!r.card);
-    setCardMode(r.cardMode === 'inapp' ? 'inapp' : 'widget'); setSheet(r.card ? 'method' : 'sinpe');
+    setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference }); setCard(!!r.card); setCrypto(!!r.crypto);
+    setCardMode(r.cardMode === 'inapp' ? 'inapp' : 'widget'); setSheet(r.card || r.crypto ? 'method' : 'sinpe');
   };
 
   const win = useAutoReleaseWindow();
@@ -97,7 +100,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   }, [pay, order.status]); // eslint-disable-line react-hooks/exhaustive-deps
   // Mis compras: cada compra queda registrada en este dispositivo (al iniciar y al completar el pago) para volver a /p/<pedido>.
   const remember = (slug: string, status: string) => rememberPurchase({ slug, title: orderTitle(order), price_crc: Number(order.price_crc), photo: order.photos?.[0] ?? null, status, delivery_mode: order.delivery_mode });
-  const funded = (r: { pin?: string | null }, method: 'card' | 'sinpe') => {
+  const funded = (r: { pin?: string | null }, method: 'card' | 'sinpe' | 'crypto') => {
     // El código de entrega se guarda en este navegador pero NO se muestra todavía: aparece cuando el vendedor lo envía.
     remember(order.slug, 'fondeado'); track('payment_funded_client', { method }); if (r.pin) setPin(r.pin); setSheet(r.pin || pin ? 'paid' : null); onChange();
   };
@@ -133,9 +136,15 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     <Sheet visible={sheet === 'method' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Elige cómo pagar"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
-        <PrimaryButton title="Pagar con tarjeta" icon="card" loading={busy}
-          onPress={cardMode === 'inapp' ? () => { track('card_pay_tapped'); setErr(null); setSheet('card'); } : payCard} />
-        <PrimaryButton title="Pagar por SINPE Móvil" icon="phone-portrait-outline" variant="secondary" disabled={busy} onPress={() => { setErr(null); setSheet('sinpe'); }} />
+        {card ? <PrimaryButton title="Pagar con tarjeta" icon="card" loading={busy}
+          onPress={cardMode === 'inapp' ? () => { track('card_pay_tapped'); setErr(null); setSheet('card'); } : payCard} /> : null}
+        <PrimaryButton title="Pagar por SINPE Móvil" icon="phone-portrait-outline" variant={card ? 'secondary' : 'primary'} disabled={busy} onPress={() => { setErr(null); setSheet('sinpe'); }} />
+        {crypto ? <Pressable testID="pay-crypto" accessibilityRole="button" accessibilityLabel="Pagar con cripto" hitSlop={4} disabled={busy}
+          onPress={() => { track('crypto_tapped'); setErr(null); setSheet('crypto'); }}
+          style={({ pressed }) => [{ alignSelf: 'center', minHeight: 44, paddingHorizontal: S.md, flexDirection: 'row', alignItems: 'center', gap: 6 }, pressTransition, pressed && { opacity: 0.7 }]}>
+          <Icon name="swap-horizontal" size={16} color={C.lilac} />
+          <Text style={[T.footnote, { color: C.lilac, fontSize: 14 }]}>Cripto</Text>
+        </Pressable> : null}
       </>}>
       {sinpe && <>
         <Card style={{ alignItems: 'center', paddingVertical: S.lg }}>
@@ -148,6 +157,10 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     </Sheet>
     <CardSheet visible={sheet === 'card' && !!sinpe && order.status === 'escrow_creado'} amountCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
       onClose={() => setSheet('method')} onPay={payCardInApp} onSinpe={() => { setErr(null); setSheet('sinpe'); }} />
+    <CryptoSheet visible={sheet === 'crypto' && !!sinpe && order.status === 'escrow_creado'} priceCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
+      onClose={() => setSheet(null)} onBack={() => setSheet('method')}
+      call={(step, extra) => guestApi(auth, '/api/escrow/pay', { slug: order.slug, step, ...extra })}
+      onFunded={(r) => funded(r, 'crypto')} />
     <Sheet visible={sheet === 'sinpe' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Paga por SINPE Móvil"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
@@ -209,7 +222,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         })} />
     </>;
   } else if (sinpe && order.status === 'escrow_creado') {
-    footer = <PrimaryButton title="Continuar pago" icon="arrow-forward" onPress={() => { setErr(null); setSheet(card ? 'method' : 'sinpe'); }} />;
+    footer = <PrimaryButton title="Continuar pago" icon="arrow-forward" onPress={() => { setErr(null); setSheet(card || crypto ? 'method' : 'sinpe'); }} />;
   } else if (order.status === 'enviado' && !buyerHere) {
     footer = <Text style={[T.callout, { textAlign: 'center' }]}>Pedido enviado. El comprador confirma la recepción desde el mismo navegador donde pagó.</Text>;
   } else if (order.status === 'enviado') {
