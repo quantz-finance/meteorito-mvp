@@ -144,6 +144,12 @@ async function api(req, path, q, b) {
     if (req.method === 'GET' && q.get('push') === 'key') return { key: VAPID };
     if (req.method === 'GET' && q.get('store')) return q.get('store') === 'valeria' ? { store_slug: 'valeria', display_name: 'Valeria', rating_avg: null, rating_count: 0, items: Object.values(S.orders).filter((o) => o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa').map((o) => ({ slug: o.slug, title: o.model, price_crc: o.price_crc, photo: null })) } : null;
     if (b.action === 'push_subscribe') { needGuest(); if (!b.subscription?.endpoint) throw E(400, 'suscripción inválida'); S.subs.push({ guest, endpoint: b.subscription.endpoint }); return { ok: true }; }
+    if (b.action === 'seller_contact') { // WhatsApp del vendedor: solo el comprador (su llave) y solo con el pedido pagado
+      needGuest(); const o = get(String(b.slug));
+      if (o.buyer !== guest) throw E(403, 'Solo quien compró puede ver el contacto del vendedor.', 'not_buyer');
+      if (!['fondeado', 'enviado', 'entregado', 'liberado', 'en_disputa', 'resuelto'].includes(o.status)) throw E(409, 'Verás el contacto del vendedor cuando pagues.', 'not_paid');
+      return { contact_phone: '+50688887777' };
+    }
     if (b.action === 'rate') {
       needGuest(); const o = get(String(b.slug)); const stars = Number(b.stars);
       if (o.buyer !== guest) throw E(403, 'Solo el comprador puede calificar.');

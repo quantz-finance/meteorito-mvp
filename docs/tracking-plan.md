@@ -25,6 +25,7 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 | `photo_upload_failed` | venta / disputa | `context`, `index`, `precompressed`, `stage` (compress/sign/storage), `code`, `http_status`, `mime` |
 | `share_clicked` / `link_copied` | Compartir | `method` |
 | `payment_link_opened` / `payment_link_not_found` | `/p/:slug` | `status`, `logged_in`, `category` |
+| `seller_contact_opened` | `/p/:slug` (comprador, pedido pagado) | — (nunca el teléfono) |
 | `pay_confirm_tapped` / `payment_funded_client` | PayBox "Ya pagué" | – |
 | `pin_failed` | vendedor ingresa PIN | `locked` |
 | `dispute_opened` | DisputeSheet | `reason`, `photos` |
