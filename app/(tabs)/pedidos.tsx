@@ -10,6 +10,7 @@ import { Card, Chip, ErrorText, Icon, IconButton, MoneyTimeline, PrimaryButton, 
 import { OrderCard } from '@/components/OrderRow';
 import { SellerActions } from '@/components/SellerActions';
 import { SellerOrderChat } from '@/components/OrderChat';
+import { SellerInboxButton } from '@/components/ChatInbox';
 import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
@@ -85,7 +86,7 @@ export default function Pedidos() {
 
   return (
     <Screen title="Home" subtitle={short ? undefined : 'El estado de tu dinero, siempre a la vista.'} scroll={false}
-      right={<IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />}>
+      right={<><SellerInboxButton /><IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} /></>}>
       {/* Sin botón "Actualizar" (era de pruebas): Home carga al enfocar, hace polling mientras haya pedidos no finales y
           vuelve a pedir al regresar a la app/pestaña (useFocusEffect + useOrdersRefresh). */}
       <View style={{ flex: 1, gap: S.sm }}>

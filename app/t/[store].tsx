@@ -9,6 +9,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OwnerTools } from '@/components/OwnerTools';
 import { FollowButton } from '@/components/FollowButton';
+import { ChatButton } from '@/components/ChatButton';
 import { useAuth } from '@/lib/cavos';
 import { isOwnerView, shareLink } from '@/lib/storePage';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
@@ -125,8 +126,10 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
       </View>
 
       <View style={{ gap: S.sm }}>
-        {p.whatsapp ? <PrimaryButton title="Escribir por WhatsApp" icon="logo-whatsapp" onPress={() => openWhatsApp(p)} /> : null}
-        <PrimaryButton testID="share-store" title={owner ? COPY.store.shareMine : COPY.store.share} icon="share-outline" variant={p.whatsapp && !owner ? 'secondary' : 'primary'} onPress={() => shareProfile(p, owner)} />
+        {/* Chat dentro de Meteorito primero (la compra sigue en custodia); WhatsApp queda como alternativa. */}
+        {!owner ? <ChatButton as="buyer" target={{ store_slug: p.store_slug }} source="store" variant="primary" testID="store-chat" /> : null}
+        {p.whatsapp ? <PrimaryButton title="Escribir por WhatsApp" icon="logo-whatsapp" variant="secondary" onPress={() => openWhatsApp(p)} /> : null}
+        <PrimaryButton testID="share-store" title={owner ? COPY.store.shareMine : COPY.store.share} icon="share-outline" variant={owner ? 'primary' : 'secondary'} onPress={() => shareProfile(p, owner)} />
         <View style={[s.metaRow, { justifyContent: 'center' }]}>
           <Icon name="lock-closed" size={13} color={C.textDim} />
           <Text style={[T.footnote, { textAlign: 'center', flexShrink: 1 }]}>{COPY.profile.escrowNote}</Text>
