@@ -1,6 +1,7 @@
 // (63) WhatsApp en el perfil público: opt-in del vendedor (whatsapp_public, migración 019). Por defecto NO se muestra;
 //      solo el dueño lo activa, solo con número guardado; sin la migración: leer -> false, guardar -> 503 amable. Sin red.
 import type { T } from './setup';
+import { COPY } from '../../lib/copy';
 import { readFileSync } from 'node:fs';
 import { installTestJwks, res, token } from './jwt';
 import { __setDbForTests } from '../../api/_lib/db';
@@ -60,7 +61,7 @@ export async function run(t: T) {
   (db as any).from = orig;
 
   const ui = readFileSync('components/Payout.tsx', 'utf8');
-  t.check('Mi tienda: interruptor "Mostrar en mi perfil público" y textos honestos', /Mostrar en mi perfil público/.test(ui) && /whatsapp_public/.test(ui) && !/nunca lo muestra/.test(ui));
+  t.check('Mi tienda: interruptor "Mostrar en mi perfil público" y textos honestos', /COPY\.whatsappPublic\.label/.test(ui) && COPY.whatsappPublic.label === 'Mostrar en mi perfil público' && /whatsapp_public/.test(ui) && !/nunca lo muestra/.test(ui));
   const mig = readFileSync('supabase/migrations/019_seller_profile_flags.sql', 'utf8');
   t.check('migración 019: whatsapp_public default false, listed_in_feed default true, pg_trgm', /whatsapp_public boolean not null default false/.test(mig) && /listed_in_feed boolean not null default true/.test(mig) && /pg_trgm/.test(mig));
 }

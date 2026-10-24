@@ -1,5 +1,6 @@
 // "Arma un gran perfil": progreso del perfil + cuenta IBAN para cobrar + WhatsApp de contacto (opcional). Se carga diferido (React.lazy) desde
 // Mi cuenta y Mi tienda: no pesa en la bienvenida ni en /p/.
+import { COPY } from '@/lib/copy';
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ErrorText, haptic, Icon, PrimaryButton, Sheet, Skeleton, toast } from '@/components/ds';
@@ -128,10 +129,10 @@ function ContactSheet({ visible, onClose, phone, isPublic, onSaved }: { visible:
       {err ? <ErrorText>{err}</ErrorText> : null}
       <View style={s.pubRow}>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={T.body}>Mostrar en mi perfil público</Text>
-          <Text style={T.footnote}>{pub ? 'Cualquiera que vea tu perfil puede escribirte por WhatsApp.' : 'Tu perfil público no lo muestra.'}</Text>
+          <Text style={T.body}>{COPY.whatsappPublic.label}</Text>
+          <Text style={T.footnote}>{pub ? COPY.whatsappPublic.on : COPY.whatsappPublic.off}</Text>
         </View>
-        <Switch value={pub} onValueChange={(x) => { haptic.tap(); setPub(x); }} disabled={busy || !(n && n !== 'invalid')} accessibilityLabel="Mostrar mi WhatsApp en mi perfil público"
+        <Switch value={pub} onValueChange={(x) => { haptic.tap(); setPub(x); }} disabled={busy || !(n && n !== 'invalid')} accessibilityLabel={COPY.whatsappPublic.a11y}
           trackColor={{ true: C.purple, false: C.surface2 }} thumbColor={C.white} testID="whatsapp-public-switch" />
       </View>
     </Sheet>
