@@ -4,6 +4,7 @@
 //  - Respaldo sin auth: GET ?slug=xxxxxx (la página pública lo llama al cargar). Solo procesa ESE pedido y solo si ya venció.
 // Plazo real = releaseDueAt (nunca antes de shipped_at + 7 días): si auto_release_at quedó corto (env viejo de 10 min),
 // se corrige en la fila y no se libera. Disputa y PIN bloqueado congelan la liberación (approveAndRelease).
+// Cripto: pedidos con cotización de las últimas 24 h -> cryptoStatus (api/_lib/crypto.ts).
 // Disputas: con el flag disputes_auto_resolve encendido (apagado por defecto) resuelve las que una regla decide (api/_lib/disputeAdmin.ts).
 // Idempotente: lock por fila (release_lock_until) + updates condicionados al status. Verificación on-chain en approveAndRelease.
 import { db, json, fail, logEvent } from '../_lib/db';
@@ -13,6 +14,7 @@ import { missingColumn } from '../_lib/listings';
 import { approveAndRelease } from '../_lib/escrow';
 import { notifyDueSoon } from '../_lib/buyerContact';
 import { autoResolvePass } from '../_lib/disputeAdmin';
+import { cryptoCronPass } from '../_lib/crypto';
 
 async function claim(id: string): Promise<boolean> {
   const now = new Date();
@@ -59,6 +61,8 @@ export default async function handler(req: any, res: any) {
     const dueSoon = await notifyDueSoon(db());
     // Disputas: auto-resolución por reglas SOLO con el flag disputes_auto_resolve (apagado por defecto). Nunca tumba el cron.
     const disputes = await autoResolvePass().catch((e: any) => ({ skipped: 'error', resolved: [], errors: [String(e?.message ?? e).slice(0, 120)] }));
-    return json(res, 200, { processed: out, disputes, due_soon_notices: dueSoon });
+    // Pagos con cripto: fondea los pedidos cuyo pago ya llegó aunque el comprador haya cerrado la pantalla. Nunca tumba el cron.
+    const crypto = await cryptoCronPass().catch((e: any) => [{ slug: '', error: String(e?.message ?? e).slice(0, 120) }]);
+    return json(res, 200, { processed: out, disputes, due_soon_notices: dueSoon, ...(crypto.length ? { crypto } : {}) });
   } catch (e) { return fail(res, e); }
 }
