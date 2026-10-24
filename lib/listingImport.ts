@@ -57,7 +57,7 @@ export function importNotice(r: ListingImport): { title: string; body: string } 
 export const INVITE_URL_INVALID = 'Pega el link completo del anuncio (empieza con https://).';
 /** Marketplaces que se muestran en la hoja (iconos): son los que se aceptan, no una promesa de leerlos. */
 export const INVITE_MARKETS: ProviderId[] = ['facebook', 'mercadolibre', 'amazon', 'encuentra24', 'walmart'];
-export const inviteMarketsLabel = 'Facebook, Mercado Libre, Amazon y más';
+export const inviteMarketsLabel = 'Pega el link del anuncio';
 
 /** Comprador sin cuenta: mismo import_listing que Vender, identificado con su llave de invitado. */
 export async function importFromLinkAsBuyer(auth: Pick<MeteoritoAuth, 'getAuthToken'>, raw: string): Promise<ListingImport> {
@@ -67,16 +67,18 @@ export async function importFromLinkAsBuyer(auth: Pick<MeteoritoAuth, 'getAuthTo
 }
 
 type Detected = NonNullable<ReturnType<typeof detectProvider>>;
+/** Proveedor que no se lee (bloquea nuestros servidores): no nombra al proveedor. Copy final aprobado por Neo. */
+export const INVITE_UNREAD = 'No pudimos leer ese anuncio. Escribe el nombre y el precio.';
 /** Se intenta leer solo donde funciona; los proveedores que bloquean nuestros servidores no se piden. */
 export const inviteCanRead = (d: Detected) => !d.blocked;
 /** Línea debajo del campo apenas se pega el link (sin error para ningún proveedor). */
-export const inviteDetectedLabel = (d: Detected) => d.blocked ? `Anuncio de ${d.name}: tú escribes el nombre y el precio.`
+export const inviteDetectedLabel = (d: Detected) => d.blocked ? INVITE_UNREAD
   : d.id === 'web' ? `Anuncio de ${d.name}` : `Anuncio de ${d.name}: llenamos el nombre, el precio y la foto.`;
 
 /** Aviso en el formulario después de pegar el link. `r` null = no se pidió (proveedor bloqueado) o falló la red. */
 export function inviteImportNotice(d: Pick<Detected, 'name'>, r: ListingImport | null): { title: string; body: string } {
   const name = r?.provider_name || d.name;
-  if (!r || r.result === 'failed') return { title: `Anuncio de ${name}`, body: 'Escribe el nombre y el precio. El vendedor verá el link del anuncio.' };
+  if (!r || r.result === 'failed') return { title: 'No pudimos leer ese anuncio.', body: 'Escribe el nombre y el precio. El vendedor verá el link del anuncio.' };
   if (r.result === 'partial') return { title: `Importamos parte de ${name}`, body: importNotice(r).body.replace('generar el link', 'crear la invitación') };
   const conv = importNotice(r).body.replace('Si todo está bien, genera tu link.', '').trim();
   return { title: `Importado de ${name}`, body: `${conv ? conv + ' ' : ''}Ajusta el precio si acordaste otro con el vendedor.` };

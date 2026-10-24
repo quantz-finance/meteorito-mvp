@@ -137,6 +137,7 @@ test.describe('Comprar: feed y perfil', () => {
     await open(page, '/comprar', 'buyer', true);
     await expect(page.getByTestId('feed-card').first()).toBeVisible();
     await settle(page);
+    await expect(page.getByTestId('feed-view')).toBeInViewport(); // Para ti / Siguiendo, arriba
     await expect(page.getByTestId('feed-filter')).toBeInViewport();
     await page.screenshot({ path: 'test-results/feed-filtro-2.png' });
   });

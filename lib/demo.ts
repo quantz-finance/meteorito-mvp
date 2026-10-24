@@ -40,7 +40,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -86,6 +86,7 @@ function init(): DemoState {
       if (q.get('demo_reset') === '1') { st = fresh(); try { window.sessionStorage.removeItem('meteorito:demo:chat:v1'); } catch { /* */ } }
       const role = q.get('role'); if (role === 'seller' || role === 'buyer') st.role = role;
       const buyer = q.get('buyer'); if (buyer && /^[A-Za-z0-9]{1,8}$/.test(buyer)) st.buyer = buyer;
+      const admin = q.get('admin'); if (admin === '1') st.admin = true; else if (admin === '0') st.admin = false;
       const badge = q.get('badge'); if (badge === '0' || badge === 'false') st.badge = false; else if (badge === '1' || badge === 'true') st.badge = true;
     } catch { /* ignorar */ }
   }
@@ -171,7 +172,8 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
       if (!['ship', 'listing', 'dispute'].includes(purpose)) throw err(400, 'capture_bad_purpose', 'propósito inválido');
       const ref = purpose === 'listing' ? 'new' : String(body.ref);
       if (purpose === 'ship') { need('seller'); const o = get(ref); if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.'); }
-      if (purpose === 'dispute') { need('buyer'); const o = get(ref); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador de este pedido'); }
+      if (purpose === 'dispute' && body.as === 'seller') { need('seller'); const o = get(ref); if (o.status !== 'en_disputa') throw err(409, 'bad_state', 'Esta disputa ya no está abierta.'); }
+      else if (purpose === 'dispute') { need('buyer'); const o = get(ref); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador de este pedido'); }
       const id = Array.from({ length: 4 }, () => Math.random().toString(16).slice(2, 10).padEnd(8, '0')).join('').slice(0, 32).replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
       const token = `demo.${purpose}.${id}`; const exp = Date.now() + DEMO_CAPTURE_TTL;
       demoCaps.set(token, { id, purpose, ref, exp, used: false });
@@ -320,6 +322,10 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
       if (String(body.pin) !== o.pin) { o.pin_attempts = (o.pin_attempts ?? 0) + 1; emit(); throw err(401, 'bad_pin', 'PIN incorrecto'); }
     } else { need('buyer'); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador'); }
     o.delivered_at = now(); o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = now(); emit(); return { released: true, releasedTx: o.released_tx };
+  }
+  if (p === '/api/escrow/dispute' && typeof body.action === 'string') { // panel admin + respuesta del vendedor: lib/demoAdmin.ts
+    const { demoAdminApi } = await import('./demoAdmin');
+    return demoAdminApi({ admin: !!st.admin, role: st.role, orders: st.orders, audit: (st.audit ??= {}), responses: (st.responses ??= {}), caps: demoCaps, resolve: demoResolve, emit }, body);
   }
   if (p === '/api/escrow/dispute') {
     need('buyer'); const o = get(String(body.slug));
@@ -495,6 +501,7 @@ if (DEMO_ENABLED && hasWindow()) {
     setRole: setDemoRole, getRole: getDemoRole, reset: resetDemo, seed: demoSeed, setBadge: setDemoBadge, DEMO_PIN,
     setBuyer: (b: string) => { S().buyer = b; emit(); }, advance: (ms: number) => { S().clock = (S().clock ?? 0) + ms; emit(); },
     cron: demoRunCron, resolve: demoResolve, state: () => S(), expireSession: demoExpireSession,
+    api: demoApi, setAdmin: (v: boolean) => { S().admin = v; emit(); },
   };
 }
 

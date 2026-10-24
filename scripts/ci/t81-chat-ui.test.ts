@@ -49,5 +49,13 @@ export async function run(t: T) {
   const legal = read('lib/legal.ts');
   const line = JSON.stringify(LEGAL.privacidad);
   t.check('privacidad: línea del chat marcada para revisión legal (Neo)', /REVISIÓN LEGAL \(Neo\)[^\n]*chat/.test(legal) && /Mensajes del chat/.test(line) && /12 meses/.test(line));
+  t.check('privacidad: retención en pausa con disputa abierta (12 meses desde la resolución)', /Borramos cada conversación 12 meses después de su último mensaje\. Si hay una disputa abierta, no la borramos y los 12 meses empiezan a contar cuando se resuelve\./.test(line));
+  t.check('privacidad: sin "quedan en este dispositivo" (los mensajes se guardan en el servidor)', !/quedan en este dispositivo/.test(JSON.stringify(K)));
+  // Copy final aprobado (Neo): avisos que sí existen, reporte sin aviso a la otra parte, bloqueo con compra o disputa.
+  t.check('copy final: bandeja vacía, primer mensaje, reporte y bloqueo', K.inboxEmptyBuyer === 'Escríbele a un vendedor desde su tienda o un producto. Tus conversaciones aparecen aquí.'
+    && K.first('Valeria') === 'Escríbele a Valeria. Su respuesta aparecerá aquí.' && K.firstSeller === 'Escríbele al comprador. Su respuesta aparecerá aquí.'
+    && K.reportText === 'Cuéntanos qué pasa. El equipo de Meteorito lo revisa. No le avisamos que la reportaste.'
+    && K.blockLocked === 'No puedes bloquear mientras haya una compra en curso o una disputa abierta. Si hay un problema, repórtalo.' && !/avisamos cuando respond/i.test(JSON.stringify(all)));
+  t.check('pantalla: con compra o disputa, Bloquear queda deshabilitado con la explicación (el servidor también lo rechaza)', /testID="chat-block-locked"/.test(chat) && /K\.blockLocked/.test(chat) && /state\.blocked \|\| canBlock/.test(chat));
   t.check('la línea legal no usa palabras prohibidas', !BANNED_COPY.test(legal.split('\n').find((l) => l.includes('Mensajes del chat')) ?? ''));
 }

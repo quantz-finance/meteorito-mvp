@@ -77,6 +77,8 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '83', name: 'Panel de disputas: reglas (sin envío, envío sin prueba, 48 h sin respuesta), admin solo por servidor (no admin 404), decisión + resolución compartida con el script, auditoría, devolución al invitado, IA sin PII con caché, sin 027 degrada', file: './t83-disputes-admin.test.ts', onchain: false },
   { id: '84', name: 'Sesión vencida del vendedor: sin token vencido al SDK, re-login encima de la pantalla + reintento único, borrador persistente, misma pantalla, sin "recarga la página"', file: './t84-sesion-vencida.test.ts', onchain: false },
   { id: '85', name: 'Mis compras sin cuenta: toda Comprar pública, sin barra del vendedor, Volver y vacío amable', file: './t85-mis-compras-invitado.test.ts', onchain: false },
+  { id: '86', name: 'Seguidores privados: la tienda y el API nunca dicen quién sigue (ni al dueño); solo el número, que no se toca; ventas cerradas en el feed siguen', file: './t86-followers-private.test.ts', onchain: false },
+  { id: '87', name: 'Comprar › Siguiendo: solo las tiendas que sigues (cuenta o dispositivo), con filtro y búsqueda, sin ejemplos ni Patrocinado, vacío en tuteo; Para ti no cambia', file: './t87-feed-siguiendo.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
