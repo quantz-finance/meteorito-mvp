@@ -18,6 +18,7 @@ import { useAuth } from '@/lib/cavos';
 import { formatCRC, getPublicOrder, orderTitle, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
 import { isBuyerDevice } from '@/lib/guest';
 import { SellerContact } from '@/components/SellerContact';
+import { OrderChatCard } from '@/components/OrderChat';
 import { canShowContact } from '../../api/_lib/contact';
 import { haptic } from '@/components/ds';
 import { getOrderSeller, rateOrder, ratedStars, rememberRated, type OrderSeller } from '@/lib/store';
@@ -134,6 +135,8 @@ export default function LinkDeVenta() {
       )}
 
       {/* WhatsApp del vendedor: solo el comprador (su dispositivo) y solo después de pagar; el servidor lo vuelve a validar. */}
+      {/* Chat de la compra (comprador): mismo criterio que el contacto; el servidor valida llave/sesión y pedido. */}
+      {canShowContact(order.status) && isBuyerDevice(order.slug) ? <OrderChatCard slug={order.slug} /> : null}
       {canShowContact(order.status) && isBuyerDevice(order.slug) ? <SellerContact slug={order.slug} /> : null}
       {RATABLE.includes(order.status) && isBuyerDevice(order.slug) ? <RateCard slug={order.slug} /> : null}
       {['fondeado', 'enviado', 'en_disputa'].includes(order.status) && isBuyerDevice(order.slug)

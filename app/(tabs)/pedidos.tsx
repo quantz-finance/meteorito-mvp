@@ -9,6 +9,7 @@ import { GridPager } from '@/components/GridPager';
 import { Card, Chip, ErrorText, Icon, IconButton, MoneyTimeline, PrimaryButton, Screen, Sheet, SkeletonCard, statusTone } from '@/components/ds';
 import { OrderCard } from '@/components/OrderRow';
 import { SellerActions } from '@/components/SellerActions';
+import { SellerOrderChat } from '@/components/OrderChat';
 import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
@@ -121,6 +122,7 @@ export default function Pedidos() {
             <Text style={T.callout}>{(detail?.slug === open.slug && detail?.delivery_mode === 'cara_a_cara' && F2F_HINT[open.status]) || NEXT_HINT[open.status] || ''}</Text>
           </Card>
           <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />
+          {open.status !== 'creado' ? <SellerOrderChat slug={open.slug} onOpen={() => setOpenSlug(null)} /> : null}
           {open.status === 'creado' ? <AdTemplateButton onPress={() => {
             const d = detail?.slug === open.slug ? detail : null;
             setAd({ title: orderTitle(open), price_crc: open.price_crc, link: orderLink(open.slug), description: d?.description ?? null, delivery_mode: d?.delivery_mode ?? open.delivery_mode, protection_minutes: d?.protection_minutes ?? null });

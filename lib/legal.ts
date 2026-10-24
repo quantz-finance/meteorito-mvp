@@ -17,6 +17,8 @@ const BASE_LEGAL: Record<'privacidad' | 'terminos', Doc> = {
         'Publicaciones: categoría, marca, modelo, estado, precio, descripción, fotos e identificador del equipo (IMEI o número de serie) que tú ingresas.',
         'Fotos: se guardan en Supabase (almacenamiento) y se muestran en el link de venta.',
         'Pedidos y disputas: estados, fechas, motivo y evidencia que adjuntes.',
+        // REVISIÓN LEGAL (Neo): línea NUEVA del chat (025), propuesta pendiente de aprobación. Plazo propuesto: 12 meses.
+        'Mensajes del chat: el texto de los mensajes que intercambias con un vendedor o un comprador dentro de Meteorito, con su fecha y hora, si se leyeron y los reportes que hagas. Los guardamos para que puedan coordinar la compra, para revisar reportes de abuso o fraude y como evidencia si se abre una disputa. Solo ven la conversación las dos partes; el equipo de Meteorito la revisa únicamente si alguien la reporta o hay una disputa. Si compras sin cuenta, la conversación queda ligada a la llave de este dispositivo, no a tu nombre. Borramos cada conversación 12 meses después de su último mensaje.',
         'Última conexión (opcional): si la enciendes, quienes ven tu tienda en Meteorito ven cuándo estuviste activo por última vez, de forma aproximada y sin hora exacta (por ejemplo, «En línea» o «Activo hace 3 h»), para que sepan si sueles estar disponible. Está apagada por defecto, registramos cuándo la enciendes o la apagas, y puedes apagarla cuando quieras en Mi cuenta; al apagarla dejamos de mostrarla y borramos la hora guardada.',
       ] },
       { h: 'Analítica de uso (PostHog)', p: [

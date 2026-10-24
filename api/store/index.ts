@@ -38,6 +38,14 @@
 //                                                 (migración 022). Privado: devuelve { following, followers } (solo el número).
 //                                                 Anti-spam: FOLLOW_PER_MIN por identidad (+ por IP sin cuenta), tope 500.
 //  POST { action:'following' }                    (X-Guest-Key y/o Bearer Cavos) -> { store_slugs }: a quién sigo YO. Sin 022: [].
+//  GET  ?chat=status                             -> { available }: ¿está el chat (migración 025)? Caché pública corta. Sin ella la app
+//                                                 oculta los botones de mensaje. Ver api/_lib/chat.ts y docs/chat.md.
+//  POST { action:'chat_open', store_slug, item_slug? } | { action:'chat_open', order_slug } (X-Guest-Key y/o Bearer)
+//                                                 -> { token, role }: conversación con el vendedor (antes de comprar) o del pedido
+//  POST { action:'chat_get', token, after?, before?, typing?, full? } -> mensajes (solo las dos partes; si no, 404)
+//  POST { action:'chat_send', token, body, client_id } -> { message } (1000 caracteres, límite por minuto, push a la otra parte)
+//  POST { action:'chat_list', as:'buyer'|'seller', summary? } -> bandeja { unread, conversations } (vendedor: Bearer Cavos)
+//  POST { action:'chat_block', token, blocked } (vendedor) / { action:'chat_report', token, reason, detail? } (cualquiera)
 //  POST { action:'import_facebook', url }         (Bearer Cavos o X-Guest-Key del comprador que invita) -> lee un anuncio PÚBLICO de Facebook Marketplace (solo
 //                                                 facebook.com / fb.me) para precargar Vender: título, precio en colones,
 //                                                 descripción y foto (data URL + photo_urls: la misma foto guardada por el
@@ -64,6 +72,7 @@ import { canShowContact, normalizeContactPhone } from '../_lib/contact';
 import { buyerOrders } from '../_lib/purchases';
 import { FOLLOW_IP_PER_MIN, followedSellerSubs, followingSlugs, followRateLimited, setFollow } from '../_lib/follows';
 import { sponsoredFor } from '../_lib/sponsored';
+import { blockChat, chatAvailable, listChats, openChat, readChat, reportChat, sendChat } from '../_lib/chat';
 import { parseVerified, searchTokens } from '../_lib/feedText';
 import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
@@ -202,6 +211,10 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { activity: await activityBySlug(slugs) });
     }
     if (req.method === 'GET' && req.query?.og != null) return ogPage(req, res);
+    if (req.method === 'GET' && req.query?.chat === 'status') {
+      res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=300');
+      return json(res, 200, { available: await chatAvailable() });
+    }
     if (req.method === 'GET' && req.query?.seller_of != null) {
       const slug = String(req.query.seller_of);
       if (!/^[a-z0-9]{6}$/.test(slug)) throw new HttpError(400, 'slug inválido');
@@ -313,6 +326,23 @@ export default async function handler(req: any, res: any) {
       const who = await requireBuyerIdentity(req);
       res.setHeader?.('Cache-Control', 'no-store');
       return json(res, 200, { store_slugs: await followingSlugs(who.ids) });
+    }
+
+    if (typeof b.action === 'string' && b.action.startsWith('chat_')) {
+      res.setHeader?.('Cache-Control', 'private, no-store');
+      if (b.action === 'chat_list') {
+        const as = b.as === 'seller' ? 'seller' : 'buyer';
+        if (as === 'seller') { const u = await requireCavosUser(req); return json(res, 200, await listChats({ ids: [u.sub] }, 'seller', u.sub, b.summary === true)); }
+        const who = await requireBuyerIdentity(req);
+        return json(res, 200, await listChats(who, 'buyer', null, b.summary === true));
+      }
+      const who = await requireBuyerIdentity(req);
+      if (b.action === 'chat_open') return json(res, 200, await openChat(who, b, who.cavos ? null : clientIp(req)));
+      if (b.action === 'chat_get') return json(res, 200, await readChat(who, b));
+      if (b.action === 'chat_send') return json(res, 200, await sendChat(who, b, { ip: who.cavos ? null : clientIp(req) }));
+      if (b.action === 'chat_block') return json(res, 200, await blockChat(who, b));
+      if (b.action === 'chat_report') return json(res, 200, await reportChat(who, b));
+      throw new HttpError(400, 'acción inválida');
     }
 
     const user = await requireCavosUser(req);

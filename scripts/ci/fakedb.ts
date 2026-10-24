@@ -1,7 +1,8 @@
 // Supabase en memoria para tests (subset de la API de PostgREST que usa api/_lib). PK por tabla → 23505.
 const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id', user_wallets: 'sub', session_nonces: 'nonce', invitations: 'code', seller_ratings: 'order_id', seller_profiles: 'sub' };
 /** Índices únicos además de la PK (→ 23505). */
-const UNIQUE: Record<string, string[]> = { seller_follows: ['follower_id', 'seller_user_id'] };
+const UNIQUE: Record<string, string[][]> = { seller_follows: [['follower_id', 'seller_user_id']],
+  chat_conversations: [['token'], ['buyer_id', 'seller_user_id', 'ctx']], chat_messages: [['conversation_id', 'client_id']], chat_reports: [['conversation_id', 'reporter_role']] };
 export function fakeDb() {
   const tables: Record<string, any[]> = { orders: [], ramp_mock_payments: [], disputes: [], order_events: [], invitations: [] };
   let seq = 1;
@@ -15,13 +16,14 @@ export function fakeDb() {
     const exec = () => {
       if (op === 'insert') {
         const list = Array.isArray(payload) ? payload : [payload];
+        const stored: any[] = [];
         for (const r of list) {
           const k = PK[t] ?? 'id'; const row = { ...r }; if (row[k] == null) row[k] = seq++;
           if (tables[t].some((x) => x[k] === row[k])) return { data: null, error: { code: '23505', message: 'duplicate key' } };
-          const u = UNIQUE[t]; if (u && tables[t].some((x) => u.every((c) => x[c] === row[c]))) return { data: null, error: { code: '23505', message: 'duplicate key' } };
-          tables[t].push(row);
+          const u = UNIQUE[t] ?? []; if (u.some((cols) => cols.every((c) => row[c] != null) && tables[t].some((x) => cols.every((c) => x[c] === row[c])))) return { data: null, error: { code: '23505', message: 'duplicate key' } };
+          tables[t].push(row); stored.push({ ...row });
         }
-        return { data: list, error: null };
+        return { data: returning ? stored : list, error: null };
       }
       if (op === 'update') { const rs = rows(); rs.forEach((r) => Object.assign(r, payload)); return { data: returning ? rs.map((r) => ({ ...r })) : null, error: null }; }
       if (op === 'delete') { const rs = rows(); tables[t] = tables[t].filter((r) => !rs.includes(r)); return { data: null, error: null }; }
