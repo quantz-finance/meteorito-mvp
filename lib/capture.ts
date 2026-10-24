@@ -54,9 +54,10 @@ export function cameraHelp(kind: CameraFailure, env: CameraEnv): { title: string
 }
 
 /** Pide el token de captura de un solo uso al abrir la cámara. Invitados (sin cuenta) con su llave. */
-export async function requestCaptureToken(auth: MeteoritoAuth, purpose: CapturePurpose, ref: string, asGuest: boolean): Promise<CaptureToken> {
+export async function requestCaptureToken(auth: MeteoritoAuth, purpose: CapturePurpose, ref: string, asGuest: boolean, asSeller = false): Promise<CaptureToken> {
   const { api, guestApi } = await import('./api');
-  const body = { action: 'capture_token', purpose, ref, ...(asGuest && purpose === 'listing' ? { as: 'guest' } : {}) };
+  // asSeller: foto de la respuesta del vendedor en una disputa (token 'dispute' en su carpeta).
+  const body = { action: 'capture_token', purpose, ref, ...(asGuest && purpose === 'listing' ? { as: 'guest' } : {}), ...(asSeller && purpose === 'dispute' ? { as: 'seller' } : {}) };
   const sent = Date.now();
   const r: Omit<CaptureToken, 'offsetMs'> = asGuest ? await guestApi(auth, '/api/photos/upload-url', body) : await api(auth, '/api/photos/upload-url', body);
   const server = Date.parse(r.now);

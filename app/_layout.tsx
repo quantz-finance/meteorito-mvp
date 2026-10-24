@@ -144,6 +144,8 @@ function Gate() {
       <Stack.Screen name="como-funciona" />
       <Stack.Screen name="chat" />
       <Stack.Screen name="mensajes" />
+      <Stack.Screen name="admin/disputas" />
+      <Stack.Screen name="admin/disputa" />
     </Stack>
     <DemoBadge />
     </>
