@@ -1,4 +1,4 @@
-// (67) Feed de Comprar: ventas cerradas. Hoy SOLO ejemplos ficticios (lib/feedSales.ts), con etiqueta "Ejemplo", sin montos,
+// (67) Feed de Comprar: ventas cerradas. Hoy SOLO ejemplos ficticios (lib/feedSales.ts), con un iconito discreto (i), sin montos,
 // detrás de FEED_DEMO_SALES, mezclados 1 de cada 6 tarjetas y respetando el filtro de identidad. Ventas reales: no (falta opt-in).
 import { existsSync, readFileSync } from 'node:fs';
 import type { T } from './setup';
@@ -13,7 +13,9 @@ export async function run(t: T) {
   t.check('flag FEED_DEMO_SALES encendido y fácil de apagar (constante)', FEED_DEMO_SALES === true && /export const FEED_DEMO_SALES = (true|false);/.test(readFileSync('lib/feedSales.ts', 'utf8')));
   t.check('todas las ventas son ejemplos ficticios, con confirmados y sin confirmar', DEMO_SALES.length >= 4 && DEMO_SALES.every((s) => s.example === true && s.kind === 'sale')
     && DEMO_SALES.some((s) => s.verified) && DEMO_SALES.some((s) => !s.verified));
-  t.check('etiqueta "Ejemplo" y hoja que lo explica', COPY.sales.example === 'Ejemplo' && /ejemplo/i.test(COPY.sales.sheetTitle) && /ficticios/.test(COPY.sales.sheetText));
+  const feedSrc = readFileSync('components/Feed.tsx', 'utf8');
+  t.check('iconito discreto (sin etiqueta "Ejemplo" visible) y hoja que lo explica', /testID="feed-sale-info"/.test(feedSrc) && !/COPY\.sales\.example|feed-sale-example/.test(feedSrc)
+    && /ejemplo/i.test(COPY.sales.sheetTitle) && /ficticios/.test(COPY.sales.sheetText));
   const p = DEMO_SALES[0];
   t.check('"María R. le vendió a Carlos M." + "ganó 5 estrellas"', saleHeadline(p) === 'María R. le vendió a Carlos M.' && saleStars(5) === 'ganó 5 estrellas' && saleStars(1) === 'ganó 1 estrella');
   const txt = DEMO_SALES.map((s) => `${saleLabel(s)} ${s.product}`).join(' | ');

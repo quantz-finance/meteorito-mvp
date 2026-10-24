@@ -18,7 +18,6 @@ export const COPY = {
     searchOther: (label: string) => `Buscar en ${label}`,
   },
   sales: {
-    example: 'Ejemplo',                      // etiqueta discreta: estas ventas son ficticias
     sheetTitle: 'Es un ejemplo',
     sheetText: 'Así se verán las ventas cerradas en el feed. Los nombres y el producto son ficticios: esta venta no ocurrió.',
     sheetOk: 'Entendido',
@@ -37,17 +36,25 @@ export const COPY = {
   },
   ficha: { seeProfile: 'Ver perfil del vendedor', soldBy: (name: string) => `Vendido por ${name}` },
   // Productos y tiendas de EJEMPLO del feed (api/_lib/demoProducts.ts, FEED_DEMO_PRODUCTS): ficticios, nunca se pagan.
+  // Señal SUTIL: un iconito (i) discreto que abre un popup chico; nada de etiquetas "Ejemplo" ni avisos grandes.
   demoProducts: {
-    tag: 'Ejemplo',
-    cardLabel: (title: string, price: string) => `Ejemplo. ${title}, ${price}`,
-    storeTitle: 'Tienda de ejemplo',
-    storeNote: 'Esta tienda, sus productos y sus reseñas son ficticios: los mostramos para que veas cómo se ve Meteorito. No están a la venta.',
-    productTitle: 'Producto de ejemplo',
-    productSubtitle: 'Así se ve una publicación en Meteorito.',
-    productNoteTitle: 'Es un ejemplo',
-    productNote: 'Este producto y su vendedor son ficticios: no está a la venta y no se puede pagar.',
-    payDisabled: 'Pago desactivado (ejemplo)',
-    seeStore: 'Ver la tienda de ejemplo',
+    cardLabel: (title: string, price: string) => `Ejemplo. ${title}, ${price}`, // solo lector de pantalla
+    info: {
+      iconLabel: 'Producto de ejemplo',
+      title: 'Producto de ejemplo',
+      body: 'Lo pusimos para mostrarte cómo se ve el feed. No está a la venta.',
+      ok: 'Entendido',
+    },
+    storeInfo: {
+      iconLabel: 'Tienda de ejemplo',
+      title: 'Tienda de ejemplo',
+      body: 'La pusimos para mostrarte cómo se ve una tienda. Sus productos no están a la venta.',
+      ok: 'Entendido',
+    },
+    productTitle: 'Producto',
+    productNote: 'Es de ejemplo: no se puede pagar.',
+    payDisabled: 'Pago desactivado',
+    seeStore: 'Ver la tienda',
     gone: 'Este ejemplo ya no está disponible.',
     reviewBy: (name: string | null) => `${name ?? 'Comprador'} · reseña de ejemplo`,
   },

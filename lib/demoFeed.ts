@@ -2,7 +2,7 @@
 // Fotos: public/demo-feed/p-*.jpg (las mismas de los productos de ejemplo, generadas, sin marcas ni personas).
 // ?feed=empty en la URL simula un feed vacío (para ver el estado vacío).
 // ?ejemplos=1 agrega los productos de EJEMPLO del feed de producción (api/_lib/demoProducts.ts) igual que el API:
-// después de estos, con etiqueta "Ejemplo", y sus tiendas /t/<usuario> (para probar y fotografiar esa vista sin backend).
+// después de estos, con un iconito (i) discreto, y sus tiendas /t/<usuario> (para probar y fotografiar esa vista sin backend).
 import type { Activity } from './activity';
 import { foldText, matchesTokens, searchTokens, type VerifiedFilter } from '../api/_lib/feedText';
 import { demoGetStore, demoStoreSlug } from './demo';

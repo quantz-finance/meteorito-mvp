@@ -1,6 +1,6 @@
 // Publicaciones de "venta cerrada" en el feed de Comprar ("María R. le vendió a Carlos M. · ganó 5 estrellas").
 // HOY SOLO HAY EJEMPLOS: usuarios y productos FICTICIOS, definidos aquí (no en la base de datos), cada uno con la
-// etiqueta "Ejemplo" y una hoja que lo explica al tocarlo. Nunca se presentan como reales. Sin montos.
+// un iconito (i) discreto y una hoja que lo explica al tocarlo. Nunca se presentan como reales. Sin montos.
 // Apagarlos: FEED_DEMO_SALES = false.
 // TODO(ventas reales): mostrar ventas cerradas reales SOLO si el vendedor lo autoriza (opt-in explícito, Ley 8968, plan F
 // de Gary). Ese opt-in todavía no existe: no se publica ninguna venta real.

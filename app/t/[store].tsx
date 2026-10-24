@@ -3,7 +3,8 @@
 // de compras liberadas. Textos en lib/copy.ts. Lectura pública: GET /api/store?profile (caché corta, sin datos privados).
 // Es también "Mi tienda": con la sesión del dueño viendo su propia tienda (isOwnerView) se agregan sus herramientas
 // (OwnerTools) y sus productos en pausa. Visitantes e invitados nunca las ven. Compartir siempre visible.
-// Tiendas de EJEMPLO (p.demo, api/_lib/demoProducts.ts): etiqueta "Ejemplo" + nota de que todo es ficticio, sin Seguir ni chat.
+// Tiendas de EJEMPLO (p.demo, api/_lib/demoProducts.ts): solo un iconito (i) discreto junto al nombre que abre un popup
+// (components/DemoInfo.tsx); sin Seguir ni chat.
 import { COPY } from '@/lib/copy';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -11,6 +12,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { OwnerTools } from '@/components/OwnerTools';
 import { FollowButton } from '@/components/FollowButton';
 import { ChatButton } from '@/components/ChatButton';
+import { DemoInfo } from '@/components/DemoInfo';
 import { useAuth } from '@/lib/cavos';
 import { isOwnerView, shareLink } from '@/lib/storePage';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
@@ -105,17 +107,15 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
             <Text style={[T.title, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={2} accessibilityRole="header">{p.display_name}</Text>
             {p.verified ? <VerifiedBadge size={20} /> : null}
+            {p.demo ? <DemoInfo kind="store" onDark={false} /> : null}
           </View>
           <Text style={T.callout} numberOfLines={1}>@{p.store_slug}</Text>
           {followers != null ? <Text style={T.footnote} testID="followers-count"><Text style={{ color: C.text, fontFamily: Fonts.bold }}>{followers}</Text> {COPY.follow.followers(followers)}</Text> : null}
           <ActivityLine activity={activity} center />
           {p.bio ? <Text style={[T.body, { textAlign: 'center', marginTop: S.xs }]} numberOfLines={4}>{p.bio}</Text> : null}
           {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
-          {p.demo ? <View style={s.demoTag} testID="store-demo-tag"><Text style={s.demoTagText}>{COPY.demoProducts.tag}</Text></View> : null}
           {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{COPY.identity.unconfirmed}</Text></View> : null}
         </View>
-        {p.demo ? <View style={s.demoNote} testID="store-demo-note"><Icon name="information-circle-outline" size={16} color={C.lilac} />
-          <View style={{ flex: 1, gap: 2 }}><Text style={T.headline}>{COPY.demoProducts.storeTitle}</Text><Text style={T.footnote}>{COPY.demoProducts.storeNote}</Text></View></View> : null}
         {!owner && !p.demo ? <View style={{ alignItems: 'center', marginTop: 2 }}>
           <FollowButton store={p} source="profile" onFollowers={(n, on) => setFollowers((cur) => (n != null ? n : cur == null ? null : Math.max(0, cur + (on ? 1 : -1))))} />
         </View> : null}
@@ -152,7 +152,6 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
                 style={({ pressed }) => [s.tile, pressTransition, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }]}>
                 {it.photo ? <Image source={{ uri: it.photo }} style={s.tilePhoto} resizeMode="cover" accessibilityIgnoresInvertColors />
                   : <View style={[s.tilePhoto, s.noPhoto]}><Icon name="image-outline" size={28} color={C.lilac} /></View>}
-                {it.demo || p.demo ? <View style={[s.demoTag, s.tileTag]}><Text style={s.demoTagText}>{COPY.demoProducts.tag}</Text></View> : null}
                 <View style={{ padding: S.sm, gap: 2 }}>
                   <Text style={[T.body, { fontSize: 14, lineHeight: 19 }]} numberOfLines={2}>{it.title}</Text>
                   <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
@@ -231,9 +230,5 @@ const s = StyleSheet.create({
   noPhoto: { alignItems: 'center', justifyContent: 'center' },
   summary: { flexDirection: 'row', alignItems: 'center', gap: S.md, backgroundColor: C.surface, borderRadius: R.md, padding: S.md, borderWidth: 0.5, borderColor: C.line },
   review: { gap: S.xs + 2, backgroundColor: C.surface, borderRadius: R.md, padding: S.md, borderWidth: 0.5, borderColor: C.line },
-  demoTag: { alignSelf: 'center', marginTop: S.xs, paddingHorizontal: 9, paddingVertical: 2, borderRadius: R.pill, backgroundColor: 'rgba(20,10,40,0.72)', borderWidth: 1, borderColor: 'rgba(201,182,255,0.4)' },
-  demoTagText: { fontFamily: Fonts.bold, fontSize: 12, color: C.text, letterSpacing: 0.3 },
-  tileTag: { position: 'absolute', top: 6, left: 6, marginTop: 0 },
-  demoNote: { flexDirection: 'row', gap: S.sm, alignItems: 'flex-start', marginHorizontal: S.md, padding: S.sm + 2, borderRadius: R.md, backgroundColor: C.lilacBg },
   emptyBox: { alignItems: 'center', gap: S.sm, padding: S.lg, borderRadius: R.md, borderWidth: 1, borderStyle: 'dashed', borderColor: C.line },
 });

@@ -94,7 +94,7 @@ export async function uploadStoreAvatar(auth: MeteoritoAuth, p: { uri: string; w
 export type VerifiedFilter = 'true' | 'false' | 'all';
 export interface FeedSeller { store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; rating_avg: number | null; rating_count: number; /** Tienda de EJEMPLO (ficticia). */ demo?: boolean }
 export interface FeedItem { slug: string; title: string; price_crc: number; photo: string | null; created_at: string; seller: FeedSeller;
-  /** Producto de EJEMPLO (api/_lib/demoProducts.ts): etiqueta "Ejemplo", ficha sin pago. */ demo?: boolean }
+  /** Producto de EJEMPLO (api/_lib/demoProducts.ts): iconito (i) discreto con popup, ficha sin pago. */ demo?: boolean }
 /** Producto del bloque Patrocinado (migración 024): un vendedor pagó para mostrarlo ahí. */
 export interface SponsoredItem { id: number; slug: string; title: string; price_crc: number; photo: string | null; seller: FeedSeller }
 export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[] }
