@@ -34,9 +34,9 @@ test.describe('Comprar: invitar desde Facebook', () => {
   test('CMP-FB-01 pegar link de FB -> invitación precargada -> mensaje para Messenger -> el vendedor ve foto y precio y publica', async ({ page }, info) => {
     await captureShare(page);
     await open(page, '/comprar?buyer=A', 'buyer', true);
-    const entry = page.getByRole('button', { name: 'Importar de Facebook' });
+    const entry = page.getByRole('button', { name: 'Importar de un link' });
     await expect(entry).toBeVisible();
-    // Facebook es el caso más común: botón principal (blanco); invitar a mano queda secundario, debajo.
+    // Pegar el link (Facebook u otro marketplace) es el caso más común: botón principal (blanco); invitar a mano queda secundario, debajo.
     const manual = page.getByRole('button', { name: 'Invitar a un vendedor' });
     const bg = (l: typeof entry) => l.evaluate((e) => getComputedStyle(e).backgroundColor);
     expect(await bg(entry)).toBe('rgb(255, 255, 255)');
@@ -46,15 +46,16 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await shot(page, info, '1-comprar');
     await entry.click();
     await expect(page).toHaveURL(/\/i\/nueva/);
-    const input = page.getByLabel('Link del anuncio de Facebook');
+    const input = page.getByLabel('Link del anuncio');
     await expect(input).toBeVisible();
     await input.fill(FB);
+    await expect(page.getByTestId('import-provider')).toContainText('Anuncio de Facebook: llenamos el nombre, el precio y la foto.');
     await page.waitForTimeout(600); // animación de la hoja
     await expectInputs16(page);
     await expect(page.getByRole('button', { name: /Importar$/ })).toBeInViewport();
     await shot(page, info, '2-pegar-link');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('Listo, revisa los datos')).toBeVisible();
+    await expect(page.getByText('Importado de Facebook')).toBeVisible();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('Bicicleta de montaña aro 29');
     await expect(page.getByLabel('Precio acordado')).toHaveValue('185 000');
     await expect(page.getByLabel('Quitar foto')).toHaveCount(1);
@@ -69,7 +70,7 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await expect(page.getByText('Tu invitación')).toBeVisible();
     const code = page.url().match(/\/i\/(inv\d+)/)![1];
     const s = await st(page);
-    expect(s.invites[code].source_url).toBe('https://www.facebook.com/share/18HroUrSak/?mibextid=wwXIfr');
+    expect(s.invites[code].source_url).toMatch(/^https:\/\/www\.facebook\.com\/share\/18HroUrSak\//);
     expect(s.invites[code].photos).toHaveLength(1);
     expect(s.invites[code].price_crc).toBe(185000);
     await expect(page.getByText('Bicicleta de montaña aro 29')).toBeVisible();
@@ -111,15 +112,16 @@ test.describe('Comprar: invitar desde Facebook', () => {
     expect(s2.orders[s2.invites[code].order_slug].photos[0]).toBe(s.invites[code].photos[0]);
   });
 
-  test('CMP-FB-02 anuncio que no se puede leer: aviso y formulario a mano; link ajeno se rechaza', async ({ page }) => {
+  test('CMP-FB-02 anuncio de Facebook que no se puede leer: aviso neutro, formulario a mano y el link va en la invitación', async ({ page }) => {
     await open(page, '/i/nueva?fb=1&buyer=A', 'buyer', true);
-    const input = page.getByLabel('Link del anuncio de Facebook');
-    await input.fill('https://evil.com/?u=facebook.com');
+    const input = page.getByLabel('Link del anuncio');
+    await input.fill('esto no es un link');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('Pega el link de un anuncio de Facebook Marketplace.')).toBeVisible();
+    await expect(page.getByText('Pega el link completo del anuncio (empieza con https://).')).toBeVisible();
     await input.fill('https://www.facebook.com/marketplace/item/1/');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('No pudimos leer ese anuncio, completa los datos.')).toBeVisible();
+    await expect(page.getByText('Anuncio de Facebook', { exact: true })).toBeVisible();
+    await expect(page.getByText(/No pudimos/)).toHaveCount(0);
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('');
     await expectNoScroll(page);
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bicicleta aro 29');
@@ -140,7 +142,7 @@ test.describe('Comprar: invitar desde Facebook', () => {
     // Altos y separaciones de los campos (el teclado no debe comprimir el formulario).
     const layout = () => page.evaluate(() => {
       const q = (sel: string) => { const r = document.querySelector(sel)!.getBoundingClientRect(); return { top: Math.round(r.top + window.scrollY), h: Math.round(r.height) }; };
-      return { fb: q('[aria-label="Importar de Facebook"]'), name: q('input[aria-label="Nombre del producto"]'), price: q('input[aria-label="Precio acordado"]'), root: Math.round(document.getElementById('root')!.getBoundingClientRect().height) };
+      return { fb: q('[aria-label="Importar de un link"]'), name: q('input[aria-label="Nombre del producto"]'), price: q('input[aria-label="Precio acordado"]'), root: Math.round(document.getElementById('root')!.getBoundingClientRect().height) };
     });
     const before = await layout();
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').focus();

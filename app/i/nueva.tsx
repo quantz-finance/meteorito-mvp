@@ -1,8 +1,9 @@
 // Comprador (sin cuenta): pide a un vendedor que publique el artículo. Mismos campos que el vendedor: nombre, precio y
 // fotos opcionales. Crea una INVITACIÓN; el vendedor la confirma y manda el link de pago (reservado para este comprador).
-// "Importar de Facebook" (caso más común: el comprador vio el artículo en Marketplace): pega el link del anuncio y se
-// precargan nombre, precio y foto (mismo /api/store import_facebook que Vender, con su llave de invitado). El link del
-// anuncio queda en la invitación como referencia para el vendedor. Nada se crea sin que el comprador revise.
+// "Importar de un link": pega el link del anuncio de cualquier marketplace (Facebook, Mercado Libre, Amazon, Encuentra24,
+// Walmart o cualquier tienda https). Se detecta el proveedor al pegar (mismo providers.ts que Vender). Donde se deja leer
+// (Facebook, Walmart…) se precargan nombre, precio y foto con import_listing y la llave de invitado; donde no (Mercado
+// Libre, Amazon…) NO se intenta: el link se acepta igual, sin error, y va en la invitación como referencia para el vendedor.
 // Fotos propias: SOLO con la cámara de la app en el momento (CameraCapture, token 'listing' con su llave de invitado).
 // La foto del anuncio importado la guarda el servidor (photo_urls). No hay carrete ni input de archivo.
 import { router, useLocalSearchParams } from 'expo-router';
@@ -10,22 +11,21 @@ import { userMessage } from '@/lib/cavosSession';
 import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useStableWindow } from '@/lib/viewport';
-import { Card, ErrorText, haptic, Icon, PrimaryButton, Screen, Sheet } from '@/components/ds';
+import { Card, ErrorText, haptic, Icon, PrimaryButton, Screen, Sheet, type IconName } from '@/components/ds';
 import { ui } from '@/components/ui';
 import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { createInvite } from '@/lib/invites';
 import { formatCRC } from '@/lib/orders';
 import { formatPriceInput, MAX_PRICE, MIN_PRICE, parsePrice, TITLE_MAX, TITLE_MIN } from '@/lib/listing';
-import { checkFacebookUrl, fbImportNotice, fbImportProps, importFromFacebookAsBuyer, type FbImport } from '@/lib/fbImport';
+import { checkListingUrl, detectProvider, importFromLinkAsBuyer, importProps, INVITE_MARKETS, INVITE_URL_INVALID, inviteCanRead, inviteDetectedLabel, inviteImportNotice, inviteMarketsLabel, PROVIDER_ICON, type ListingImport } from '@/lib/listingImport';
 import { CameraCapture } from '@/components/CameraCapture';
 import { track, trackError } from '@/lib/analytics';
 
 const MAX_INVITE_PHOTOS = 4;
-/** Foto ya subida (cámara de la app o anuncio de Facebook guardado por el servidor). */
+/** Foto ya subida (cámara de la app o foto del anuncio importado, guardada por el servidor). */
 interface Pic { key: string; uri: string; url: string }
 let seq = 0;
-const FAILED: FbImport = { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'] };
 
 export default function NuevaInvitacion() {
   const auth = useAuth();
@@ -39,7 +39,8 @@ export default function NuevaInvitacion() {
   const [fbUrl, setFbUrl] = useState('');
   const [fbBusy, setFbBusy] = useState(false);
   const [fbErr, setFbErr] = useState<string | null>(null);
-  const [fbNotice, setFbNotice] = useState<{ title: string; body: string; failed: boolean } | null>(null);
+  const [fbNotice, setFbNotice] = useState<{ title: string; body: string; icon: string } | null>(null);
+  const detected = detectProvider(fbUrl);
   const [source, setSource] = useState<string | null>(null); // link del anuncio (referencia para el vendedor)
   const priceNum = parsePrice(price);
 
@@ -51,25 +52,30 @@ export default function NuevaInvitacion() {
   }
 
   async function runImport() {
-    const chk = checkFacebookUrl(fbUrl);
-    if (!chk.ok) { setFbErr(chk.error); haptic.error(); return; }
-    setFbErr(null); setFbBusy(true);
-    let r: FbImport | null = null;
-    try { r = await importFromFacebookAsBuyer(auth, chk.url); }
-    catch (e: any) {
-      track('facebook_import', { ...fbImportProps(null, e?.code), context: 'invite' });
-      // Demasiados intentos, llave de invitado perdida o link inválido: se avisa en la hoja. Otra falla: completar a mano.
-      if (e?.status === 401 || e?.status === 429 || e?.code === 'fb_url_invalid') { setFbErr(userMessage((e as Error).message)); setFbBusy(false); haptic.error(); return; }
-    }
-    const res = r ?? FAILED;
-    if (res.title) setTitle(res.title.slice(0, TITLE_MAX));
-    if (res.price_crc) setPrice(String(res.price_crc));
-    setSource(res.source_url ?? chk.url); setErr(null);
-    if (r) track('facebook_import', { ...fbImportProps(res), context: 'invite' });
-    setFbNotice({ ...fbImportNotice(res), body: noticeBody(res), failed: res.result === 'failed' });
+    const chk = checkListingUrl(fbUrl);
+    const d = detectProvider(fbUrl);
+    if (!chk.ok || !d) { setFbErr(INVITE_URL_INVALID); haptic.error(); return; }
+    setFbErr(null);
+    let r: ListingImport | null = null;
+    if (inviteCanRead(d)) { // solo donde funciona; Mercado Libre, Amazon… no se piden (bloquean nuestros servidores)
+      setFbBusy(true);
+      track('import_started', { provider: d.id, context: 'invite' });
+      try { r = await importFromLinkAsBuyer(auth, chk.url); }
+      catch (e: any) {
+        track('import_failed', { provider: d.id, result: 'failed', code: String(e?.code ?? 'unknown').slice(0, 40), context: 'invite' });
+        // Demasiados intentos o llave de invitado perdida: se avisa en la hoja. Otra falla: el link se acepta igual.
+        if (e?.status === 401 || e?.status === 429) { setFbErr(userMessage((e as Error).message)); setFbBusy(false); haptic.error(); return; }
+      }
+    } else track('import_link_only', { provider: d.id, context: 'invite' });
+    if (r) track(r.result === 'failed' ? 'import_failed' : 'import_succeeded', { ...importProps(r), context: 'invite' });
+    const ok = r && r.result !== 'failed' ? r : null;
+    if (ok?.title) setTitle(ok.title.slice(0, TITLE_MAX));
+    if (ok?.price_crc) setPrice(String(ok.price_crc));
+    setSource(r?.source_url ?? chk.url); setErr(null);
+    setFbNotice({ ...inviteImportNotice(d, r), icon: d.icon });
     setFbBusy(false); setFbOpen(false); setFbUrl('');
-    res.result === 'failed' ? haptic.error() : haptic.success();
-    res.photos.slice(0, Math.max(0, MAX_INVITE_PHOTOS - pics.length)).forEach((src, i) => addImportedPhoto(src, res.photo_urls?.[i]));
+    ok ? haptic.success() : haptic.tap();
+    (ok?.photos ?? []).slice(0, Math.max(0, MAX_INVITE_PHOTOS - pics.length)).forEach((src, i) => addImportedPhoto(src, ok?.photo_urls?.[i]));
   }
 
   async function submit() {
@@ -79,9 +85,9 @@ export default function NuevaInvitacion() {
     if (!priceNum || priceNum < MIN_PRICE || priceNum > MAX_PRICE) return setErr(`Ingresa un precio válido: mínimo ${formatCRC(MIN_PRICE)}, máximo ${formatCRC(MAX_PRICE)}.`);
     setBusy(true);
     try {
-      const photos = pics.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (Facebook)
+      const photos = pics.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (anuncio importado)
       const code = await createInvite(auth, { title: t, price_crc: priceNum, ...(photos.length ? { photos } : {}), ...(source ? { source_url: source } : {}) });
-      track('invite_created', { photos: photos.length, from_facebook: !!source });
+      track('invite_created', { photos: photos.length, from_facebook: detectProvider(source ?? '')?.id === 'facebook', source_provider: source ? detectProvider(source)?.id ?? null : null });
       router.replace({ pathname: '/i/[code]', params: { code } });
     } catch (e) { trackError('create_invite', e); setErr(userMessage((e as Error).message)); } finally { setBusy(false); }
   }
@@ -91,20 +97,20 @@ export default function NuevaInvitacion() {
       footer={<>{err && <ErrorText>{err}</ErrorText>}<PrimaryButton title="Crear invitación" icon="paper-plane-outline" loading={busy} onPress={submit} /></>}>
       <View style={{ flex: 1, gap: S.sm }}>
         {fbNotice ? (
-          <Card style={[s.fbNotice, fbNotice.failed && { borderColor: C.orange }]}>
-            <View style={[s.fbIcon, fbNotice.failed && { backgroundColor: C.warnBg }]}><Icon name={fbNotice.failed ? 'alert-circle' : 'logo-facebook'} size={20} color={fbNotice.failed ? C.orange : C.lilac} /></View>
+          <Card style={s.fbNotice}>
+            <View style={s.fbIcon}><Icon name={fbNotice.icon as IconName} size={20} color={C.lilac} /></View>
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={2}>{fbNotice.title}</Text>
               <Text style={T.footnote} numberOfLines={2}>{fbNotice.body}</Text>
             </View>
-            <Pressable onPress={() => { haptic.tap(); setFbNotice(null); setSource(null); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Quitar anuncio de Facebook" style={s.fbClose}><Icon name="close" size={18} color={C.textDim} /></Pressable>
+            <Pressable onPress={() => { haptic.tap(); setFbNotice(null); setSource(null); }} hitSlop={10} accessibilityRole="button" accessibilityLabel="Quitar link del anuncio" style={s.fbClose}><Icon name="close" size={18} color={C.textDim} /></Pressable>
           </Card>
         ) : (
-          <Pressable onPress={() => { haptic.tap(); setFbErr(null); setFbOpen(true); }} accessibilityRole="button" accessibilityLabel="Importar de Facebook"
+          <Pressable onPress={() => { haptic.tap(); setFbErr(null); setFbOpen(true); }} accessibilityRole="button" accessibilityLabel="Importar de un link"
             style={({ pressed }) => [s.fbBtn, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
-            <Icon name="logo-facebook" size={20} color={C.lilac} />
-            <Text style={[T.headline, { color: C.lilac, fontSize: 15, flex: 1 }]} numberOfLines={1}>Importar de Facebook</Text>
-            <Text style={[T.footnote, { color: C.textDim }]} numberOfLines={1}>Pega el link</Text>
+            <Icon name="link" size={20} color={C.lilac} />
+            <Text style={[T.headline, { color: C.lilac, fontSize: 15, flex: 1 }]} numberOfLines={1}>Importar de un link</Text>
+            <Text style={[T.footnote, { color: C.textDim }]} numberOfLines={1}>Cualquier tienda</Text>
             <Icon name="chevron-forward" size={16} color={C.textDim} />
           </Pressable>
         )}
@@ -134,22 +140,24 @@ export default function NuevaInvitacion() {
       <CameraCapture visible={camOpen} purpose="listing" refId="new" asGuest onClose={() => setCamOpen(false)}
         onDone={(p) => { setPics((x) => (x.length >= MAX_INVITE_PHOTOS ? x : [...x, { key: `i${++seq}`, uri: p.uri, url: p.url }])); setCamOpen(false); }} />
 
-      <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de Facebook"
-        footer={<PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim()} onPress={runImport} />}>
-        <Text style={T.callout}>En Facebook abre el anuncio, toca Compartir y luego Copiar link. Pégalo aquí: llenamos el nombre, el precio y la foto para que solo revises.</Text>
-        <TextInput style={[ui.input, fbErr && s.inputErr]} placeholder="facebook.com/marketplace/item/…" placeholderTextColor={C.textDim} value={fbUrl}
+      <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de un link"
+        footer={detected?.blocked
+          ? <PrimaryButton title="Agregar link" icon="link" disabled={!fbUrl.trim()} onPress={runImport} />
+          : <PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim()} onPress={runImport} />}>
+        <Text style={T.callout}>Abre el anuncio, toca Compartir y copia el link. Pégalo aquí: va en tu invitación para que el vendedor publique desde ahí.</Text>
+        <View style={s.provRow} testID="invite-markets">
+          {INVITE_MARKETS.map((id) => <View key={id} style={s.provBadge}><Icon name={PROVIDER_ICON[id] as IconName} size={16} color={C.lilac} /></View>)}
+          <Text style={[T.footnote, { flex: 1 }]} numberOfLines={2}>{inviteMarketsLabel}</Text>
+        </View>
+        <TextInput style={[ui.input, fbErr && s.inputErr]} placeholder="Pega el link del anuncio" placeholderTextColor={C.textDim} value={fbUrl}
           onChangeText={(v) => { setFbUrl(v); if (fbErr) setFbErr(null); }} autoCapitalize="none" autoCorrect={false} keyboardType="url" inputMode="url"
-          returnKeyType="go" onSubmitEditing={runImport} editable={!fbBusy} autoFocus accessibilityLabel="Link del anuncio de Facebook" />
-        {fbErr ? <ErrorText>{fbErr}</ErrorText> : <Text style={T.footnote}>Solo anuncios públicos. El vendedor verá el link de su anuncio en la invitación.</Text>}
+          returnKeyType="go" onSubmitEditing={runImport} editable={!fbBusy} autoFocus accessibilityLabel="Link del anuncio" />
+        {fbErr ? <ErrorText>{fbErr}</ErrorText>
+          : detected ? <View style={s.detected} testID="import-provider"><Icon name={detected.icon as IconName} size={16} color={C.lilac} /><Text style={[T.footnote, { color: C.text, flex: 1 }]} numberOfLines={2}>{inviteDetectedLabel(detected)}</Text></View>
+          : <Text style={T.footnote}>Solo anuncios públicos. El vendedor verá el link en la invitación.</Text>}
       </Sheet>
     </Screen>
   );
-}
-
-/** Texto del aviso para el comprador: el precio es el que acuerdas con el vendedor. */
-function noticeBody(r: FbImport): string {
-  if (r.result === 'failed') return 'Escribe el nombre y el precio. Guardamos el link para el vendedor.';
-  return r.result === 'partial' ? fbImportNotice(r).body.replace('generar el link', 'crear la invitación') : 'Ajusta el precio si acordaste otro con el vendedor.';
 }
 
 const s = StyleSheet.create({
@@ -162,4 +170,7 @@ const s = StyleSheet.create({
   fbNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, padding: S.sm + 2, borderWidth: 1, borderColor: C.lilac },
   fbIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
   fbClose: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  provRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs + 2 },
+  provBadge: { width: 28, height: 28, borderRadius: 8, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
+  detected: { flexDirection: 'row', alignItems: 'center', gap: S.xs + 2, minHeight: 20 },
 });

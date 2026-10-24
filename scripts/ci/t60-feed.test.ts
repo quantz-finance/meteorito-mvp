@@ -120,7 +120,7 @@ export async function run(t: T) {
   const app = readFileSync(new URL('../../app/(tabs)/comprar.tsx', import.meta.url), 'utf8');
   const feed = readFileSync(new URL('../../components/Feed.tsx', import.meta.url), 'utf8');
   const src = app + feed;
-  t.check('Comprar mantiene Importar de Facebook, Invitar a un vendedor y Pagar un link arriba', /Importar de Facebook/.test(app) && /Invitar a un vendedor/.test(app) && /Pagar un link/.test(app));
+  t.check('Comprar mantiene Importar de un link, Invitar a un vendedor y Pagar un link arriba', /Importar de un link/.test(app) && /Invitar a un vendedor/.test(app) && /Pagar un link/.test(app));
   t.check('eventos feed_viewed, feed_item_clicked y feed_search', ['feed_viewed', 'feed_item_clicked', 'feed_search'].every((e) => src.includes(`'${e}'`)));
   t.check('filtro en dos mitades: "Identidad confirmada" (por defecto) y "Sin confirmar" desde lib/copy.ts, sin "Todos"', COPY.filters.confirmed === 'Identidad confirmada' && COPY.filters.unconfirmed === 'Sin confirmar' && !('all' in COPY.filters)
     && /COPY\.filters\.confirmed/.test(src) && /COPY\.filters\.unconfirmed/.test(src) && /useState<VerifiedFilter>\('true'\)/.test(src) && !/COPY\.filters\.all|'Todos'|"Todos"|en Todos/.test(src));
