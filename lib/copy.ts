@@ -37,6 +37,7 @@ export const COPY = {
     publicNote: 'Tu reseña es pública en el perfil del vendedor con tu nombre corto (ej. "María R."). Sin links.',
     submit: 'Publicar reseña', thanks: '¡Gracias por tu reseña!', thanksText: 'Ayuda a otros compradores a elegir con confianza.',
     seeProfile: 'Ver el perfil del vendedor', failed: 'No pudimos guardar tu reseña.',
+  },
   whatsappPublic: {
     label: 'Mostrar en mi perfil público', a11y: 'Mostrar mi WhatsApp en mi perfil público',
     on: 'Cualquiera que vea tu perfil puede escribirte por WhatsApp.', off: 'Tu perfil público no lo muestra.',
