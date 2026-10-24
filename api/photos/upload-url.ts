@@ -1,7 +1,8 @@
 // POST /api/photos/upload-url — subida de fotos por URL firmada (Supabase Storage). El bucket no acepta inserts anon (005).
 //  1) { action:'capture_token', purpose:'ship'|'listing'|'dispute', ref, as? }  -> token de captura de UN uso (5 min).
 //     ship: Bearer Cavos del VENDEDOR del pedido `ref` (fondeado, no cara a cara). listing: ref 'new' (Bearer Cavos, o
-//     as:'guest' con la llave del comprador que invita). dispute: el COMPRADOR del pedido `ref` (llave de invitado o Cavos).
+//     as:'guest' con la llave del comprador que invita). dispute: el COMPRADOR del pedido `ref` (llave de invitado o Cavos)
+//     o, con as:'seller', el VENDEDOR del pedido en disputa (foto de su respuesta).
 //     Devuelve { token, id, purpose, ref, code, exp, now } (code = texto corto que la app dibuja en la foto).
 //  2) { purpose, capture_token, mime:'image/jpeg', size, as? } -> firma para listings/<carpeta>/<purpose>-<id>/0.jpg.
 //     Sin token, vencido, ya usado, de otro propósito o de otra persona: rechazado. Esas carpetas solo se escriben así.
@@ -20,6 +21,8 @@ const guestErr = () => Object.assign(new HttpError(401, 'Falta la llave de invit
 
 /** Quién toma la foto para cada propósito: la carpeta (sub) del token y las identidades aceptadas al firmar. */
 async function captureOwner(req: any, purpose: CapturePurpose): Promise<{ sub: string; subs: string[] }> {
+  // Disputa: el comprador (evidencia) o, con as:'seller', el vendedor (foto de su respuesta; api/_lib/disputeAdmin.ts).
+  if (purpose === 'dispute' && req.body?.as === 'seller') { const u = await requireCavosUser(req); return { sub: u.sub, subs: [u.sub] }; }
   if (purpose === 'dispute') { const who = await requireBuyerIdentity(req); return { sub: who.cavos?.sub ?? who.guest!, subs: who.ids }; }
   if (purpose === 'listing' && req.body?.as === 'guest') { const g = guestSubFromReq(req); if (!g) throw guestErr(); return { sub: g, subs: [g] }; }
   const u = await requireCavosUser(req); return { sub: u.sub, subs: [u.sub] };
@@ -43,7 +46,11 @@ export default async function handler(req: any, res: any) {
         if (o.delivery_mode === 'cara_a_cara') throw Object.assign(new HttpError(409, 'La entrega es cara a cara: no hay envío.'), { code: 'face_to_face' });
         if (o.status !== 'fondeado') throw new HttpError(409, `status ${o.status}`);
       }
-      if (purpose === 'dispute') {
+      if (purpose === 'dispute' && b.as === 'seller') {
+        const o = await orderBySlug(ref);
+        if (o.seller_user_id !== owner.sub) throw new HttpError(403, 'no eres el vendedor');
+        if (o.status !== 'en_disputa') throw new HttpError(409, `status ${o.status}`);
+      } else if (purpose === 'dispute') {
         const who = await requireBuyerIdentity(req); const o = await orderBySlug(ref);
         if (!isBuyerOf(o, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
       }
