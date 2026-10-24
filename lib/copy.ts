@@ -49,6 +49,13 @@ export const COPY = {
     label: 'Mostrar en mi perfil público', a11y: 'Mostrar mi WhatsApp en mi perfil público',
     on: 'Cualquiera que vea tu perfil puede escribirte por WhatsApp.', off: 'Tu perfil público no lo muestra.',
   },
+  follow: {
+    follow: 'Seguir', following: 'Siguiendo',
+    a11yFollow: (name: string) => `Seguir a ${name}`, a11yUnfollow: (name: string) => `Dejar de seguir a ${name}`,
+    followers: (n: number) => (n === 1 ? 'seguidor' : 'seguidores'),
+    done: (name: string) => `Ahora sigues a ${name}.`,
+    privateNote: 'Solo se muestra cuántos te siguen, nunca quiénes.',
+  },
   myStore: { confirmIdentity: 'Confirma tu identidad' },
   store: {
     share: 'Compartir perfil', shareMine: 'Compartir mi tienda',

@@ -12,6 +12,7 @@ import { missingColumn } from '../_lib/listings';
 import { listingSource } from '../_lib/importers/providers';
 import { guestSubFromReq } from '../_lib/guest';
 import { validateAgreement } from '../_lib/agreement';
+import { notifyFollowers } from '../_lib/follows';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 // Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
@@ -100,6 +101,8 @@ export default async function handler(req: any, res: any) {
           if (e2) inviteErr(e2);
           if (!ok?.length) { await db().from('orders').update({ status: 'cancelado' }).eq('slug', s).eq('status', 'creado'); throw Object.assign(new HttpError(409, 'Esta invitación ya fue aceptada por otra publicación.'), { code: 'invite_not_open' }); }
         }
+        // Producto permanente nuevo: aviso push a quienes siguen al vendedor (022). Best-effort, nunca rompe la publicación.
+        if (kind === 'listing') await notifyFollowers(user.sub, { slug: s, title: fullTitle });
         await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price, from_invite: !!invite, delivery_mode: agreement.delivery_mode, protection_minutes: agreement.protection_minutes });
         return json(res, 200, { slug: s, kind: kind ?? 'single', ...agreement });
       }
