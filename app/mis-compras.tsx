@@ -22,7 +22,7 @@ function PurchaseCard({ r }: { r: PurchaseRow }) {
       style={{ flex: 1, justifyContent: 'center', padding: S.sm + 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm + 4 }}>
         {r.photo ? <Image source={{ uri: r.photo }} style={s.thumb} resizeMode="cover" accessibilityIgnoresInvertColors />
-          : <View style={[s.thumb, s.noPhoto]}><Icon name="bag-handle-outline" size={24} color={C.lilac} /></View>}
+          : <View style={[s.thumb, s.noPhoto]}><Icon name="bag-handle" size={24} color={C.lilac} /></View>}
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
             <Text style={[T.headline, { flex: 1 }]} numberOfLines={1}>{r.title}</Text>
@@ -66,7 +66,7 @@ export default function MisCompras() {
         {rows === null ? <><SkeletonCard /><SkeletonCard /></>
           : active.length + closed.length === 0 ? (
             <Card style={{ alignItems: 'center', paddingVertical: S.xl, gap: S.md }}>
-              <Icon name="bag-handle-outline" size={40} color={C.lilac} />
+              <Icon name="bag-handle" size={40} color={C.lilac} />
               <Text testID="purchases-empty" style={[T.callout, { textAlign: 'center' }]}>{MY_PURCHASES_EMPTY}</Text>
               <PrimaryButton title="Ver productos" icon="arrow-forward" variant="secondary" onPress={() => router.replace('/comprar')} />
             </Card>

@@ -1,4 +1,4 @@
-// (66) Mis compras: botón arriba a la derecha en Comprar -> lista de compras de ESTE dispositivo (registro guardado al
+// (69) Mis compras: botón arriba a la derecha en Comprar -> lista de compras de ESTE dispositivo (registro guardado al
 //      pagar + recuperación retroactiva por PIN/pedido propio) y del servidor SOLO por la llave de invitado y/o la
 //      sesión del comprador (/api/store action 'buyer_orders', sin función nueva). Activas primero, cerradas aparte.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -116,7 +116,7 @@ export async function run(t: T) {
 
   // ---------- Cableado ----------
   const comprar = read('app/(tabs)/comprar.tsx');
-  t.check('Comprar: botón de icono arriba a la derecha "Mis compras" -> /mis-compras', /right=\{<IconButton icon="bag-handle-outline" label=\{MY_PURCHASES_TITLE\} onPress=\{\(\) => router\.push\('\/mis-compras'\)\}/.test(comprar) && MY_PURCHASES_TITLE === 'Mis compras');
+  t.check('Comprar: botón de icono arriba a la derecha "Mis compras" -> /mis-compras', /right=\{<IconButton icon="bag-handle" label=\{MY_PURCHASES_TITLE\} onPress=\{\(\) => router\.push\('\/mis-compras'\)\}/.test(comprar) && MY_PURCHASES_TITLE === 'Mis compras');
   const pay = read('components/PayBox.tsx');
   t.check('PayBox guarda la compra al iniciar el pago (pedido propio) y al completarlo', /remember\(r\.slug \?\? order\.slug, 'escrow_creado'\)/.test(pay) && /remember\(order\.slug, 'fondeado'\)/.test(pay));
   t.check('cada fila abre su seguimiento /p/<pedido>', /pathname: '\/p\/\[slug\]', params: \{ slug: r\.slug \}/.test(screenSrc));

@@ -46,7 +46,7 @@ export default function Pedidos() {
   const auth = useAuth();
   const { address } = auth;
   const [orders, setOrders] = useState<SellerOrder[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Error de sesión (token rechazado/vencido): se muestra UNA vez arriba y la tarjeta de notificaciones se oculta.
   const [sessionError, setSessionError] = useState(false);
@@ -84,10 +84,9 @@ export default function Pedidos() {
 
   return (
     <Screen title="Home" subtitle={short ? undefined : 'El estado de tu dinero, siempre a la vista.'} scroll={false}
-      right={<>
-        <IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />
-        <IconButton icon="refresh" label="Actualizar" onPress={() => { if (!loading) load(); }} />
-      </>}>
+      right={<IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} />}>
+      {/* Sin botón "Actualizar" (era de pruebas): Home carga al enfocar, hace polling mientras haya pedidos no finales y
+          vuelve a pedir al regresar a la app/pestaña (useFocusEffect + useOrdersRefresh). */}
       <View style={{ flex: 1, gap: S.sm }}>
       <SalesSummary orders={orders} compact={short} onHistory={() => router.push('/ventas')} />
       <RulesLink from="home" />

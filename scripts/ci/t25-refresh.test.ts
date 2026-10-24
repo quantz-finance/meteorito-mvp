@@ -8,4 +8,8 @@ export async function run(t: T) {
   t.check('pedido enviado -> hay polling', needsPolling([{ status: 'liberado' }, { status: 'enviado' }]));
   t.check('todos finales / vacío / null -> sin polling', !needsPolling([{ status: 'liberado' }]) && !needsPolling([]) && !needsPolling(null));
   t.check('intervalo entre 5 y 10 s', POLL_MS >= 5000 && POLL_MS <= 10000);
+  // Home sin botón "Actualizar" (era de pruebas): se actualiza sola al enfocar, con polling y al volver a la pestaña.
+  const home = (await import('node:fs')).readFileSync('app/(tabs)/pedidos.tsx', 'utf8');
+  t.check('Home: sin botón Actualizar', !/label="Actualizar"/.test(home) && !/icon="refresh"/.test(home));
+  t.check('Home: carga al enfocar y refresca sola (useFocusEffect + useOrdersRefresh)', /useFocusEffect\(useCallback\(\(\) => \{ load\(\); \}/.test(home) && /useOrdersRefresh\(silentRefresh, orders\)/.test(home));
 }

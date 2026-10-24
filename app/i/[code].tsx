@@ -6,7 +6,7 @@ import { userMessage } from '@/lib/cavosSession';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Linking, Platform, Pressable, Share, Text, View } from 'react-native';
-import { Card, Chip, ErrorText, haptic, Icon, PrimaryButton, Screen, SkeletonCard } from '@/components/ds';
+import { Card, Chip, ErrorText, haptic, Icon, PrimaryButton, Screen, SkeletonCard, type IconName } from '@/components/ds';
 import { toast } from '@/components/ds';
 import { Freshness } from '@/components/Freshness';
 import { C, S, T } from '@/constants/theme';
@@ -14,6 +14,7 @@ import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { cancelInvite, getInvite, inviteLink, type Invite } from '@/lib/invites';
 import { inviteShareMessage, showCategoryChip } from '@/lib/inviteShare';
+import { detectProvider } from '@/lib/listingImport';
 import { formatCRC } from '@/lib/orders';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { track } from '@/lib/analytics';
@@ -51,10 +52,12 @@ export default function Invitacion() {
   const st = STATUS[inv.status];
   const name = `${inv.brand} ${inv.model}`.trim();
   // Mensaje listo para Messenger/WhatsApp (el link va dentro del texto: Messenger ignora `url` en algunos teléfonos).
+  const src = inv.source_url ? detectProvider(inv.source_url) : null; // proveedor del anuncio (Facebook, Mercado Libre, Amazon, una tienda…)
+  const where = src?.name ?? 'la tienda'; const whereIcon = (src?.icon ?? 'link') as IconName;
   const message = inviteShareMessage({ title: name, price_crc: inv.price_crc, source_url: inv.source_url }, link);
 
   async function share() {
-    track('invite_shared', { from_facebook: !!inv?.source_url });
+    track('invite_shared', { from_facebook: src?.id === 'facebook', source_provider: src?.id ?? null });
     if (Platform.OS === 'web') {
       const nav = globalThis.navigator as Navigator | undefined;
       if (nav?.share) return nav.share({ title: 'Meteorito', text: message }).catch(() => {});
@@ -79,10 +82,10 @@ export default function Invitacion() {
       {inv.photos && inv.photos.length > 1 ? <View style={{ flexDirection: 'row', gap: S.sm }}>{inv.photos.slice(1).map((u) => <Image key={u} source={{ uri: u }} style={{ width: 48, height: 48, borderRadius: 10 }} />)}</View> : null}
       {inv.note ? <Text style={T.callout}>“{inv.note}”</Text> : null}
       {inv.source_url ? (
-        <Pressable accessibilityRole="link" accessibilityLabel="Ver anuncio en Facebook" hitSlop={8} onPress={() => { haptic.tap(); Linking.openURL(inv.source_url!).catch(() => {}); }}
+        <Pressable accessibilityRole="link" accessibilityLabel={`Ver anuncio en ${where}`} hitSlop={8} onPress={() => { haptic.tap(); Linking.openURL(inv.source_url!).catch(() => {}); }}
           style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: S.xs, minHeight: 32 }, pressed && { opacity: 0.7 }]}>
-          <Icon name="logo-facebook" size={16} color={C.lilac} />
-          <Text style={[T.footnote, { color: C.lilac }]} numberOfLines={1}>Ver anuncio en Facebook</Text>
+          <Icon name={whereIcon} size={16} color={C.lilac} />
+          <Text style={[T.footnote, { color: C.lilac, flexShrink: 1 }]} numberOfLines={1}>Ver anuncio en {where}</Text>
           <Icon name="open-outline" size={14} color={C.lilac} />
         </Pressable>
       ) : null}
@@ -113,7 +116,7 @@ export default function Invitacion() {
   // Vista del vendedor.
   const open = inv.status === 'abierta';
   return (
-    <Screen back="/comprar" title="Quieren comprarte" subtitle={inv.source_url ? 'Vieron tu anuncio en Facebook y quieren pagarte en custodia.' : 'Alguien te invitó a vender este artículo en custodia.'}
+    <Screen back="/comprar" title="Quieren comprarte" subtitle={inv.source_url ? `Vieron tu anuncio en ${where} y quieren pagarte en custodia.` : 'Alguien te invitó a vender este artículo en custodia.'}
       footer={open ? <PrimaryButton title={auth.isAuthenticated ? 'Publicar para esta compra' : 'Entrar para publicar'} icon="add-circle-outline"
         loading={auth.isLoading}
         onPress={() => { if (!auth.isAuthenticated) return auth.openLogin(); router.push({ pathname: '/vender', params: { invite: inv.code } }); }} /> : null}>

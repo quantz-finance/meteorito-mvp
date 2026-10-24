@@ -178,7 +178,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       if (title.length < 3) throw err(400, 'bad_title', 'Escribe el nombre de lo que quieres comprar.');
       const code = 'inv' + String(++st.seq).padStart(5, '0');
       let source_url: string | null = null;
-      if (body.source_url) { const chk = checkFacebookUrl(String(body.source_url)); if (!chk.ok) throw err(400, 'fb_url_invalid', 'El link del anuncio no es de Facebook Marketplace.'); source_url = chk.url; }
+      if (body.source_url) { const chk = checkListingUrl(String(body.source_url)); if (!chk.ok) throw err(400, 'import_url_invalid', 'El link del anuncio no es válido.'); source_url = chk.url; }
       st.invites[code] = { code, category: 'otro', brand: '', model: title, title, photos: Array.isArray(body.photos) ? body.photos.slice(0, 4) : [], price_crc: price, note: body.note ? String(body.note) : null, source_url, status: 'abierta', order_slug: null, created_at: now(), buyer: me() };
       emit(); return { code };
     }

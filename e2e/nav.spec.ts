@@ -21,22 +21,17 @@ test.describe('Navegación', () => {
     expect(manifest.start_url).toBe('/vender');
   });
 
-  test('NAV-03 Home: Tus ventas + Mi cuenta junto a Actualizar, sin scroll', async ({ page }) => {
+  test('NAV-03 Home: Tus ventas + Mi cuenta, sin botón Actualizar (se actualiza sola), sin scroll', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     await page.evaluate(() => (window as any).__meteoritoDemo.seed('fondeado', { title: 'Bici', price_crc: 150000 }));
     await open(page, '/pedidos', 'seller');
     await expect(page.getByText('Tus ventas', { exact: true })).toBeVisible();
     await expect(page.getByLabel('En curso: 1')).toBeVisible();
-    await settle(page); // las dos medidas en el mismo cuadro, ya sin la animación de entrada
-    const [acct, refresh] = await page.evaluate(() => ['Mi cuenta', 'Actualizar'].map((l) => {
-      const r = document.querySelector(`[aria-label="${l}"]`)!.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height };
-    }));
-    expect(acct && refresh).toBeTruthy();
-    expect(Math.abs(acct!.y - refresh!.y)).toBeLessThanOrEqual(1); // misma fila
-    expect(Math.abs(acct!.width - refresh!.width)).toBeLessThanOrEqual(1); // mismo tamaño
-    expect(Math.abs(acct!.x + acct!.width - refresh!.x)).toBeLessThanOrEqual(16); // uno al lado del otro
+    await expect(page.getByRole('button', { name: 'Mi cuenta' })).toBeVisible();
+    await expect(page.getByLabel('Actualizar', { exact: true })).toHaveCount(0);
     await page.waitForTimeout(500);
     await expectNoScroll(page);
+    if (test.info().project.name === 'webkit-iphone-se') { await settle(page); await page.screenshot({ path: 'test-results/home-sin-refrescar.png' }); }
     await page.getByRole('button', { name: 'Mi cuenta' }).click();
     await expect(page.getByRole('button', { name: /Cerrar sesión/ })).toBeVisible();
   });

@@ -18,8 +18,8 @@ export default function Comprar() {
   const goPay = () => { if (!linkSlug) return; setPayOpen(false); setLink(''); router.push(`/p/${linkSlug}`); };
   return (
     <Screen title="Comprar" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
-      right={<IconButton icon="bag-handle-outline" label={MY_PURCHASES_TITLE} onPress={() => router.push('/mis-compras')} />}>
-      {/* Arriba se mantienen: importar de Facebook, invitar (pedir link) a un vendedor y pagar un link. Debajo, el feed. */}
+      right={<IconButton icon="bag-handle" label={MY_PURCHASES_TITLE} onPress={() => router.push('/mis-compras')} />}>
+      {/* Arriba se mantienen: importar de un link (Facebook, Mercado Libre, Amazon… cualquier marketplace), invitar (pedir link) a un vendedor y pagar un link. Debajo, el feed. */}
       <Feed header={<View style={{ gap: S.md }}>
         <Reveal i={0}><Card style={{ gap: S.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
@@ -27,7 +27,7 @@ export default function Comprar() {
             <Text style={[T.headline, { flex: 1 }]}>¿Lo viste en Facebook o en otro lado?</Text>
           </View>
           <Text style={T.callout} numberOfLines={3}>Invita al vendedor: pega el link del anuncio o di qué quieres y a qué precio. Él acepta y te manda el link de pago.</Text>
-          <PrimaryButton title="Importar de Facebook" icon="logo-facebook" accessibilityLabel="Importar de Facebook"
+          <PrimaryButton title="Importar de un link" icon="link" accessibilityLabel="Importar de un link"
             onPress={() => router.push({ pathname: '/i/nueva', params: { fb: '1' } })} />
           <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" variant="secondary" accessibilityLabel="Invitar a un vendedor" onPress={() => router.push('/i/nueva')} />
         </Card></Reveal>

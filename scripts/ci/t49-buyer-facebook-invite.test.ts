@@ -76,8 +76,8 @@ export async function run(t: T) {
   const KEY_A = key('a'); const buyer = guestSubFromReq({ headers: { 'x-guest-key': KEY_A } })!;
   const buyerPhoto = publicPrefix(buyer) + 'listing-55555555-5555-4555-8555-555555555555/0.jpg';
   const base = { op: 'create', title: 'Grutov 800 piezas Clips de retención', price_crc: 18000, photos: [buyerPhoto] };
-  let r = await call(invites, { guest: KEY_A, body: { ...base, source_url: 'https://evil.com/marketplace/item/1/' } });
-  t.check('source_url que no es de Facebook Marketplace -> 400', r.code === 400 && db.tables.invitations.length === 0, `${r.code}`);
+  let r = await call(invites, { guest: KEY_A, body: { ...base, source_url: 'https://127.0.0.1/marketplace/item/1/' } });
+  t.check('source_url que no es un link público (IP literal) -> 400 (otros marketplaces: t66)', r.code === 400 && db.tables.invitations.length === 0, `${r.code}`);
   r = await call(invites, { guest: KEY_A, body: { ...base, source_url: `Mira esto ${ITEM.replace('https://', '')}` } });
   const code = r.body?.code as string;
   const row = db.tables.invitations.find((i: any) => i.code === code);
