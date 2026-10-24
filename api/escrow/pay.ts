@@ -3,6 +3,8 @@
 // confirm_sinpe ("Ya pagué"): ramp-provider.mock fondea el escrow. Devuelve el PIN de entrega UNA vez.
 // card_pay (formulario propio, Lendara headless) / card_session (widget, respaldo) / card_confirm: pago con tarjeta vía Lendara (api/_lib/lendara.ts, docs/lendara-card.md). Verificado en
 // Lendara + Horizon antes de fondear por el mismo camino que confirm_sinpe.
+// crypto_quote { asset:'USDC'|'XLM', buyer? } / crypto_status: pago con cripto en Stellar (api/_lib/crypto.ts, docs/pago-cripto.md).
+// Detectado en Horizon y fondeado por el mismo camino (escrow siempre en USDC). Funciona igual para invitados.
 import { json, fail, orderBySlug } from '../_lib/db';
 import { requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
 import { deployFor, mockRampFund, fundDirectXdr, fundDirect } from '../_lib/escrow';
@@ -13,6 +15,7 @@ import { inviteForOrder } from '../_lib/invites';
 import { db } from '../_lib/db';
 import { orderForBuyer } from '../_lib/listings';
 import { cardConfirm, cardEnabled, cardMode, cardPay, cardSession } from '../_lib/lendara';
+import { cryptoEnabled, cryptoQuote, cryptoStatus } from '../_lib/crypto';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -31,7 +34,7 @@ export default async function handler(req: any, res: any) {
       if (who.cavos && who.cavos.sub === order.seller_user_id) throw Object.assign(new HttpError(409, 'No puedes comprar tu propio artículo.'), { code: 'self_purchase' });
       await deployFor(order, env.platformPublic(), who.guest);
       order = await orderBySlug(order.slug);
-      return json(res, 200, { slug: order.slug, contractId: order.contract_id, amountUsdc: Number(order.amount_usdc), priceCrc: Number(order.price_crc), sinpe: { simulated: true, reference: `MET-${order.slug.toUpperCase()}` }, card: cardEnabled(), cardMode: cardMode(), guest: true });
+      return json(res, 200, { slug: order.slug, contractId: order.contract_id, amountUsdc: Number(order.amount_usdc), priceCrc: Number(order.price_crc), sinpe: { simulated: true, reference: `MET-${order.slug.toUpperCase()}` }, card: cardEnabled(), cardMode: cardMode(), crypto: cryptoEnabled(), guest: true });
     }
     if (step === 'start') {
       const user = who.cavos; if (!user) throw new HttpError(401, 'Inicia sesión para continuar.');
@@ -50,7 +53,7 @@ export default async function handler(req: any, res: any) {
         throw Object.assign(new HttpError(409, 'Antes de pagar necesitamos activar tu cuenta. Vuelve a intentar.'), { code: 'buyer_wallet_not_ready' });
       await deployFor(order, buyer, user.sub);
       order = await orderBySlug(order.slug);
-      return json(res, 200, { slug: order.slug, contractId: order.contract_id, amountUsdc: Number(order.amount_usdc), priceCrc: Number(order.price_crc), sinpe: { simulated: true, reference: `MET-${order.slug.toUpperCase()}` }, card: cardEnabled(), cardMode: cardMode() });
+      return json(res, 200, { slug: order.slug, contractId: order.contract_id, amountUsdc: Number(order.amount_usdc), priceCrc: Number(order.price_crc), sinpe: { simulated: true, reference: `MET-${order.slug.toUpperCase()}` }, card: cardEnabled(), cardMode: cardMode(), crypto: cryptoEnabled() });
     }
     if (step === 'confirm_sinpe') {
       if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
@@ -62,6 +65,11 @@ export default async function handler(req: any, res: any) {
       // card_pay: formulario propio (default). card_session: widget de Lendara (respaldo, LENDARA_MODE=widget).
       if (step === 'card_pay') return json(res, 200, await cardPay(order, req.body));
       return json(res, 200, step === 'card_session' ? await cardSession(order) : await cardConfirm(order));
+    }
+    if (step === 'crypto_quote' || step === 'crypto_status') {
+      if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
+      if (step === 'crypto_quote') return json(res, 200, await cryptoQuote(order, req.body?.asset, req.body?.buyer));
+      return json(res, 200, await cryptoStatus(order));
     }
     // Pago directo en USDC desde una wallet Stellar (sin SINPE): el comprador firma fund-escrow; platform paga el fee.
     if (step === 'fund_xdr' || step === 'fund_direct') {

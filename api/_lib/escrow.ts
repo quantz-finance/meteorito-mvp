@@ -82,13 +82,16 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
 }
 
 /** ramp-provider.mock: SINPE simulado (y pago con tarjeta ya verificado: api/_lib/lendara.ts). Fondea desde treasury. Monto SIEMPRE del pedido en DB. Idempotente por order_id. */
-export async function mockRampFund(orderId: string, meta: Record<string, unknown> = { ramp: 'mock' }) {
+/** opts.locked: quien llama ya tomó el lock (fila en ramp_mock_payments), p. ej. el pago con cripto (api/_lib/crypto.ts). */
+export async function mockRampFund(orderId: string, meta: Record<string, unknown> = { ramp: 'mock' }, opts: { locked?: boolean } = {}) {
   const { data: order } = await db().from('orders').select('*').eq('id', orderId).single();
   if (order.funded_tx) return { fundedTx: order.funded_tx as string, pin: null };
   if (order.status !== 'escrow_creado') throw new HttpError(409, `status ${order.status}`);
   const amount = Number(order.amount_usdc);
-  const { error: lockErr } = await db().from('ramp_mock_payments').insert({ order_id: order.id, amount_usdc: amount });
-  if (lockErr) throw new HttpError(409, 'fondeo ya en curso o hecho');
+  if (!opts.locked) {
+    const { error: lockErr } = await db().from('ramp_mock_payments').insert({ order_id: order.id, amount_usdc: amount });
+    if (lockErr) throw new HttpError(409, 'fondeo ya en curso o hecho');
+  }
   // El escrow on-chain debe ser exactamente por el monto del pedido (nunca 'balance > 0').
   const esc = await tw.onChainEscrow(order.contract_id);
   const before = await tw.getBalance(order.contract_id);
