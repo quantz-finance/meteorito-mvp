@@ -6,6 +6,7 @@ import { db, json, fail } from '../_lib/db';
 import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
 import { walletState } from '../_lib/wallet';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
+import { cameraRequired, listingPhotoOk } from '../_lib/capture';
 import { inviteByCode, inviteErr, validCode } from '../_lib/invites';
 import { missingColumn } from '../_lib/listings';
 import { guestSubFromReq } from '../_lib/guest';
@@ -45,8 +46,7 @@ export default async function handler(req: any, res: any) {
     // Acuerdo de entrega: cara a cara o envío y plazo de protección (24 h a 30 días), validado aquí.
     const agreement = validateAgreement({ delivery_mode: b.delivery_mode, protection_minutes: b.protection_minutes });
     if ('error' in agreement) throw Object.assign(new HttpError(400, agreement.error), { code: 'bad_agreement' });
-    // Fotos obligatorias (1-4) y solo de la carpeta del vendedor (subidas por /api/photos/upload-url) o de la invitación.
-    const prefix = publicPrefix(user.sub);
+    // Fotos obligatorias (1-4): tomadas con la cámara de la app (token 'listing'), importadas de Facebook por el servidor o de la invitación.
     const photos: string[] = Array.isArray(b.photos) ? b.photos : [];
     if (photos.length < 1) throw new HttpError(400, 'agrega al menos una foto');
     if (photos.length > MAX_PHOTOS || photos.some((u) => typeof u !== 'string')) throw new HttpError(400, 'fotos inválidas');
@@ -58,7 +58,8 @@ export default async function handler(req: any, res: any) {
       invite = await inviteByCode(b.invite);
     }
     const invitePhotos: string[] = Array.isArray(invite?.photos) ? invite.photos : [];
-    if (photos.some((u) => !u.startsWith(prefix) && !invitePhotos.includes(u))) throw new HttpError(400, 'fotos inválidas');
+    if (photos.some((u) => !invitePhotos.includes(u) && !u.startsWith(publicPrefix(user.sub)))) throw new HttpError(400, 'fotos inválidas');
+    if (photos.some((u) => !invitePhotos.includes(u) && !listingPhotoOk(u, user.sub))) throw cameraRequired();
     // El link no se publica si la wallet del vendedor no puede recibir USDC (activar con /api/wallet/activate).
     if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Actívala y vuelve a publicar.'), { code: 'wallet_not_ready' });
     // La invitación debe seguir abierta y el precio acordado coincidir.

@@ -54,7 +54,7 @@ export async function run(t: T) {
     const guestSub = guestSubFromReq({ headers: { 'x-guest-key': key } })!;
     const db2 = fakeDb(); __setDbForTests(db2 as any);
     db2.tables.invitations.push({ code: 'inv00001', buyer_user_id: guestSub, status: 'abierta', price_crc: 5000, brand: '', model: 'Algo' });
-    const r = res(); const rq: any = req(await token({ sub: 'seller-c' }), { title: 'Algo bonito', price_crc: 5000, photos: [publicPrefix('seller-c') + 'd/0.jpg'], invite: 'inv00001', proof: sellerProof() });
+    const r = res(); const rq: any = req(await token({ sub: 'seller-c' }), { title: 'Algo bonito', price_crc: 5000, photos: [publicPrefix('seller-c') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg'], invite: 'inv00001', proof: sellerProof() });
     rq.headers['x-guest-key'] = key;
     await create(rq, r);
     t.check('c) el vendedor no puede aceptar su propia invitación (misma llave) -> 400', r.code === 400 && /propia invitación/.test(r.body?.error ?? ''), `${r.code} ${r.body?.error}`);

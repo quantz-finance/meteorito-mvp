@@ -39,7 +39,7 @@ const signProof = (kp: Keypair, action: string, ref: string) => {
   return { address: kp.publicKey(), publicKey: kp.publicKey(), message, signature: kp.sign(pre).toString('base64') };
 };
 /** Cuerpo válido de "crear link" (prueba de dirección + foto propia). */
-const sellerBody = (sub: string, over: any = {}) => ({ proof: signProof(SELLER, 'create', 'new'), title: 'iPhone 13', price_crc: 250000, photos: [publicPrefix(sub) + '44444444-4444-4444-8444-444444444444/0.jpg'], ...over });
+const sellerBody = (sub: string, over: any = {}) => ({ proof: signProof(SELLER, 'create', 'new'), title: 'iPhone 13', price_crc: 250000, photos: [publicPrefix(sub) + 'listing-44444444-4444-4444-8444-444444444444/0.jpg'], ...over });
 const order = (o: any) => ({ id: o.slug, kind: 'single', status: 'creado', seller_address: 'G' + 'S'.repeat(55), seller_user_id: 'seller-1', category: 'otro', brand: '', model: 'Bici', condition: '', price_crc: 150000, photos: [], checks: [], created_at: new Date().toISOString(), ...o });
 
 // Mismo entorno que scripts/ci/setup.ts baseEnv() (no se importa: ese archivo es ESM por import.meta).
@@ -228,9 +228,13 @@ test('API-FB-BUYER comprador sin cuenta: importa con su llave de invitado (fixtu
     expect(r.body.price_crc).toBe(25000);
     expect(r.body.photos[0]).toMatch(/^data:image\/jpeg;base64,/);
     expect(seen.every((u) => /^https:\/\/([a-z0-9-]+\.)*(facebook\.com|fbcdn\.net)\//.test(u))).toBe(true);
-    // El cliente sube la foto con la llave de invitado (carpeta del comprador) y crea la invitación con el link de FB.
-    const up = await call(upload, { guest: KEY_A, body: { as: 'guest', draftId: '77777777-7777-4777-8777-777777777777', index: 0, mime: 'image/jpeg', size: 1000 } });
-    expect(up.code).toBe(200);
+    // La foto del anuncio la guarda el servidor (photo_urls, carpeta del comprador): sin subida desde el teléfono.
+    // La vía vieja de subida para invitados quedó cerrada (fotos solo con la cámara de la app).
+    const legacy = await call(upload, { guest: KEY_A, body: { as: 'guest', draftId: '77777777-7777-4777-8777-777777777777', index: 0, mime: 'image/jpeg', size: 1000 } });
+    expect(legacy.code).toBe(403);
+    const fbPhoto = r.body.photo_urls[0];
+    expect(fbPhoto).toMatch(/\/fb-[0-9a-f-]{36}\/0\.jpg$/);
+    const up = { body: { publicUrl: fbPhoto } };
     const inv = await call(invites, { guest: KEY_A, body: { op: 'create', title: r.body.title ?? 'Artículo', price_crc: r.body.price_crc, photos: [up.body.publicUrl], source_url: ITEM } });
     expect(inv.code).toBe(200);
     const pub = await call(invites, { method: 'GET', query: { code: inv.body.code } });

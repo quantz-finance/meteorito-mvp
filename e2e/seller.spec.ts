@@ -1,13 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { open, PHOTO, expectNoScroll, expectInputs16, expectTitleAt16 } from './helpers';
+import { open, takePhoto, expectNoScroll, expectInputs16, expectTitleAt16 } from './helpers';
 
 test.describe('Vendedor (demo)', () => {
   test('VEN-01 crea un link con título, precio y foto', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
     await page.getByPlaceholder('0').fill('150000');
-    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Agregar', { exact: true }).click()]);
-    await fc.setFiles(PHOTO);
+    await takePhoto(page);
     await expect(page.getByText('FOTOS (1/4)', { exact: false })).toBeVisible();
     await page.getByText('Generar link').click();
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
@@ -18,14 +17,13 @@ test.describe('Vendedor (demo)', () => {
   test('VEN-06 fotos: hasta 4, se puede quitar una', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     for (let i = 1; i <= 4; i++) {
-      const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByLabel('Agregar fotos').click()]);
-      await fc.setFiles(PHOTO);
+      await takePhoto(page);
       await expect(page.getByText(`FOTOS (${i}/4)`, { exact: false })).toBeVisible();
     }
-    await expect(page.getByLabel('Agregar fotos')).toHaveCount(0); // no deja más de 4
+    await expect(page.getByLabel('Tomar foto', { exact: true })).toHaveCount(0); // no deja más de 4
     await page.getByLabel('Quitar foto').first().click();
     await expect(page.getByText('FOTOS (3/4)', { exact: false })).toBeVisible();
-    await expect(page.getByLabel('Agregar fotos')).toBeVisible();
+    await expect(page.getByLabel('Tomar foto', { exact: true })).toBeVisible();
     await expectNoScroll(page);
   });
 
@@ -41,8 +39,7 @@ test.describe('Vendedor (demo)', () => {
     await open(page, '/vender', 'seller', true);
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici');
     await page.getByPlaceholder('0').fill('500');
-    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Agregar', { exact: true }).click()]);
-    await fc.setFiles(PHOTO);
+    await takePhoto(page);
     await page.getByText('Generar link').click();
     await expect(page.getByText('¡Tu link está listo!')).toHaveCount(0);
   });
@@ -127,8 +124,7 @@ test.describe('Vendedor (demo)', () => {
     // Sigue funcionando a mano
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Silla de oficina');
     await page.getByPlaceholder('0').fill('45000');
-    const [fc] = await Promise.all([page.waitForEvent('filechooser'), page.getByText('Agregar', { exact: true }).click()]);
-    await fc.setFiles(PHOTO);
+    await takePhoto(page);
     await page.getByText('Generar link').click();
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
   });

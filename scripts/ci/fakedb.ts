@@ -42,6 +42,12 @@ export function fakeDb() {
     return q;
   };
   const uploads: string[] = [];
-  const storage = { from: (_b: string) => ({ createSignedUploadUrl: async (path: string) => { uploads.push(path); return { data: { token: 'tok', signedUrl: `https://x/${path}` }, error: null }; } }) };
-  return { from, tables, storage, uploads };
+  /** Objetos ya subidos al bucket (ruta completa). Los tests simulan la subida del teléfono con objects.add(path). */
+  const objects = new Set<string>();
+  const storage = { from: (_b: string) => ({
+    createSignedUploadUrl: async (path: string) => { uploads.push(path); return { data: { token: 'tok', signedUrl: `https://x/${path}` }, error: null }; },
+    upload: async (path: string) => { if (objects.has(path)) return { data: null, error: { message: 'The resource already exists', statusCode: '409' } }; objects.add(path); return { data: { path }, error: null }; },
+    list: async (dir: string, o: { search?: string } = {}) => ({ data: [...objects].filter((p) => p.startsWith(dir + '/')).map((p) => ({ name: p.slice(dir.length + 1) })).filter((f) => !f.name.includes('/') && (!o.search || f.name.includes(o.search))), error: null }),
+  }) };
+  return { from, tables, storage, uploads, objects };
 }

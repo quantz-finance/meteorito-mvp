@@ -3,8 +3,9 @@
 // "Importar de Facebook" (caso más común: el comprador vio el artículo en Marketplace): pega el link del anuncio y se
 // precargan nombre, precio y foto (mismo /api/store import_facebook que Vender, con su llave de invitado). El link del
 // anuncio queda en la invitación como referencia para el vendedor. Nada se crea sin que el comprador revise.
+// Fotos propias: SOLO con la cámara de la app en el momento (CameraCapture, token 'listing' con su llave de invitado).
+// La foto del anuncio importado la guarda el servidor (photo_urls). No hay carrete ni input de archivo.
 import { router, useLocalSearchParams } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { userMessage } from '@/lib/cavosSession';
 import { useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -16,11 +17,13 @@ import { useAuth } from '@/lib/cavos';
 import { createInvite } from '@/lib/invites';
 import { formatCRC } from '@/lib/orders';
 import { formatPriceInput, MAX_PRICE, MIN_PRICE, parsePrice, TITLE_MAX, TITLE_MIN } from '@/lib/listing';
-import { checkFacebookUrl, fbImportNotice, fbImportProps, importedPhotoBlob, importFromFacebookAsBuyer, type FbImport } from '@/lib/fbImport';
+import { checkFacebookUrl, fbImportNotice, fbImportProps, importFromFacebookAsBuyer, type FbImport } from '@/lib/fbImport';
+import { CameraCapture } from '@/components/CameraCapture';
 import { track, trackError } from '@/lib/analytics';
 
 const MAX_INVITE_PHOTOS = 4;
-interface Pic { key: string; uri: string; width?: number; height?: number }
+/** Foto ya subida (cámara de la app o anuncio de Facebook guardado por el servidor). */
+interface Pic { key: string; uri: string; url: string }
 let seq = 0;
 const FAILED: FbImport = { result: 'failed', title: null, price_crc: null, price_source: null, converted: false, description: null, photos: [], missing: ['title', 'price', 'photos'] };
 
@@ -40,17 +43,11 @@ export default function NuevaInvitacion() {
   const [source, setSource] = useState<string | null>(null); // link del anuncio (referencia para el vendedor)
   const priceNum = parsePrice(price);
 
-  async function pick() {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_INVITE_PHOTOS - pics.length, quality: 1 });
-    if (res.canceled) return;
-    setPics((p) => [...p, ...res.assets.map((a) => ({ key: `i${++seq}`, uri: a.uri, width: a.width, height: a.height }))].slice(0, MAX_INVITE_PHOTOS));
-  }
-  /** Foto del anuncio (data URL del API) -> se muestra ya; se comprime y sube con la llave de invitado al crear. */
-  async function addImportedPhoto(src: string) {
-    const blob = await importedPhotoBlob(src);
-    const uri = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(blob) : src;
-    const dims = await new Promise<{ width?: number; height?: number }>((res) => Image.getSize(uri, (width, height) => res({ width, height }), () => res({})));
-    setPics((p) => (p.length >= MAX_INVITE_PHOTOS ? p : [...p, { key: `i${++seq}`, uri, ...dims }]));
+  const [camOpen, setCamOpen] = useState(false);
+  /** Foto del anuncio: la data URL se muestra ya; la copia guardada por el servidor (photo_urls) es la que se usa. */
+  function addImportedPhoto(src: string, url: string | null | undefined) {
+    if (!url) return;
+    setPics((p) => (p.length >= MAX_INVITE_PHOTOS ? p : [...p, { key: `i${++seq}`, uri: src, url }]));
   }
 
   async function runImport() {
@@ -72,7 +69,7 @@ export default function NuevaInvitacion() {
     setFbNotice({ ...fbImportNotice(res), body: noticeBody(res), failed: res.result === 'failed' });
     setFbBusy(false); setFbOpen(false); setFbUrl('');
     res.result === 'failed' ? haptic.error() : haptic.success();
-    for (const src of res.photos.slice(0, Math.max(0, MAX_INVITE_PHOTOS - pics.length))) { try { await addImportedPhoto(src); } catch { /* foto mala: sigue sin foto */ } }
+    res.photos.slice(0, Math.max(0, MAX_INVITE_PHOTOS - pics.length)).forEach((src, i) => addImportedPhoto(src, res.photo_urls?.[i]));
   }
 
   async function submit() {
@@ -82,12 +79,7 @@ export default function NuevaInvitacion() {
     if (!priceNum || priceNum < MIN_PRICE || priceNum > MAX_PRICE) return setErr(`Ingresa un precio válido: mínimo ${formatCRC(MIN_PRICE)}, máximo ${formatCRC(MAX_PRICE)}.`);
     setBusy(true);
     try {
-      const photos: string[] = [];
-      if (pics.length) { // diferido: compresión y subida solo si hay fotos
-        const { compressPhoto, newDraftId, uploadGuestPhoto } = await import('@/lib/photos');
-        const draft = newDraftId();
-        for (const [i, p] of pics.entries()) photos.push(await uploadGuestPhoto(auth, await compressPhoto(p), draft, i));
-      }
+      const photos = pics.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (Facebook)
       const code = await createInvite(auth, { title: t, price_crc: priceNum, ...(photos.length ? { photos } : {}), ...(source ? { source_url: source } : {}) });
       track('invite_created', { photos: photos.length, from_facebook: !!source });
       router.replace({ pathname: '/i/[code]', params: { code } });
@@ -120,7 +112,7 @@ export default function NuevaInvitacion() {
         <TextInput style={ui.input} value={title} onChangeText={setTitle} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim} maxLength={TITLE_MAX} accessibilityLabel="Nombre del producto" />
         <Text style={T.caption}>Precio acordado en colones</Text>
         <TextInput style={ui.input} value={formatPriceInput(price)} onChangeText={(v) => setPrice(formatPriceInput(v))} inputMode="numeric" keyboardType="number-pad" placeholder="250 000" placeholderTextColor={C.textDim} accessibilityLabel="Precio acordado" />
-        <Text style={T.caption}>Fotos (opcional)</Text>
+        <Text style={T.caption}>Fotos con la cámara (opcional)</Text>
         <View style={s.row}>
           {pics.map((p) => (
             <View key={p.key} style={s.thumb}>
@@ -131,13 +123,16 @@ export default function NuevaInvitacion() {
             </View>
           ))}
           {pics.length < MAX_INVITE_PHOTOS ? (
-            <Pressable accessibilityRole="button" accessibilityLabel="Agregar fotos" onPress={pick} style={[s.thumb, s.add]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Tomar foto" onPress={() => { haptic.tap(); setCamOpen(true); }} style={[s.thumb, s.add]}>
               <Icon name="camera-outline" size={24} color={C.lilac} />
             </Pressable>
           ) : null}
         </View>
         <View style={{ flexDirection: 'row', gap: S.sm, marginTop: S.xs }}><Icon name="information-circle-outline" size={18} color={C.lilac} /><Text style={[T.footnote, { flex: 1 }]} numberOfLines={3}>No necesitas cuenta: tu navegador guarda una llave para que solo tú pagues el link.</Text></View>
       </View>
+
+      <CameraCapture visible={camOpen} purpose="listing" refId="new" asGuest onClose={() => setCamOpen(false)}
+        onDone={(p) => { setPics((x) => (x.length >= MAX_INVITE_PHOTOS ? x : [...x, { key: `i${++seq}`, uri: p.uri, url: p.url }])); setCamOpen(false); }} />
 
       <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de Facebook"
         footer={<PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim()} onPress={runImport} />}>

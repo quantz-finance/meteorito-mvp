@@ -31,7 +31,11 @@ const out: Record<string, unknown> = {};
   const pubFunded: any = await getPublicOrder(slug);
   out.pinLeak = 'pin' in pubFunded; out.status2 = pubFunded.status; out.fundedTxLen = String(pubFunded.funded_tx).length; out.contractLen = String(pubFunded.contract_id).length;
   mk('seller'); // el vendedor marca enviado
-  await api(seller, '/api/escrow/ship', { slug, evidence: { note: 'x' } });
+  // "Ya lo envié" con la foto de la cámara (token 'ship' de un uso, firma y luego el envío); sin foto no se puede.
+  try { await api(seller, '/api/escrow/ship', { slug, evidence: { note: 'x' } }); out.shipNoPhoto = 'accepted'; } catch (e: any) { out.shipNoPhoto = e.code; }
+  const cap = await api(seller, '/api/photos/upload-url', { action: 'capture_token', purpose: 'ship', ref: slug });
+  await api(seller, '/api/photos/upload-url', { purpose: 'ship', capture_token: cap.token, mime: 'image/jpeg', size: 10 });
+  await api(seller, '/api/escrow/ship', { slug, evidence: { photo: 'data:image/jpeg;base64,/9j/2Q==', capture_token: cap.token, captured_at: cap.now, note: 'x' } });
   out.status3 = (await getPublicOrder(slug) as any).status;
   try { await api(seller, '/api/escrow/confirm', { slug, reason: 'pin', pin: '000000' }); out.badPin = 'accepted'; } catch (e: any) { out.badPin = e.code; }
   await api(seller, '/api/escrow/confirm', { slug, reason: 'pin', pin: funded.pin });

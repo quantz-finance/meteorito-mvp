@@ -3,15 +3,16 @@
 // "Importar de Facebook": pega el link de un anuncio de Marketplace y precarga nombre, precio, foto y descripción.
 // No crea nada solo: el vendedor revisa y toca "Generar link" (los datos leídos de FB pueden venir mal).
 // "Entrega y plazo": cara a cara o envío (default) y el plazo para liberar (24 h, 3 días, 7 días u otro, de 24 h a 30 días).
+// Fotos: SOLO con la cámara de la app en el momento (CameraCapture, token 'listing'); se suben al tomarlas. Excepción: la
+// foto del anuncio importado de Facebook (la guarda el servidor) y las fotos de la invitación del comprador.
 import { ensureWalletReady, freshAuth, needsDeviceStep, walletErrorNotice, WALLET_LOADING } from '@/lib/wallet';
 import type { MeteoritoAuth } from '@/lib/types';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
-import * as ImagePicker from 'expo-image-picker';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { checkFacebookUrl, fbImportNotice, fbImportProps, importedPhotoBlob, importFromFacebook, type FbImport } from '@/lib/fbImport';
+import { checkFacebookUrl, fbImportNotice, fbImportProps, importFromFacebook, type FbImport } from '@/lib/fbImport';
 import { useStableWindow } from '@/lib/viewport';
 import { ui } from '@/components/ui';
 import { BetaNotice, RulesHint } from '@/components/RulesLink';
@@ -24,15 +25,16 @@ import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { createOrder, formatCRC, orderLink } from '@/lib/orders';
 import { getInvite, type Invite } from '@/lib/invites';
-import { compressPhoto, MAX_PHOTOS, newDraftId, uploadCompressed, uploadPhoto } from '@/lib/photos';
+import { MAX_PHOTOS } from '@/lib/photos';
+import { CameraCapture } from '@/components/CameraCapture';
+import type { CapturedPhoto } from '@/lib/capture';
 import { formatPriceInput, parsePrice, TITLE_MAX, validateListing, type ListingErrors } from '@/lib/listing';
 import { supabaseConfigured } from '@/lib/supabase';
 import { priceBucket, track, trackError } from '@/lib/analytics';
-import { photoFailureProps } from '@/lib/photoError';
 import { agreementSummary, daysToMinutes, DEFAULT_PROTECTION_MIN, DELIVERY_LABEL, PROTECTION_CHIPS, protectionLabel, type DeliveryMode } from '../../api/_lib/agreement';
 
 type PhotoStatus = 'processing' | 'ready' | 'uploading' | 'done' | 'error';
-interface Photo { key: string; uri: string; mime: string; width?: number; height?: number; status: PhotoStatus; blob?: Blob; /** ya subida (foto de la invitación del comprador): se reutiliza tal cual */ url?: string }
+interface Photo { key: string; uri: string; mime: string; status: PhotoStatus; /** ya subida: cámara de la app, anuncio de Facebook (servidor) o invitación del comprador */ url: string }
 interface Created { slug: string; title: string; price: number; photo: string | null; agreement: string }
 let photoSeq = 0;
 
@@ -116,28 +118,16 @@ function VenderForm() {
   useEffect(() => { saveDraft({ owner: address, title, price, description }); }, [address, title, price, description]);
   const clearErr = (k: keyof ListingErrors) => setErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
 
-  const setPhoto = useCallback((key: string, patch: Partial<Photo>) =>
-    setPhotos((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p))), []);
-  async function pickPhotos() {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: MAX_PHOTOS - photos.length, quality: 1 });
-    if (res.canceled) return;
-    const added: Photo[] = res.assets.slice(0, MAX_PHOTOS - photos.length).map((a) => ({
-      key: `p${++photoSeq}`, uri: a.uri, mime: a.mimeType ?? 'image/jpeg', width: a.width, height: a.height, status: 'processing',
-    }));
-    setPhotos((p) => [...p, ...added].slice(0, MAX_PHOTOS)); clearErr('photos');
-    for (const ph of added) { // comprimir en el dispositivo apenas se eligen
-      try { setPhoto(ph.key, { status: 'ready', blob: await compressPhoto(ph) }); }
-      catch { setPhoto(ph.key, { status: 'ready' }); }
-    }
+  const [camOpen, setCamOpen] = useState(false);
+  /** Foto de la cámara de la app: ya viene subida con su token de un uso. */
+  function addCameraPhoto(p: CapturedPhoto) {
+    setPhotos((ps) => (ps.length >= MAX_PHOTOS ? ps : [...ps, { key: `p${++photoSeq}`, uri: p.uri, mime: 'image/jpeg', status: 'ready', url: p.url }]));
+    clearErr('photos'); setCamOpen(false);
   }
-  /** Foto importada (data URL) -> misma compresión que una foto del teléfono; se sube al generar el link. */
-  async function addImportedPhoto(src: string) {
-    const blob = await importedPhotoBlob(src);
-    const uri = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(blob) : src;
-    const dims = await new Promise<{ width?: number; height?: number }>((res) => Image.getSize(uri, (width, height) => res({ width, height }), () => res({})));
-    const ph: Photo = { key: `p${++photoSeq}`, uri, mime: blob.type || 'image/jpeg', ...dims, status: 'processing' };
-    setPhotos((p) => (p.length >= MAX_PHOTOS ? p : [...p, ph])); clearErr('photos');
-    try { setPhoto(ph.key, { status: 'ready', blob: await compressPhoto(ph) }); } catch { setPhoto(ph.key, { status: 'ready' }); }
+  /** Foto del anuncio de Facebook: la guardó el servidor al importar (photo_urls); la data URL solo se usa para mostrarla. */
+  function addImportedPhoto(src: string, url: string | null | undefined) {
+    if (!url) return; // sin copia en el servidor no se puede usar: el vendedor toma la suya con la cámara
+    setPhotos((p) => (p.length >= MAX_PHOTOS ? p : [...p, { key: `p${++photoSeq}`, uri: src, mime: 'image/jpeg', status: 'ready', url }])); clearErr('photos');
   }
 
   async function runImport() {
@@ -159,7 +149,7 @@ function VenderForm() {
     setFbNotice({ ...fbImportNotice(res), failed: res.result === 'failed' });
     setFbBusy(false); setFbOpen(false); setFbUrl('');
     res.result === 'failed' ? haptic.error() : haptic.success();
-    for (const src of res.photos.slice(0, Math.max(0, MAX_PHOTOS - photos.length))) { try { await addImportedPhoto(src); } catch { /* foto mala: el vendedor agrega la suya */ } }
+    res.photos.slice(0, Math.max(0, MAX_PHOTOS - photos.length)).forEach((src, i) => addImportedPhoto(src, res.photo_urls?.[i]));
   }
 
   const removePhoto = useCallback((key: string) => { haptic.tap(); setPhotos((ps) => ps.filter((p) => p.key !== key)); }, []);
@@ -179,14 +169,7 @@ function VenderForm() {
     setBusy(true);
     try {
       await ensureWalletReady(a).catch((e) => { const msg = walletErrorNotice(e); if (e?.code === 'device_not_authorized' || needsDeviceStep(e)) setOrphan(true); throw Object.assign(new Error(msg), { code: e?.code }); }); // primer link: activar la wallet
-      const draftId = newDraftId();
-      const urls: string[] = [];
-      for (const [i, p] of photos.entries()) {
-        if (p.url) { urls.push(p.url); continue; }
-        setPhoto(p.key, { status: 'uploading' });
-        try { urls.push(p.blob ? await uploadCompressed(a, p.blob, draftId, i) : await uploadPhoto(a, p, draftId, i)); setPhoto(p.key, { status: 'done' }); }
-        catch (e) { setPhoto(p.key, { status: 'error' }); track('photo_upload_failed', { context: 'listing', index: i, precompressed: !!p.blob, ...photoFailureProps(e) }); throw e; }
-      }
+      const urls = photos.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (Facebook / invitación)
       const t = title.trim();
       const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}) });
       track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: !!fbNotice && !fbNotice.failed, delivery_mode: mode, protection_minutes: windowMin });
@@ -289,9 +272,9 @@ function VenderForm() {
         <View style={s.grid}>
           {photos.map((p, i) => <PhotoTile key={p.key} photo={p} index={i} total={photos.length} onRemove={busy ? undefined : removePhoto} />)}
           {photos.length < MAX_PHOTOS && (
-            <Pressable onPress={pickPhotos} accessibilityRole="button" accessibilityLabel="Agregar fotos" style={({ pressed }) => [s.photo, s.photoAdd, errors.photos && { borderColor: C.orange }, pressed && { opacity: 0.8 }]}>
+            <Pressable onPress={() => { haptic.tap(); setCamOpen(true); }} accessibilityRole="button" accessibilityLabel="Tomar foto" style={({ pressed }) => [s.photo, s.photoAdd, errors.photos && { borderColor: C.orange }, pressed && { opacity: 0.8 }]}>
               <Icon name="camera" size={24} color={C.lilac} />
-              <Text style={[T.footnote, { color: C.lilac }]}>Agregar</Text>
+              <Text style={[T.footnote, { color: C.lilac }]}>Tomar</Text>
             </Pressable>
           )}
         </View>
@@ -306,11 +289,12 @@ function VenderForm() {
         <Icon name="chevron-forward" size={16} color={C.textDim} />
       </Pressable>
       {error && <ErrorText>{error}</ErrorText>}
-      {short ? null : <Text style={T.footnote}>De 1 a 4 fotos con buena luz.</Text>}
+      {short ? null : <Text style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>}
       <RulesHint text={SELL_SUMMARY} from="sell" compact={short} /* iPhone SE: solo "Ver reglas" para dejar espacio al aviso de beta */ />
       <BetaNotice from="sell" />
       </View>
 
+      <CameraCapture visible={camOpen} purpose="listing" refId="new" onClose={() => setCamOpen(false)} onDone={addCameraPhoto} />
       <Sheet visible={agreeOpen} onClose={() => setAgreeOpen(false)} title="Entrega y plazo"
         footer={<PrimaryButton title="Listo" icon="checkmark" disabled={customOpen && !customMin}
           onPress={() => { if (customOpen && customMin) setWindowMin(customMin); setAgreeOpen(false); }} />}>

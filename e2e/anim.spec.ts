@@ -83,7 +83,7 @@ test.describe('Universo y Home', () => {
     const vp = page.viewportSize()!;
     // contenido clave del Vender: título, importar, campos, fotos, Generar link y barra de pestañas
     const key = [page.getByText('Vender', { exact: true }).first(), page.getByText('Importar de Facebook'), page.getByPlaceholder(/iPhone 13/),
-      page.locator('input').nth(1), page.getByText('Agregar', { exact: true }), page.getByText('Generar link'), page.getByRole('tablist')];
+      page.locator('input').nth(1), page.getByText('Tomar', { exact: true }), page.getByText('Generar link'), page.getByRole('tablist')];
     const boxes = (await Promise.all(key.map((l) => l.first().boundingBox()))).filter(Boolean) as { x: number; y: number; width: number; height: number }[];
     expect(boxes.length).toBeGreaterThanOrEqual(6);
     for (const id of ids) {

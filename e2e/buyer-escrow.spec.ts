@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { open, seed, orderStatus, DEMO_PIN, PAID, expectNoScroll, openSellerRow } from './helpers';
+import { open, seed, orderStatus, DEMO_PIN, PAID, expectNoScroll, openSellerRow, takePhoto } from './helpers';
 
 test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
   test('COM-01 paga por SINPE con "Ya pagué" y ve su PIN', async ({ page }) => {
@@ -41,6 +41,7 @@ test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
     await open(page, '/', 'seller', true);
     const slug = await seed(page, 'fondeado');
     await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+    await takePhoto(page, 'Tomar foto del envío'); // obligatoria, con la cámara de la app
     await page.getByText('Ya lo envié', { exact: true }).last().click();
     await expect.poll(() => orderStatus(page, slug)).toBe('enviado');
     await openSellerRow(page, /Enviado|En disputa/, '••••••');
