@@ -31,6 +31,8 @@ const REVIEWS = [
   { stars: 4, comment: null, buyer_name: null, h: 400 },
 ];
 
+const DEMO_ADS = ['dmf003', 'dmf005', 'dmf004'];
+const ads = () => { try { return new URLSearchParams(window.location.search).get('ads') === '1'; } catch { return false; } };
 const empty = () => { try { return new URLSearchParams(window.location.search).get('feed') === 'empty'; } catch { return false; } };
 const valeria = (): DemoSeller => {
   const s = demoGetStore(demoStoreSlug());
@@ -60,7 +62,9 @@ export async function demoFeed(o: { q?: string; cursor?: string | null; verified
   const start = cur?.offset ?? 0;
   const page = ranked.slice(start, start + (o.limit ?? 10)).map((r) => list.find((i) => i.slug === r.slug)!);
   const end = start + page.length;
-  return { items: page, next_cursor: end < ranked.length ? encodeRankCursor(end, now) : null };
+  // Bloque Patrocinado del demo: SOLO con ?ads=1 en la URL (el demo normal, como producción sin patrocinios, no lo muestra).
+  const sponsored = !cur && ads() ? list.filter((i) => DEMO_ADS.includes(i.slug)).map((i, k) => ({ id: k + 1, slug: i.slug, title: i.title, price_crc: i.price_crc, photo: i.photo, seller: i.seller })) : [];
+  return { items: page, next_cursor: end < ranked.length ? encodeRankCursor(end, now) : null, sponsored };
 }
 export async function demoProfile(slug: string): Promise<SellerProfile | null> {
   const s = slug === valeria().store_slug ? valeria() : SELLERS.find((x) => x.store_slug === foldText(slug));

@@ -9,13 +9,14 @@ import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextIn
 import { haptic, Icon, PrimaryButton, Sheet, Skeleton, type IconName } from '@/components/ds';
 import { StoreAvatar } from '@/components/StoreAvatar';
 import { FollowButton } from '@/components/FollowButton';
+import { SponsoredBlock } from '@/components/SponsoredBlock';
 import { StarRow, VerifiedBadge } from '@/components/SellerBits';
 import { pressTransition } from '@/constants/motion';
 import { Fonts } from '@/constants/Colors';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { track } from '@/lib/analytics';
 import { formatCRC } from '@/lib/orders';
-import { FEED_ERROR, getFeed, type FeedItem, type VerifiedFilter } from '@/lib/store';
+import { FEED_ERROR, getFeed, type FeedItem, type SponsoredItem, type VerifiedFilter } from '@/lib/store';
 import { useAuth } from '@/lib/cavos';
 import { followsSome, loadFollowing } from '@/lib/follows';
 import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
@@ -37,6 +38,7 @@ export function Feed({ header }: { header: ReactElement }) {
   const [cursor, setCursor] = useState<string | null>(null);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [more, setMore] = useState(false);
+  const [sponsored, setSponsored] = useState<SponsoredItem[]>([]); // bloque Patrocinado (024): solo si hay activos
   const [example, setExample] = useState(false);
   const req = useRef(0);
   const viewed = useRef(false);
@@ -49,11 +51,11 @@ export function Feed({ header }: { header: ReactElement }) {
 
   const load = useCallback(async () => {
     const id = ++req.current;
-    setPhase('loading'); setItems([]); setCursor(null);
+    setPhase('loading'); setItems([]); setCursor(null); setSponsored([]);
     try {
       const page = await getFeed({ q, verified: filter, limit: PAGE, personal: await personal() });
       if (id !== req.current) return;
-      setItems(page.items); setCursor(page.next_cursor); setPhase('ready');
+      setItems(page.items); setCursor(page.next_cursor); setSponsored(page.sponsored ?? []); setPhase('ready');
       if (q) track('feed_search', { results: page.items.length, more: !!page.next_cursor, filter, q_len: q.length });
       else if (!viewed.current) { viewed.current = true; track('feed_viewed', { items: page.items.length, filter }); }
     } catch { if (id === req.current) setPhase('error'); }
@@ -94,6 +96,7 @@ export function Feed({ header }: { header: ReactElement }) {
           );
         })}
       </View>
+      {phase === 'ready' && sponsored.length ? <SponsoredBlock items={sponsored} filter={filter} /> : null}
       <Text style={T.caption}>{q ? COPY.feed.results : COPY.feed.latest}</Text>
     </View>
   );

@@ -88,7 +88,9 @@ export async function uploadStoreAvatar(auth: MeteoritoAuth, p: { uri: string; w
 export type VerifiedFilter = 'true' | 'false' | 'all';
 export interface FeedSeller { store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; rating_avg: number | null; rating_count: number }
 export interface FeedItem { slug: string; title: string; price_crc: number; photo: string | null; created_at: string; seller: FeedSeller }
-export interface FeedPage { items: FeedItem[]; next_cursor: string | null }
+/** Producto del bloque Patrocinado (migración 024): un vendedor pagó para mostrarlo ahí. */
+export interface SponsoredItem { id: number; slug: string; title: string; price_crc: number; photo: string | null; seller: FeedSeller }
+export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[] }
 export interface Review { stars: number; comment: string | null; /** Nombre corto que eligió el comprador; null = "Compra verificada". */ buyer_name: string | null; created_at: string | null }
 /** Cómo salieron las ventas, sin montos. completed = no_issues + disputes_resolved. */
 export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
@@ -118,7 +120,7 @@ export async function getFeed(o: { q?: string; cursor?: string | null; verified:
     j = (await r.json().catch(() => null)) ?? {};
     if (!r.ok) throw new Error(r.status >= 500 ? FEED_ERROR : j.error ?? FEED_ERROR);
   }
-  return { items: Array.isArray(j?.items) ? j.items : [], next_cursor: j?.next_cursor ?? null };
+  return { items: Array.isArray(j?.items) ? j.items : [], next_cursor: j?.next_cursor ?? null, sponsored: Array.isArray(j?.sponsored) ? j.sponsored : [] };
 }
 /** Perfil público; null si no existe. */
 export async function getSellerProfile(slug: string): Promise<SellerProfile | null> {

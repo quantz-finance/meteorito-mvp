@@ -4,6 +4,7 @@
 //                                                 -> feed de Comprar (y buscador): productos activos de vendedores, lo más
 //                                                 nuevo primero, paginado por cursor. Sin datos privados. Caché corta.
 //       [&order=rank]                            -> con el algoritmo (api/_lib/feedRank.ts), sin personalizar (caché pública)
+//                                                 + sponsored: bloque Patrocinado (024), solo en la 1.ª página, [] si no hay
 //  POST { action:'feed', q?, verified?, cursor?, limit? } (X-Guest-Key y/o Bearer) -> el mismo feed con el algoritmo y el
 //                                                 impulso de los vendedores que SIGUE quien pide (022). Sin caché.
 //  GET  ?profile=<usuario>                        -> perfil público del vendedor (/t/<usuario>): tienda + verificado, ventas,
@@ -58,6 +59,8 @@ import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
 import { buyerOrders } from '../_lib/purchases';
 import { FOLLOW_IP_PER_MIN, followedSellerSubs, followingSlugs, followRateLimited, setFollow } from '../_lib/follows';
+import { sponsoredFor } from '../_lib/sponsored';
+import { parseVerified, searchTokens } from '../_lib/feedText';
 import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
@@ -164,6 +167,12 @@ async function ogPage(req: any, res: any) {
   res.send(injectMeta(appHtml, meta, url));
 }
 
+/** Bloque Patrocinado (024): solo en la primera página del feed con el algoritmo, con el mismo filtro y búsqueda. */
+async function withSponsored<P extends { verified: any }>(page: P, q: any): Promise<P & { sponsored?: unknown[] }> {
+  if ((q.cursor != null && q.cursor !== '') || (q.order !== 'rank' && q.action !== 'feed')) return page;
+  return { ...page, sponsored: await sponsoredFor({ verified: parseVerified(q.verified), tokens: searchTokens(q.q) }) };
+}
+
 export default async function handler(req: any, res: any) {
   try {
     if (req.method === 'GET' && req.query?.push === 'key') {
@@ -171,7 +180,7 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { key: vapid()?.publicKey ?? null });
     }
     if (req.method === 'GET' && req.query?.feed != null) {
-      const page = await feedPage({ q: req.query.q, cursor: req.query.cursor, limit: req.query.limit, verified: req.query.verified, order: req.query.order });
+      const page = await withSponsored(await feedPage({ q: req.query.q, cursor: req.query.cursor, limit: req.query.limit, verified: req.query.verified, order: req.query.order }), req.query);
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=60');
       return json(res, 200, page);
     }
@@ -286,7 +295,7 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'feed') {
       const who = await requireBuyerIdentity(req);
-      const page = await feedPage({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed: await followedSellerSubs(who.ids) });
+      const page = await withSponsored(await feedPage({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed: await followedSellerSubs(who.ids) }), b);
       res.setHeader?.('Cache-Control', 'private, no-store');
       return json(res, 200, page);
     }

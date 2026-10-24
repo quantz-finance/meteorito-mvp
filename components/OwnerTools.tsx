@@ -13,6 +13,7 @@ import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { userMessage } from '@/lib/cavosSession';
 import { COPY } from '@/lib/copy';
+import { track } from '@/lib/analytics';
 import { formatCRC, orderLink } from '@/lib/orders';
 import { HISTORY_TITLE, type AdInput } from '@/lib/sellerTools';
 import { setListingStatus, updateMyStore, type Store, type StoreItem } from '@/lib/store';
@@ -24,6 +25,7 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
   const auth = useAuth();
   const [editing, setEditing] = useState(false); const [account, setAccount] = useState(false);
   const [ad, setAd] = useState<AdInput | null>(null);
+  const [promote, setPromote] = useState(false); // "Promocionar este producto": por ahora solo avisa (sin cobro)
   const [slug, setSlug] = useState(''); const [name, setName] = useState('');
   const [err, setErr] = useState<string | null>(null); const [saving, setSaving] = useState(false);
 
@@ -77,6 +79,8 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
             : <PrimaryButton title="Pausar ventas" icon="pause" variant="secondary" loading={saving} onPress={() => setStatus('pausada')} />}
           <PrimaryButton title="Copiar anuncio" icon="document-text-outline" variant="ghost" disabled={saving}
             onPress={() => { const it = managing!; onCloseManage(); setAd({ title: it.title, price_crc: it.price_crc, link: orderLink(it.slug) }); }} />
+          <PrimaryButton title={COPY.sponsored.promote} icon="rocket-outline" variant="ghost" disabled={saving} testID="promote"
+            onPress={() => { onCloseManage(); setPromote(true); track('promote_interest', { items: store.items.length }); }} />
           <PrimaryButton title="Archivar" icon="archive-outline" variant="ghost" disabled={saving} onPress={() => setStatus('archivada')} />
           <PrimaryButton title="Ver página" icon="open-outline" variant="ghost" onPress={() => { const s = managing!.slug; onCloseManage(); router.push({ pathname: '/p/[slug]', params: { slug: s } }); }} />
         </>}>
@@ -84,6 +88,13 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
         <Text style={T.footnote}>En pausa no se puede comprar y no aparece en tu tienda. Archivado sale de tu lista; los pedidos en curso siguen igual.</Text>
       </Sheet>
 
+      <Sheet visible={promote} onClose={() => setPromote(false)} title={COPY.sponsored.promote}
+        footer={<PrimaryButton title={COPY.sponsored.ok} icon="checkmark" onPress={() => setPromote(false)} />}>
+        <View style={{ alignItems: 'center', gap: S.sm }} testID="promote-sheet">
+          <Icon name="rocket-outline" size={40} color={C.lilac} />
+          <Text style={[T.callout, { textAlign: 'center' }]}>{COPY.sponsored.promoteText}</Text>
+        </View>
+      </Sheet>
       <Sheet visible={editing} onClose={() => setEditing(false)} title="Editar mi tienda"
         footer={<PrimaryButton title="Guardar" loading={saving} onPress={save} />}>
         <Text style={T.caption}>Tu nombre</Text>
