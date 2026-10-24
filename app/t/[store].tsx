@@ -3,6 +3,7 @@
 // de compras liberadas. Textos en lib/copy.ts. Lectura pública: GET /api/store?profile (caché corta, sin datos privados).
 // Es también "Mi tienda": con la sesión del dueño viendo su propia tienda (isOwnerView) se agregan sus herramientas
 // (OwnerTools) y sus productos en pausa. Visitantes e invitados nunca las ven. Compartir siempre visible.
+// Tiendas de EJEMPLO (p.demo, api/_lib/demoProducts.ts): etiqueta "Ejemplo" + nota de que todo es ficticio, sin Seguir ni chat.
 import { COPY } from '@/lib/copy';
 import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -110,9 +111,12 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
           <ActivityLine activity={activity} center />
           {p.bio ? <Text style={[T.body, { textAlign: 'center', marginTop: S.xs }]} numberOfLines={4}>{p.bio}</Text> : null}
           {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
+          {p.demo ? <View style={s.demoTag} testID="store-demo-tag"><Text style={s.demoTagText}>{COPY.demoProducts.tag}</Text></View> : null}
           {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{COPY.identity.unconfirmed}</Text></View> : null}
         </View>
-        {!owner ? <View style={{ alignItems: 'center', marginTop: 2 }}>
+        {p.demo ? <View style={s.demoNote} testID="store-demo-note"><Icon name="information-circle-outline" size={16} color={C.lilac} />
+          <View style={{ flex: 1, gap: 2 }}><Text style={T.headline}>{COPY.demoProducts.storeTitle}</Text><Text style={T.footnote}>{COPY.demoProducts.storeNote}</Text></View></View> : null}
+        {!owner && !p.demo ? <View style={{ alignItems: 'center', marginTop: 2 }}>
           <FollowButton store={p} source="profile" onFollowers={(n, on) => setFollowers((cur) => (n != null ? n : cur == null ? null : Math.max(0, cur + (on ? 1 : -1))))} />
         </View> : null}
         <View style={s.stats}>
@@ -127,7 +131,7 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
 
       <View style={{ gap: S.sm }}>
         {/* Chat dentro de Meteorito primero (la compra sigue en custodia); WhatsApp queda como alternativa. */}
-        {!owner ? <ChatButton as="buyer" target={{ store_slug: p.store_slug }} source="store" variant="primary" testID="store-chat" /> : null}
+        {!owner && !p.demo ? <ChatButton as="buyer" target={{ store_slug: p.store_slug }} source="store" variant="primary" testID="store-chat" /> : null}
         {p.whatsapp ? <PrimaryButton title="Escribir por WhatsApp" icon="logo-whatsapp" variant="secondary" onPress={() => openWhatsApp(p)} /> : null}
         <PrimaryButton testID="share-store" title={owner ? COPY.store.shareMine : COPY.store.share} icon="share-outline" variant={owner ? 'primary' : 'secondary'} onPress={() => shareProfile(p, owner)} />
         <View style={[s.metaRow, { justifyContent: 'center' }]}>
@@ -148,6 +152,7 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
                 style={({ pressed }) => [s.tile, pressTransition, pressed && { opacity: 0.88, transform: [{ scale: 0.98 }] }]}>
                 {it.photo ? <Image source={{ uri: it.photo }} style={s.tilePhoto} resizeMode="cover" accessibilityIgnoresInvertColors />
                   : <View style={[s.tilePhoto, s.noPhoto]}><Icon name="image-outline" size={28} color={C.lilac} /></View>}
+                {it.demo || p.demo ? <View style={[s.demoTag, s.tileTag]}><Text style={s.demoTagText}>{COPY.demoProducts.tag}</Text></View> : null}
                 <View style={{ padding: S.sm, gap: 2 }}>
                   <Text style={[T.body, { fontSize: 14, lineHeight: 19 }]} numberOfLines={2}>{it.title}</Text>
                   <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={1}>{formatCRC(it.price_crc)}</Text>
@@ -171,7 +176,7 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
           <View key={i} style={s.review}>
             <View style={st.rowBetween}><StarRow value={r.stars} size={14} /><Text style={T.footnote}>{timeAgo(r.created_at)}</Text></View>
             {r.comment ? <Text style={T.body}>{r.comment}</Text> : null}
-            <View style={s.metaRow}><Icon name="shield-checkmark-outline" size={13} color={C.success} /><Text style={T.footnote}>{COPY.profile.reviewBy(r.buyer_name)}</Text></View>
+            <View style={s.metaRow}><Icon name="shield-checkmark-outline" size={13} color={C.success} /><Text style={T.footnote}>{p.demo ? COPY.demoProducts.reviewBy(r.buyer_name) : COPY.profile.reviewBy(r.buyer_name)}</Text></View>
           </View>
         )) : <Empty icon="chatbubble-ellipses-outline" text={COPY.profile.noReviews} />}
       </View>
@@ -226,5 +231,9 @@ const s = StyleSheet.create({
   noPhoto: { alignItems: 'center', justifyContent: 'center' },
   summary: { flexDirection: 'row', alignItems: 'center', gap: S.md, backgroundColor: C.surface, borderRadius: R.md, padding: S.md, borderWidth: 0.5, borderColor: C.line },
   review: { gap: S.xs + 2, backgroundColor: C.surface, borderRadius: R.md, padding: S.md, borderWidth: 0.5, borderColor: C.line },
+  demoTag: { alignSelf: 'center', marginTop: S.xs, paddingHorizontal: 9, paddingVertical: 2, borderRadius: R.pill, backgroundColor: 'rgba(20,10,40,0.72)', borderWidth: 1, borderColor: 'rgba(201,182,255,0.4)' },
+  demoTagText: { fontFamily: Fonts.bold, fontSize: 12, color: C.text, letterSpacing: 0.3 },
+  tileTag: { position: 'absolute', top: 6, left: 6, marginTop: 0 },
+  demoNote: { flexDirection: 'row', gap: S.sm, alignItems: 'flex-start', marginHorizontal: S.md, padding: S.sm + 2, borderRadius: R.md, backgroundColor: C.lilacBg },
   emptyBox: { alignItems: 'center', gap: S.sm, padding: S.lg, borderRadius: R.md, borderWidth: 1, borderStyle: 'dashed', borderColor: C.line },
 });
