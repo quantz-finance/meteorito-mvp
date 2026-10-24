@@ -9,7 +9,7 @@
 import { COPY } from '@/lib/copy';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
-import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { haptic, Icon, PrimaryButton, Sheet, Skeleton, type IconName } from '@/components/ds';
 import { StoreAvatar } from '@/components/StoreAvatar';
 import { FollowButton } from '@/components/FollowButton';
@@ -26,6 +26,8 @@ import { formatCRC } from '@/lib/orders';
 import { FEED_ERROR, getFeed, type FeedItem, type FeedView, type SponsoredItem, type VerifiedFilter } from '@/lib/store';
 import { useAuth } from '@/lib/cavos';
 import { followsSome, loadFollowing } from '@/lib/follows';
+import { clearSearch, openSearch, useFeedSearch } from '@/lib/feedSearch';
+import { SearchSheet } from '@/components/SearchSheet';
 import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
 
 export const SEARCH_DEBOUNCE_MS = 300;
@@ -47,8 +49,9 @@ export function Feed({ header }: { header: ReactElement }) {
   const [filter, setFilter] = useState<VerifiedFilter>('true');
   const [view, setView] = useState<FeedView>('for_you');
   const [followsNone, setFollowsNone] = useState(false); // Siguiendo sin seguir a nadie: estado vacío sin pedir nada
-  const [text, setText] = useState('');
-  const [q, setQ] = useState('');
+  // Buscador en un modalcito (lupa de ComprarNav -> components/SearchSheet): el texto vive en lib/feedSearch.
+  const { text, open: searching } = useFeedSearch();
+  const [q, setQ] = useState(() => text.trim());
   const [items, setItems] = useState<FeedItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -93,7 +96,9 @@ export function Feed({ header }: { header: ReactElement }) {
       setItems((prev) => [...prev, ...page.items.filter((i) => !prev.some((p) => p.slug === i.slug))]); setCursor(page.next_cursor);
     } catch { /* se reintenta al seguir bajando */ } finally { if (id === req.current) setMore(false); }
   };
-  const clear = () => { setText(''); setQ(''); };
+  const clear = () => { clearSearch(); setQ(''); };
+  // Enter / cerrar la hoja: la búsqueda se aplica ya (sin esperar el debounce).
+  useEffect(() => { if (!searching) setQ(text.trim()); }, [searching]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (f: VerifiedFilter) => { if (f === filter) return; haptic.tap(); setFilter(f); };
   const pickView = (v: FeedView) => { if (v === view) return; haptic.tap(); setView(v); track('feed_view_changed', { view: v, filter }); };
 
@@ -112,14 +117,16 @@ export function Feed({ header }: { header: ReactElement }) {
           );
         })}
       </View>
-      <View style={s.search}>
-        <Icon name="search" size={20} color={C.textDim} />
-        <TextInput style={s.searchInput} value={text} onChangeText={setText} placeholder={COPY.feed.searchPlaceholder} placeholderTextColor={C.textDim}
-          accessibilityLabel={COPY.feed.searchLabel} autoCapitalize="none" autoCorrect={false} returnKeyType="search" enterKeyHint="search" maxLength={60}
-          onSubmitEditing={() => setQ(text.trim())} />
-        {text ? <Pressable onPress={clear} accessibilityRole="button" accessibilityLabel={COPY.feed.clear} hitSlop={10} style={s.clear}>
-          <Icon name="close-circle" size={20} color={C.textDim} /></Pressable> : null}
-      </View>
+      {q ? <View style={s.chipRow}>
+        <Pressable onPress={() => { haptic.tap(); openSearch(); }} accessibilityRole="button" accessibilityLabel={`${COPY.feed.searchLabel}: ${q}`} testID="search-chip"
+          style={({ pressed }) => [s.chip, pressed && { opacity: 0.85 }]}>
+          <Icon name="search" size={16} color={C.lilac} />
+          <Text style={s.chipText} numberOfLines={1}>{q}</Text>
+        </Pressable>
+        <Pressable onPress={() => { haptic.tap(); clear(); }} accessibilityRole="button" accessibilityLabel={COPY.feed.clear} hitSlop={6} style={s.chipClear}>
+          <Icon name="close" size={18} color={C.lilac} />
+        </Pressable>
+      </View> : null}
       <View style={s.seg} accessibilityRole="tablist" testID="feed-filter">
         {FILTERS.map((f) => {
           const on = f.key === filter;
@@ -188,6 +195,7 @@ export function Feed({ header }: { header: ReactElement }) {
       ListFooterComponent={more ? <ActivityIndicator color={C.lilac} style={{ marginVertical: S.lg }} /> : <View style={{ height: S.xl }} />}
       onEndReached={loadMore} onEndReachedThreshold={0.6} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
       showsVerticalScrollIndicator={false} initialNumToRender={6} windowSize={7} testID="feed" />
+    <SearchSheet />
     <Sheet visible={example} onClose={() => setExample(false)} title={COPY.sales.sheetTitle}
       footer={<PrimaryButton title={COPY.sales.sheetOk} icon="checkmark" onPress={() => setExample(false)} />}>
       <Text style={T.callout}>{COPY.sales.sheetText}</Text>
@@ -290,9 +298,11 @@ const s = StyleSheet.create({
   viewBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: TOUCH, paddingHorizontal: 2, borderBottomWidth: 2, borderBottomColor: 'transparent', marginBottom: -StyleSheet.hairlineWidth },
   viewOn: { borderBottomColor: C.lilac },
   viewText: { fontFamily: Fonts.bold, fontSize: 16, color: C.textDim },
-  search: { flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.surface, borderRadius: R.md, paddingLeft: S.md, minHeight: TOUCH + 4, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
-  searchInput: { flex: 1, minWidth: 0, color: C.text, fontFamily: Fonts.regular, fontSize: 16, minHeight: TOUCH + 4, paddingVertical: 0, outlineStyle: 'none' } as any,
-  clear: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
+  // Chip de la búsqueda activa: tocarlo reabre la hoja; la X la limpia.
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs, alignSelf: 'flex-start', maxWidth: '100%', backgroundColor: C.lilacBg, borderRadius: R.pill, paddingLeft: S.sm + 4 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: S.xs, flexShrink: 1, minHeight: TOUCH },
+  chipText: { fontFamily: Fonts.bold, fontSize: 16, color: C.text, flexShrink: 1 },
+  chipClear: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
   // Filtro: dos mitades iguales (mismo ancho y alto).
   seg: { flexDirection: 'row', padding: 3, gap: 3, borderRadius: R.pill, borderWidth: 1, borderColor: 'rgba(201,182,255,0.4)' },
   segBtn: { flex: 1, flexBasis: 0, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minHeight: TOUCH, paddingHorizontal: 2, borderRadius: R.pill },

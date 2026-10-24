@@ -853,3 +853,16 @@ test('CNT-05 link de acceso en OTRO dispositivo: recupera la compra, quita el to
   await expect(c.getByTestId('access-msg')).toContainText('Este link venció');
   await expect(c.getByTestId('recover-open')).toBeVisible();
 });
+
+test('MCK-SRCH-01 sin cuenta: la lupa abre el buscador y filtra el feed (sin barra de pestañas)', async ({ page, request }) => {
+  await reset(request, [listing, { slug: 'prod02', kind: 'listing', model: 'Consola PS5', price_crc: 300000 }]);
+  await page.goto('/comprar');
+  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(0);
+  await page.getByTestId('comprar-search').click();
+  const input = page.getByLabel('Buscar productos', { exact: true });
+  await expect(input).toBeFocused();
+  await input.fill('bici'); await input.press('Enter');
+  await expect(page.getByTestId('search-chip')).toContainText('bici');
+  await expect(page.getByTestId('feed-card')).toHaveCount(1);
+  await expect(page.getByTestId('feed-card').first()).toContainText('Bici de montaña');
+});
