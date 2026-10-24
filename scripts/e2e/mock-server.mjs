@@ -21,6 +21,8 @@ const base = (o) => ({ kind: 'single', listing_slug: null, listing_status: 'acti
 S = fresh();
 const PRIV = ['buyer', 'pin_attempts', 'ship_evidence']; // la foto del envío solo la ve el comprador (step shipment)
 const pub = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !PRIV.includes(k)));
+// Acuerdo de entrega (migración 017): cara a cara corre desde el pago con su plazo (default 24 h).
+const f2fDue = (o) => (o.delivery_mode === 'cara_a_cara' ? { auto_release_at: new Date(Date.now() + (o.protection_minutes ?? 1440) * 60_000).toISOString() } : {});
 const hex = (n) => Array.from({ length: n }, (_, i) => ((S.seq * 31 + i * 7) % 16).toString(16)).join('');
 
 function staticFile(path) {
@@ -79,7 +81,7 @@ async function api(req, path, q, b) {
       if (o.buyer !== guest) throw E(403, 'no eres el comprador de este pedido');
       if (o.status === 'fondeado') return { funded: true, fundedTx: o.funded_tx, pin: null }; // idempotente: el PIN no se re-emite
       if (o.status !== 'escrow_creado') throw E(409, 'Primero inicia el pago.', 'bad_state');
-      Object.assign(o, { status: 'fondeado', funded_tx: 'f'.repeat(64) }); return { funded: true, fundedTx: o.funded_tx, pin: PIN };
+      Object.assign(o, { status: 'fondeado', funded_tx: 'f'.repeat(64), funded_at: new Date().toISOString(), ...f2fDue(o) }); return { funded: true, fundedTx: o.funded_tx, pin: PIN };
     }
     // Pago con tarjeta (Lendara simulado): el widget es /__mock/lendara/widget/<id> (mismo origen), igual que el real postea
     // { transaction } al padre. card_confirm decide con el estado guardado (como el servidor real con Lendara + Horizon).
@@ -106,7 +108,7 @@ async function api(req, path, q, b) {
       if (o.status !== 'escrow_creado') throw E(409, 'Primero inicia el pago.', 'bad_state');
       const mine = Object.entries(S.lendara).filter(([, x]) => x.slug === o.slug).reverse();
       const done = mine.find(([, x]) => x.status === 'completed');
-      const fund = () => { Object.assign(o, { status: 'fondeado', funded_tx: 'c'.repeat(64) }); return { fundedTx: o.funded_tx, pin: PIN }; };
+      const fund = () => { Object.assign(o, { status: 'fondeado', funded_tx: 'c'.repeat(64), funded_at: new Date().toISOString(), ...f2fDue(o) }); return { fundedTx: o.funded_tx, pin: PIN }; };
       if (done) return fund();
       const inapp = mine.find(([, x]) => x.status === 'pending_anchor' && x.polls != null);
       if (inapp && b.step === 'card_confirm') { if (--inapp[1].polls <= 0) { inapp[1].status = 'completed'; return fund(); } return { pending: true }; }
@@ -126,7 +128,21 @@ async function api(req, path, q, b) {
   if (path === '/api/escrow/confirm') {
     needGuest(); const o = get(String(b.slug));
     if (o.buyer !== guest) throw E(403, 'no eres el comprador');
-    if (o.status !== 'enviado') throw E(409, 'Este pedido no está enviado.', 'bad_state');
+    const running = o.status === 'enviado' || (o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara');
+    if (b.reason === 'extend' || b.reason === 'extend_answer') { // como api/escrow/confirm (lado comprador)
+      if (!running) throw E(409, 'El plazo no se puede cambiar en este momento.', 'ext_not_running');
+      const p = o.release_ext && Date.now() - Date.parse(o.release_ext.at) < 86_400_000 ? o.release_ext : null;
+      if (b.reason === 'extend') {
+        if (![1, 3, 7].includes(Number(b.days))) throw E(400, 'Elige 1, 3 o 7 días.');
+        if (p) throw E(409, 'Ya hay una solicitud esperando respuesta.', 'ext_pending');
+        o.release_ext = { by: 'buyer', days: Number(b.days), at: new Date().toISOString() }; return { pending: o.release_ext };
+      }
+      if (!p) throw E(409, 'No hay ninguna solicitud pendiente.', 'ext_none');
+      if (p.by === 'buyer') throw E(403, 'La otra parte tiene que responder tu solicitud.');
+      if (b.accept === true) { o.release_ext_minutes = (o.release_ext_minutes ?? 0) + p.days * 1440; o.auto_release_at = new Date(Date.parse(o.auto_release_at) + p.days * 86_400_000).toISOString(); }
+      o.release_ext = null; return { accepted: b.accept === true, autoReleaseAt: o.auto_release_at };
+    }
+    if (!running) throw E(409, 'Este pedido no está enviado.', 'bad_state');
     Object.assign(o, { status: 'liberado', released_tx: 'r'.repeat(64), approval_reason: 'buyer_confirm' }); return { released: true, releasedTx: o.released_tx };
   }
   if (path === '/api/escrow/dispute') {

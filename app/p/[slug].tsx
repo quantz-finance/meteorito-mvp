@@ -50,7 +50,9 @@ export default function LinkDeVenta() {
   useOrdersRefresh(silent, order ? [order] : null);
   // Respaldo del pg_cron: si el plazo de liberación (AUTO_RELEASE_MINUTES) ya venció, pedirle al backend que libere (idempotente, verifica on-chain).
   useEffect(() => {
-    if (!DEMO_ENABLED && order?.status === 'enviado' && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
+    // Cara a cara: el plazo corre desde el pago (sigue en 'fondeado').
+    const running = order?.status === 'enviado' || (order?.status === 'fondeado' && order.delivery_mode === 'cara_a_cara');
+    if (!DEMO_ENABLED && running && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
       fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
   }, [order?.status, order?.auto_release_at]);
   useEffect(load, [slug]);

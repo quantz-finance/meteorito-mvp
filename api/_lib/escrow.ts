@@ -1,7 +1,8 @@
 import { Keypair, Networks, Transaction, TransactionBuilder } from '@stellar/stellar-sdk';
 import { feeBumpAndSend, validateEscrowTx } from './feebump';
 import { createHash, randomInt } from 'node:crypto';
-import { env, releaseDueAt } from './env';
+import { env, releaseBlockedUntil } from './env';
+import { deliveryModeOf, isFaceToFace, protectionOf } from './agreement';
 import { ownPhotoUrl } from './photos';
 import { db, advance, logEvent } from './db';
 import { HttpError } from './auth';
@@ -97,8 +98,9 @@ export async function mockRampFund(orderId: string, meta: Record<string, unknown
   const pin = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await db().from('ramp_mock_payments').update({ state: 'sent', tx_hash: sent.hash }).eq('order_id', order.id);
   await advance(order.id, 'escrow_creado', {
-    funded_tx: sent.hash, funded_at: new Date().toISOString(), status: 'fondeado', delivery_pin_hash: pinHash(order.id, pin),
+    funded_tx: sent.hash, funded_at: new Date().toISOString(), status: 'fondeado', delivery_pin_hash: pinHash(order.id, pin), ...fundedAgreement(order),
   });
+  await logAgreement(order);
   await logEvent(order.id, 'funded', { hash: sent.hash, amount, ramp: 'mock', ...meta });
   return { fundedTx: sent.hash, pin };
 }
@@ -124,10 +126,20 @@ export async function fundDirect(orderId: string, signedXdr: string) {
   if (!chk.ok) { await logEvent(order.id, 'funding_mismatch', { reason: chk.reason, amount, direct: true }); throw new HttpError(409, `fondeo no verificado: ${chk.reason}`); }
   const pin = String(randomInt(0, 1_000_000)).padStart(6, '0');
   await advance(order.id, 'escrow_creado', {
-    funded_tx: sent.hash, funded_at: new Date().toISOString(), status: 'fondeado', delivery_pin_hash: pinHash(order.id, pin),
+    funded_tx: sent.hash, funded_at: new Date().toISOString(), status: 'fondeado', delivery_pin_hash: pinHash(order.id, pin), ...fundedAgreement(order),
   });
+  await logAgreement(order);
   await logEvent(order.id, 'funded', { hash: sent.hash, amount, ramp: 'direct_usdc' });
   return { fundedTx: sent.hash, pin };
+}
+
+/** Cara a cara: el plazo de protección corre desde el pago. */
+export function fundedAgreement(order: any, at = Date.now()) {
+  return isFaceToFace(order) ? { auto_release_at: new Date(at + protectionOf(order) * 60_000).toISOString() } : {};
+}
+/** Al pagar el comprador acepta el acuerdo que vio antes de pagar: queda en order_events. */
+export async function logAgreement(order: any) {
+  await logEvent(order.id, 'agreement_accepted', { delivery_mode: deliveryModeOf(order), protection_minutes: protectionOf(order) });
 }
 
 export const pinHash = (orderId: string, pin: string) => createHash('sha256').update(`${env.pinPepper()}:${orderId}:${pin}`).digest('hex');
@@ -137,13 +149,17 @@ export type ApproveReason = 'buyer_confirm' | 'pin' | 'timeout';
 
 /** Backend approver aprueba + release signer libera, verificando on-chain antes. */
 export async function approveAndRelease(order: any, reason: ApproveReason) {
-  if (order.status !== 'enviado' && order.status !== 'entregado') throw new HttpError(409, `status ${order.status}`);
+  // Cara a cara no tiene paso de envío: se aprueba y libera desde 'fondeado' (PIN, "Recibí" o plazo desde el pago).
+  // Probado en testnet: approve_milestone de TW funciona sin change_milestone_status previo.
+  const f2fPaid = order.status === 'fondeado' && isFaceToFace(order);
+  if (order.status !== 'enviado' && order.status !== 'entregado' && !f2fPaid) throw new HttpError(409, `status ${order.status}`);
   // PIN bloqueado (3 intentos fallidos del vendedor): el plazo NO libera solo; queda para revisión o confirmación del comprador.
   if (reason === 'timeout' && (order.pin_attempts ?? 0) >= 3) throw Object.assign(new HttpError(423, 'PIN bloqueado: el pago no se libera solo; lo revisamos.'), { code: 'pin_locked' });
   if (order.dispute_tx || order.disputed_at) throw new HttpError(409, 'pedido en disputa');
   // Plazo: nunca antes de 7 días (o la ventana vigente) desde "Ya lo envié", aunque auto_release_at sea viejo y corto.
-  if (reason === 'timeout' && order.status === 'enviado' && Date.parse(releaseDueAt(order)) > Date.now())
-    throw Object.assign(new HttpError(425, 'Todavía no vence el plazo de liberación automática.'), { code: 'not_due', dueAt: releaseDueAt(order) });
+  // Extensión pendiente: congela hasta la respuesta (máx. 24 h).
+  if (reason === 'timeout' && order.status !== 'entregado' && Date.parse(releaseBlockedUntil(order)) > Date.now())
+    throw Object.assign(new HttpError(425, 'Todavía no vence el plazo de liberación automática.'), { code: 'not_due', dueAt: releaseBlockedUntil(order) });
   // Verificación ON-CHAIN (contrato directo, no indexador de TW) antes de aprobar y antes de liberar.
   const assertOpen = async () => {
     const g = await chain().releaseGuard(order.contract_id);
@@ -153,10 +169,10 @@ export async function approveAndRelease(order: any, reason: ApproveReason) {
     }
     return g;
   };
-  if (order.status === 'enviado') {
+  if (order.status === 'enviado' || f2fPaid) {
     await assertOpen();
     const ap = await chain().approveMilestone(order.contract_id, env.approverSecret());
-    await advance(order.id, 'enviado', { approved_tx: ap.hash, approval_reason: reason, delivered_at: new Date().toISOString(), status: 'entregado' });
+    await advance(order.id, order.status, { approved_tx: ap.hash, approval_reason: reason, delivered_at: new Date().toISOString(), status: 'entregado' });
     await logEvent(order.id, 'approved', { hash: ap.hash, reason });
   }
   const g = await assertOpen();

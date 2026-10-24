@@ -177,7 +177,7 @@ export async function run(t: T) {
 
     /* ---------- 6) Textos y demo ---------- */
     const ped = src('app/(tabs)/pedidos.tsx');
-    t.check('Pedidos: el texto de "fondeado" habla de "Ya lo envié" y el de "enviado" del código y los 7 días', /Ya lo envié/.test(ped) && /código de entrega/.test(ped) && /7 días/.test(ped));
+    t.check('Pedidos: el texto de "fondeado" habla de "Ya lo envié" y el de "enviado" del código y el plazo acordado (t57)', /Ya lo envié/.test(ped) && /código de entrega/.test(ped) && /plazo acordado/.test(ped));
     const demo = src('lib/demo.ts');
     t.check('demo: plazo de 7 días como producción', /DEMO_AUTO_RELEASE_MINUTES = 10080/.test(demo));
     t.check('demo: step shipment para el comprador', /'shipment'/.test(demo));

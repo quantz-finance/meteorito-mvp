@@ -21,6 +21,7 @@ export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeo
 import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe } from '../api/_lib/payout'; // pura y chica (~1 KB)
 import { canShowContact, normalizeContactPhone } from '../api/_lib/contact'; // pura
 import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
+import { daysLabel, EXTENSION_DAYS, MAX_TOTAL_FROM_PAYMENT_MIN, pendingExtension, protectionOf, validateAgreement } from '../api/_lib/agreement'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
 
@@ -28,6 +29,7 @@ export interface DemoOrder {
   slug: string; category: string; brand: string; model: string; condition: string; price_crc: number;
   description: string | null; photos: string[]; status: string; identifier_masked: string | null;
   amount_usdc: number | null; contract_id: string | null; funded_tx: string | null; released_tx: string | null; auto_release_at: string | null;
+  delivery_mode?: 'envio' | 'cara_a_cara'; protection_minutes?: number; release_ext?: { by: 'buyer' | 'seller'; days: number; at: string } | null; release_ext_minutes?: number;
   funded_at?: string | null; shipped_at?: string | null; delivered_at?: string | null; released_at?: string | null; disputed_at?: string | null;
   checks_summary: { id: string; label: string; blocksRelease: boolean; ok: boolean }[]; created_at: string;
   seller_address: string; pin: string | null; pinShown: boolean; shipped_tx: string | null; evidence: unknown; dispute: unknown;
@@ -168,6 +170,8 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       if (inv.status !== 'abierta') throw err(409, 'invite_not_open', 'Esta invitación ya no está abierta.');
       if (inv.price_crc !== price) throw err(409, 'invite_price_mismatch', 'El precio tiene que ser el acordado en la invitación.');
     }
+    const agreement = validateAgreement({ delivery_mode: body.delivery_mode, protection_minutes: body.protection_minutes });
+    if ('error' in agreement) throw err(400, 'bad_agreement', agreement.error);
     const slug = newSlug();
     // Igual que el API: link en un paso con `title` (se guarda en model) o, por compatibilidad, marca + modelo.
     const title = typeof body.title === 'string' ? body.title.trim() : '';
@@ -178,6 +182,7 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       identifier_masked: body.identifier ? mask(String(body.identifier)) : null, amount_usdc: null, contract_id: null, funded_tx: null, released_tx: null, auto_release_at: null,
       checks_summary: Array.isArray(body.checks) ? body.checks.slice(0, 20) : [], created_at: now(),
       seller_address: DEMO_SELLER.address, pin: null, pinShown: false, shipped_tx: null, evidence: null, dispute: null,
+      delivery_mode: agreement.delivery_mode, protection_minutes: agreement.protection_minutes, release_ext: null, release_ext_minutes: 0,
       // Como producción: link nuevo = producto permanente; de invitación (o single:true) = un solo uso, reservado.
       kind: inv || body.single === true ? 'single' : 'listing', listing_status: 'activa', listing_slug: null, buyer: null, pin_attempts: 0, resolution: null, invite_code: inv?.code ?? null,
     };
@@ -206,6 +211,8 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
       if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador de este pedido');
       if (o.status !== 'escrow_creado') throw err(409, 'bad_state', 'Primero inicia el pago.');
       o.status = 'fondeado'; o.funded_tx = demoTxHash('fund:' + o.slug); o.funded_at = now(); o.pin = DEMO_PIN; o.pinShown = true;
+      // Cara a cara: el plazo acordado corre desde el pago (como fundedAgreement en el API).
+      if (o.delivery_mode === 'cara_a_cara') o.auto_release_at = iso(nowMs() + protectionOf(o) * 60_000);
       emit(); return { funded: true, fundedTx: o.funded_tx, pin: DEMO_PIN }; // el PIN se devuelve una sola vez
     }
     if (body.step === 'shipment') { // como el API: solo el comprador ve la foto del envío y la nota
@@ -219,7 +226,9 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   if (p === '/api/escrow/ship') {
     need('seller'); const o = get(String(body.slug));
     if (o.status !== 'fondeado') throw err(409, 'bad_state', 'Los fondos todavía no están en custodia.');
-    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.auto_release_at = iso(nowMs() + DEMO_AUTO_RELEASE_MINUTES * 60_000);
+    if (o.delivery_mode === 'cara_a_cara') throw err(409, 'face_to_face', 'La entrega es cara a cara: no hay envío. Pide el código al comprador.');
+    // Plazo acordado desde "Ya lo envié" (sin acuerdo: la ventana del demo, 7 días).
+    o.status = 'enviado'; o.shipped_tx = demoTxHash('ship:' + o.slug); o.shipped_at = now(); o.auto_release_at = iso(nowMs() + (o.protection_minutes ? protectionOf(o) : DEMO_AUTO_RELEASE_MINUTES) * 60_000 + (o.release_ext_minutes ?? 0) * 60_000);
     // Igual que el API: evidencia opcional {at, photo?, note?}; en demo la foto es una data URL local.
     const raw = body.evidence ?? {}; const ev: { at: string; photo?: string; note?: string } = { at: now() };
     if (raw.photo) { if (!/^data:image\/(jpeg|png|webp);base64,/.test(String(raw.photo))) throw err(400, 'bad_ship_photo', 'No pudimos usar esa foto. Elige otra e intenta de nuevo.'); ev.photo = String(raw.photo); }
@@ -229,7 +238,29 @@ export async function demoApi(path: string, body: any = {}): Promise<any> {
   }
   if (p === '/api/escrow/confirm') {
     const o = get(String(body.slug));
-    if (o.status !== 'enviado') throw err(409, 'bad_state', 'Este pedido no está enviado.');
+    if (body.reason === 'extend' || body.reason === 'extend_answer') { // extensión de mutuo acuerdo (como el API)
+      const role = getDemoRole() === 'seller' ? 'seller' : 'buyer';
+      if (role === 'buyer' && o.buyer && o.buyer !== me()) throw err(403, 'not_party', 'Solo el comprador y el vendedor pueden cambiar el plazo.');
+      if (!(o.status === 'enviado' || (o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara')) || o.disputed_at) throw err(409, 'ext_not_running', 'El plazo no se puede cambiar en este momento.');
+      const due = Date.parse(o.auto_release_at ?? '') || nowMs(), paid = Date.parse(o.funded_at ?? '') || nowMs();
+      const fits = (d: number) => due + d * 86_400_000 <= paid + MAX_TOTAL_FROM_PAYMENT_MIN * 60_000;
+      const pending = pendingExtension(o, nowMs());
+      if (body.reason === 'extend') {
+        const days = Number(body.days);
+        if (!(EXTENSION_DAYS as readonly number[]).includes(days)) throw err(400, 'bad_days', 'Elige 1, 3 o 7 días.');
+        if (pending) throw err(409, 'ext_pending', 'Ya hay una solicitud esperando respuesta.');
+        if (!fits(days)) throw err(409, 'ext_cap', `Con ${daysLabel(days)} más pasarías los 30 días desde el pago.`);
+        o.release_ext = { by: role, days, at: now() }; emit(); return { pending: o.release_ext };
+      }
+      if (!pending) throw err(409, 'ext_none', 'No hay ninguna solicitud pendiente.');
+      if (pending.by === role) throw err(403, 'ext_own', 'La otra parte tiene que responder tu solicitud.');
+      const accept = body.accept === true;
+      if (accept && !fits(pending.days)) throw err(409, 'ext_cap', `Con ${daysLabel(pending.days)} más pasarías los 30 días desde el pago.`);
+      if (accept) { o.release_ext_minutes = (o.release_ext_minutes ?? 0) + pending.days * 1440; o.auto_release_at = iso(due + pending.days * 86_400_000); }
+      o.release_ext = null; emit(); return { accepted: accept, autoReleaseAt: o.auto_release_at };
+    }
+    const f2fPaid = o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara'; // cara a cara: se libera desde 'fondeado'
+    if (o.status !== 'enviado' && !f2fPaid) throw err(409, 'bad_state', 'Este pedido no está enviado.');
     if (body.reason === 'pin') {
       need('seller');
       if ((o.pin_attempts ?? 0) >= 3) throw err(429, 'pin_locked', 'demasiados intentos de PIN');
@@ -331,8 +362,10 @@ export function demoGetInvite(code: string) {
 export function demoRunCron(): string[] {
   const st = S(); const out: string[] = [];
   for (const o of Object.values(st.orders)) {
-    if (o.status !== 'enviado' || !o.auto_release_at || new Date(o.auto_release_at).getTime() > nowMs()) continue;
+    const running = o.status === 'enviado' || (o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara');
+    if (!running || !o.auto_release_at || new Date(o.auto_release_at).getTime() > nowMs()) continue;
     if ((o.pin_attempts ?? 0) >= 3) continue;
+    const p = pendingExtension(o, nowMs()); if (p && Date.parse(p.at) + 24 * 3600_000 > nowMs()) continue; // extensión pendiente: congela (máx. 24 h)
     o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = iso(); out.push(o.slug);
   }
   emit(); return out;
@@ -348,13 +381,14 @@ export function demoBalances(addr: string) {
   return { funded: true, xlm: '9.5000000', usdc };
 }
 /** Pedido de ejemplo ya en un estado dado (para grabar solo un tramo del flujo). Devuelve el slug. */
-export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado', opts: { title?: string; price_crc?: number; photos?: string[]; single?: boolean } = {}): Promise<string> {
+export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado', opts: { title?: string; price_crc?: number; photos?: string[]; single?: boolean; delivery_mode?: 'envio' | 'cara_a_cara'; protection_minutes?: number } = {}): Promise<string> {
   const prev = S().role; const set = (r: DemoRole) => { S().role = r; };
   set('seller');
   // Igual que la pantalla única de vender: solo título, precio y fotos. Devuelve el producto (creado) o el pedido del comprador.
-  let { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [], ...(opts.single ? { single: true } : {}) });
+  let { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [], ...(opts.single ? { single: true } : {}),
+    ...(opts.delivery_mode ? { delivery_mode: opts.delivery_mode } : {}), ...(opts.protection_minutes ? { protection_minutes: opts.protection_minutes } : {}) });
   if (upTo !== 'creado') { set('buyer'); slug = (await demoApi('/api/escrow/pay', { slug, step: 'start' })).slug; await demoApi('/api/escrow/pay', { slug, step: 'confirm_sinpe' }); }
-  if (upTo === 'enviado') { set('seller'); await demoApi('/api/escrow/ship', { slug }); }
+  if (upTo === 'enviado' && opts.delivery_mode !== 'cara_a_cara') { set('seller'); await demoApi('/api/escrow/ship', { slug }); }
   set(prev); emit(); return slug;
 }
 

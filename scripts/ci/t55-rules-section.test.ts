@@ -20,7 +20,7 @@ export async function run(t: T) {
     /custodia/.test(all) && /Ya lo envié/.test(all) && /código de entrega/i.test(all) && /congela/.test(all) && /IA/.test(all) && /una persona decide/.test(all) && /WhatsApp/.test(all));
   t.check('copy en tuteo, sin voseo', !VOSEO.test(all), all.match(VOSEO)?.[0]);
   t.check('sin palabras prohibidas por la regla legal (seguro/protegido/garantía)', !BANNED.test(all), all.match(BANNED)?.[0]);
-  t.check('resúmenes de una línea', PAY_SUMMARY === 'Tu dinero queda en custodia hasta que recibas tu compra.' && SELL_SUMMARY === 'El pago se libera con el código de entrega o a los 7 días.');
+  t.check('resúmenes de una línea', PAY_SUMMARY === 'Tu dinero queda en custodia hasta que recibas tu compra.' && SELL_SUMMARY === 'El pago se libera con el código de entrega o al terminar el plazo que elijas.');
   t.check('tour guiado: solo un hook apagado', TOUR.enabled === false);
 
   t.check('pantalla /como-funciona existe y lee lib/rules', RULES_ROUTE === '/como-funciona' && existsSync('app/como-funciona.tsx') && /from '@\/lib\/rules'/.test(read('app/como-funciona.tsx')));

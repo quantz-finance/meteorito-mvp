@@ -12,7 +12,7 @@ export const missingColumn = (e: any) => !!e && (e.code === '42703' || e.code ==
 export const newSlug = () => { const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; let s = ''; while (s.length < 6) { const b = randomBytes(1)[0]; if (b < 252) s += a[b % 36]; } return s; };
 
 /** Campos que el pedido hijo copia del producto (precio y destino incluidos: inmutables desde ahí). */
-const COPY = ['seller_address', 'seller_user_id', 'seller_email', 'category', 'brand', 'model', 'condition', 'price_crc', 'description', 'identifier', 'photos', 'checks'] as const;
+const COPY = ['seller_address', 'seller_user_id', 'seller_email', 'category', 'brand', 'model', 'condition', 'price_crc', 'description', 'identifier', 'photos', 'checks', 'delivery_mode', 'protection_minutes'] as const; // acuerdo de entrega (017; ausente -> no se copia)
 export function childRow(parent: any, buyerId: string, slug: string) {
   const row: Record<string, unknown> = { slug, kind: 'single', listing_slug: parent.slug, buyer_user_id: buyerId, status: 'creado' };
   for (const k of COPY) if (parent[k] !== undefined) row[k] = parent[k];

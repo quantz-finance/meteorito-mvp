@@ -1,3 +1,4 @@
+import { EXTENSION_PENDING_MS, MIN_PROTECTION_MIN, extendedOf, isFaceToFace, pendingExtension, protectionOf } from './agreement';
 // Server-only. Nunca importar desde app/ ni lib/ (cliente).
 function req(name: string): string {
   const v = process.env[name];
@@ -58,8 +59,23 @@ export const autoReleaseAt = (from = Date.now()) => new Date(from + env.autoRele
 
 /** Cuándo vence de verdad la liberación automática de un pedido 'enviado': nunca antes de auto_release_at NI antes de
  *  shipped_at + la ventana vigente. Así los pedidos enviados con un plazo viejo (10 min) esperan los 7 días. */
-export function releaseDueAt(o: { shipped_at?: string | null; funded_at?: string | null; created_at?: string | null; auto_release_at?: string | null }): string {
-  const base = Date.parse(o.shipped_at ?? o.funded_at ?? o.created_at ?? '') || Date.now();
-  const due = Math.max(base + env.autoReleaseMinutes() * 60_000, Date.parse(o.auto_release_at ?? '') || 0);
+type ReleaseOrder = { shipped_at?: string | null; funded_at?: string | null; created_at?: string | null; auto_release_at?: string | null;
+  delivery_mode?: string | null; protection_minutes?: number | null; release_ext_minutes?: number | null; release_ext?: any };
+/** Plazo acordado del pedido + extensiones aceptadas (min). Sin la migración 017: envío con la ventana global (7 días). */
+export function windowMinutes(o: ReleaseOrder): number {
+  const agreed = Number.isInteger(Number(o.protection_minutes)) && o.protection_minutes != null && Number(o.protection_minutes) >= MIN_PROTECTION_MIN;
+  const base = agreed || isFaceToFace(o) ? protectionOf(o) : env.autoReleaseMinutes();
+  return base + extendedOf(o); // protectionOf ya es ≥ 24 h; la ventana global tiene su piso en producción
+}
+/** Cara a cara cuenta desde el pago; envío desde "Ya lo envié". Nunca antes que auto_release_at ya guardado. */
+export function releaseDueAt(o: ReleaseOrder): string {
+  const start = isFaceToFace(o) ? (o.funded_at ?? o.created_at) : (o.shipped_at ?? o.funded_at ?? o.created_at);
+  const base = Date.parse(start ?? '') || Date.now();
+  const due = Math.max(base + windowMinutes(o) * 60_000, Date.parse(o.auto_release_at ?? '') || 0);
   return new Date(due).toISOString();
+}
+/** Hasta cuándo NO se puede liberar por plazo: el vencimiento, o la respuesta pendiente a una extensión (máx. 24 h). */
+export function releaseBlockedUntil(o: ReleaseOrder, now = Date.now()): string {
+  const p = pendingExtension(o, now);
+  return new Date(Math.max(Date.parse(releaseDueAt(o)), p ? Date.parse(p.at) + EXTENSION_PENDING_MS : 0)).toISOString();
 }

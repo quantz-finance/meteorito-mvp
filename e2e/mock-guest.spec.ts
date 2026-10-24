@@ -522,3 +522,41 @@ test('MCK-BETA-01 aviso de beta visible en el viewport antes de "Pagar en custod
   await notice.getByText('Ver cómo funciona').click();
   await expect(page).toHaveURL(/\/como-funciona/);
 });
+
+// Plazo acordado (t57): el comprador ve el acuerdo antes de pagar; cara a cara ve su código apenas paga; responde una
+// extensión pedida por el vendedor. En este archivo (no en uno nuevo): los MCK de un mismo archivo corren en serie.
+test('MCK-WIN-01 cara a cara: "Entrega: Cara a cara · Protección: 24 h" antes de pagar y el código al pagar', async ({ page, request }) => {
+  await reset(request, [{ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000, delivery_mode: 'cara_a_cara', protection_minutes: 1440 }]);
+  await page.goto('/p/prod01');
+  await expect(page.getByText('Entrega: Cara a cara · Protección: 24 h')).toBeVisible();
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page).toHaveURL(/\/p\/h[0-9a-f]{5}\?pay=1/);
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page.getByText(MOCK_PIN).first()).toBeVisible(); // cara a cara: el código se ve al pagar
+  const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
+  const o = (await state(request)).orders[slug];
+  expect([o.delivery_mode, o.status]).toEqual(['cara_a_cara', 'fondeado']);
+  expect(Date.parse(o.auto_release_at) - Date.parse(o.funded_at)).toBeGreaterThan(86_000_000); // ~24 h desde el pago
+  await page.goto(`/p/${slug}`);
+  await expect(page.getByText('Dáselo al vendedor cuando revises el producto.')).toBeVisible();
+  await expect(page.getByText('Ya lo envié')).toHaveCount(0);
+});
+
+test('MCK-WIN-02 envío: "7 días desde el envío"; el comprador acepta 3 días más que pidió el vendedor', async ({ page, request }) => {
+  await reset(request, [{ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000 }]);
+  await page.goto('/p/prod01');
+  await expect(page.getByText('Entrega: Envío · Protección: 7 días desde el envío')).toBeVisible(); // sin columnas: default
+  await page.getByText(/Pagar en custodia/).last().click();
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page).toHaveURL(/\/p\/h[0-9a-f]{5}/);
+  const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
+  await expect.poll(async () => (await state(request)).orders[slug].status).toBe('fondeado');
+  const due = Date.now() + 7 * 86_400_000;
+  await patch(request, slug, { status: 'enviado', auto_release_at: new Date(due).toISOString(), release_ext: { by: 'seller', days: 3, at: new Date().toISOString() } });
+  await page.goto(`/p/${slug}`);
+  await expect(page.getByText('El vendedor pidió 3 días más')).toBeVisible();
+  await page.getByText('Aceptar', { exact: true }).click();
+  await expect.poll(async () => (await state(request)).orders[slug].release_ext).toBeNull();
+  expect(Date.parse((await state(request)).orders[slug].auto_release_at) - due).toBe(3 * 86_400_000);
+  await expect(page.getByLabel('Pedir más tiempo')).toBeVisible(); // ya sin pendiente: puede pedir otra
+});

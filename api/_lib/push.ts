@@ -1,8 +1,9 @@
 // Web Push (VAPID) a las dos partes de un pedido cuando cambia de estado. Best-effort: nunca rompe la operación real.
 // Sin VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT, o sin la tabla push_subscriptions (migración 011), no hace nada.
 import { db } from './db';
+import { daysLabel, extensionRequestText, isFaceToFace } from './agreement';
 
-export interface PushOrder { slug: string; status: string; seller_user_id?: string | null; buyer_user_id?: string | null; brand?: string | null; model?: string | null }
+export interface PushOrder { slug: string; status: string; delivery_mode?: string | null; seller_user_id?: string | null; buyer_user_id?: string | null; brand?: string | null; model?: string | null }
 export interface PushMsg { to: string; role: 'seller' | 'buyer'; title: string; body: string; url: string; tag: string }
 export interface PushSub { endpoint: string; user_id: string; p256dh: string; auth: string }
 
@@ -19,6 +20,7 @@ export function pushMessages(o: PushOrder): PushMsg[] {
     en_disputa: { seller: ['Disputa abierta', `El comprador reportó un problema con ${it}. Revisa el pedido.`], buyer: ['Disputa abierta', `Recibimos tu reporte de ${it}. Te avisamos cuando se resuelva.`] },
     resuelto: { seller: ['Disputa resuelta', `Ya hay una resolución para ${it}. Revisa el pedido.`], buyer: ['Disputa resuelta', `Ya hay una resolución para ${it}. Revisa el pedido.`] },
   };
+  if (isFaceToFace(o)) T.fondeado = { seller: ['¡Te pagaron!', `El dinero de ${it} está en custodia. Cuando se vean, pide el código al comprador.`], buyer: ['Pago recibido', `Tu pago de ${it} quedó en custodia. Revisa el producto y dale tu código al vendedor.`] };
   const t = T[o.status];
   if (!t) return [];
   const out: PushMsg[] = [];
@@ -26,6 +28,18 @@ export function pushMessages(o: PushOrder): PushMsg[] {
   if (t.seller && o.seller_user_id) out.push({ to: o.seller_user_id, role: 'seller', title: t.seller[0], body: t.seller[1], url, tag: `${o.slug}:${o.status}` });
   if (t.buyer && o.buyer_user_id && o.buyer_user_id !== o.seller_user_id) out.push({ to: o.buyer_user_id, role: 'buyer', title: t.buyer[0], body: t.buyer[1], url, tag: `${o.slug}:${o.status}` });
   return out;
+}
+
+/** Extensión de mutuo acuerdo: la solicitud va a la otra parte; la respuesta, a quien la pidió. Pura. */
+export function extensionMessages(o: PushOrder, kind: 'requested' | 'accepted' | 'rejected', by: 'buyer' | 'seller', days: number): PushMsg[] {
+  const target = kind === 'requested' ? (by === 'buyer' ? 'seller' : 'buyer') : by;
+  const to = target === 'seller' ? o.seller_user_id : o.buyer_user_id;
+  if (!to) return [];
+  const it = itemName(o), other = by === 'buyer' ? 'El vendedor' : 'El comprador';
+  const [title, body] = kind === 'requested' ? ['Piden más tiempo', `${extensionRequestText(by, days)} para ${it}. Abre el pedido para aceptar o rechazar.`]
+    : kind === 'accepted' ? ['Plazo extendido', `${other} aceptó ${daysLabel(days)} más para ${it}.`]
+    : ['Extensión rechazada', `${other} no aceptó ${daysLabel(days)} más para ${it}. El plazo sigue igual.`];
+  return [{ to, role: target, title, body, url: `/p/${o.slug}`, tag: `${o.slug}:ext` }];
 }
 
 export const vapid = () => {
@@ -61,10 +75,10 @@ const loadSubs = async (ids: string[]) => {
 const dropSubs = async (endpoints: string[]) => { await db().from('push_subscriptions').delete().in('endpoint', endpoints); };
 
 /** Avisa a vendedor y comprador del nuevo estado. Nunca lanza; tarda como mucho ~5 s. Devuelve cuántos envíos salieron bien. */
-export async function notifyOrder(o: PushOrder, deps: PushDeps = {}): Promise<number> {
+export async function notifyOrder(o: PushOrder, deps: PushDeps = {}, custom?: PushMsg[]): Promise<number> {
   try {
     if (!(deps.enabled ?? (() => !!vapid()))()) return 0;
-    const msgs = pushMessages(o);
+    const msgs = custom ?? pushMessages(o);
     if (!msgs.length) return 0;
     const subs = await (deps.load ?? loadSubs)([...new Set(msgs.map((m) => m.to))]);
     if (!subs.length) return 0;

@@ -1,5 +1,7 @@
 // Vendedor: "Ya lo envié" en un toque (evidencia {at, photo?, note?} -> hash en Supabase y en TW) e "Ingresar PIN del comprador".
 // La foto (paquete o comprobante de Correos de Costa Rica) y el número de guía son opcionales.
+// Cara a cara: no hay "Ya lo envié"; en 'fondeado' el vendedor ingresa el PIN del comprador y cobra al instante.
+// Con el plazo corriendo, "Pedir más tiempo" / responder la solicitud del comprador (ExtensionBox).
 import { useState } from 'react';
 import { userMessage } from '@/lib/cavosSession';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -10,8 +12,12 @@ import { C, S, T } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/cavos';
+import { ExtensionBox } from '@/components/ExtensionBox';
 
-export function SellerActions({ slug, status, onChange }: { slug: string; status: string; onChange: () => void }) {
+export function SellerActions({ slug, status, order, onChange }: { slug: string; status: string; onChange: () => void;
+  /** Pedido público (acuerdo de entrega y extensión pendiente). Sin él: envío. */
+  order?: { status: string; delivery_mode?: string | null; release_ext?: any } | null }) {
+  const f2f = order?.delivery_mode === 'cara_a_cara';
   const auth = useAuth();
   const [note, setNote] = useState('');
   const [noteOpen, setNoteOpen] = useState(false);
@@ -38,6 +44,21 @@ export function SellerActions({ slug, status, onChange }: { slug: string; status
     <SuccessCheck celebrate={done.startsWith('¡Cobrado')} />
     <Text style={[T.headline, { textAlign: 'center' }]}>{done}</Text>
   </View>;
+
+  const ext = order && order.status === status
+    ? <ExtensionBox order={order} role="seller" onChange={onChange} call={(b) => api(auth, '/api/escrow/confirm', { slug, ...b })} /> : null;
+  const pinForm = (hint?: string) => <View style={{ gap: S.sm }}>
+    {hint ? <Text style={T.callout}>{hint}</Text> : null}
+    <Text style={T.caption}>Código de entrega del comprador (PIN)</Text>
+    <TextInput style={[ui.input, { fontFamily: Fonts.black, fontSize: 28, letterSpacing: 8, textAlign: 'center', fontVariant: ['tabular-nums'] }]}
+      placeholder="••••••" keyboardType="number-pad" maxLength={6} value={pin} onChangeText={setPin} placeholderTextColor={C.textDim} accessibilityLabel="Código de entrega del comprador" />
+    <PrimaryButton title="Confirmar PIN y cobrar" icon="lock-open" loading={busy} disabled={pin.length !== 6}
+      onPress={() => run(async () => { await api(auth, '/api/escrow/confirm', { slug, reason: 'pin', pin }); }, '¡Cobrado! El pago fue liberado')} />
+    {err && <ErrorText>{err}</ErrorText>}
+    {ext}
+  </View>;
+
+  if (status === 'fondeado' && f2f) return pinForm('Cara a cara: cuando el comprador revise el producto, pídele su código.');
 
   if (status === 'fondeado') return <View style={{ gap: S.sm }}>
     <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
@@ -68,14 +89,7 @@ export function SellerActions({ slug, status, onChange }: { slug: string; status
     {err && <ErrorText>{err}</ErrorText>}
   </View>;
 
-  if (status === 'enviado') return <View style={{ gap: S.sm }}>
-    <Text style={T.caption}>Código de entrega del comprador (PIN)</Text>
-    <TextInput style={[ui.input, { fontFamily: Fonts.black, fontSize: 28, letterSpacing: 8, textAlign: 'center', fontVariant: ['tabular-nums'] }]}
-      placeholder="••••••" keyboardType="number-pad" maxLength={6} value={pin} onChangeText={setPin} placeholderTextColor={C.textDim} />
-    <PrimaryButton title="Confirmar PIN y cobrar" icon="lock-open" loading={busy} disabled={pin.length !== 6}
-      onPress={() => run(async () => { await api(auth, '/api/escrow/confirm', { slug, reason: 'pin', pin }); }, '¡Cobrado! El pago fue liberado')} />
-    {err && <ErrorText>{err}</ErrorText>}
-  </View>;
+  if (status === 'enviado') return pinForm();
   return null;
 }
 

@@ -2,6 +2,7 @@
 // El link aparece aquí mismo con Copiar y Compartir. Categoría, marca, modelo, estado e identificador ya no se piden.
 // "Importar de Facebook": pega el link de un anuncio de Marketplace y precarga nombre, precio, foto y descripción.
 // No crea nada solo: el vendedor revisa y toca "Generar link" (los datos leídos de FB pueden venir mal).
+// "Entrega y plazo": cara a cara o envío (default) y el plazo para liberar (24 h, 3 días, 7 días u otro, de 24 h a 30 días).
 import { ensureWalletReady, freshAuth, needsDeviceStep, walletErrorNotice, WALLET_LOADING } from '@/lib/wallet';
 import type { MeteoritoAuth } from '@/lib/types';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
@@ -28,10 +29,11 @@ import { formatPriceInput, parsePrice, TITLE_MAX, validateListing, type ListingE
 import { supabaseConfigured } from '@/lib/supabase';
 import { priceBucket, track, trackError } from '@/lib/analytics';
 import { photoFailureProps } from '@/lib/photoError';
+import { agreementSummary, daysToMinutes, DEFAULT_PROTECTION_MIN, DELIVERY_LABEL, PROTECTION_CHIPS, protectionLabel, type DeliveryMode } from '../../api/_lib/agreement';
 
 type PhotoStatus = 'processing' | 'ready' | 'uploading' | 'done' | 'error';
 interface Photo { key: string; uri: string; mime: string; width?: number; height?: number; status: PhotoStatus; blob?: Blob; /** ya subida (foto de la invitación del comprador): se reutiliza tal cual */ url?: string }
-interface Created { slug: string; title: string; price: number; photo: string | null }
+interface Created { slug: string; title: string; price: number; photo: string | null; agreement: string }
 let photoSeq = 0;
 
 /** Borrador (solo texto): sobrevive al cambiar de pestaña y a recargas en web. Se descarta al generar el link. */
@@ -76,6 +78,14 @@ function VenderForm() {
   const [orphan, setOrphan] = useState(false);
   const [waitWallet, setWaitWallet] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
+  // Acuerdo de entrega: envío 7 días por defecto; cara a cara 24 h.
+  const [mode, setMode] = useState<DeliveryMode>('envio');
+  const [windowMin, setWindowMin] = useState<number>(DEFAULT_PROTECTION_MIN.envio);
+  const [agreeOpen, setAgreeOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
+  const [customDays, setCustomDays] = useState('');
+  const customMin = customOpen ? daysToMinutes(customDays) : null;
+  const pickMode = (m: DeliveryMode) => { haptic.tap(); setMode(m); setWindowMin(DEFAULT_PROTECTION_MIN[m]); setCustomOpen(false); setCustomDays(''); };
   const short = useStableWindow().height < 740; // iPhone SE y similares: menos aire, todo en una pantalla
 
   // Respuesta a una invitación del comprador (?invite=codigo): nombre y precio precargados; el precio acordado no se cambia.
@@ -178,10 +188,11 @@ function VenderForm() {
         catch (e) { setPhoto(p.key, { status: 'error' }); track('photo_upload_failed', { context: 'listing', index: i, precompressed: !!p.blob, ...photoFailureProps(e) }); throw e; }
       }
       const t = title.trim();
-      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}) });
-      track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: !!fbNotice && !fbNotice.failed });
+      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}) });
+      track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: !!fbNotice && !fbNotice.failed, delivery_mode: mode, protection_minutes: windowMin });
       haptic.success();
-      setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null });
+      setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null, agreement: agreementSummary(mode, windowMin) });
+      setMode('envio'); setWindowMin(DEFAULT_PROTECTION_MIN.envio); setCustomOpen(false); setCustomDays('');
       setTitle(''); setPrice(''); setPhotos([]); setInvite(null); setDescription(null); setFbNotice(null); saveDraft(null);
       if (inviteParam) router.setParams({ invite: undefined });
     } catch (e: any) {
@@ -215,6 +226,7 @@ function VenderForm() {
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={T.headline} numberOfLines={2}>{created.title}</Text>
             <Text style={[T.title, { fontVariant: ['tabular-nums'] }]}>{formatCRC(created.price)}</Text>
+            <Text style={T.footnote} numberOfLines={2}>{created.agreement}</Text>
           </View>
         </Card></Reveal>
         <Reveal i={2}><ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} /></Reveal>
@@ -286,11 +298,51 @@ function VenderForm() {
         {errors.photos ? <ErrorText>{errors.photos}</ErrorText> : null}
       </View>
 
+      <Pressable onPress={() => { haptic.tap(); setAgreeOpen(true); }} accessibilityRole="button" accessibilityLabel="Entrega y plazo"
+        style={({ pressed }) => [s.agreeRow, pressed && { opacity: 0.85 }]}>
+        <Icon name={mode === 'cara_a_cara' ? 'people-outline' : 'cube-outline'} size={20} color={C.lilac} />
+        <Text style={[T.headline, { fontSize: 15, flex: 1 }]} numberOfLines={1}>Entrega y plazo</Text>
+        <Text testID="agreement-value" style={[T.footnote, { color: C.text }]} numberOfLines={1}>{DELIVERY_LABEL[mode]} · {protectionLabel(windowMin)}</Text>
+        <Icon name="chevron-forward" size={16} color={C.textDim} />
+      </Pressable>
       {error && <ErrorText>{error}</ErrorText>}
-      <Text style={T.footnote}>De 1 a 4 fotos con buena luz.</Text>
+      {short ? null : <Text style={T.footnote}>De 1 a 4 fotos con buena luz.</Text>}
       <RulesHint text={SELL_SUMMARY} from="sell" compact={short} /* iPhone SE: solo "Ver reglas" para dejar espacio al aviso de beta */ />
       <BetaNotice from="sell" />
       </View>
+
+      <Sheet visible={agreeOpen} onClose={() => setAgreeOpen(false)} title="Entrega y plazo"
+        footer={<PrimaryButton title="Listo" icon="checkmark" disabled={customOpen && !customMin}
+          onPress={() => { if (customOpen && customMin) setWindowMin(customMin); setAgreeOpen(false); }} />}>
+        <Text style={T.caption}>¿Cómo entregas?</Text>
+        <View style={{ flexDirection: 'row', gap: S.sm }}>
+          {(['envio', 'cara_a_cara'] as DeliveryMode[]).map((m) => <Pressable key={m} onPress={() => pickMode(m)} accessibilityRole="radio" aria-checked={mode === m}
+            accessibilityLabel={DELIVERY_LABEL[m]} style={({ pressed }) => [s.choice, mode === m && s.choiceOn, pressed && { opacity: 0.85 }]}>
+            <Icon name={m === 'cara_a_cara' ? 'people-outline' : 'cube-outline'} size={20} color={mode === m ? C.white : C.lilac} />
+            <Text style={[T.headline, { fontSize: 15, color: mode === m ? C.white : C.lilac }]}>{DELIVERY_LABEL[m]}</Text>
+          </Pressable>)}
+        </View>
+        <Text style={T.caption}>Plazo para liberar el pago</Text>
+        <View style={{ flexDirection: 'row', gap: S.sm }}>
+          {PROTECTION_CHIPS.map((m) => { const on = !customOpen && windowMin === m; return <Pressable key={m} onPress={() => { haptic.tap(); setCustomOpen(false); setWindowMin(m); }}
+            accessibilityRole="radio" aria-checked={on} accessibilityLabel={`Plazo ${protectionLabel(m)}`} style={({ pressed }) => [s.chip, on && s.choiceOn, pressed && { opacity: 0.85 }]}>
+            <Text style={[T.headline, { fontSize: 15, color: on ? C.white : C.lilac }]}>{protectionLabel(m)}</Text>
+          </Pressable>; })}
+          <Pressable onPress={() => { haptic.tap(); setCustomOpen(true); setCustomDays(PROTECTION_CHIPS.includes(windowMin) ? '' : String(windowMin / 1440)); }} accessibilityRole="radio"
+            aria-checked={customOpen || !PROTECTION_CHIPS.includes(windowMin)} accessibilityLabel="Otro plazo en días"
+            style={({ pressed }) => [s.chip, (customOpen || !PROTECTION_CHIPS.includes(windowMin)) && s.choiceOn, pressed && { opacity: 0.85 }]}>
+            <Text style={[T.headline, { fontSize: 15, color: customOpen || !PROTECTION_CHIPS.includes(windowMin) ? C.white : C.lilac }]}>{!customOpen && !PROTECTION_CHIPS.includes(windowMin) ? protectionLabel(windowMin) : 'Otro'}</Text>
+          </Pressable>
+        </View>
+        {customOpen ? <View style={{ gap: S.xs }}>
+          <TextInput style={[ui.input, s.input, customDays && !customMin ? s.inputErr : null]} placeholder="Días (de 1 a 30)" placeholderTextColor={C.textDim} keyboardType="number-pad" inputMode="numeric"
+            value={customDays} onChangeText={(v) => setCustomDays(v.replace(/\D/g, '').slice(0, 2))} maxLength={2} autoFocus accessibilityLabel="Días del plazo" />
+          {customDays && !customMin ? <ErrorText>Escribe de 1 a 30 días.</ErrorText> : null}
+        </View> : null}
+        <Text style={T.footnote}>{mode === 'cara_a_cara'
+          ? 'Cara a cara: el plazo cuenta desde el pago. El comprador te da su código cuando revisa el producto.'
+          : 'Envío: el plazo cuenta desde que tocas "Ya lo envié".'} Si el comprador no reporta un problema, el pago se libera al terminar el plazo. Lo ve antes de pagar.</Text>
+      </Sheet>
 
       <Sheet visible={fbOpen} onClose={() => { if (!fbBusy) setFbOpen(false); }} title="Importar de Facebook"
         footer={<PrimaryButton title={fbBusy ? 'Leyendo el anuncio…' : 'Importar'} icon="download-outline" loading={fbBusy} disabled={!fbUrl.trim()} onPress={runImport} />}>
@@ -337,5 +389,9 @@ const s = StyleSheet.create({
   fbNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, padding: S.sm + 2, borderWidth: 1, borderColor: C.lilac },
   fbIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
   fbClose: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+  agreeRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44, paddingHorizontal: S.md, borderRadius: R.md, backgroundColor: C.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
+  choice: { flex: 1, flexDirection: 'row', gap: S.xs + 2, alignItems: 'center', justifyContent: 'center', minHeight: 48, borderRadius: R.md, borderWidth: 1, borderColor: C.lilac },
+  chip: { flex: 1, minHeight: 44, borderRadius: R.md, borderWidth: 1, borderColor: C.lilac, alignItems: 'center', justifyContent: 'center' },
+  choiceOn: { backgroundColor: C.lilac, borderColor: C.lilac },
   thumb: { width: 56, height: 56, borderRadius: R.md, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center' },
 });

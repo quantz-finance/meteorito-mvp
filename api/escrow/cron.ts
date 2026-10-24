@@ -1,12 +1,14 @@
 // /api/escrow/cron
-//  - Batch (pg_cron cada 5 min, Authorization: Bearer CRON_SECRET): libera pedidos 'enviado' con plazo vencido
+//  - Batch (pg_cron cada 5 min, Authorization: Bearer CRON_SECRET): libera pedidos 'enviado' (o 'fondeado' cara a cara) con plazo vencido
 //    (reason=timeout) y reintenta 'entregado' sin liberar.
 //  - Respaldo sin auth: GET ?slug=xxxxxx (la página pública lo llama al cargar). Solo procesa ESE pedido y solo si ya venció.
 // Plazo real = releaseDueAt (nunca antes de shipped_at + 7 días): si auto_release_at quedó corto (env viejo de 10 min),
 // se corrige en la fila y no se libera. Disputa y PIN bloqueado congelan la liberación (approveAndRelease).
 // Idempotente: lock por fila (release_lock_until) + updates condicionados al status. Verificación on-chain en approveAndRelease.
 import { db, json, fail, logEvent } from '../_lib/db';
-import { env, releaseDueAt } from '../_lib/env';
+import { env, releaseDueAt, releaseBlockedUntil } from '../_lib/env';
+import { isFaceToFace } from '../_lib/agreement';
+import { missingColumn } from '../_lib/listings';
 import { approveAndRelease } from '../_lib/escrow';
 
 async function claim(id: string): Promise<boolean> {
@@ -17,15 +19,15 @@ async function claim(id: string): Promise<boolean> {
 }
 
 async function processOrder(o: any) {
-  if (o.status === 'enviado') {
+  if (o.status === 'enviado' || (o.status === 'fondeado' && isFaceToFace(o))) {
     const due = releaseDueAt(o);
-    if (Date.parse(due) > Date.now()) { // plazo viejo/corto: se corrige y se espera
-      if (due !== o.auto_release_at) {
-        await db().from('orders').update({ auto_release_at: due }).eq('id', o.id).eq('status', 'enviado');
-        await logEvent(o.id, 'auto_release_extended', { from: o.auto_release_at ?? null, to: due });
-      }
-      return { slug: o.slug, due: false, dueAt: due };
+    if (Date.parse(due) > Date.now() && due !== o.auto_release_at) { // plazo viejo/corto: se corrige y se espera
+      await db().from('orders').update({ auto_release_at: due }).eq('id', o.id).eq('status', o.status);
+      await logEvent(o.id, 'auto_release_extended', { from: o.auto_release_at ?? null, to: due });
     }
+    // Extensión pendiente: congela hasta la respuesta o 24 h (no se guarda en auto_release_at).
+    const until = releaseBlockedUntil(o);
+    if (Date.parse(until) > Date.now()) return { slug: o.slug, due: false, dueAt: until };
   } else if (o.status !== 'entregado') return { slug: o.slug, skipped: o.status };
   if (!(await claim(o.id))) return { slug: o.slug, skipped: 'locked' };
   try { return { slug: o.slug, ...(await approveAndRelease(o, 'timeout')) }; }
@@ -39,12 +41,15 @@ export default async function handler(req: any, res: any) {
     const slug = req.query?.slug;
     if (typeof slug === 'string') {
       if (!/^[a-z0-9]{6}$/.test(slug)) return json(res, 400, { error: 'slug inválido' });
-      const { data: o } = await db().from('orders').select('*').eq('slug', slug).eq('status', 'enviado').lte('auto_release_at', now).maybeSingle();
+      const { data: o } = await db().from('orders').select('*').eq('slug', slug).in('status', ['enviado', 'fondeado']).lte('auto_release_at', now).maybeSingle();
       return json(res, 200, o ? await processOrder(o) : { slug, due: false });
     }
     if (req.headers.authorization !== `Bearer ${env.cronSecret()}`) return json(res, 401, { error: 'unauthorized' });
-    const { data } = await db().from('orders').select('*')
-      .or(`and(status.eq.enviado,auto_release_at.lte.${now}),and(status.eq.entregado,released_tx.is.null)`).limit(20);
+    const base = `and(status.eq.enviado,auto_release_at.lte.${now}),and(status.eq.entregado,released_tx.is.null)`;
+    // Cara a cara vence desde el pago (sigue en 'fondeado'). Sin la migración 017 no hay delivery_mode: solo lo de antes.
+    let { data, error } = await db().from('orders').select('*').or(`${base},and(status.eq.fondeado,delivery_mode.eq.cara_a_cara,auto_release_at.lte.${now})`).limit(20);
+    if (error && missingColumn(error)) ({ data, error } = await db().from('orders').select('*').or(base).limit(20));
+    if (error) throw error;
     const out = [];
     for (const o of data ?? []) out.push(await processOrder(o));
     return json(res, 200, { processed: out });
