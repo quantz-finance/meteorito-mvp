@@ -36,6 +36,7 @@ export default function ChatScreen() {
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [menu, setMenu] = useState(false);
+  const [canBlock, setCanBlock] = useState(true); // vendedor: false con una compra en curso o una disputa abierta (el servidor lo vuelve a comprobar)
   const [report, setReport] = useState(false);
   const scroll = useRef<ScrollView>(null);
   const nearBottom = useRef(true);
@@ -56,7 +57,7 @@ export default function ChatScreen() {
         try {
           const d = await readChat(auth, as, String(token), { full: true });
           if (!live) return;
-          setRole(d.role); setConv(d.conversation ?? null); setMsgs(d.messages);
+          setRole(d.role); setConv(d.conversation ?? null); setMsgs(d.messages); setCanBlock(d.can_block !== false);
           setState({ blocked: d.blocked, other_read_at: d.other_read_at, other_typing: d.other_typing, has_more: d.has_more });
           track('chat_opened', { role: d.role, kind: d.conversation?.kind ?? 'store', source: typeof src === 'string' && /^[a-z_]{2,20}$/.test(src) ? src : 'link', messages: d.messages.length });
           void refreshUnread(auth, d.role);
@@ -145,7 +146,7 @@ export default function ChatScreen() {
   const toggleBlock = async () => {
     setMenu(false);
     try { const r0 = await blockChat(auth, String(token), !state.blocked); setState((s) => ({ ...s, blocked: r0.blocked })); toast(r0.blocked ? K.blockedToast : K.unblockedToast); track('chat_blocked', { blocked: r0.blocked }); }
-    catch (e: any) { toast(e?.message ?? K.loadError, 'info'); }
+    catch (e: any) { if (e?.code === 'chat_block_locked') setCanBlock(false); toast(e?.message ?? K.loadError, 'info'); }
   };
 
   const mineLastRead = state.other_read_at ? Date.parse(state.other_read_at) : 0;
@@ -265,7 +266,14 @@ export default function ChatScreen() {
         {ctxSlug ? <ListRow icon={conv?.kind === 'order' ? 'bag-check-outline' : 'pricetag-outline'} title={conv?.kind === 'order' ? K.seeOrder : K.seeItem} onPress={() => { setMenu(false); router.push({ pathname: '/p/[slug]', params: { slug: ctxSlug } }); }} /> : null}
         {role === 'buyer' && other?.store_slug ? <ListRow icon="storefront-outline" title={COPY.ficha.seeProfile} onPress={() => { setMenu(false); router.push({ pathname: '/t/[store]', params: { store: other.store_slug! } }); }} /> : null}
         <ListRow icon="flag-outline" title={K.report} onPress={() => { setMenu(false); setReport(true); }} />
-        {role === 'seller' ? <ListRow icon={state.blocked ? 'lock-open-outline' : 'ban-outline'} title={state.blocked ? K.unblock : K.block} onPress={toggleBlock} /> : null}
+        {role === 'seller' && (state.blocked || canBlock) ? <ListRow icon={state.blocked ? 'lock-open-outline' : 'ban-outline'} title={state.blocked ? K.unblock : K.block} onPress={toggleBlock} /> : null}
+        {/* Compra en curso o disputa abierta entre los dos: no se puede bloquear (el comprador siempre puede escribir y disputar). */}
+        {role === 'seller' && !state.blocked && !canBlock ? (
+          <View style={s.locked} testID="chat-block-locked" accessibilityRole="text" aria-disabled>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, opacity: 0.55 }}><View style={st.rowIcon}><Icon name="ban-outline" size={20} color={C.lilac} /></View><Text style={T.headline}>{K.block}</Text></View>
+            <Text style={T.footnote}>{K.blockLocked}</Text>
+          </View>
+        ) : null}
       </Sheet>
       <ReportSheet visible={report} onClose={() => setReport(false)} onSend={async (reason, detail) => {
         await reportChat(auth, role, String(token), reason, detail); setReport(false); toast(K.reported); track('chat_reported', { reason, role });
@@ -389,5 +397,6 @@ const s = StyleSheet.create({
   blocked: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: TOUCH },
   reason: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: TOUCH, paddingHorizontal: S.sm, borderRadius: R.sm + 4 },
   reasonOn: { backgroundColor: C.lilacBg },
+  locked: { gap: 4, paddingVertical: S.sm, minHeight: TOUCH },
   reportInput: { backgroundColor: C.surface2, borderRadius: R.md, minHeight: 72, textAlignVertical: 'top' },
 });

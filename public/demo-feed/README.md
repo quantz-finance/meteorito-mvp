@@ -1,6 +1,6 @@
 # Fotos de las ventas de EJEMPLO del feed
 
-`venta-*.jpg` son las fotos de las 6 ventas cerradas ficticias de `lib/feedSales.ts` (etiqueta "Ejemplo",
+`venta-*.jpg` son las fotos de las 6 ventas cerradas ficticias de `lib/feedSales.ts` (iconito (i) discreto,
 `FEED_DEMO_SALES`). Son **imágenes generadas por IA** el 2026-10-24 (no son fotos de personas, productos ni marcas
 reales; sin logos ni texto). No hay licencia de terceros ni créditos que dar: son propias del proyecto.
 

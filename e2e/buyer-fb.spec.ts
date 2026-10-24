@@ -120,8 +120,8 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await expect(page.getByText('Pega el link completo del anuncio (empieza con https://).')).toBeVisible();
     await input.fill('https://www.facebook.com/marketplace/item/1/');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('Anuncio de Facebook', { exact: true })).toBeVisible();
-    await expect(page.getByText(/No pudimos/)).toHaveCount(0);
+    await expect(page.getByText('No pudimos leer ese anuncio.', { exact: true })).toBeVisible();
+    await expect(page.getByText('Escribe el nombre y el precio. El vendedor verá el link del anuncio.')).toBeVisible();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('');
     await expectNoScroll(page);
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bicicleta aro 29');

@@ -19,19 +19,19 @@ test.describe('Comprar: invitar con el link de cualquier marketplace', () => {
     await shot(page, info, '1-comprar');
     await page.getByRole('button', { name: 'Importar de un link' }).click();
     await expect(page).toHaveURL(/\/i\/nueva/);
-    await expect(page.getByTestId('invite-markets')).toContainText('Facebook, Mercado Libre, Amazon y más');
+    await expect(page.getByTestId('invite-markets')).toContainText('Pega el link del anuncio');
     await page.getByLabel('Link del anuncio').fill(ML);
-    await expect(page.getByTestId('import-provider')).toContainText('Anuncio de Mercado Libre: tú escribes el nombre y el precio.');
+    await expect(page.getByTestId('import-provider')).toContainText('No pudimos leer ese anuncio. Escribe el nombre y el precio.');
     await page.waitForTimeout(600); // animación de la hoja
     await expectInputs16(page);
     const add = page.getByRole('button', { name: /Agregar link$/ });
     await expect(add).toBeInViewport();
-    await expect(page.getByText(/Todavía no podemos|No pudimos/)).toHaveCount(0);
+    await expect(page.getByText(/Todavía no podemos|Mercado Libre:/)).toHaveCount(0);
     await copyOk(page);
     await shot(page, info, '2-hoja-mercadolibre');
     const before = await st(page);
     await add.click();
-    await expect(page.getByText('Anuncio de Mercado Libre', { exact: true })).toBeVisible();
+    await expect(page.getByText('No pudimos leer ese anuncio.', { exact: true })).toBeVisible();
     await expect(page.getByText('Escribe el nombre y el precio. El vendedor verá el link del anuncio.')).toBeVisible();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('');
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bicicleta aro 29');

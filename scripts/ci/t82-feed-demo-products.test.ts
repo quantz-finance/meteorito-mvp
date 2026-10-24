@@ -50,7 +50,13 @@ export async function run(t: T) {
   const texts = [...DEMO_PRODUCTS.flatMap((x) => [x.title, x.description, x.condition]), ...DEMO_SELLERS.flatMap((s) => [s.display_name, s.bio, ...s.reviews.map((r) => r.comment ?? '')]), ...Object.values(COPY.demoProducts).map(String)];
   t.check('copy sin palabras prohibidas', texts.every((x) => !BANNED_COPY.test(x)), texts.filter((x) => BANNED_COPY.test(x)).join(' | '));
   t.check('copy en tuteo (sin voseo) y sin emojis', texts.every((x) => !/\b(vos|tenés|podés|querés|escribí|tocá|mirá|pagá)\b/i.test(x) && !/\p{Extended_Pictographic}/u.test(x)));
-  t.check('copy: etiqueta "Ejemplo" y aviso de pago desactivado', COPY.demoProducts.tag === 'Ejemplo' && /no se puede pagar/.test(COPY.demoProducts.productNote) && /desactivado/i.test(COPY.demoProducts.payDisabled));
+  // Señal SUTIL (pedido del dueño): un iconito discreto que abre un popup, sin etiquetas "Ejemplo" ni avisos grandes.
+  const I = COPY.demoProducts.info;
+  t.check('copy del popup: título, texto y botón exactos', I.title === 'Producto de ejemplo' && I.body === 'Lo pusimos para mostrarte cómo se ve el feed. No está a la venta.' && I.ok === 'Entendido' && I.iconLabel === 'Producto de ejemplo');
+  const banned = /segur|garant[ií]a|verificad|empresa|fintech|banco|billetera|proteg/i;
+  const demoCopy = JSON.stringify(COPY.demoProducts, (_k, v) => (typeof v === 'function' ? v('X', 'Y') : v));
+  t.check('copy de ejemplos sin palabras prohibidas', !banned.test(demoCopy), demoCopy.match(banned)?.[0]);
+  t.check('pago desactivado: motivo corto y claro', /desactivado/i.test(COPY.demoProducts.payDisabled) && COPY.demoProducts.payDisabled.length <= 30 && /no se puede pagar/.test(COPY.demoProducts.productNote) && COPY.demoProducts.productNote.length <= 50);
 
   // --- Funciones puras: orden, filtro, búsqueda, cursor ---
   const now = Date.UTC(2026, 9, 24, 12);
@@ -128,5 +134,12 @@ export async function run(t: T) {
   t.check('ficha de ejemplo: sin PayBox ni llamadas de pago; botón desactivado', !/PayBox|['"]\/api\/|fetch\(/.test(ui) && /testID="demo-pay-disabled"/.test(ui) && /disabled/.test(ui));
   t.check('ficha de ejemplo carga los datos en diferido (no infla el bundle inicial)', /import\('\.\.\/api\/_lib\/demoProducts'\)/.test(ui) && !/from '\.\.\/api\/_lib\/demoProducts'/.test(ui));
   const feed = src('components/Feed.tsx'); const st = src('app/t/[store].tsx');
-  t.check('tarjetas y tiendas con etiqueta "Ejemplo"', /feed-demo-tag/.test(feed) && /store-demo-tag/.test(st) && /store-demo-note/.test(st));
+  const strip = (x: string) => x.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  const info = strip(src('components/DemoInfo.tsx'));
+  t.check('DemoInfo: icono chico con accessibilityLabel y popup (Modal) con título, texto y Entendido', /accessibilityLabel=\{[^}]*iconLabel/.test(info) && /testID="demo-info"/.test(info) && /<Modal/.test(info) && /testID="demo-info-popup"/.test(info) && /COPY\.demoProducts\.info\b/.test(info) && /\.title\}/.test(info) && /\.body\}/.test(info) && /\.ok\}/.test(info) && /information-circle-outline/.test(info));
+  t.check('DemoInfo: tocar el icono no navega (stopPropagation)', /stopPropagation/.test(info));
+  const fe = strip(feed), sto = strip(st), pr = strip(src('components/DemoProduct.tsx'));
+  t.check('feed: tarjeta de ejemplo con <DemoInfo>, sin etiqueta "Ejemplo"', /it\.demo \? <DemoInfo/.test(fe) && !/feed-demo-tag|COPY\.demoProducts\.tag|feed-sale-example/.test(fe));
+  t.check('tienda de ejemplo: <DemoInfo>, sin etiqueta ni nota grande', /<DemoInfo/.test(sto) && !/store-demo-tag|store-demo-note|COPY\.demoProducts\.tag/.test(sto));
+  t.check('ficha de ejemplo: <DemoInfo>, sin aviso grande ni chip "Ejemplo"', /<DemoInfo/.test(pr) && !/demo-product-notice|COPY\.demoProducts\.tag|productNoteTitle/.test(pr));
 }

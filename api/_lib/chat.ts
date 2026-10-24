@@ -12,7 +12,7 @@ import type { BuyerIdentity } from './guest';
 import { isMissingTable, notifyOrder, vapid, type PushDeps, type PushMsg } from './push';
 import { canShowContact } from './contact';
 import {
-  buyerLabel, chatPreview, CHAT_MAX, CHAT_OPEN_PER_HOUR, CHAT_PRESENT_MS, CHAT_PUSH_COOLDOWN_MIN, CHAT_SEND_PER_MIN, CHAT_TYPING_MS,
+  blockLock, buyerLabel, chatPreview, CHAT_BLOCK_LOCKED, CHAT_MAX, CHAT_OPEN_PER_HOUR, CHAT_PRESENT_MS, CHAT_PUSH_COOLDOWN_MIN, CHAT_SEND_PER_MIN, CHAT_TYPING_MS,
   cleanChatText, isUnread, validChatToken, validClientId, type ChatRole,
 } from './chatText';
 
@@ -169,6 +169,9 @@ export async function readChat(who: BuyerIdentity, b: { token?: unknown; after?:
     has_more: !after && rows.length === CHAT_PAGE,
   };
   if (b.full !== true) return { ...state, messages };
+  // Vendedor: ¿puede bloquear? (la app oculta o deshabilita la opción; el servidor lo vuelve a comprobar en chat_block).
+  let can_block = false;
+  if (role === 'seller') { try { can_block = !(await pairLock(c)); } catch { can_block = true; } }
   // Cabecera: la otra parte, el tema (producto o pedido) y si ya se pagó (el aviso de "paga dentro" es solo antes de pagar).
   const cards = await sellerCards([c.seller_user_id]);
   const s = cards[c.seller_user_id];
@@ -180,7 +183,7 @@ export async function readChat(who: BuyerIdentity, b: { token?: unknown; after?:
     else if (o) item = { slug: o.slug, price_crc: o.price_crc == null ? null : Number(o.price_crc) };
   }
   return {
-    ...state, messages,
+    ...state, messages, can_block,
     conversation: {
       token: c.token, kind: c.order_slug ? 'order' as const : 'store' as const, subject: c.subject ?? null, item_photo: c.item_photo ?? null, item, order,
       paid: !!order && canShowContact(order.status),
@@ -274,11 +277,31 @@ export async function listChats(who: Pick<BuyerIdentity, 'ids'>, as: ChatRole, s
   };
 }
 
-/** El vendedor bloquea (o desbloquea) la conversación: nadie puede escribir mientras está bloqueada. */
+/** ¿Hay una compra en curso o una disputa abierta entre ESTE comprador y ESTE vendedor (cualquier pedido del par, no solo el
+ *  de esta conversación)? Mientras la haya, el vendedor no puede bloquear. El comprador abre su disputa desde el pedido
+ *  (/api/escrow/dispute), que no depende del chat. */
+export async function pairLock(c: { seller_user_id: string; buyer_id: string }): Promise<'dispute' | 'order' | null> {
+  const { data, error } = await db().from('orders').select('id, status').eq('seller_user_id', c.seller_user_id).eq('buyer_user_id', c.buyer_id).limit(200);
+  if (error) throw error;
+  const orders: { id: string; status: string; dispute_state?: string | null }[] = (data ?? []) as any[];
+  if (orders.length) { // estado de la disputa (005); sin la tabla basta el status del pedido
+    const { data: ds } = await db().from('disputes').select('order_id, state').in('order_id', orders.map((o) => o.id));
+    const st = new Map<string, string>((ds ?? []).map((d: any) => [String(d.order_id), String(d.state)]));
+    orders.forEach((o) => { o.dispute_state = st.get(o.id) ?? null; });
+  }
+  return blockLock(orders);
+}
+
+/** El vendedor bloquea (o desbloquea) la conversación: nadie puede escribir mientras está bloqueada. No se puede bloquear
+ *  con una compra en curso o una disputa abierta entre los dos (409 chat_block_locked); desbloquear siempre se puede. */
 export async function blockChat(who: BuyerIdentity, b: { token?: unknown; blocked?: unknown }) {
   const { c, role } = await requireParty(b.token, who);
   if (role !== 'seller') throw Object.assign(new HttpError(403, 'Solo el vendedor puede bloquear la conversación.'), { code: 'not_seller' });
   const blocked = b.blocked !== false;
+  if (blocked && !c.blocked_at) {
+    const lock = await pairLock(c);
+    if (lock) throw Object.assign(new HttpError(409, CHAT_BLOCK_LOCKED), { code: 'chat_block_locked', lock });
+  }
   const { error } = await db().from(CONV).update({ blocked_at: blocked ? new Date().toISOString() : null }).eq('id', c.id);
   if (error) dbErr(error);
   return { blocked };
