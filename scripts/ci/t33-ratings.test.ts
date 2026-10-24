@@ -1,4 +1,4 @@
-// (33) Tienda + calificaciones: 1-5, solo el comprador del pedido (llave de invitado o sesión), solo Entregado/Liberado, una vez. Sin red.
+// (33) Tienda + calificaciones: 1-5, solo el comprador del pedido (llave de invitado o sesión), solo Liberado (compra verificada, 062), una vez. Sin red.
 import type { T } from './setup';
 import { installTestJwks, res, token } from './jwt';
 import { __setDbForTests } from '../../api/_lib/db';
@@ -18,7 +18,7 @@ export async function run(t: T) {
   const db = fakeDb(); __setDbForTests(db as any);
   const buyerA = guestSubFromReq({ headers: { 'x-guest-key': KEY_A } })!;
   const order = (slug: string, status: string, buyer: string | null = buyerA) => ({ id: `id-${slug}`, slug, status, seller_user_id: 'seller1', buyer_user_id: buyer, seller_address: 'G'.padEnd(56, 'A') });
-  db.tables.orders.push(order('aaaaaa', 'liberado'), order('bbbbbb', 'enviado'), order('cccccc', 'entregado', 'cavos-buyer'));
+  db.tables.orders.push(order('aaaaaa', 'liberado'), order('bbbbbb', 'enviado'), order('cccccc', 'liberado', 'cavos-buyer'));
 
   let r = await call({ guest: KEY_A, body: { action: 'rate', slug: 'aaaaaa', stars: 6 } });
   t.check('estrellas fuera de 1-5 -> 400', r.code === 400, `${r.code}`);
@@ -35,7 +35,7 @@ export async function run(t: T) {
   r = await call({ guest: KEY_A, body: { action: 'rate', slug: 'aaaaaa', stars: 1 } });
   t.check('segunda calificación del mismo pedido -> 409 already_rated', r.code === 409 && r.body?.code === 'already_rated' && db.tables.seller_ratings.length === 1, `${r.code}`);
   r = await call({ tok: await token({ sub: 'cavos-buyer' }), body: { action: 'rate', slug: 'cccccc', stars: 5 } });
-  t.check('comprador con sesión Cavos califica pedido Entregado -> 200', r.code === 200, `${r.code} ${r.body?.error}`);
+  t.check('comprador con sesión Cavos califica pedido Liberado -> 200', r.code === 200, `${r.code} ${r.body?.error}`);
 
   // Mi tienda: se crea con usuario único derivado del correo; datos públicos sin correo ni dirección.
   r = await call({ tok: await token({ sub: 'seller1' }), body: { action: 'me' } });

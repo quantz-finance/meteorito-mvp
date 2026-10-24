@@ -16,8 +16,9 @@
 //                                                 '' o null lo quita. Migración 016)
 //  POST { action:'seller_contact', slug }        (X-Guest-Key o Bearer del comprador) -> WhatsApp del vendedor, SOLO al comprador
 //                                                 del pedido y SOLO pagado (fondeado…resuelto). Sin 016 o sin teléfono: null
-//  POST { action:'rate', slug, stars }           (X-Guest-Key o Bearer del comprador) -> 1-5 estrellas, una vez por pedido,
-//                                                 solo con el pedido Entregado o Liberado
+//  POST { action:'rate', slug, stars, comment?, buyer_name? } (X-Guest-Key o Bearer del comprador) -> reseña de compra
+//                                                 verificada: 1-5 estrellas, comentario opcional (280, sin links) y nombre
+//                                                 corto ("María R."), una por pedido, solo con el pedido Liberado (018)
 //  POST { action:'payout_get' } / { action:'payout_set', iban, holder_name, sinpe_phone? } (Bearer Cavos)
 //                                                 -> cuenta IBAN para cobrar (migración 011). Solo sale enmascarada.
 //  GET  ?push=key                                 -> llave pública VAPID (o null si no hay push configurado)
@@ -46,7 +47,7 @@ import { checkListingUrl } from '../_lib/importers/providers';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
 import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile } from '../_lib/feed';
-import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
+import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
 
@@ -161,17 +162,25 @@ export default async function handler(req: any, res: any) {
     const b = req.body ?? {};
 
     if (b.action === 'rate') {
+      // Reseña de compra verificada: estrellas + comentario opcional + nombre corto opcional (migración 018).
       const stars = Number(b.stars);
       if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw new HttpError(400, 'Elige de 1 a 5 estrellas.');
+      const comment = cleanReviewComment(b.comment);
+      if (comment === 'too_long') throw Object.assign(new HttpError(400, `El comentario puede tener hasta ${REVIEW_MAX} caracteres.`), { code: 'bad_comment' });
+      if (comment === 'link') throw Object.assign(new HttpError(400, 'Quita los links del comentario.'), { code: 'bad_comment' });
+      const buyer_name = shortBuyerName(b.buyer_name);
       const order = await orderBySlug(b.slug);
       const who = await requireBuyerIdentity(req);
       if (!isBuyerOf(order, who)) throw new HttpError(403, 'Solo quien compró puede calificar este pedido.');
-      if (!RATABLE.includes(order.status)) throw Object.assign(new HttpError(409, 'Puedes calificar cuando el pedido esté entregado.'), { code: 'not_ratable' });
+      if (!RATABLE.includes(order.status)) throw Object.assign(new HttpError(409, 'Podrás dejar tu reseña cuando se libere el pago.'), { code: 'not_ratable' });
       if (!order.seller_user_id) throw new HttpError(409, 'Este pedido no se puede calificar.');
-      const { error } = await db().from('seller_ratings').insert({ order_id: order.id, order_slug: order.slug, seller_user_id: order.seller_user_id, buyer_user_id: order.buyer_user_id, stars });
+      const base = { order_id: order.id, order_slug: order.slug, seller_user_id: order.seller_user_id, buyer_user_id: order.buyer_user_id, stars };
+      let { error } = await db().from('seller_ratings').insert({ ...base, comment, buyer_name });
+      if (error && missingColumn(error)) ({ error } = await db().from('seller_ratings').insert(base)); // sin 018: solo estrellas
       if (error?.code === '23505') throw Object.assign(new HttpError(409, 'Ya calificaste este pedido.'), { code: 'already_rated' });
       if (error) storeDbErr(error);
-      return json(res, 200, { rated: true, stars });
+      const { data: sp } = await db().from('seller_profiles').select('store_slug').eq('sub', order.seller_user_id).maybeSingle();
+      return json(res, 200, { rated: true, stars, store_slug: (sp as any)?.store_slug ?? null });
     }
 
     if (b.action === 'push_subscribe' || b.action === 'push_unsubscribe') {

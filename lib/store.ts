@@ -29,10 +29,12 @@ export async function getMyStore(auth: MeteoritoAuth): Promise<Store> {
 export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null; contact_phone?: string | null }): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'update', ...patch }));
 }
-/** Calificación del comprador (llave de invitado o sesión), una vez por pedido. */
-export async function rateOrder(auth: Pick<MeteoritoAuth, 'getAuthToken'>, slug: string, stars: number): Promise<void> {
-  if (DEMO_ENABLED) { await demoApi('/api/store', { action: 'rate', slug, stars }); return; }
-  await friendly(() => guestApi(auth, '/api/store', { action: 'rate', slug, stars }));
+/** Reseña del comprador (llave de invitado o sesión), una por pedido y solo con la compra liberada.
+ *  Devuelve el usuario de la tienda del vendedor (para ir a su perfil) o null. */
+export async function rateOrder(auth: Pick<MeteoritoAuth, 'getAuthToken'>, slug: string, stars: number, extra: { comment?: string; buyer_name?: string } = {}): Promise<string | null> {
+  const body = { action: 'rate', slug, stars, ...(extra.comment?.trim() ? { comment: extra.comment.trim() } : {}), ...(extra.buyer_name?.trim() ? { buyer_name: extra.buyer_name.trim() } : {}) };
+  const r: any = DEMO_ENABLED ? await demoApi('/api/store', body) : await friendly(() => guestApi(auth, '/api/store', body));
+  return typeof r?.store_slug === 'string' ? r.store_slug : null;
 }
 async function friendly<T>(f: () => Promise<T>): Promise<T> {
   try { return await f(); }
