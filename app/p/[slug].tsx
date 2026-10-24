@@ -33,6 +33,8 @@ import { Freshness } from '@/components/Freshness';
 import { LearnSheet } from '@/components/LearnSheet';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { DEMO_ENABLED } from '@/lib/demo';
+import { RulesHint } from '@/components/RulesLink';
+import { PAY_SUMMARY } from '@/lib/rules';
 
 export default function LinkDeVenta() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -100,6 +102,8 @@ export default function LinkDeVenta() {
         <TrustBlock order={order} />
         {order.description ? <Text style={T.callout}>{order.description}</Text> : null}
       </Card></Reveal>
+      {/* Reglas en una línea, solo antes de pagar (Ver reglas -> /como-funciona). */}
+      {unpaid ? <RulesHint text={PAY_SUMMARY} from="pay" /> : null}
 
       {moneyProgress(order.status) > 0 || order.status === 'en_disputa' ? (
         <Card style={{ gap: S.md }}>

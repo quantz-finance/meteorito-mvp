@@ -26,6 +26,7 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 | `share_clicked` / `link_copied` | Compartir | `method` |
 | `payment_link_opened` / `payment_link_not_found` | `/p/:slug` | `status`, `logged_in`, `category` |
 | `seller_contact_opened` | `/p/:slug` (comprador, pedido pagado) | — (nunca el teléfono) |
+| `rules_opened` | Cómo funciona (Home, Mi cuenta, pago, Vender) | `from` (home, account, pay, sell) |
 | `pay_confirm_tapped` / `payment_funded_client` | PayBox "Ya pagué" | – |
 | `pin_failed` | vendedor ingresa PIN | `locked` |
 | `dispute_opened` | DisputeSheet | `reason`, `photos` |
