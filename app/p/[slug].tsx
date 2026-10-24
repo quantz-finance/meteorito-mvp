@@ -110,7 +110,7 @@ export default function LinkDeVenta() {
       {moneyProgress(order.status) > 0 || order.status === 'en_disputa' ? (
         <Card style={{ gap: S.md }}>
           <Text style={T.caption}>Estado de tu pago</Text>
-          <MoneyTimeline status={order.status} shipped={!!(order as any).shipped_tx} />
+          <MoneyTimeline status={order.status} shipped={!!(order as any).shipped_tx} mode={order.delivery_mode} />
         </Card>
       ) : (
         <Card style={{ gap: S.md }}>

@@ -160,6 +160,16 @@ export async function run(t: T) {
     t.check('demo: cara a cara y extensión', /cara_a_cara/.test(demo) && /extend_answer/.test(demo));
     const { readdirSync, statSync } = await import('node:fs');
     const fns = (d: string): string[] => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? (n === '_lib' ? [] : fns(p)) : /\.ts$/.test(n) ? [p] : []; });
+    // Línea de tiempo: cara a cara = Pagado, Entregado con PIN, Liberado (en 'fondeado' el paso actual nunca es "Enviado").
+    const { moneyProgress, moneyStepKeys } = await import('../../lib/progress');
+    t.check('timeline cara a cara: 3 pasos sin "enviado"', moneyStepKeys('cara_a_cara').join() === 'pagado,entregado_pin,liberado' && moneyStepKeys('envio').join() === 'pagado,enviado,entregado,liberado' && moneyStepKeys(undefined).length === 4);
+    t.check('timeline cara a cara: fondeado=1 (actual: Entregado con PIN), entregado=2, liberado=3; envío sin cambios',
+      moneyProgress('fondeado', false, 'cara_a_cara') === 1 && moneyProgress('entregado', false, 'cara_a_cara') === 2 && moneyProgress('liberado', false, 'cara_a_cara') === 3
+      && moneyProgress('en_disputa', true, 'cara_a_cara') === 1 && moneyProgress('enviado') === 2 && moneyProgress('liberado') === 4);
+    const ds = readFileSync(join(ROOT, 'components/ds.tsx'), 'utf8');
+    t.check('MoneyTimeline usa los pasos cara a cara según mode', /label: 'Entregado con PIN'/.test(ds) && /mode === 'cara_a_cara' \? MONEY_STEPS_F2F : MONEY_STEPS/.test(ds));
+    t.check('vendedor (Pedidos, fila y detalle) y comprador pasan delivery_mode a la línea de tiempo',
+      ['app/(tabs)/pedidos.tsx', 'components/OrderRow.tsx', 'app/p/[slug].tsx'].every((f) => /<MoneyTimeline[^>]*mode=\{/.test(readFileSync(join(ROOT, f), 'utf8'))));
     const mig = readFileSync(join(ROOT, 'supabase/migrations/017_agreed_window.sql'), 'utf8');
     t.check('migración 017: columnas con checks (24 h-30 días), vista pública y tick para cara a cara', /delivery_mode text not null default 'envio'/.test(mig)
       && /between 1440 and 43200/.test(mig) && /release_ext jsonb/.test(mig) && /public_orders[\s\S]*delivery_mode, protection_minutes, release_ext, release_ext_minutes/.test(mig)

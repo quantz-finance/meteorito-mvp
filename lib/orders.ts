@@ -78,6 +78,8 @@ export interface SellerOrder {
   slug: string; category: string; brand: string; model: string; price_crc: number; status: string; identifier_masked: string | null; created_at: string;
   /** Migración 012 (seller_orders_v2). Sin ella: undefined = link de un uso. */
   kind?: 'single' | 'listing'; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada';
+  /** Migración 017: tipo de entrega (cara a cara no tiene paso "Enviado"). */
+  delivery_mode?: 'envio' | 'cara_a_cara' | null;
 }
 /** Pedidos del vendedor: por la API con su sesión (solo los suyos). La RPC pública seller_orders se revoca en la 013. */
 export async function getSellerOrders(auth: MeteoritoAuth): Promise<SellerOrder[]> {

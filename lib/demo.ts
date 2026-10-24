@@ -398,7 +398,7 @@ export function demoGetStore(slug: string, owner = false) {
 export const demoGetPublicOrder = (slug: string) => { const o = S().orders[slug]; return o ? pub(o) : null; };
 export const demoGetSellerOrders = (addr: string) =>
   Object.values(S().orders).filter((o) => o.seller_address === addr && !(o.listing_slug && o.status === 'creado')).sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((o) => ({ slug: o.slug, category: o.category, brand: o.brand, model: o.model, price_crc: o.price_crc, status: o.status, identifier_masked: o.identifier_masked, created_at: o.created_at, kind: o.kind, listing_slug: o.listing_slug ?? null, listing_status: o.listing_status }));
+    .map((o) => ({ slug: o.slug, category: o.category, brand: o.brand, model: o.model, price_crc: o.price_crc, status: o.status, identifier_masked: o.identifier_masked, created_at: o.created_at, kind: o.kind, listing_slug: o.listing_slug ?? null, listing_status: o.listing_status, delivery_mode: o.delivery_mode ?? 'envio' }));
 /** Invitación pública simulada (misma forma que GET /api/invites). */
 export function demoGetInvite(code: string) {
   const inv = S().invites?.[code]; if (!inv) return null;
