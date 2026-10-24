@@ -20,6 +20,8 @@ import { SELL_SUMMARY } from '@/lib/rules';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, SuccessCheck, type IconName } from '@/components/ds';
 import { Reveal } from '@/components/space';
 import { ShareLink } from '@/components/ShareLink';
+import { AdTemplateButton, AdTemplateSheet } from '@/components/AdTemplateSheet';
+import type { AdInput } from '@/lib/sellerTools';
 import { Fonts } from '@/constants/Colors';
 import { C, R, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
@@ -35,7 +37,7 @@ import { agreementSummary, daysToMinutes, DEFAULT_PROTECTION_MIN, DELIVERY_LABEL
 
 type PhotoStatus = 'processing' | 'ready' | 'uploading' | 'done' | 'error';
 interface Photo { key: string; uri: string; mime: string; status: PhotoStatus; /** ya subida: cámara de la app, anuncio de Facebook (servidor) o invitación del comprador */ url: string }
-interface Created { slug: string; title: string; price: number; photo: string | null; agreement: string }
+interface Created { slug: string; title: string; price: number; photo: string | null; agreement: string; ad: AdInput }
 let photoSeq = 0;
 
 /** Borrador (solo texto): sobrevive al cambiar de pestaña y a recargas en web. Se descarta al generar el link. */
@@ -83,6 +85,7 @@ function VenderForm() {
   const [orphan, setOrphan] = useState(false);
   const [waitWallet, setWaitWallet] = useState(false);
   const [created, setCreated] = useState<Created | null>(null);
+  const [adOpen, setAdOpen] = useState(false); // plantilla de anuncio del link recién creado
   // Acuerdo de entrega: envío 7 días por defecto; cara a cara 24 h.
   const [mode, setMode] = useState<DeliveryMode>('envio');
   const [windowMin, setWindowMin] = useState<number>(DEFAULT_PROTECTION_MIN.envio);
@@ -186,7 +189,8 @@ function VenderForm() {
       const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}), ...(source ? { source_url: source.url, source_provider: source.provider } : {}) });
       track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: source?.provider === 'facebook', import_provider: source?.provider ?? null, delivery_mode: mode, protection_minutes: windowMin });
       haptic.success();
-      setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null, agreement: agreementSummary(mode, windowMin) });
+      setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null, agreement: agreementSummary(mode, windowMin),
+        ad: { title: t, price_crc: priceNum, link: orderLink(slug), description, delivery_mode: mode, protection_minutes: windowMin } });
       setMode('envio'); setWindowMin(DEFAULT_PROTECTION_MIN.envio); setCustomOpen(false); setCustomDays('');
       setTitle(''); setPrice(''); setPhotos([]); setInvite(null); setDescription(null); setFbNotice(null); setSource(null); saveDraft(null);
       if (inviteParam) router.setParams({ invite: undefined });
@@ -225,8 +229,10 @@ function VenderForm() {
           </View>
         </Card></Reveal>
         <Reveal i={2}><ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} /></Reveal>
-        <Reveal i={3}><Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar.</Text></Reveal>
+        <Reveal i={3}><AdTemplateButton onPress={() => setAdOpen(true)} /></Reveal>
+        <Reveal i={4}><Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar.</Text></Reveal>
       </View>
+      <AdTemplateSheet visible={adOpen} onClose={() => setAdOpen(false)} ad={created.ad} />
     </Screen>
   );
 

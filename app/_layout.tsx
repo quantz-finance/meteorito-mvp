@@ -109,6 +109,7 @@ function Gate() {
       <Stack.Screen name="p/[slug]" />
       <Stack.Screen name="t/[store]" />
       <Stack.Screen name="mi-tienda" />
+      <Stack.Screen name="ventas" />
       <Stack.Screen name="i/nueva" />
       <Stack.Screen name="i/[code]" />
       <Stack.Screen name="compartir/[slug]" options={{ presentation: 'modal' }} />
