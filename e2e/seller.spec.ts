@@ -70,24 +70,26 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('CR05015202001026284066')).toHaveCount(0); // siempre enmascarada
   });
 
-  // Importar de Facebook: el API simulado del demo responde como /api/store {action:'import_facebook'} (sin red).
-  test('VEN-07 importar de Facebook: botón, pegar link, formulario precargado, generar link', async ({ page }, info) => {
+  // Importar de un link: el API simulado del demo responde como /api/store {action:'import_listing'} (sin red).
+  test('VEN-07 importar de un link (Facebook): botón, pegar link, formulario precargado, generar link', async ({ page }, info) => {
     await open(page, '/vender', 'seller', true);
-    const btn = page.getByRole('button', { name: 'Importar de Facebook' });
+    const btn = page.getByRole('button', { name: 'Importar de un link' });
     await expect(btn).toBeVisible();
     await expectNoScroll(page);
     await expectTitleAt16(page, 'Vender');
     if (info.project.name === 'webkit-iphone-se') await page.screenshot({ path: 'test-results/fb-import-1-boton.png' });
     await btn.click();
-    const input = page.getByLabel('Link del anuncio de Facebook');
+    const input = page.getByLabel('Link del anuncio');
     await expect(input).toBeVisible();
+    await expect(page.getByTestId('import-providers')).toContainText('Facebook, Mercado Libre, Encuentra24 y más');
     await expectInputs16(page);
     await input.fill('https://www.facebook.com/share/18HroUrSak/?mibextid=wwXIfr');
     await page.waitForTimeout(600); // animación de la hoja
     if (info.project.name === 'webkit-iphone-se') await page.screenshot({ path: 'test-results/fb-import-2-pegar.png' });
     await expect(page.getByRole('button', { name: /Importar$/ })).toBeInViewport();
+    await expect(page.getByTestId('import-provider')).toContainText('Anuncio de Facebook');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('Listo, revisa los datos')).toBeVisible();
+    await expect(page.getByText('Importado de Facebook')).toBeVisible();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('Bicicleta de montaña aro 29');
     await expect(page.getByPlaceholder('0')).toHaveValue('185 000');
     await expect(page.getByText('FOTOS (1/4)', { exact: false })).toBeVisible();
@@ -105,18 +107,20 @@ test.describe('Vendedor (demo)', () => {
     expect(o.price_crc).toBe(185000);
     expect(o.photos).toHaveLength(1);
     expect(String(o.description)).toContain('frenos de disco');
-    expect(JSON.stringify(o)).not.toContain('facebook.com'); // el link de FB no queda en el producto
+    expect(o.source_provider).toBe('facebook'); // de dónde vino (migración 019)
+    expect(o.source_url).toBe('https://www.facebook.com/share/18HroUrSak/?mibextid=wwXIfr');
   });
 
-  test('VEN-08 importar de Facebook: link ajeno se rechaza; anuncio ilegible -> completar a mano', async ({ page }, info) => {
+  test('VEN-08 importar de un link: link inválido se rechaza; anuncio ilegible -> mensaje amable y completar a mano', async ({ page }, info) => {
     await open(page, '/vender', 'seller', true);
-    await page.getByRole('button', { name: 'Importar de Facebook' }).click();
-    await page.getByLabel('Link del anuncio de Facebook').fill('https://evil.com/?u=facebook.com');
+    await page.getByRole('button', { name: 'Importar de un link' }).click();
+    await page.getByLabel('Link del anuncio').fill('http://localhost/admin');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('Pega el link de un anuncio de Facebook Marketplace.')).toBeVisible();
-    await page.getByLabel('Link del anuncio de Facebook').fill('https://www.facebook.com/marketplace/item/1/');
+    await expect(page.getByText('Pega el link completo de tu anuncio (empieza con https://).')).toBeVisible();
+    await page.getByLabel('Link del anuncio').fill('https://www.facebook.com/marketplace/item/1/');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByText('No pudimos leer ese anuncio, completa los datos.')).toBeVisible();
+    await expect(page.getByText('No pudimos leer ese link; súbelo con la cámara.')).toBeVisible();
+    await page.getByRole('button', { name: 'Cerrar' }).last().click();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('');
     await expect(page.getByText('FOTOS (0/4)', { exact: false })).toBeVisible();
     await expectNoScroll(page);
@@ -127,5 +131,30 @@ test.describe('Vendedor (demo)', () => {
     await takePhoto(page);
     await page.getByText('Generar link').click();
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
+  });
+
+  test('VEN-09 importar de Mercado Libre: detecta el proveedor al pegar, skeleton mientras lee y vista previa editable', async ({ page }, info) => {
+    await open(page, '/vender', 'seller', true);
+    await page.getByRole('button', { name: 'Importar de un link' }).click();
+    await page.getByLabel('Link del anuncio').fill('https://articulo.mercadolibre.com.mx/MLM-1770588108-bicicleta-gravel-andes-mtb-de-montana-r29-24v-shimano-altus-_JM');
+    await expect(page.getByTestId('import-provider')).toContainText('Anuncio de Mercado Libre');
+    await expectInputs16(page);
+    if (info.project.name === 'webkit-iphone-se') { await page.waitForTimeout(500); await page.screenshot({ path: 'test-results/import-1-mercadolibre.png' }); }
+    await page.getByRole('button', { name: /Importar$/ }).click();
+    await expect(page.getByTestId('import-skeleton')).toContainText('Leyendo tu anuncio de Mercado Libre');
+    await expect(page.getByText('Importado de Mercado Libre')).toBeVisible();
+    await expect(page.getByText(/Sugerido de MX\$7,238\.99: confírmalo/)).toBeVisible();
+    const name = page.getByPlaceholder('Ej. iPhone 13 de 128 GB');
+    await expect(name).toHaveValue('Bicicleta de montaña aro 29');
+    await name.fill('Bicicleta Gravel Andes R29'); // la vista previa se edita
+    await expect(page.getByPlaceholder('0')).toHaveValue('197 400');
+    await page.waitForTimeout(400);
+    await expectNoScroll(page);
+    // El aviso de beta (Ley 7472) no puede quedar tapado por "Generar link" con el aviso de importación abierto
+    const beta = await page.getByText(/Beta en testnet/).boundingBox();
+    const btn = await page.getByRole('button', { name: 'Generar link' }).boundingBox();
+    expect(beta!.y + beta!.height).toBeLessThanOrEqual(btn!.y);
+    await expect(page.getByText('Modo prueba', { exact: false })).toHaveCount(0);
+    if (info.project.name === 'webkit-iphone-se') { await page.screenshot({ path: 'test-results/import-2-vista-previa.png' }); }
   });
 });

@@ -19,6 +19,9 @@
 //                                                 descripción y foto (data URL + photo_urls: la misma foto guardada por el
 //                                                 servidor en import-<clave>-<uuid>, la única que no viene de la cámara). Nunca crea nada: quien importa revisa y
 //                                                 confirma (link de pago en Vender o invitación en Comprar).
+//  POST { action:'import_listing', url }          (igual) -> lo mismo para cualquier anuncio público: Facebook, Mercado Libre,
+//                                                 Encuentra24, Amazon, AliExpress, Walmart o cualquier página https con
+//                                                 JSON-LD/Open Graph (api/_lib/importers, SSRF estricto). + provider y source_url.
 import { db, fail, json, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
@@ -29,6 +32,8 @@ import { checkFacebookUrl } from '../_lib/fbparse';
 import { clientIp, FB_GUEST_IP_PER_MIN, importFacebookListing, fbRateLimited } from '../_lib/fbimport';
 import { storeImportedPhotos } from '../_lib/capture';
 import { MAX_PHOTO_BYTES } from '../_lib/photos';
+import { importListing } from '../_lib/importers';
+import { checkListingUrl } from '../_lib/importers/providers';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
@@ -145,21 +150,23 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { contact_phone: await contactPhoneOf(order.seller_user_id) });
     }
 
-    if (b.action === 'import_facebook') {
+    if (b.action === 'import_facebook' || b.action === 'import_listing') {
       // Vendedor (Bearer Cavos) o comprador sin cuenta que invita al vendedor desde el anuncio (X-Guest-Key).
+      // import_listing: cualquier anuncio público (Facebook, Mercado Libre, Encuentra24, Amazon…), con protección SSRF.
       const who = await requireBuyerIdentity(req);
-      const chk = checkFacebookUrl(b.url);
-      if (!chk.ok) throw Object.assign(new HttpError(400, chk.error), { code: 'fb_url_invalid' });
+      const any = b.action === 'import_listing';
+      const chk = any ? checkListingUrl(b.url) : checkFacebookUrl(b.url);
+      if (!chk.ok) throw Object.assign(new HttpError(400, chk.error), { code: any ? 'import_url_invalid' : 'fb_url_invalid' });
       // Límite por identidad (8/min) y, para invitados, también por IP: la llave de invitado es gratis de generar.
       const ip = who.cavos ? null : clientIp(req);
       if (fbRateLimited(who.cavos?.sub ?? who.guest!) || (ip && fbRateLimited(`ip:${ip}`, Date.now(), FB_GUEST_IP_PER_MIN))) {
         throw Object.assign(new HttpError(429, 'Espera un momento antes de importar otro anuncio.'), { code: 'fb_rate_limited' });
       }
       res.setHeader?.('Cache-Control', 'no-store');
-      const r = await importFacebookListing(chk.url, { rate: env.crcUsdcRate() });
-      // La foto del anuncio queda guardada por el servidor (import-<clave del link>-<uuid>): es la única que no se toma con
-      // la cámara, y solo vale en un producto o invitación que mande este mismo source_url.
-      const source_url = chk.url;
+      const r = any ? await importListing(chk.url, { rate: env.crcUsdcRate() }) : await importFacebookListing(chk.url, { rate: env.crcUsdcRate() });
+      // Las fotos del anuncio quedan guardadas por el servidor (import-<clave del link>-<uuid>): son las únicas que no se
+      // toman con la cámara, y solo valen en un producto o invitación que mande este mismo source_url (el canónico del import).
+      const source_url = ('source_url' in r && typeof r.source_url === 'string' && r.source_url) || chk.url;
       const photo_urls = r.photos.length ? await storeImportedPhotos(db().storage, r.photos, who.cavos?.sub ?? who.guest!, MAX_PHOTO_BYTES, source_url) : [];
       return json(res, 200, { ...r, photo_urls, source_url });
     }
