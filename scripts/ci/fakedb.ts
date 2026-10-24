@@ -9,7 +9,8 @@ export function fakeDb() {
   const from = (t: string) => {
     tables[t] ??= [];
     const filters: ((r: any) => boolean)[] = [];
-    let op: 'select' | 'insert' | 'update' | 'delete' = 'select';
+    let op: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
+    let conflict: string[] = [];
     let payload: any = null; let returning = false;
     let sort: { c: string; asc: boolean } | null = null; let cap: number | null = null;
     const rows = () => tables[t].filter((r) => filters.every((f) => f(r)));
@@ -25,6 +26,11 @@ export function fakeDb() {
         }
         return { data: returning ? stored : list, error: null };
       }
+      if (op === 'upsert') { // onConflict: columnas separadas por coma (o la PK)
+        const list = Array.isArray(payload) ? payload : [payload]; const cols = conflict.length ? conflict : [PK[t] ?? 'id']; const stored: any[] = [];
+        for (const r of list) { const hit = tables[t].find((x) => cols.every((c) => x[c] === r[c])); if (hit) { Object.assign(hit, r); stored.push({ ...hit }); } else { const row = { ...r }; const k = PK[t] ?? 'id'; if (row[k] == null) row[k] = seq++; tables[t].push(row); stored.push({ ...row }); } }
+        return { data: returning ? stored : null, error: null };
+      }
       if (op === 'update') { const rs = rows(); rs.forEach((r) => Object.assign(r, payload)); return { data: returning ? rs.map((r) => ({ ...r })) : null, error: null }; }
       if (op === 'delete') { const rs = rows(); tables[t] = tables[t].filter((r) => !rs.includes(r)); return { data: null, error: null }; }
       let out = rows().map((r) => ({ ...r }));
@@ -36,6 +42,7 @@ export function fakeDb() {
       select: () => { if (op !== 'select') returning = true; return q; },
       insert: (p: any) => { op = 'insert'; payload = p; return q; },
       update: (p: any) => { op = 'update'; payload = p; return q; },
+      upsert: (p: any, o?: { onConflict?: string }) => { op = 'upsert'; payload = p; conflict = (o?.onConflict ?? '').split(',').map((x) => x.trim()).filter(Boolean); return q; },
       delete: () => { op = 'delete'; return q; },
       eq: (c: string, v: any) => { filters.push((r) => r[c] === v); return q; },
       neq: (c: string, v: any) => { filters.push((r) => r[c] !== v); return q; },

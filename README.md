@@ -27,7 +27,7 @@ Meteorito is a hackathon-stage prototype. To be upfront about what it is and is 
 - **Testnet only.** It runs on the Stellar testnet; there is no mainnet deployment and no real money moves.
 - **SINPE is simulated.** The SINPE Móvil payment step is simulated by a testnet treasury that funds the escrow; there is no real fiat on-ramp.
 - **Escrow via Trustless Work contracts.** Funds sit in a Trustless Work escrow contract on Stellar, but some contract roles (approver, release signer, platform/fee-bump) are operated by Meteorito's backend, so it is not fully trustless.
-- **Disputes are resolved manually.** A buyer can open a dispute on-chain; the team resolves it manually (see `scripts/resolve-dispute.ts`). There is no automated arbiter.
+- **Disputes are decided by a person.** A buyer can open a dispute on-chain; an admin decides it in the in-app panel (`/admin/disputas`, see `docs/disputas.md`) or with `scripts/resolve-dispute.ts`. Deterministic rules and an optional AI summary only *suggest*; auto-resolve exists behind a flag that is off by default.
 - **No IMEI/iCloud verification yet.** The IMEI/serial and device checks are declared by the seller and are not verified by Meteorito. Buyers must inspect the device on receipt before handing over the PIN.
 - **Drafted legal texts.** Terms and privacy policy are drafts pending legal review.
 
@@ -56,7 +56,7 @@ Meteorito is a hackathon-stage prototype. To be upfront about what it is and is 
 | Ops scripts | Dispute resolution, smoke checks | `scripts/` |
 | Tests | Unit + testnet integration tests | `scripts/ci/` |
 
-Signing roles (deployer, approver, release signer, platform/fee-bump, dispute resolver) are separate keys. The dispute resolver secret is never deployed to the server; it is only used locally by `scripts/resolve-dispute.ts`.
+Signing roles (deployer, approver, release signer, platform/fee-bump, dispute resolver) are separate keys. By default the dispute resolver secret is not deployed to the server: the admin panel records the decision as `pending_onchain` and shows the exact `scripts/resolve-dispute.ts` command to run locally. Setting `DISPUTE_RESOLVER_SECRET` on the server is an explicit opt-in that lets the panel execute the resolution itself (trade-off documented in `docs/disputas.md`).
 
 ## Getting started
 
