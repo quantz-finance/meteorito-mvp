@@ -79,4 +79,4 @@ Se usa el mismo `providers.ts` para detectar el proveedor al pegar ("Anuncio de 
 
 En todos los casos el link queda en la invitación (`invitations.source_url`, migración 015: solo exige `https://`) y el
 vendedor ve "Ver anuncio en {proveedor}" y "Vieron tu anuncio en {proveedor}". `/api/invites` valida el link con
-`checkListingUrl` (https público, sin IPs ni nombres internos, máx. 1000). Tests: `t66`, `e2e/invite-markets.spec.ts`.
+`checkListingUrl` (https público, sin IPs ni nombres internos, máx. 1000). Tests: `t68`, `e2e/invite-markets.spec.ts`.

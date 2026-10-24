@@ -1,4 +1,4 @@
-// (66) Comprar → Invitar a un vendedor con el link de CUALQUIER marketplace (no solo Facebook): mismo detector de
+// (68) Comprar → Invitar a un vendedor con el link de CUALQUIER marketplace (no solo Facebook): mismo detector de
 // proveedores que "Importar de un link". Facebook y Walmart se leen (nombre, precio, foto); Mercado Libre, Amazon,
 // Encuentra24… bloquean nuestros servidores: el link se acepta igual, sin error y SIN pedirlo, y va en la invitación.
 import { readFileSync } from 'node:fs';
