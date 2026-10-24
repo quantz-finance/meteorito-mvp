@@ -1,4 +1,4 @@
-// (84) Seguidores privados: quien entra a una tienda (/t/<usuario>) NUNCA ve quiénes la siguen (ni nombres, ni fotos, ni
+// (86) Seguidores privados: quien entra a una tienda (/t/<usuario>) NUNCA ve quiénes la siguen (ni nombres, ni fotos, ni
 //      identificadores, ni una lista). Solo el NÚMERO de seguidores, como texto que no se toca. Tampoco el dueño recibe la
 //      lista. El feed sigue mostrando las ventas cerradas ("X le vendió a Y") como antes. Sin red.
 import type { T } from './setup';

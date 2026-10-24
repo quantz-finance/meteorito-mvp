@@ -9,7 +9,7 @@
 //                                                 + sponsored: bloque Patrocinado (024), solo en la 1.ª página, [] si no hay
 //  POST { action:'feed', q?, verified?, cursor?, limit? } (X-Guest-Key y/o Bearer) -> el mismo feed con el algoritmo y el
 //                                                 impulso de los vendedores que SIGUE quien pide (022). Sin caché.
-//  GET  ?profile=<usuario>                        -> perfil público del vendedor (/t/<usuario>): tienda + verificado, ventas, followers (SOLO el número; nunca quiénes, ni al dueño: t84),
+//  GET  ?profile=<usuario>                        -> perfil público del vendedor (/t/<usuario>): tienda + verificado, ventas, followers (SOLO el número; nunca quiénes, ni al dueño: t86),
 //                                                 miembro desde, reseñas y WhatsApp (wa.me) SOLO si el vendedor lo puso.
 //  GET  ?seller_of=<pedido>                       -> vendedor de un pedido/link para la ficha /p/<slug>: nombre, foto,
 //                                                 identidad confirmada, estrellas y cómo salieron sus ventas (sin montos)

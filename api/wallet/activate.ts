@@ -4,7 +4,7 @@
 import { json, fail } from '../_lib/db';
 import { trackApiError } from '../_lib/analytics';
 import { env } from '../_lib/env';
-import { requireCavosUser, requireAddressProof, HttpError, issueSessionNonce, bindWalletIfFresh, requireBindProof } from '../_lib/auth';
+import { requireCavosUser, requireAddressProof, HttpError, issueSessionNonce, bindWalletIfFresh, requireBindProof, SESSION_EXPIRED } from '../_lib/auth';
 import { relinkWallet, cancelUnfundedListing } from '../_lib/relink';
 import { walletState, buildActivationTx, assertActivationConfig, validateActivationTx, signAndSubmitActivation } from '../_lib/wallet';
 
@@ -16,7 +16,7 @@ export default async function handler(req: any, res: any) {
     const user = await requireCavosUser(req);
     // step 'bind': solo con token FRESCO liga sub -> wallet si no hay binding (idempotente). Sin acción on-chain.
     if (req.body?.step === 'bind') {
-      if (user.renewed) throw Object.assign(new HttpError(401, 'Tu sesión venció. Vuelve a cargar la página para continuar.'), { code: 'session_expired' });
+      if (user.renewed) throw Object.assign(new HttpError(401, SESSION_EXPIRED), { code: 'session_expired' });
       const r = await bindWalletIfFresh(user, await requireBindProof(user, req.body?.proof));
       return json(res, 200, { bound: r !== 'other_wallet', relinkRequired: r === 'other_wallet' });
     }

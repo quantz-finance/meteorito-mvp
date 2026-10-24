@@ -6,7 +6,7 @@ import * as Font from 'expo-font';
 import { toast, ToastHost } from '@/components/ds';
 import { consumeUpdatedFlag, startUpdater } from '@/lib/updater';
 import { installViewport } from '@/lib/viewport';
-import { DarkTheme, Stack, ThemeProvider, usePathname, useSegments } from 'expo-router';
+import { DarkTheme, router, Stack, ThemeProvider, usePathname, useSegments } from 'expo-router';
 import { identify, initAnalytics, resetAnalytics, screen, track } from '@/lib/analytics';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -15,9 +15,12 @@ import { Platform } from 'react-native';
 import 'react-native-reanimated';
 
 import { CavosRoot, useAuth } from '@/lib/cavos';
-import { hasCavosTrace } from '@/lib/authStore';
+import { authStore, hasCavosTrace } from '@/lib/authStore';
 import { bindWalletOnLogin } from '@/lib/wallet';
-import { setReloginHandler } from '@/lib/api';
+import { setReloginHandler, setReloginWaiter } from '@/lib/api';
+import { needsRelogin } from '@/lib/cavosSession';
+import { DEMO_ENABLED, demoAuthNow, demoLoginOpen } from '@/lib/demo';
+import { markReloginPending, rememberRoute, takeReturnRoute } from '@/lib/returnTo';
 import { DemoBadge } from '@/components/DemoBadge';
 import Welcome from '@/components/Welcome';
 import { Brand } from '@/constants/Colors';
@@ -93,6 +96,27 @@ function Gate() {
   useLastSeenPing(auth, authed); // última conexión (estilo P2P): al abrir y al usar, máx. 1 vez cada 5 min
   // session_relogin_required: abrir el login de Cavos SIN logout (la llave se queda en este dispositivo).
   useEffect(() => { setReloginHandler((a) => a.openLogin()); return () => setReloginHandler(null); }, []);
+  // ...y al volver a entrar, la acción que falló se reintenta una vez sola (lib/api.ts): el login de Cavos se abre ENCIMA de
+  // la pantalla, así que el formulario (y su borrador) siguen ahí.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    setReloginWaiter({
+      isOpen: () => (DEMO_ENABLED ? demoLoginOpen() : !!document.querySelector('.cavos-root, [aria-modal="true"]')),
+      current: () => (DEMO_ENABLED ? demoAuthNow() : authStore.get().bridged ?? auth),
+    });
+    return () => setReloginWaiter(null);
+  }, []);
+  // Misma pantalla tras "Entrar de nuevo": se guarda la ruta con sesión; si la sesión se pierde (PWA reabierta con el
+  // token vencido) y la persona vuelve a entrar, regresa a donde estaba.
+  const relogin = !authed && !isPublic && needsRelogin(auth.error);
+  useEffect(() => { if (relogin) markReloginPending(); }, [relogin]);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !authed) return;
+    const here = window.location.pathname + window.location.search;
+    const back = takeReturnRoute(window.location.pathname);
+    if (back && back !== here) { router.replace(back as any); return; }
+    if (!isPublic) rememberRoute(here);
+  }, [authed, pathname]);
   // Con sesión previa en este dispositivo, el splash (mascota) sigue hasta que Cavos termina de cargar la cuenta:
   // así no parpadea la bienvenida antes de entrar. Sin sesión, o en links públicos, se quita al primer render.
   const [trace] = useState(() => Platform.OS === 'web' && !isPublic && hasCavosTrace());
