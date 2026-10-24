@@ -10,18 +10,22 @@ import { DEMO_ENABLED } from './demo';
 import { hasGuestKey } from './guest';
 import type { MeteoritoAuth } from './types';
 import { CHAT_BADGE_MS, type ChatRole } from '../api/_lib/chatText';
-export { CHAT_MAX, chatPollDelay, sharesContact, type ChatRole } from '../api/_lib/chatText';
+export { CHAT_MAX, chatPollDelay, itemCardRows, sharesContact, type ChatRole } from '../api/_lib/chatText';
 
 type Auth = Pick<MeteoritoAuth, 'getAuthToken'> & Partial<MeteoritoAuth>;
-export interface ChatMsg { id: number; sender: ChatRole; body: string; client_id: string | null; created_at: string; pending?: 'sending' | 'failed' }
+export interface ChatMsg { id: number; sender: ChatRole; body: string; client_id: string | null; created_at: string; pending?: 'sending' | 'failed';
+  /** Tarjeta del producto pegada a este mensaje (030). */ item_slug?: string | null }
+/** Datos públicos del producto de una tarjeta del hilo. */
+export interface ChatProduct { slug: string; title: string; photo: string | null; price_crc: number | null }
 export interface ChatConversation {
   token: string; kind: 'store' | 'order'; subject: string | null; item_photo: string | null;
   item: { slug: string; price_crc: number | null } | null; order: { slug: string; status: string; price_crc: number | null } | null; paid: boolean;
   other: { name: string; store_slug: string | null; avatar_url: string | null };
 }
 export interface ChatRead { role: ChatRole; blocked: boolean; other_read_at: string | null; other_typing: boolean; has_more: boolean; messages: ChatMsg[]; conversation?: ChatConversation;
+  /** Productos de las tarjetas de estos mensajes. */ products?: Record<string, ChatProduct>;
   /** Solo con full y para el vendedor: false si hay una compra en curso o una disputa abierta entre los dos. */ can_block?: boolean }
-export interface ChatListItem { token: string; role: ChatRole; kind: 'store' | 'order'; order_slug: string | null; subject: string | null; photo: string | null; name: string; last_preview: string; last_sender: ChatRole | null; last_message_at: string; unread: boolean; blocked: boolean }
+export interface ChatListItem { token: string; role: ChatRole; kind: 'store' | 'order'; order_slug: string | null; item_slug?: string | null; subject: string | null; photo: string | null; name: string; last_preview: string; last_sender: ChatRole | null; last_message_at: string; unread: boolean; blocked: boolean }
 
 const call = <T,>(auth: Auth, as: ChatRole, body: Record<string, unknown>) =>
   (as === 'seller' ? api<T>(auth as MeteoritoAuth, '/api/store', body) : guestApi<T>(auth, '/api/store', body));
@@ -38,12 +42,13 @@ export function useChatAvailable(): boolean {
   return v;
 }
 
-export const openChat = (auth: Auth, as: ChatRole, target: { store_slug: string; item_slug?: string } | { order_slug: string }) =>
+export const openChat = (auth: Auth, as: ChatRole, target: { store_slug: string; item_slug?: string } | { item_slug: string } | { order_slug: string }) =>
   call<{ token: string; role: ChatRole }>(auth, as, { action: 'chat_open', ...target });
 export const readChat = (auth: Auth, as: ChatRole, token: string, o: { after?: number; before?: number; typing?: boolean; full?: boolean } = {}) =>
   call<ChatRead>(auth, as, { action: 'chat_get', token, ...o });
-export const sendChat = (auth: Auth, as: ChatRole, token: string, body: string, client_id: string) =>
-  call<{ message: ChatMsg }>(auth, as, { action: 'chat_send', token, body, client_id });
+/** item_slug: el producto con el que se abrió desde la ficha (?p=); el servidor decide si el mensaje lleva su tarjeta. */
+export const sendChat = (auth: Auth, as: ChatRole, token: string, body: string, client_id: string, item_slug?: string | null) =>
+  call<{ message: ChatMsg }>(auth, as, { action: 'chat_send', token, body, client_id, ...(item_slug ? { item_slug } : {}) });
 export const listChats = (auth: Auth, as: ChatRole) => call<{ unread: number; conversations: ChatListItem[] }>(auth, as, { action: 'chat_list', as });
 export const blockChat = (auth: Auth, token: string, blocked: boolean) => call<{ blocked: boolean }>(auth, 'seller', { action: 'chat_block', token, blocked });
 export const reportChat = (auth: Auth, as: ChatRole, token: string, reason: string, detail?: string) =>
