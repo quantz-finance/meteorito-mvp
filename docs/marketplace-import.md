@@ -22,19 +22,27 @@ moneda, descripción y fotos; pedimos la versión JPEG quitando `f_auto`, que si
 
 ## Proveedores
 
-| Proveedor | Dominios | Estado | Notas |
+Probados el 2026-10-24 **desde producción** (IPs de Vercel). Desde una IP residencial varios funcionaban (Encuentra24,
+Amazon MX, AliExpress parcial), pero lo que cuenta es lo que ve el servidor:
+
+| Proveedor | Dominios | Estado | Qué vio el servidor |
 |---|---|---|---|
 | Facebook Marketplace | facebook.com, fb.me | ok | importador existente |
-| Mercado Libre | todos los ccTLD, articulo.*, mercadolivre.com.br, meli.la | ok* | desde IPs de datacenter redirige a `/gz/account-verification`; la API pide token. Si el muro aparece, el vendedor ve "No pudimos leer ese link; súbelo con la cámara." |
-| Encuentra24 | encuentra24.com | ok | `f_auto` sirve AVIF (el bucket no lo acepta): pedimos la foto sin `f_auto` y llega JPEG |
-| Amazon | .com, .com.mx, .com.br, a.co, amzn.to, amzn.eu | ok | con UA de navegador móvil |
-| AliExpress | aliexpress.* | parcial | título y foto por Open Graph; sin precio (lo completa el vendedor) |
-| Walmart | walmart.co.cr, walmart.com.mx | ok (CR) | CR por JSON-LD; MX respondió `/blocked` en las pruebas |
+| Walmart CR | walmart.co.cr | ok | JSON-LD: nombre, ₡, foto |
+| Cualquier otra tienda https | — | genérico | JSON-LD → OG → microdata (walmart.com.mx cae aquí y responde `/blocked`) |
+| Mercado Libre | todos los ccTLD, articulo.*, mercadolivre.com.br, meli.la | fuera | redirige a `/gz/account-verification`; la API pide token |
+| Encuentra24 | encuentra24.com | fuera | HTTP de error a IPs de datacenter (desde IP residencial: 200) |
+| Amazon | .com, .com.mx, .com.br, a.co, amzn.to, amzn.eu | fuera | captcha (`/errors/validateCaptcha`, título "Amazon.com.mx") |
+| AliExpress | aliexpress.* | fuera | página sin datos del producto |
 | Shopee | br, mx, co, cl | fuera | SPA sin datos en el HTML |
 | OLX | br | fuera | Cloudflare 403 |
 | Falabella | falabella.com* | fuera | 403 |
 | Temu | temu.com | fuera | SPA sin datos en el HTML |
-| Cualquier otro https | — | genérico | JSON-LD → OG → microdata |
+
+Al pegar un link de un proveedor "fuera" la hoja lo dice de una vez ("Todavía no podemos leer anuncios de X; súbelo con
+la cámara.") y no se intenta. Los extractores de Encuentra24, Amazon y Mercado Libre se quedan con sus tests de fixtures
+(`ignoreStatus` solo en tests) por si se reabren (API oficial, acuerdo o salida por otra red).
+Las fallas guardan un código de diagnóstico (`wall`, `http_403`, `unreadable`…), sin datos del vendedor.
 
 Los proveedores "fuera" responden `provider_blocked` sin hacer ninguna llamada de red.
 

@@ -81,7 +81,7 @@ test.describe('Vendedor (demo)', () => {
     await btn.click();
     const input = page.getByLabel('Link del anuncio');
     await expect(input).toBeVisible();
-    await expect(page.getByTestId('import-providers')).toContainText('Facebook, Mercado Libre, Encuentra24 y más');
+    await expect(page.getByTestId('import-providers')).toContainText('Facebook, Walmart y más');
     await expectInputs16(page);
     await input.fill('https://www.facebook.com/share/18HroUrSak/?mibextid=wwXIfr');
     await page.waitForTimeout(600); // animación de la hoja
@@ -133,16 +133,20 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
   });
 
-  test('VEN-09 importar de Mercado Libre: detecta el proveedor al pegar, skeleton mientras lee y vista previa editable', async ({ page }, info) => {
+  test('VEN-09 importar de un link: Mercado Libre avisa que no se puede leer; tienda genérica con skeleton y vista previa editable', async ({ page }, info) => {
     await open(page, '/vender', 'seller', true);
     await page.getByRole('button', { name: 'Importar de un link' }).click();
+    // Mercado Libre no deja leer sus anuncios desde nuestros servidores: se avisa al pegar y no se intenta
     await page.getByLabel('Link del anuncio').fill('https://articulo.mercadolibre.com.mx/MLM-1770588108-bicicleta-gravel-andes-mtb-de-montana-r29-24v-shimano-altus-_JM');
-    await expect(page.getByTestId('import-provider')).toContainText('Anuncio de Mercado Libre');
+    await expect(page.getByTestId('import-provider')).toContainText('Todavía no podemos leer anuncios de Mercado Libre; súbelo con la cámara.');
+    await expect(page.getByRole('button', { name: /Importar$/ })).toBeDisabled();
     await expectInputs16(page);
     if (info.project.name === 'webkit-iphone-se') { await page.waitForTimeout(500); await page.screenshot({ path: 'test-results/import-1-mercadolibre.png' }); }
+    await page.getByLabel('Link del anuncio').fill('https://www.bicishop.com.mx/p/gravel-andes-r29');
+    await expect(page.getByTestId('import-provider')).toContainText('Anuncio de bicishop.com.mx');
     await page.getByRole('button', { name: /Importar$/ }).click();
-    await expect(page.getByTestId('import-skeleton')).toContainText('Leyendo tu anuncio de Mercado Libre');
-    await expect(page.getByText('Importado de Mercado Libre')).toBeVisible();
+    await expect(page.getByTestId('import-skeleton')).toContainText('Leyendo tu anuncio de bicishop.com.mx');
+    await expect(page.getByText('Importado de bicishop.com.mx')).toBeVisible();
     await expect(page.getByText(/Sugerido de MX\$7,238\.99: confírmalo/)).toBeVisible();
     const name = page.getByPlaceholder('Ej. iPhone 13 de 128 GB');
     await expect(name).toHaveValue('Bicicleta de montaña aro 29');

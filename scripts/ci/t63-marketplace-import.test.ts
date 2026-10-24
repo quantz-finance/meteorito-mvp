@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import { checkListingUrl, providerForHost, listingSource, IMPORT_FAILED, PROVIDERS, SUPPORTED } from '../../api/_lib/importers/providers';
 import { checkUrl, isPublicIp, safeGet, ImportNetError, type NetDeps, type RawResponse } from '../../api/_lib/importers/net';
 import { parseFor, suggestCrc, cutDescription, DESC_MAX } from '../../api/_lib/importers/parse';
-import { importListing, __setImportNetForTests, isImageBytes } from '../../api/_lib/importers';
+import { importListing, __setImportNetForTests, isImageBytes, siteOnlyTitle } from '../../api/_lib/importers';
 import { importNotice, importProps, supportedLabel, detectProvider } from '../../lib/listingImport';
 import { installTestJwks, res, token } from './jwt';
 import { __setDbForTests } from '../../api/_lib/db';
@@ -54,7 +54,7 @@ export async function run(t: T) {
   t.check('Mercado Libre: todos los dominios + articulo.* + .com.br (mercadolivre) + meli.la', [...meli, 'https://produto.mercadolivre.com.br/MLB-1-x', 'https://www.mercadolibre.com.mx/p/MLM1', 'https://meli.la/2AbCd'].every((u) => prov(u) === 'mercadolibre'));
   t.check('Encuentra24 (CR y Centroamérica)', ['https://www.encuentra24.com/costa-rica-es/x/1', 'https://www.encuentra24.com/panama-es/x/2', 'https://encuentra24.com/guatemala-es/x/3'].every((u) => prov(u) === 'encuentra24'));
   t.check('Amazon: .com, .com.mx, .com.br, a.co y amzn.to', ['https://www.amazon.com/dp/B0', 'https://www.amazon.com.mx/x/dp/B0', 'https://www.amazon.com.br/dp/B0', 'https://a.co/d/abc', 'https://amzn.to/3x'].every((u) => prov(u) === 'amazon'));
-  t.check('AliExpress, Walmart (cr, mx), Facebook', prov('https://es.aliexpress.com/item/1.html') === 'aliexpress' && prov('https://www.walmart.co.cr/x/p') === 'walmart' && prov('https://super.walmart.com.mx/ip/x/1') === 'walmart' && prov('https://www.facebook.com/marketplace/item/1/') === 'facebook');
+  t.check('AliExpress, Walmart CR, Facebook (Walmart MX queda genérico)', prov('https://es.aliexpress.com/item/1.html') === 'aliexpress' && prov('https://www.walmart.co.cr/x/p') === 'walmart' && prov('https://super.walmart.com.mx/ip/x/1') === 'web' && prov('https://www.facebook.com/marketplace/item/1/') === 'facebook');
   t.check('Shopee, OLX, Falabella y Temu: detectados pero marcados "blocked" (documentado)', ['shopee', 'olx', 'falabella', 'temu'].every((id) => PROVIDERS.find((p) => p.id === id)?.status === 'blocked') && providerForHost('shopee.com.br')?.id === 'shopee');
   t.check('otro sitio https -> fallback genérico "web"; texto alrededor y sin https:// se acepta', prov('https://tienda.example.cr/p/1') === 'web' && prov('Mira esto: encuentra24.com/costa-rica-es/x/1 ¿te sirve?') === 'encuentra24');
   const rejected = ['http://localhost/x', 'https://127.0.0.1/', 'https://10.0.0.1/admin', 'https://[::1]/', 'javascript:alert(1)', 'ftp://x.com/a', 'https://user:pw@tienda.com/', 'https://tienda.com:8080/', 'https://router.local/', 'https://metadata.google.internal/', 'hola', ''];
@@ -125,18 +125,34 @@ export async function run(t: T) {
   const E24 = 'https://www.encuentra24.com/costa-rica-es/anuncios-clasificados-deportes-y-ocio-bicicletas/giant-talon-0/32518390';
   const photoRoutes = Object.fromEntries(e24.images.map((u) => [u, { body: JPEG, type: 'image/jpeg' }]));
   n = fakeNet({ 'www.encuentra24.com': PUB, 'photos.encuentra24.com': ['151.101.9.9'] }, { [E24 + '?utm_source=whatsapp']: { body: fx('encuentra24-giant-talon.html') }, ...photoRoutes });
-  let r = await importListing(E24 + '?utm_source=whatsapp#fotos', { rate: 505, net: n.net });
+  let r = await importListing(E24 + '?utm_source=whatsapp#fotos', { rate: 505, net: n.net, ignoreStatus: true });
   t.check('Encuentra24 completo: success, 4 fotos JPEG (sin f_auto, que sirve AVIF) -> data URL, source_url sin query', r.result === 'success' && r.provider === 'encuentra24' && r.photos.length === 4 && r.photos.every((p) => p.startsWith('data:image/jpeg;base64,'))
     && r.source_url === E24 && r.price_crc === 300000 && !r.converted, JSON.stringify({ ...r, photos: r.photos.length }));
   t.check('bytes de imagen verificados (no basta el content-type)', !isImageBytes(AVIF) && isImageBytes(JPEG) && !isImageBytes(Buffer.from('<html>hola</html>')));
   n = fakeNet({ 'a.co': PUB, 'www.amazon.com.mx': ['151.101.3.3'], 'm.media-amazon.com': ['151.101.4.4'] }, { 'https://a.co/d/xyz': { status: 301, location: 'https://www.amazon.com.mx/KUBOR/dp/B0BDMYQ3DH?ref=x' },
     'https://www.amazon.com.mx/KUBOR/dp/B0BDMYQ3DH?ref=x': { body: fx('amazon-mx-kubor.html') }, ...Object.fromEntries(amz.images.map((u) => [u, { body: JPEG, type: 'image/jpeg' }])) });
-  r = await importListing('https://a.co/d/xyz', { rate: 505, net: n.net });
+  r = await importListing('https://a.co/d/xyz', { rate: 505, net: n.net, ignoreStatus: true });
   t.check('link corto a.co -> redirección validada a Amazon MX; precio MXN convertido como sugerencia', r.provider === 'amazon' && r.source_url === 'https://www.amazon.com.mx/KUBOR/dp/B0BDMYQ3DH' && r.converted && r.price_crc === 197400 && r.photos.length === 4);
   n = fakeNet({ 'articulo.mercadolibre.com.mx': PUB, 'www.mercadolibre.com.mx': PUB }, { 'https://articulo.mercadolibre.com.mx/MLM-1-x-_JM': { location: 'https://www.mercadolibre.com.mx/gz/account-verification?go=x' },
     'https://www.mercadolibre.com.mx/gz/account-verification?go=x': { body: fx('mercadolibre-verificacion.html') } });
-  r = await importListing('https://articulo.mercadolibre.com.mx/MLM-1-x-_JM', { rate: 505, net: n.net });
+  r = await importListing('https://articulo.mercadolibre.com.mx/MLM-1-x-_JM', { rate: 505, net: n.net, ignoreStatus: true });
   t.check('Mercado Libre con muro de verificación (lo que ve un servidor) -> failed "wall" y mensaje amable', r.result === 'failed' && r.code === 'wall' && r.message === IMPORT_FAILED && r.provider === 'mercadolibre');
+  // Producción (IPs de Vercel, 2026-10-24): Mercado Libre muro, Encuentra24 403, Amazon captcha, AliExpress vacío -> excluidos sin red.
+  for (const u of ['https://articulo.mercadolibre.com.mx/MLM-1-x-_JM', E24, 'https://www.amazon.com.mx/KUBOR/dp/B0BDMYQ3DH', 'https://a.co/d/xyz', 'https://es.aliexpress.com/item/1.html']) {
+    n = fakeNet({}, {}); r = await importListing(u, { rate: 505, net: n.net });
+    t.check(`excluido en producción sin tocar la red: ${new URL(u).hostname}`, r.result === 'failed' && r.code === 'provider_blocked' && r.message === IMPORT_FAILED && n.conns.length === 0, JSON.stringify(r.code));
+  }
+  t.check('etiqueta y estados: solo se anuncian los que funcionan desde el servidor (Facebook, Walmart CR)', SUPPORTED.map((p) => p.id).join() === 'facebook,walmart' && supportedLabel() === 'Facebook, Walmart y más');
+  const AMZ_CAPTCHA = '<html><head><title>Amazon.com.mx</title></head><body><form method="get" action="/errors/validateCaptcha"><input name="amzn"></form></body></html>';
+  n = fakeNet({ 'tienda.example.mx': PUB }, { 'https://tienda.example.mx/p/1': { body: AMZ_CAPTCHA } });
+  r = await importListing('https://tienda.example.mx/p/1', { rate: 505, net: n.net });
+  t.check('captcha (lo que Amazon le da a un servidor) -> failed "wall", nunca "Amazon.com.mx" como nombre', r.result === 'failed' && r.code === 'wall' && r.title === null, JSON.stringify(r));
+  n = fakeNet({ 'tienda.example.mx': PUB }, { 'https://tienda.example.mx/p/2': { body: '<html><head><meta property="og:title" content="tienda.example.mx"></head></html>' } });
+  r = await importListing('https://tienda.example.mx/p/2', { rate: 505, net: n.net });
+  t.check('título que es solo el nombre del sitio -> no cuenta (failed unreadable)', r.result === 'failed' && r.code === 'unreadable' && siteOnlyTitle('Amazon.com.mx', 'https://www.amazon.com.mx/x', 'Amazon') && siteOnlyTitle('Walmart', 'https://www.walmart.co.cr/x', 'Walmart') && !siteOnlyTitle('Bicicleta Trek 29', 'https://x.cr/p', 'x'), JSON.stringify(r));
+  n = fakeNet({ 'tienda.example.mx': PUB }, { 'https://tienda.example.mx/p/3': { status: 403, body: 'no' } });
+  r = await importListing('https://tienda.example.mx/p/3', { rate: 505, net: n.net });
+  t.check('sitio que rechaza al servidor -> code http_403 (diagnóstico, sin datos del vendedor)', r.result === 'failed' && r.code === 'http_403', JSON.stringify(r.code));
   n = fakeNet({}, {});
   r = await importListing('https://sp.olx.com.br/sao-paulo/ciclismo/bici-123', { rate: 505, net: n.net });
   t.check('proveedor bloqueado (OLX) -> failed sin tocar la red', r.result === 'failed' && r.code === 'provider_blocked' && n.conns.length === 0);
@@ -150,21 +166,22 @@ export async function run(t: T) {
   // --- Endpoint /api/store import_listing
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
   __setDbForTests(fakeDb() as any);
-  n = fakeNet({ 'www.encuentra24.com': PUB, 'photos.encuentra24.com': ['151.101.9.9'] }, { [E24]: { body: fx('encuentra24-giant-talon.html') }, ...photoRoutes });
+  const WCR = 'https://www.walmart.co.cr/vino-bicicleta-cono-sur-merlot-750ml/p'; // el que sí funcionó desde producción
+  n = fakeNet({ 'www.walmart.co.cr': PUB, 'walmartcr.vtexassets.com': ['151.101.9.9'] }, { [WCR]: { body: fx('walmart-cr-vino.html') }, ...Object.fromEntries(wcr.images.map((u) => [u, { body: JPEG, type: 'image/jpeg' }])) });
   __setImportNetForTests(n.net);
   const call = async (body: any, o: { guest?: string; tok?: string; ip?: string } = {}) => { const rr = res(); await (store as any)({ method: 'POST', headers: { ...(o.guest ? { 'x-guest-key': o.guest } : {}), ...(o.tok ? { authorization: `Bearer ${o.tok}` } : {}), 'x-forwarded-for': o.ip ?? '203.0.113.50' }, body, query: {} }, rr); return rr as any; };
   try {
-    let e = await call({ action: 'import_listing', url: E24 });
+    let e = await call({ action: 'import_listing', url: WCR });
     t.check('import_listing sin sesión ni llave -> 401', e.code === 401, `${e.code}`);
     const tok = await token({ sub: 'seller-imp-63' });
     e = await call({ action: 'import_listing', url: 'http://169.254.169.254/latest/meta-data/' }, { tok });
     t.check('import_listing con link interno -> 400 import_url_invalid', e.code === 400 && e.body?.code === 'import_url_invalid', JSON.stringify(e.body));
-    e = await call({ action: 'import_listing', url: E24 }, { tok });
-    t.check('import_listing vendedor -> 200 con provider, source_url y fotos', e.code === 200 && e.body.provider === 'encuentra24' && e.body.photos.length === 4 && e.body.source_url === E24);
+    e = await call({ action: 'import_listing', url: WCR }, { tok });
+    t.check('import_listing vendedor -> 200 con provider, source_url y fotos', e.code === 200 && e.body.provider === 'walmart' && e.body.price_crc === 8500 && e.body.photos.length === wcr.images.slice(0, 4).length && e.body.photos.length >= 1 && e.body.source_url === WCR, JSON.stringify({ ...e.body, photos: e.body.photos?.length }));
     const pu: (string | null)[] = e.body.photo_urls ?? [];
-    t.check('fotos guardadas por el servidor (#68): photo_urls en orden, válidas solo con ese source_url y ese vendedor', pu.length === 4 && pu.every((u) => !!u && listingPhotoOk(u, 'seller-imp-63', e.body.source_url))
-      && !listingPhotoOk(pu[0], 'seller-imp-63', 'https://www.encuentra24.com/otro') && !listingPhotoOk(pu[0], 'otro-vendedor', e.body.source_url), JSON.stringify(pu));
-    let last = 0; for (let i = 0; i < 9; i++) last = (await call({ action: 'import_listing', url: E24 }, { tok })).code;
+    t.check('fotos guardadas por el servidor (#68): photo_urls en orden, válidas solo con ese source_url y ese vendedor', pu.length === e.body.photos.length && pu.length >= 1 && pu.every((u) => !!u && listingPhotoOk(u, 'seller-imp-63', e.body.source_url))
+      && !listingPhotoOk(pu[0], 'seller-imp-63', 'https://www.walmart.co.cr/otro/p') && !listingPhotoOk(pu[0], 'otro-vendedor', e.body.source_url), JSON.stringify(pu));
+    let last = 0; for (let i = 0; i < 9; i++) last = (await call({ action: 'import_listing', url: WCR }, { tok })).code;
     t.check('límite compartido con Facebook (8/min por identidad) -> 429', last === 429, `${last}`);
   } finally { __setImportNetForTests(null); }
 
