@@ -18,8 +18,8 @@ import { followerCount } from './follows';
 import { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, parseVerified, searchTokens, FEED_DEFAULT, FEED_MAX, type VerifiedFilter } from './feedText';
 export { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, parseVerified, searchTokens };
 
-interface Seller { sub: string; store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; listed: boolean; rating_avg: number | null; rating_count: number }
-const titleOf = (o: any) => `${o.brand ?? ''} ${o.model ?? ''}`.trim() || 'Artículo';
+export interface Seller { sub: string; store_slug: string; display_name: string; avatar_url: string | null; verified: boolean; listed: boolean; rating_avg: number | null; rating_count: number }
+export const titleOf = (o: any) => `${o.brand ?? ''} ${o.model ?? ''}`.trim() || 'Artículo';
 
 /** seller_profiles con fallback: listed_in_feed (020) y avatar_url (014) pueden no existir todavía. */
 async function profilesBy(apply: (q: any) => any): Promise<any[]> {
@@ -31,7 +31,7 @@ async function profilesBy(apply: (q: any) => any): Promise<any[]> {
   }
   return [];
 }
-async function sellersFor(subs: string[]): Promise<Map<string, Seller>> {
+export async function sellersFor(subs: string[]): Promise<Map<string, Seller>> {
   const out = new Map<string, Seller>();
   if (!subs.length) return out;
   const rows = await profilesBy((q) => q.in('sub', subs));
@@ -46,7 +46,7 @@ async function sellersFor(subs: string[]): Promise<Map<string, Seller>> {
   }
   return out;
 }
-const publicSeller = (s: Seller) => ({ store_slug: s.store_slug, display_name: s.display_name, avatar_url: s.avatar_url, verified: s.verified, rating_avg: s.rating_avg, rating_count: s.rating_count });
+export const publicSeller = (s: Seller) => ({ store_slug: s.store_slug, display_name: s.display_name, avatar_url: s.avatar_url, verified: s.verified, rating_avg: s.rating_avg, rating_count: s.rating_count });
 
 export interface FeedQuery { q?: unknown; cursor?: unknown; limit?: unknown; verified?: unknown;
   /** 'rank' = algoritmo (api/_lib/feedRank.ts); 'new' o ausente = lo más nuevo primero (clientes viejos). */ order?: unknown;

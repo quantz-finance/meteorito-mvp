@@ -56,6 +56,17 @@ export const COPY = {
     done: (name: string) => `Ahora sigues a ${name}. Verás primero lo nuevo que publique.`,
     privateNote: 'Solo se muestra cuántos te siguen, nunca quiénes.',
   },
+  // Publicidad identificable (Ley 7472): siempre con la etiqueta "Patrocinado" y en su propio bloque.
+  sponsored: {
+    label: 'Patrocinado',
+    a11y: (title: string) => `Patrocinado: ${title}`,
+    infoA11y: 'Qué significa Patrocinado',
+    infoTitle: 'Productos patrocinados',
+    infoText: 'Estos vendedores pagaron para mostrar sus productos en este bloque. Lo demás del feed no es publicidad. Comprar un producto patrocinado funciona igual: tu pago queda en custodia hasta que recibas.',
+    ok: 'Entendido',
+    promote: 'Promocionar este producto',
+    promoteText: 'Pronto podrás promocionar tus productos: aparecerán en el bloque Patrocinado de Comprar, donde los ven más compradores. Por ahora no se cobra nada y no tienes que hacer nada.',
+  },
   myStore: { confirmIdentity: 'Confirma tu identidad' },
   store: {
     share: 'Compartir perfil', shareMine: 'Compartir mi tienda',
