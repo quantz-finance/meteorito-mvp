@@ -1,8 +1,8 @@
 name: E2E
 # Playwright contra el build web en modo demo y el build real con API simulado (sin Cavos, sin backend, sin testnet, sin secretos).
-# Mismos tests que `npm run test:e2e` (todos los proyectos de playwright.config.ts), repartidos en 6 shards en
-# paralelo (--shard). El job final `e2e` junta los reportes y es el único check a mirar/requerir: falla si falla
-# cualquier shard.
+# Mismos tests que `npm run test:e2e` (todos los proyectos de playwright.config.ts):
+#   build (demo | mock, en paralelo, una sola vez) -> 6 shards en paralelo (--shard) -> job final `e2e`.
+# El job final `e2e` junta los reportes y es el único check a mirar/requerir: falla si falla cualquier job previo.
 #
 # Navegadores: los shards corren dentro de la imagen oficial de Playwright (misma versión que package-lock.json), que
 # ya trae WebKit + Chromium y todas sus dependencias del sistema. Así no se ejecuta `playwright install --with-deps`,
@@ -39,9 +39,47 @@ jobs:
       - id: v
         run: echo "pw=$(jq -r '.packages["node_modules/@playwright/test"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
 
+  # Los dos builds web una sola vez, cada uno en su runner (en el mismo runner compiten por CPU: ~170 s c/u vs ~85 s).
+  build:
+    name: e2e-build (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: demo
+            cmd: npm run -s demo:build
+            out: dist-demo
+          - target: mock
+            cmd: node scripts/e2e/build-mock.mjs
+            out: dist-e2e
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Cache node_modules
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: nm-host-node22-${{ hashFiles('package-lock.json', 'scripts/patch-cavos-kit.mjs') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Build ${{ matrix.out }}
+        run: ${{ matrix.cmd }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out }}
+          path: ${{ matrix.out }}/
+          include-hidden-files: true
+          retention-days: 1
+
   shard:
     name: e2e-shard (${{ matrix.shard }}/6)
-    needs: prep
+    needs: [prep, build]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     container:
@@ -68,18 +106,14 @@ jobs:
       - if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci
 
-      # Los dos builds web (demo y real con API simulado) en paralelo. TMPDIR separado = caché de Metro separada
-      # (ambos usan --clear).
-      - name: Builds web (dist-demo + dist-e2e, en paralelo)
-        run: |
-          mkdir -p /tmp/metro-demo /tmp/metro-mock /tmp/builds
-          ( TMPDIR=/tmp/metro-demo npm run -s demo:build > /tmp/builds/demo.log 2>&1; echo $? > /tmp/builds/demo.exit ) &
-          ( TMPDIR=/tmp/metro-mock node scripts/e2e/build-mock.mjs > /tmp/builds/mock.log 2>&1; echo $? > /tmp/builds/mock.exit ) &
-          wait
-          for b in demo mock; do
-            echo "::group::build $b (exit $(cat /tmp/builds/$b.exit))"; tail -n 40 /tmp/builds/$b.log; echo "::endgroup::"
-          done
-          [ "$(cat /tmp/builds/demo.exit)" = 0 ] && [ "$(cat /tmp/builds/mock.exit)" = 0 ]
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-demo
+          path: dist-demo
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-e2e
+          path: dist-e2e
 
       - name: E2E shard ${{ matrix.shard }}/6 (API + iPhone SE + iPhone 13 + Chromium + build real con API simulado)
         run: npx playwright test --shard=${{ matrix.shard }}/6 --reporter=list,blob
@@ -94,16 +128,14 @@ jobs:
         if: failure()
         with:
           name: test-results-shard-${{ matrix.shard }}
-          path: |
-            test-results/
-            /tmp/builds/*.log
+          path: test-results/
           retention-days: 7
 
   # Check único y estable: se llama `e2e` como antes (branch protection / costumbre).
   e2e:
     name: e2e
     if: ${{ always() }}
-    needs: [prep, shard]
+    needs: [prep, build, shard]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -130,5 +162,5 @@ jobs:
           retention-days: 7
       - name: Resultado
         run: |
-          echo "prep: ${{ needs.prep.result }} · shards: ${{ needs.shard.result }}"
-          [ "${{ needs.prep.result }}" = success ] && [ "${{ needs.shard.result }}" = success ]
+          echo "prep: ${{ needs.prep.result }} · build: ${{ needs.build.result }} · shards: ${{ needs.shard.result }}"
+          [ "${{ needs.prep.result }}" = success ] && [ "${{ needs.build.result }}" = success ] && [ "${{ needs.shard.result }}" = success ]
