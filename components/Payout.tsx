@@ -1,7 +1,8 @@
 // "Arma un gran perfil": progreso del perfil + cuenta IBAN para cobrar + WhatsApp de contacto (opcional). Se carga diferido (React.lazy) desde
 // Mi cuenta y Mi tienda: no pesa en la bienvenida ni en /p/.
+import { COPY } from '@/lib/copy';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ErrorText, haptic, Icon, PrimaryButton, Sheet, Skeleton, toast } from '@/components/ds';
 import { ui } from '@/components/ui';
 import { pressTransition } from '@/constants/motion';
@@ -69,8 +70,8 @@ export function ProfileCard({ products = 0 }: { products?: number }) {
       <PayoutRow payout={payout} error={payoutErr} onPress={() => setOpen(true)} />
       <PayoutSheet visible={open} onClose={() => setOpen(false)} payout={payout ?? null} onSaved={(p) => { setPayout(p); setOpen(false); }} />
       {store ? <ContactRow phone={store.contact_phone ?? null} onPress={() => setContactOpen(true)} /> : null}
-      <ContactSheet visible={contactOpen} onClose={() => setContactOpen(false)} phone={store?.contact_phone ?? null}
-        onSaved={(st) => { setStore((cur) => (cur ? { ...cur, contact_phone: st.contact_phone ?? null } : st)); setContactOpen(false); }} />
+      <ContactSheet visible={contactOpen} onClose={() => setContactOpen(false)} phone={store?.contact_phone ?? null} isPublic={!!store?.whatsapp_public}
+        onSaved={(st) => { setStore((cur) => (cur ? { ...cur, contact_phone: st.contact_phone ?? null, whatsapp_public: !!st.whatsapp_public } : st)); setContactOpen(false); }} />
     </View>
   );
 }
@@ -92,15 +93,20 @@ function ContactRow({ phone, onPress }: { phone: string | null; onPress: () => v
   );
 }
 
-function ContactSheet({ visible, onClose, phone, onSaved }: { visible: boolean; onClose: () => void; phone: string | null; onSaved: (s: Store) => void }) {
+function ContactSheet({ visible, onClose, phone, isPublic, onSaved }: { visible: boolean; onClose: () => void; phone: string | null; isPublic: boolean; onSaved: (s: Store) => void }) {
   const auth = useAuth();
   const [v, setV] = useState(''); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false);
-  useEffect(() => { if (visible) { setV(phone ? formatContactPhone(phone).replace(/^\+506 /, '') : ''); setErr(null); } }, [visible]);
+  const [pub, setPub] = useState(false); // whatsapp_public: mostrarlo en el perfil público (opt-in)
+  useEffect(() => { if (visible) { setV(phone ? formatContactPhone(phone).replace(/^\+506 /, '') : ''); setPub(isPublic); setErr(null); } }, [visible]);
   const n = normalizeContactPhone(v);
   const bad = n === 'invalid' && v.replace(/\D/g, '').length >= 8 ? contactPhoneError(v) : null;
   async function save(next: string | null) {
     setBusy(true); setErr(null);
-    try { const st = await updateMyStore(auth, { contact_phone: next }); haptic.success(); toast(next ? 'WhatsApp guardado' : 'WhatsApp quitado'); onSaved({ ...st, contact_phone: st.contact_phone ?? next }); }
+    try {
+      const st = await updateMyStore(auth, next ? { contact_phone: next, whatsapp_public: pub } : { contact_phone: null });
+      haptic.success(); toast(next ? 'WhatsApp guardado' : 'WhatsApp quitado');
+      onSaved({ ...st, contact_phone: st.contact_phone ?? next, whatsapp_public: !!next && (st.whatsapp_public ?? pub) });
+    }
     catch (e) { haptic.error(); setErr(userMessage((e as Error).message)); }
     finally { setBusy(false); }
   }
@@ -110,7 +116,7 @@ function ContactSheet({ visible, onClose, phone, onSaved }: { visible: boolean; 
         <PrimaryButton title="Guardar" icon="checkmark" loading={busy} disabled={n === null || n === 'invalid'} onPress={() => save(n as string)} />
         {phone ? <PrimaryButton title="Quitar" variant="ghost" disabled={busy} onPress={() => save(null)} /> : null}
       </>}>
-      <Text style={T.callout}>Tus compradores lo ven solo después de pagar, para coordinar el envío o escribirte si algo sale mal.</Text>
+      <Text style={T.callout}>Tus compradores lo ven después de pagar, para coordinar el envío o escribirte si algo sale mal.</Text>
       <Text style={T.caption}>WhatsApp o teléfono (opcional)</Text>
       <View style={[ui.input, s.inRow, bad ? { borderColor: C.orange } : n && n !== 'invalid' ? { borderColor: C.success } : null]}>
         <Text style={[T.body, { color: C.textDim }]}>+506</Text>
@@ -121,7 +127,14 @@ function ContactSheet({ visible, onClose, phone, onSaved }: { visible: boolean; 
       </View>
       {bad ? <ErrorText>{bad}</ErrorText> : null}
       {err ? <ErrorText>{err}</ErrorText> : null}
-      <Text style={T.footnote}>Tu tienda pública nunca lo muestra.</Text>
+      <View style={s.pubRow}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={T.body}>{COPY.whatsappPublic.label}</Text>
+          <Text style={T.footnote}>{pub ? COPY.whatsappPublic.on : COPY.whatsappPublic.off}</Text>
+        </View>
+        <Switch value={pub} onValueChange={(x) => { haptic.tap(); setPub(x); }} disabled={busy || !(n && n !== 'invalid')} accessibilityLabel={COPY.whatsappPublic.a11y}
+          trackColor={{ true: C.purple, false: C.surface2 }} thumbColor={C.white} testID="whatsapp-public-switch" />
+      </View>
     </Sheet>
   );
 }
@@ -216,4 +229,5 @@ const s = StyleSheet.create({
   payIcon: { width: 40, height: 40, borderRadius: 14, backgroundColor: C.orange, alignItems: 'center', justifyContent: 'center' },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: S.xs, minHeight: 44 },
   inRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  pubRow: { flexDirection: 'row', alignItems: 'center', gap: S.md, paddingVertical: S.xs },
 });
