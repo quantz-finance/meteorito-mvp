@@ -43,6 +43,7 @@ test('WIN-02 cara a cara: acuerdo antes de pagar, código al pagar, PIN del vend
   await open(page, `/p/${prod}?buyer=A`, 'buyer');
   await expect(page.getByText('Entrega: Cara a cara', { exact: true })).toBeVisible();
   await expect(page.getByTestId('beta-notice')).toContainText(CUSTODY_NOTICE);
+  await expect(page.getByTestId('follow-product')).toBeVisible(); // Seguir junto al vendedor en la ficha
   await shot(page, 'comprador-antes-de-pagar');
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page.getByText('Al pagar aceptas: entrega cara a cara; el pago se libera con tu PIN de entrega, o por tiempo si no abres una disputa antes.')).toBeVisible();

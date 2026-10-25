@@ -12,7 +12,7 @@ import { COPY } from '@/lib/copy';
 import { setFollowing, useFollowing } from '@/lib/follows';
 
 export function FollowButton({ store, source, size = 'md', onFollowers }: {
-  store: { store_slug: string; display_name: string; verified?: boolean }; source: 'profile' | 'feed';
+  store: { store_slug: string; display_name: string; verified?: boolean }; source: 'profile' | 'feed' | 'product';
   /** sm: pastilla compacta (tarjeta del feed); md: botón del perfil. */ size?: 'sm' | 'md';
   onFollowers?: (n: number | null, following: boolean) => void;
 }) {
