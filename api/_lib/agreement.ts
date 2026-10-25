@@ -48,6 +48,15 @@ export const daysLabel = (n: number) => (n === 1 ? '1 día' : `${n} días`);
 export function agreementSummary(mode: DeliveryMode | string | null | undefined, _minutes?: number | null): string {
   return `Entrega: ${DELIVERY_LABEL[deliveryModeOf({ delivery_mode: mode as string })]}`;
 }
+/** Hojas de pago (antes de pagar, aprobado por Neo) con el plazo que eligió quien vende. Envío cuenta desde "Ya lo envié";
+ *  cara a cara, desde el pago (releaseDueAt). */
+export function payAcceptText(mode: DeliveryMode | string | null | undefined, minutes?: number | null): string {
+  const m = deliveryModeOf({ delivery_mode: mode as string });
+  const p = protectionLabel(protectionOf({ delivery_mode: m, protection_minutes: minutes }));
+  return m === 'cara_a_cara'
+    ? `Al pagar aceptas: entrega cara a cara; el pago se libera con tu PIN de entrega, o por tiempo (${p} después del pago) si no abres una disputa antes.`
+    : `Al pagar aceptas: entrega por envío; el pago se libera con tu PIN de entrega, o por tiempo (${p} después del envío) si no abres una disputa antes.`;
+}
 /** "entrega por envío" / "entrega cara a cara" (hojas de pago: "Al pagar aceptas: …"). */
 export function deliveryPhrase(mode: DeliveryMode | string | null | undefined): string {
   return deliveryModeOf({ delivery_mode: mode as string }) === 'cara_a_cara' ? 'entrega cara a cara' : 'entrega por envío';

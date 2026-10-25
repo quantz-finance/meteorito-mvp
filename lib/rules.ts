@@ -36,7 +36,9 @@ export const RULES: Rule[] = [
   { id: 'codigo', icon: 'key', title: 'Código de entrega',
     text: 'Con envío, el comprador ve su código cuando el pedido va en camino. Cara a cara, lo ve apenas paga y se lo da al vendedor cuando revisa el producto. Con ese código se libera el pago.' },
   { id: 'liberacion', icon: 'timer-outline', title: 'Liberación automática',
-    text: `Si el comprador no da el código ni reporta un problema, el pago se libera al terminar el plazo acordado: por defecto a los ${C.autoReleaseDays} días del envío, o a las ${C.faceToFaceHours} h del pago si es cara a cara.`,
+    // Texto final aprobado por Neo. Verificado con el código: envío 7 días por defecto (DEFAULT_PROTECTION_MIN), de 24 h a 30 días;
+    // cualquiera de las dos partes puede pedir la extensión (api/escrow/confirm.ts). No quitar "aunque todavía no te haya llegado el producto".
+    text: `Liberación por tiempo: quien vende elige el plazo (${C.minWindowHours} h, 3 días, ${C.autoReleaseDays} días u otro de hasta ${C.maxWindowDays} días; por defecto, ${C.autoReleaseDays} días), que empieza a contar cuando marca el pedido como enviado. Ese plazo se puede extender. El pago puede liberarse desde ${C.minWindowHours} h después de marcado el envío, aunque todavía no te haya llegado el producto. Si algo no cuadra, abre la disputa antes de que se cumpla el plazo: con la disputa abierta, el pago queda en pausa, no se libera solo y se revisa a mano.`,
     points: [
       `El vendedor elige el plazo al crear el link, de ${C.minWindowHours} h a ${C.maxWindowDays} días. El comprador lo ve antes de pagar.`,
       `Cualquiera de los dos puede pedir ${C.extensionDays.join(', ').replace(/, (\d+)$/, ' o $1')} días más; el otro acepta o rechaza. Nunca más de ${C.maxWindowDays} días desde el pago.`,

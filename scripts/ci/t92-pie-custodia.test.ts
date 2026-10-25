@@ -5,7 +5,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { T } from './setup';
 import { CUSTODY_NOTICE, CUSTODY_RELEASE, BETA_NOTICE } from '../../lib/rules';
-import { agreementSummary, deliveryPhrase, PROTECTION_RANGE_ERROR } from '../../api/_lib/agreement';
+import { agreementSummary, deliveryPhrase, payAcceptText, PROTECTION_RANGE_ERROR } from '../../api/_lib/agreement';
 import { adTemplate } from '../../lib/sellerTools';
 
 const read = (f: string) => readFileSync(f, 'utf8');
@@ -27,8 +27,12 @@ export async function run(t: T) {
   const rl = read('components/RulesLink.tsx');
   t.check('custody muestra CUSTODY_NOTICE EN LUGAR de BETA_NOTICE (no ambos)', /\{custody \? CUSTODY_NOTICE : BETA_NOTICE\}/.test(rl));
   t.check('el aviso legal aparece una sola vez en el texto del pie', CUSTODY_NOTICE.split('Meteorito no verifica el producto').length === 2 && !CUSTODY_NOTICE.includes(BETA_NOTICE));
-  t.check('hojas de pago y nota de liberación usan la misma frase (sin "7 días"/"24 h después")',
-    (pay.match(/\$\{CUSTODY_RELEASE\}/g) ?? []).length >= 3 && !/7 días después del envío|24 h después del pago|Al pagar aceptas: \$\{agreement\}/.test(pay));
+  t.check('nota de liberación con la frase aprobada; hojas de pago con el plazo elegido (payAcceptText, 2 hojas)',
+    pay.includes('`El pago ${CUSTODY_RELEASE}.`') && (pay.match(/payAcceptText\(order\.delivery_mode, order\.protection_minutes\)/g) ?? []).length === 2);
+  t.check('hojas de pago: el plazo del vendedor se ve antes de pagar (envío y cara a cara)',
+    payAcceptText('envio', 3 * 1440) === 'Al pagar aceptas: entrega por envío; el pago se libera con tu PIN de entrega, o por tiempo (3 días después del envío) si no abres una disputa antes.'
+    && payAcceptText('envio', null) === 'Al pagar aceptas: entrega por envío; el pago se libera con tu PIN de entrega, o por tiempo (7 días después del envío) si no abres una disputa antes.'
+    && payAcceptText('cara_a_cara', 1440) === 'Al pagar aceptas: entrega cara a cara; el pago se libera con tu PIN de entrega, o por tiempo (24 h después del pago) si no abres una disputa antes.');
   t.check('frase de liberación = pedazo del texto exacto', CUSTODY_NOTICE.includes(CUSTODY_RELEASE));
 
   const ad = ['whatsapp', 'marketplace'].map((f) => adTemplate({ title: 'Bici', price_crc: 1000, link: 'x', delivery_mode: 'envio', protection_minutes: 10080 }, f as any)).join('\n');

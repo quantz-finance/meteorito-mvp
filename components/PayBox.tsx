@@ -7,7 +7,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { DisputeSheet } from '@/components/DisputeSheet';
 import { Image, Pressable, Text, View } from 'react-native';
 import { deliveryCodeVisible, F2F_CODE_HINT, F2F_PAID, PAID_WAITING } from '@/lib/shipping';
-import { agreementSummary, deliveryPhrase } from '../api/_lib/agreement';
+import { agreementSummary, payAcceptText } from '../api/_lib/agreement';
 import { CUSTODY_RELEASE } from '@/lib/rules';
 import { ExtensionBox } from '@/components/ExtensionBox';
 import { Card, ErrorText, Icon, PrimaryButton, Sheet, SuccessCheck } from '@/components/ds';
@@ -153,7 +153,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.money}>{formatCRC(sinpe.priceCrc)}</Text>
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
-        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${deliveryPhrase(order.delivery_mode)}; el pago ${CUSTODY_RELEASE}.`} />
+        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={payAcceptText(order.delivery_mode, order.protection_minutes)} />
       </>}
     </Sheet>
     <CardSheet visible={sheet === 'card' && !!sinpe && order.status === 'escrow_creado'} amountCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
@@ -175,7 +175,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.footnote}>Referencia {sinpe.reference}</Text>
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
-        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${deliveryPhrase(order.delivery_mode)}; el pago ${CUSTODY_RELEASE}.`} />
+        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={payAcceptText(order.delivery_mode, order.protection_minutes)} />
         <Row icon="information-circle-outline" text='No envíes dinero: toca "Ya pagué" para continuar.' />
       </>}
     </Sheet>

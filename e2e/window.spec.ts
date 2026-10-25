@@ -46,7 +46,7 @@ test('WIN-02 cara a cara: acuerdo antes de pagar, código al pagar, PIN del vend
   await expect(page.getByTestId('follow-product')).toBeVisible(); // Seguir junto al vendedor en la ficha
   await shot(page, 'comprador-antes-de-pagar');
   await page.getByText(/Pagar en custodia/).last().click();
-  await expect(page.getByText('Al pagar aceptas: entrega cara a cara; el pago se libera con tu PIN de entrega, o por tiempo si no abres una disputa antes.')).toBeVisible();
+  await expect(page.getByText('Al pagar aceptas: entrega cara a cara; el pago se libera con tu PIN de entrega, o por tiempo (24 h después del pago) si no abres una disputa antes.')).toBeVisible();
   await page.getByText('Ya pagué', { exact: true }).click();
   const slug = page.url().match(/\/p\/(demo\d+)/)![1];
   await open(page, `/p/${slug}?buyer=A`, 'buyer');
@@ -83,4 +83,18 @@ test('WIN-02 cara a cara: acuerdo antes de pagar, código al pagar, PIN del vend
   await page.getByLabel('Código de entrega del comprador').fill(DEMO_PIN);
   await page.getByText('Confirmar PIN y cobrar', { exact: true }).click();
   await expect.poll(() => orderStatus(page, slug)).toBe('liberado');
+});
+
+test('WIN-03 ficha en iPhone SE: "Preguntar al vendedor" a la vista sin scroll (título largo) y el nombre del vendedor completo', async ({ page }) => {
+  await open(page, '/', 'seller', true);
+  const prod = await page.evaluate(() => (window as any).__meteoritoDemo.seed('creado', { title: 'iPhone 17 pro 256 detalle pantalla', price_crc: 430000 }));
+  await open(page, `/p/${prod}?buyer=A`, 'buyer');
+  const ask = page.getByTestId('ask-seller');
+  await expect(ask).toBeVisible();
+  await expect(page.getByTestId('follow-product')).toBeVisible();
+  const a = (await ask.boundingBox())!, foot = (await page.getByTestId('agreement').boundingBox())!;
+  expect(a.y).toBeGreaterThanOrEqual(0);
+  expect(a.y + a.height).toBeLessThanOrEqual(Math.min(page.viewportSize()!.height, foot.y)); // sobre el pie fijo, sin scroll
+  const name = page.getByTestId('ficha-seller').getByText(/^Vendido por /);
+  expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true); // sin "…"
 });
