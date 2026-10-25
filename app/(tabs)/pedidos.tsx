@@ -1,3 +1,4 @@
+import { Appear, AppearSub, appearSkip } from '@/components/Appear';
 import { DEVICE_NOT_AUTHORIZED, ensureSellerWalletOnLoad } from '@/lib/wallet';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
@@ -7,7 +8,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Card, Chip, ErrorText, IconButton, MoneyTimeline, PrimaryButton, Screen, Sheet, statusTone } from '@/components/ds';
 import { BuysSection, BUYS_CHROME, BUYS_EMPTY_H, HomeSummaryCard, ROW_GAP, ROW_H, SALES_CHROME, SALES_EMPTY_H, SaleRow, SalesBox } from '@/components/HomeSections';
-import { Reveal } from '@/components/space';
 import { SellerActions } from '@/components/SellerActions';
 import { SellerOrderChat } from '@/components/OrderChat';
 import { SellerInboxButton } from '@/components/ChatInbox';
@@ -119,21 +119,21 @@ export default function Pedidos() {
       right={<><AdminDisputesButton /><SellerInboxButton /><IconButton icon="storefront-outline" label="Mi tienda" onPress={() => router.push('/mi-tienda')} /><IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} /></>}>
       {/* Sin botón "Actualizar" (era de pruebas): Home carga al enfocar, hace polling mientras haya pedidos o compras no
           finales y vuelve a pedir al regresar a la app/pestaña (useFocusEffect + useOrdersRefresh). */}
-      <View style={{ flex: 1, gap: S.sm }}>
+      <AppearSub style={{ flex: 1, gap: S.sm }}>
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : error ? <ErrorText>{error}</ErrorText> : null}
-      {loaded && hasData ? <Reveal i={0}><HomeSummaryCard sum={sum} rating={rating} /></Reveal> : null}
+      {loaded && hasData ? <HomeSummaryCard sum={sum} rating={rating} /> : null}
       {orders !== null && !sessionError && <Suspense fallback={null}><PushCard role="seller" slim onSessionError={(m) => { setError(m); setSessionError(true); }} /></Suspense>}
-      <View style={{ flex: 1, gap: S.sm, overflow: 'hidden' }} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (Math.abs(h - listH) > 1) setListH(h); }}>
-        <Reveal i={1}><SalesBox rows={sales.slice(0, fit.sales)} total={sales.length} loading={orders === null} compact={short}
-          onOpen={setOpenSlug} onHistory={() => router.push('/ventas')} onSeeAll={() => setAllSales(true)} /></Reveal>
-        <Reveal i={2}><BuysSection rows={myBuys.slice(0, fit.buys)} total={myBuys.length} loading={buys === null} /></Reveal>
+      <View {...appearSkip} style={{ flex: 1, gap: S.sm, overflow: 'hidden' }} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (Math.abs(h - listH) > 1) setListH(h); }}>
+        <Appear i={2}><SalesBox rows={sales.slice(0, fit.sales)} total={sales.length} loading={orders === null} compact={short}
+          onOpen={setOpenSlug} onHistory={() => router.push('/ventas')} onSeeAll={() => setAllSales(true)} /></Appear>
+        <Appear i={3}><BuysSection rows={myBuys.slice(0, fit.buys)} total={myBuys.length} loading={buys === null} /></Appear>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: S.sm }}>
         {orders && orders.length > 0 ? <Freshness stamp={stamp} live={needsPolling(orders)} align="center" /> : <View />}
         <RulesLink from="home" />
       </View>
-      </View>
+      </AppearSub>
 
       <Sheet visible={allSales} onClose={() => setAllSales(false)} title={HOME_COPY.sales}>
         <View style={{ gap: ROW_GAP }}>

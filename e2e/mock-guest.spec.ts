@@ -529,6 +529,17 @@ test('MCK-BETA-01 aviso de beta visible en el viewport antes de "Pagar en custod
   await expect(page).toHaveURL(/\/como-funciona/);
 });
 
+test('MCK-BETA-02 con la animación de entrada ACTIVA: aviso de beta y "Ver reglas" visibles desde el primer cuadro (ni ellos ni sus contenedores se animan)', async ({ page, request }) => {
+  await page.addInitScript(() => localStorage.setItem('meteorito:e2e-anim', '1'));
+  await reset(request, [{ ...listing, photos: ['/demo-fb-import.jpg'] }]);
+  await page.goto('/p/prod01');
+  await expect(page.getByTestId('beta-notice')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.classList.contains('no-appear'))).toBe(false);
+  await expectLegalVisible(page, ['beta-notice', 'rules-hint']);
+  const n = (await page.getByTestId('beta-notice').boundingBox())!, b = (await page.getByText(/Pagar en custodia/).last().boundingBox())!;
+  expect(n.y + n.height).toBeLessThanOrEqual(Math.min(page.viewportSize()!.height, b.y));
+});
+
 // Plazo acordado (t57): el comprador ve el acuerdo antes de pagar; cara a cara ve su código apenas paga; responde una
 // extensión pedida por el vendedor. En este archivo (no en uno nuevo): los MCK de un mismo archivo corren en serie.
 test('MCK-WIN-01 cara a cara: "Entrega: Cara a cara" antes de pagar y el código al pagar', async ({ page, request }) => {

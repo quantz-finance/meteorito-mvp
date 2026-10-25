@@ -1,5 +1,6 @@
 // Historial de ventas del vendedor: cada venta con su estado y resultado (cobrado, reembolsado, en curso), más el total
 // cobrado. Mismos datos que Home (/api/store action 'orders', con su sesión); sin funciones nuevas.
+import { AppearSub } from '@/components/Appear';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
@@ -46,7 +47,7 @@ export default function Ventas() {
 
   return (
     <Screen title={HISTORY_TITLE} back="/pedidos" scroll={false}>
-      <View style={{ flex: 1, gap: S.sm }}>
+      <AppearSub style={{ flex: 1, gap: S.sm }}>
         {totals ? <Card style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, padding: S.sm + 4 }} accessibilityLabel={totalsLine(totals)}>
           <Icon name="receipt-outline" size={22} color={C.lilac} />
           <View style={{ flex: 1 }}>
@@ -64,7 +65,7 @@ export default function Ventas() {
             </Card>
           ) : <GridPager items={rows} keyOf={(r) => r.slug} minCellW={300} minCellH={short ? 70 : 78} maxCols={2} label="Página del historial"
               renderItem={(r) => <SaleCard r={r} />} />}
-      </View>
+      </AppearSub>
     </Screen>
   );
 }

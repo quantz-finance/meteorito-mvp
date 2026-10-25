@@ -6,6 +6,7 @@
 // Ventas cerradas: hoy solo EJEMPLOS ficticios con un iconito (i) discreto (lib/feedSales.ts, FEED_DEMO_SALES), 1 de cada 6.
 // Productos de ejemplo (demo: true, api/_lib/demoProducts.ts, FEED_DEMO_PRODUCTS): llegan del API después de los reales,
 // con un iconito (i) discreto que abre un popup (components/DemoInfo.tsx) y sin botón Seguir; su ficha (/p/ej-…) no permite pagar.
+import { Appear, appearItem, appearSkip, useAppear } from '@/components/Appear';
 import { COPY } from '@/lib/copy';
 import { router } from 'expo-router';
 import { memo, useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
@@ -187,11 +188,11 @@ export function Feed({ header }: { header: ReactElement }) {
   const cells: Cell[] = mixed.length % 2 ? [...mixed, { kind: 'filler', id: 'filler' }] : mixed;
   return (
     <>
-    <FlatList data={cells} extraData={acts} keyExtractor={(i) => ('slug' in i ? i.slug : i.id)} style={{ flex: 1 }} numColumns={2} columnWrapperStyle={s.row}
+    <FlatList {...appearSkip} data={cells} extraData={acts} keyExtractor={(i) => ('slug' in i ? i.slug : i.id)} style={{ flex: 1 }} numColumns={2} columnWrapperStyle={s.row}
       renderItem={({ item, index }) => 'slug' in item ? <FeedCard item={item} index={index} filter={filter} activity={acts[item.seller.store_slug] ?? null} />
         : isSale(item) ? <SaleCard post={item} onPress={() => { haptic.tap(); track('feed_item_clicked', { target: 'sale_example', position: index, verified: item.verified, filter }); setExample(true); }} />
         : <View style={s.cell} />}
-      ItemSeparatorComponent={Sep} ListHeaderComponent={top} ListEmptyComponent={empty}
+      ItemSeparatorComponent={Sep} ListHeaderComponent={<Appear i={0}>{top}</Appear>} ListEmptyComponent={empty}
       ListFooterComponent={more ? <ActivityIndicator color={C.lilac} style={{ marginVertical: S.lg }} /> : <View style={{ height: S.xl }} />}
       onEndReached={loadMore} onEndReachedThreshold={0.6} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
       showsVerticalScrollIndicator={false} initialNumToRender={6} windowSize={7} testID="feed" />
@@ -218,7 +219,7 @@ function openItem(it: FeedItem, index: number, filter: VerifiedFilter, target: '
 export const FeedCard = memo(function FeedCard({ item: it, index, filter, activity }: { item: FeedItem; index: number; filter: VerifiedFilter; activity?: Activity | null }) {
   const [broken, setBroken] = useState(false);
   return (
-    <View style={[s.cell, s.card]} testID="feed-card">
+    <View {...appearItem(useAppear(), index + 1)} style={[s.cell, s.card]} testID="feed-card">
       <Pressable onPress={() => openItem(it, index, filter, 'product')} accessibilityRole="link"
         accessibilityLabel={it.demo ? COPY.demoProducts.cardLabel(it.title, formatCRC(it.price_crc)) : `${it.title}, ${formatCRC(it.price_crc)}`}
         style={({ pressed }) => [pressTransition, pressed && { opacity: 0.92 }]}>

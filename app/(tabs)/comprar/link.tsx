@@ -6,7 +6,7 @@ import { useStableWindow } from '@/lib/viewport';
 import { router } from 'expo-router';
 import { Card, ErrorText, haptic, Icon, PrimaryButton, Screen, Sheet } from '@/components/ds';
 import { ComprarNav, GUEST_BACK, useIsGuest } from '@/components/ComprarNav';
-import { Reveal } from '@/components/space';
+import { AppearSub } from '@/components/Appear';
 import { C, R, S, T } from '@/constants/theme';
 
 // Comprar › Pagar con link (/comprar/link): lo que antes estaba arriba del feed, igual: importar de Facebook, invitar
@@ -21,8 +21,8 @@ export default function PagarConLink() {
   return (
     <Screen back={guest ? GUEST_BACK : undefined} backTop title="Pagar con link" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
       right={<ComprarNav active="link" />}>
-      <View style={{ gap: S.md }}>
-        <Reveal i={0}><Card style={{ gap: S.sm }}>
+      <AppearSub style={{ gap: S.md }}>
+        <Card style={{ gap: S.sm }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
             <Icon name="paper-plane-outline" size={24} color={C.lilac} />
             <Text style={[T.headline, { flex: 1 }]}>¿Lo viste en Facebook o en otro lado?</Text>
@@ -31,8 +31,8 @@ export default function PagarConLink() {
           <PrimaryButton title="Importar de un link" icon="link" accessibilityLabel="Importar de un link"
             onPress={() => router.push({ pathname: '/i/nueva', params: { fb: '1' } })} />
           <PrimaryButton title="Invitar a un vendedor" icon="paper-plane-outline" variant="secondary" accessibilityLabel="Invitar a un vendedor" onPress={() => router.push('/i/nueva')} />
-        </Card></Reveal>
-        <Reveal i={1}><Pressable accessibilityRole="button" accessibilityLabel="Pagar un link" onPress={() => { haptic.tap(); setPayOpen(true); }}
+        </Card>
+        <Pressable accessibilityRole="button" accessibilityLabel="Pagar un link" onPress={() => { haptic.tap(); setPayOpen(true); }}
           style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: S.sm + 4, backgroundColor: C.surface, borderRadius: R.lg, padding: S.sm + 4, minHeight: 64, borderWidth: 0.5, borderColor: C.line }, pressed && { opacity: 0.85 }]}>
           <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' }}><Icon name="link" size={22} color={C.purpleDark} /></View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
@@ -40,8 +40,8 @@ export default function PagarConLink() {
             <Text style={T.footnote} numberOfLines={1}>Pega el link que te mandó el vendedor</Text>
           </View>
           <Icon name="chevron-forward" size={20} color={C.lilac} />
-        </Pressable></Reveal>
-      </View>
+        </Pressable>
+      </AppearSub>
 
       <Sheet visible={payOpen} onClose={() => setPayOpen(false)} title="Pagar un link"
         footer={<PrimaryButton title="Ver producto" icon="arrow-forward" disabled={!linkSlug} onPress={goPay} />}>

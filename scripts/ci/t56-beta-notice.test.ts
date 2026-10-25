@@ -98,9 +98,11 @@ export async function run(t: T) {
     fadeIns.length >= 3 && fadeIns.flatMap(usedBy).filter((a) => !['confetti', 'burst', 'shock', 'shock2'].includes(a)).every((a) => anims.includes(`'${a}'`)));
   t.check('LEGAL_CSS: el aviso y cualquier contenedor que lo tenga (:has) sin animación; sin :has, sin entradas con opacidad',
     /'\[data-legal\]\{animation:none!important\}'/.test(motion) && /legalSel\(':has\(\[data-legal\]\)'\)\}\{animation:none!important\}/.test(motion)
-    && /@supports not selector\(:has\(\*\)\)\{\$\{legalSel\(''\)\}\{animation:none!important\}\}/.test(motion));
+    && /appearLegal\(':has\(\[data-legal\]\)'\)\}\{animation:none!important\}/.test(motion) && /'\[data-appear\]>\*', '\[data-appear-sub\]>\*', '\[data-appear-item\]'/.test(motion)
+    && /@supports not selector\(:has\(\*\)\)\{\$\{legalSel\(''\)\},\$\{appearLegal\(''\)\}\{animation:none!important\}\}/.test(motion));
   t.check('LEGAL_CSS va al final de MOTION_CSS, en el <style> del HTML estático (vale sin JS y desde el primer cuadro)',
     /`\.replace\(\/\\n\/g, ''\) \+ LEGAL_CSS;/.test(motion) && /MOTION_CSS \+/.test(html) && !/useEffect[^]*MOTION_CSS/.test(html));
   t.check('e2e con la animación ACTIVA: LEG-01/02/03 y MCK-BETA-01 miden aviso + ancestros sin animación de entrada',
-    /expectLegalVisible\(page, \['beta-notice', 'rules-hint'\]\)/.test(read('e2e/mock-guest.spec.ts')) && ['LEG-01', 'LEG-02', 'LEG-03'].every((x) => read('e2e/legal-visible.spec.ts').includes(x)));
+    /expectLegalVisible\(page, \['beta-notice', 'rules-hint'\]\)/.test(read('e2e/mock-guest.spec.ts')) && ['LEG-01', 'LEG-02', 'LEG-03', "localStorage.setItem('meteorito:e2e-anim', '1')"].every((x) => read('e2e/legal-visible.spec.ts').includes(x))
+    && /MCK-BETA-02[^]*meteorito:e2e-anim[^]*expectLegalVisible/.test(read('e2e/mock-guest.spec.ts')));
 }
