@@ -5,7 +5,7 @@ import { open, searchFeed, settle } from './helpers';
 
 test('FOLLOW-01 seguir desde el perfil: Siguiendo + seguidores; la tarjeta del feed lo muestra igual', async ({ page }) => {
   await open(page, '/t/jose-games', 'buyer', true);
-  await expect(page.getByTestId('store-cover').locator('img')).toHaveAttribute('src', /banner-tienda/); // portada fija, igual para todas
+  await expect(page.getByTestId('store-cover')).toHaveCount(0); // sin portada: tarjeta horizontal
   const count = page.getByTestId('followers-count');
   await expect(count).toContainText('seguidores');
   const before = Number((await count.innerText()).match(/\d+/)![0]);
