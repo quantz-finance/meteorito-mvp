@@ -61,20 +61,23 @@ test.describe('Dónde cobrar', () => {
     await expect(page.getByText(/Stellar GDJX…2K7C/).first()).toBeVisible();
   });
 
-  test('COB-02 admin: cola "Pendiente pagar al banco" y Marcar como pagado con nota', async ({ page }, info) => {
+  test('COB-02 admin: cola "Beta: sin pago al banco" y Marcar como revisado con nota', async ({ page }, info) => {
     await open(page, '/admin/pagos?admin=1', 'seller', true);
     await expect(page.getByTestId('payouts-list')).toBeVisible();
-    await expect(page.getByText('Pendiente pagar al banco').first()).toBeVisible();
+    await expect(page.getByText('Beta: sin pago al banco').first()).toBeVisible();
+    await expect(page.getByText(/Pendiente pagar al banco|Marcar como pagado|Pagados?\b/)).toHaveCount(0);
     await expect(page.getByText('CR00 0000 0000 0000 0000 00').first()).toBeVisible(); // beta: solo el dato de ejemplo
     await expectInputs16(page);
     await shot(page, 'admin-pagos-iban', info);
-    const btn = page.getByTestId('payout-pay001').getByRole('button', { name: /Marcar como pagado/ });
+    const btn = page.getByTestId('payout-pay001').getByRole('button', { name: /Marcar como revisado/ });
     await expect(btn).toBeDisabled();
     await page.getByTestId('payout-note-pay001').fill('Transferencia 99120');
     await btn.click();
     await expect(page.getByTestId('payout-pay001')).toHaveCount(0);
     await page.getByTestId('ptab-pagado').click();
     await expect(page.getByText(/Transferencia 99120/)).toBeVisible();
+    await expect(page.getByText(/^Revisado /).first()).toBeVisible();
+    await expect(page.getByText(/Revisados/)).toBeVisible();
   });
 
   test('COB-03 no admin: /admin/pagos no se encuentra', async ({ page }) => {

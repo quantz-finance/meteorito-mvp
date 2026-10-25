@@ -47,7 +47,7 @@ export const markGuestRefunded = (auth: MeteoritoAuth, slug: string, note: strin
 export type { AdminPayoutRow } from '../api/_lib/payoutChoice';
 import type { AdminPayoutRow } from '../api/_lib/payoutChoice';
 export const listPayouts = (auth: MeteoritoAuth) => api<{ available: boolean; payouts: AdminPayoutRow[]; counts: { pendiente: number; pagado: number } }>(auth, PATH, { action: 'admin_payouts' });
-export const markPayoutPaid = (auth: MeteoritoAuth, slug: string, note: string) => api<{ done: boolean; already: boolean; paid_at: string }>(auth, PATH, { action: 'admin_payout_paid', slug, note });
+export const markPayoutPaid = (auth: MeteoritoAuth, slug: string, note: string) => api<{ done: boolean; already: boolean; paid_at: string }>(auth, PATH, { action: 'admin_payout_reviewed', slug, note });
 
 /* ---------- Vendedor: su versión de la disputa ---------- */
 export interface SellerResponseState { available: boolean; open: boolean; response: { body: string; photo: string | null; created_at: string } | null; deadline: string | null; can_respond: boolean }

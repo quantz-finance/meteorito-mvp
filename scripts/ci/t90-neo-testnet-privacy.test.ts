@@ -133,5 +133,5 @@ export async function run(t: T) {
   t.check('copy exacto del campo y de la ayuda', ui.includes('IBAN_LABEL') && readFileSync('api/_lib/payout.ts', 'utf8').includes("'Cuenta bancaria (IBAN) - en la beta es un dato de ejemplo'")
     && readFileSync('api/_lib/payout.ts', 'utf8').includes("'Beta en testnet: no escribas tu IBAN real. No hacemos pagos al banco ni guardamos tu cuenta; en la beta se cobra solo en USDC de testnet, que no es dinero real.'"));
   t.check('sin "Lo hacemos a mano, en días hábiles" ni "Pendiente pagar al banco" para el vendedor', !/Lo hacemos a mano|días hábiles|Pendiente pagar al banco/.test(ui));
-  t.check('"Marcar como pagado" solo registra la nota (sin proveedor de pagos)', (() => { const pc = readFileSync('api/_lib/payoutChoice.ts', 'utf8'); const fn = pc.slice(pc.indexOf('export async function markPayoutPaid')); return !/fetch\(|lendara|Operation\.|submitTransaction|tw\./i.test(fn); })());
+  t.check('"Marcar como revisado" solo registra la nota (sin proveedor de pagos)', (() => { const pc = readFileSync('api/_lib/payoutChoice.ts', 'utf8'); const fn = pc.slice(pc.indexOf('export async function markPayoutPaid')); return !/fetch\(|lendara|Operation\.|submitTransaction|tw\./i.test(fn); })());
 }

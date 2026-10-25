@@ -85,7 +85,7 @@ export function demoAdminApi(c: DemoAdminCtx, body: any): any {
     const ps = c.payouts ?? [];
     return { available: true, payouts: ps, counts: { pendiente: ps.filter((x) => x.state === 'pendiente').length, pagado: ps.filter((x) => x.state === 'pagado').length } };
   }
-  if (a === 'admin_payout_paid') {
+  if (a === 'admin_payout_reviewed' || a === 'admin_payout_paid') {
     const note = String(body.note ?? '').trim();
     if (note.length < 3) throw err(400, 'note_required', 'Escribe una nota (por ejemplo, el número de transferencia).');
     const x = (c.payouts ?? []).find((p) => p.slug === body.slug); if (!x) throw err(404, 'not_found', 'No encontramos ese pago pendiente.');
