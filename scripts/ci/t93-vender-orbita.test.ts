@@ -16,7 +16,7 @@ export async function run(t: T) {
   t.check('listo = mismas reglas que validateListing', isListingValid({ title: 'Bici de montaña', price: 150000, photos: 1, photosBusy: false })
     && !isListingValid({ title: 'Bici', price: 500, photos: 1, photosBusy: false }) && !isListingValid({ title: 'Bici de montaña', price: 150000, photos: 0, photosBusy: false })
     && !isListingValid({ title: 'Bici de montaña', price: 150000, photos: 1, photosBusy: true }));
-  // Tamaños: el círculo vive en su propio escenario (entre "Entrega y plazo" y los avisos) y se ajusta a su alto libre
+  // Tamaños: el círculo vive en su propio escenario (entre las fotos y los avisos) y se ajusta a su alto libre
   const se = launchSize(132), big = launchSize(240, 358), min = launchSize(0);
   t.check('círculo: entre 96 y 150 px; ~120 px en iPhone SE, 150 px en pantallas altas', LAUNCH_MIN === 96 && LAUNCH_MAX === 150
     && se.core >= 118 && big.core === 150 && [se, big, min].every((z) => z.core % 2 === 0) && min.core === 96, `${se.core}/${big.core}/${min.core}`);
@@ -54,9 +54,10 @@ export async function run(t: T) {
     && !/<RadialGradient id="lg-(on|off)"[^]*?<\/RadialGradient>/.exec(btn)![0].includes('stopOpacity') && !/<RadialGradient id="lg-off"[^]*?<\/RadialGradient>/.exec(btn)![0].includes('stopOpacity'));
   t.check('botón: el círculo no se anima solo (se toca estable); el pulso en reposo es brillo (opacidad) y halo', !/anim\('breathe/.test(btn) && /anim\(lit \? 'glow' : 'glow-calm'\)/.test(btn) && /anim\(lit \? 'halo' : 'halo-calm'\)/.test(btn));
   const space = ven.slice(ven.indexOf('testID="launch-space"'));
-  t.check('Vender: el círculo va en su propio espacio (flujo), después de "Entrega y plazo" y antes de los avisos, sin footer flotante',
-    ven.indexOf('accessibilityLabel="Entrega y plazo"') < ven.indexOf('testID="launch-space"') && space.indexOf('<LaunchButton') < space.indexOf('testID="sell-photo-help"')
-    && /testID="sell-photo-help"[^]*De 1 a 4 fotos[^]*<RulesHint text=\{SELL_SUMMARY\} from="sell" \/>[^]*<BetaNotice from="sell" \/>/.test(space)
+  t.check('Vender: orden Entrega y plazo -> fotos -> círculo (su propio espacio) -> avisos, sin footer flotante ni el texto "De 1 a 4 fotos"',
+    ven.indexOf('accessibilityLabel="Entrega y plazo"') < ven.indexOf('testID="sell-photos"') && ven.indexOf('testID="sell-photos"') < ven.indexOf('testID="launch-space"')
+    && /<LaunchButton[^]*<RulesHint text=\{SELL_SUMMARY\} from="sell" \/>[^]*<BetaNotice from="sell" \/>/.test(space)
+    && !ven.includes('De 1 a 4 fotos con la cámara')
     && !/<Screen footerBare title="Vender" subtitle/.test(ven));
   t.check('Vender: los avisos nunca se esconden (sin condición de pantalla chica)', !/\? null : <Text style=\{T\.footnote\}>De 1 a 4/.test(ven) && !/compact \/>/.test(ven));
   t.check('Vender: listo = isListingValid con fotos cargando', /const ready = isListingValid\(\{ title, price: priceNum, photos: photos\.length, photosBusy \}\)/.test(ven));

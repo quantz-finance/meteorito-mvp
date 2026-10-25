@@ -84,7 +84,7 @@ test.describe('Universo y Home', () => {
     // contenido clave del Vender: título, importar, campos, fotos, Entrega y plazo, Generar link, los avisos y las pestañas
     const key = [page.getByText('Vender', { exact: true }).first(), page.getByText('Importar de un link'), page.getByPlaceholder(/iPhone 13/),
       page.locator('input').nth(1), page.getByText('Tomar', { exact: true }), page.getByText('Generar link'), page.getByRole('tablist'),
-      page.getByRole('button', { name: 'Entrega y plazo' }), page.getByText('De 1 a 4 fotos con la cámara, en este momento.'), page.getByTestId('rules-hint'), page.getByTestId('beta-notice')];
+      page.getByRole('button', { name: 'Entrega y plazo' }), page.getByTestId('sell-photos'), page.getByTestId('rules-hint'), page.getByTestId('beta-notice')];
     const boxes = (await Promise.all(key.map((l) => l.first().boundingBox()))).filter(Boolean) as { x: number; y: number; width: number; height: number }[];
     expect(boxes.length).toBeGreaterThanOrEqual(11);
     for (const id of ids) {

@@ -293,7 +293,15 @@ function VenderForm() {
         {errors.price ? <ErrorText>{errors.price}</ErrorText> : null}
       </View>
 
-      <View style={{ gap: S.xs }}>{/* pantallas bajas: "Fotos (n/4)" a la izquierda de las fotos (una fila menos) */}
+      <Pressable onPress={() => { haptic.tap(); setAgreeOpen(true); }} accessibilityRole="button" accessibilityLabel="Entrega y plazo"
+        style={({ pressed }) => [s.agreeRow, pressed && { opacity: 0.85 }]}>
+        <Icon name={mode === 'cara_a_cara' ? 'people-outline' : 'cube-outline'} size={20} color={C.lilac} />
+        <Text style={[T.headline, { fontSize: 15, flex: 1 }]} numberOfLines={1}>Entrega y plazo</Text>
+        <Text testID="agreement-value" style={[T.footnote, { color: C.text }]} numberOfLines={1}>{DELIVERY_LABEL[mode]} · {protectionLabel(windowMin)}</Text>
+        <Icon name="chevron-forward" size={16} color={C.textDim} />
+      </Pressable>
+
+      <View testID="sell-photos" style={{ gap: S.xs }}>{/* pantallas bajas: "Fotos (n/4)" a la izquierda de las fotos (una fila menos) */}
         <View style={compact ? s.photoRow : { gap: S.xs }}>
           <View style={compact ? s.photoHead : { flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={T.caption}>Fotos ({photos.length}/{MAX_PHOTOS})</Text>
@@ -311,24 +319,15 @@ function VenderForm() {
         </View>
         {errors.photos ? <ErrorText>{errors.photos}</ErrorText> : null}
       </View>
-
-      <Pressable onPress={() => { haptic.tap(); setAgreeOpen(true); }} accessibilityRole="button" accessibilityLabel="Entrega y plazo"
-        style={({ pressed }) => [s.agreeRow, pressed && { opacity: 0.85 }]}>
-        <Icon name={mode === 'cara_a_cara' ? 'people-outline' : 'cube-outline'} size={20} color={C.lilac} />
-        <Text style={[T.headline, { fontSize: 15, flex: 1 }]} numberOfLines={1}>Entrega y plazo</Text>
-        <Text testID="agreement-value" style={[T.footnote, { color: C.text }]} numberOfLines={1}>{DELIVERY_LABEL[mode]} · {protectionLabel(windowMin)}</Text>
-        <Icon name="chevron-forward" size={16} color={C.textDim} />
-      </Pressable>
       {error && <ErrorText>{error}</ErrorText>}
 
-      {/* Escenario propio de "Generar link": toma el alto libre (flex), el círculo se centra adentro y nunca se sale */}
+      {/* Escenario propio de "Generar link" (después de las fotos): toma el alto libre (flex), el círculo se centra adentro y nunca se sale */}
       <View testID="launch-space" pointerEvents="box-none" style={[s.launchSpace, { minHeight: LAUNCH_STAGE_MIN }]}
         onLayout={(e) => { const { height: h, width: w } = e.nativeEvent.layout; if (Math.abs(h - stage.h) > 1 || Math.abs(w - stage.w) > 1) setStage({ h, w }); }}>
         <LaunchButton label="Generar link" ready={ready} busy={busy} size={launch.core} inner={launch.inner} outer={launch.outer} onPress={() => submit()} />
       </View>
 
       {/* Avisos: siempre completos, en el mismo orden, debajo del círculo (nunca tapados) */}
-      <Text testID="sell-photo-help" style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>
       <RulesHint text={SELL_SUMMARY} from="sell" />
       <BetaNotice from="sell" />
       </AppearSub>
