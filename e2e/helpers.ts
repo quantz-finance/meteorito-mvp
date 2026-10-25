@@ -1,10 +1,10 @@
 import { expect, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 
-import { BETA_NOTICE } from '../lib/rules';
+import { BETA_NOTICE, CUSTODY_NOTICE } from '../lib/rules';
 /** Regla "sin etiquetas de modo prueba / testnet en la UI": la ÚNICA excepción es el aviso de beta aprobado (BETA_NOTICE,
- *  texto exacto en lib/rules.ts). Se quita SOLO esa constante del texto antes de revisar; cualquier otra mención falla. */
-export const withoutBetaNotice = (text: string) => text.split(BETA_NOTICE).join('');
+ *  texto exacto en lib/rules.ts) y el pie del producto (CUSTODY_NOTICE, aprobado por Neo). Se quitan SOLO esas constantes del texto antes de revisar; cualquier otra mención falla. */
+export const withoutBetaNotice = (text: string) => text.split(CUSTODY_NOTICE).join('').split(BETA_NOTICE).join('');
 export const PHOTO = resolve(__dirname, '../scripts/demo/assets/producto-demo.png');
 export const DEMO_PIN = '482915';
 /** Fotos "solo cámara": abre la cámara de la app (simulada en el demo), dispara y usa la foto. Nunca hay selector de archivos. */

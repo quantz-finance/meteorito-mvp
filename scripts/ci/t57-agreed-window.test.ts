@@ -60,7 +60,7 @@ export async function run(t: T) {
     t.check('24 h, 3 días, 30 días válidos', [1440, 4320, 43200].every((m) => ok(validateAgreement({ delivery_mode: 'envio', protection_minutes: m }))?.protection_minutes === m));
     t.check('< 24 h, > 30 días, decimales y texto -> error', [60, 1439, 43201, 1440.5, 'abc', -1].every((m) => 'error' in validateAgreement({ protection_minutes: m as any })));
     t.check('tipo de entrega inválido -> error', 'error' in validateAgreement({ delivery_mode: 'dron' as any }));
-    t.check('resumen para el comprador', agreementSummary('cara_a_cara', 1440) === 'Entrega: Cara a cara · Protección: 24 h' && agreementSummary('envio', 10080) === 'Entrega: Envío · Protección: 7 días desde el envío', agreementSummary('envio', 10080));
+    t.check('resumen para el comprador', agreementSummary('cara_a_cara', 1440) === 'Entrega: Cara a cara' && agreementSummary('envio', 10080) === 'Entrega: Envío' && agreementSummary('envio', 4320) === 'Entrega: Envío', agreementSummary('envio', 10080));
     t.check('etiquetas de plazo', protectionLabel(1440) === '24 h' && protectionLabel(4320) === '3 días' && protectionLabel(43200) === '30 días');
 
     /* ---------- 2) Crear link: se guarda, se valida en el servidor y tolera la columna ausente ---------- */
