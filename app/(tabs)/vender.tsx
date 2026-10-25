@@ -301,12 +301,11 @@ function VenderForm() {
         <Icon name="chevron-forward" size={16} color={C.textDim} />
       </Pressable>
 
-      <View testID="sell-photos" style={{ gap: S.xs }}>{/* pantallas bajas: "Fotos (n/4)" a la izquierda de las fotos (una fila menos) */}
+      <View testID="sell-photos" style={{ gap: S.xs }}>{/* sin la etiqueta "Fotos (n/4)" (Rolando); pantallas bajas: la ayuda a la izquierda */}
         <View style={compact ? s.photoRow : { gap: S.xs }}>
-          <View style={compact ? s.photoHead : { flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={T.caption}>Fotos ({photos.length}/{MAX_PHOTOS})</Text>
-            {photos.length > 0 && !errors.photos ? <Text style={T.footnote}>Toca una para quitarla</Text> : null}
-          </View>
+          {photos.length > 0 && !errors.photos ? <View style={compact ? s.photoHead : { flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <Text style={T.footnote}>Toca una para quitarla</Text>
+          </View> : null}
           <View style={[s.grid, compact && { flex: 1, flexWrap: 'nowrap', gap: 6 }]}>
             {photos.map((p, i) => <PhotoTile key={p.key} photo={p} index={i} total={photos.length} small={compact} tiny={short} onRemove={busy ? undefined : removePhoto} />)}
             {photos.length < MAX_PHOTOS && (

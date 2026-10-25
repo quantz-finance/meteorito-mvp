@@ -7,7 +7,7 @@ test.describe('Vendedor (demo)', () => {
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
     await page.getByPlaceholder('0').fill('150000');
     await takePhoto(page);
-    await expect(page.getByText('FOTOS (1/4)', { exact: false })).toBeVisible();
+    await expect(page.getByLabel('Quitar foto')).toHaveCount(1);
     await page.getByText('Generar link').click();
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
     await expect(page.getByText(/pago\.meteorito\.app\/p\/demo01/)).toBeVisible();
@@ -18,11 +18,11 @@ test.describe('Vendedor (demo)', () => {
     await open(page, '/vender', 'seller', true);
     for (let i = 1; i <= 4; i++) {
       await takePhoto(page);
-      await expect(page.getByText(`FOTOS (${i}/4)`, { exact: false })).toBeVisible();
+      await expect(page.getByLabel('Quitar foto')).toHaveCount(i);
     }
     await expect(page.getByLabel('Tomar foto', { exact: true })).toHaveCount(0); // no deja más de 4
     await page.getByLabel('Quitar foto').first().click();
-    await expect(page.getByText('FOTOS (3/4)', { exact: false })).toBeVisible();
+    await expect(page.getByLabel('Quitar foto')).toHaveCount(3);
     await expect(page.getByLabel('Tomar foto', { exact: true })).toBeVisible();
     await expectNoScroll(page);
   });
@@ -90,7 +90,7 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('Importado de Facebook')).toBeVisible();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('Bicicleta de montaña aro 29');
     await expect(page.getByPlaceholder('0')).toHaveValue('185 000');
-    await expect(page.getByText('FOTOS (1/4)', { exact: false })).toBeVisible();
+    await expect(page.getByLabel('Quitar foto')).toHaveCount(1);
     await expect(page.getByText(/Incluye la descripción del anuncio/)).toBeVisible();
     await expect(page.getByText('Modo prueba', { exact: false })).toHaveCount(0);
     await page.waitForTimeout(400); // la foto termina de comprimirse
@@ -120,7 +120,7 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('Todavía no podemos leer ese link. Tómale foto a tu anuncio y súbela.')).toBeVisible();
     await page.getByRole('button', { name: 'Cerrar' }).last().click();
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('');
-    await expect(page.getByText('FOTOS (0/4)', { exact: false })).toBeVisible();
+    await expect(page.getByLabel('Quitar foto')).toHaveCount(0);
     await expectNoScroll(page);
     if (info.project.name === 'webkit-iphone-se') { await page.waitForTimeout(400); await page.screenshot({ path: 'test-results/fb-import-4-no-se-pudo.png' }); }
     // Sigue funcionando a mano
