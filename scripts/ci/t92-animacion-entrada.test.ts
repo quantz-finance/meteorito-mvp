@@ -1,4 +1,4 @@
-// (91) Animación de entrada ÚNICA en toda la app: fade + subida corta (8–12 px), 250–300 ms ease-out, escalonada 40–60 ms
+// (92) Animación de entrada ÚNICA en toda la app: fade + subida corta (8–12 px), 250–300 ms ease-out, escalonada 40–60 ms
 //      entre bloques hermanos con tope (todo visible en ~0,5 s), se repite al volver a la pantalla, instantánea con reducir
 //      movimiento y en navegadores automatizados (los tests no dependen del tiempo). Solo transform/opacity.
 import type { T } from './setup';
