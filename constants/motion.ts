@@ -24,6 +24,16 @@ const confetti = Array.from({ length: 14 }, (_, i) => {
 const burst = burstPoints(10, 92).map((p, i) => `[data-anim="burst"]>div:nth-child(${i + 1}){--x:${p.x}px;--y:${p.y}px;background:${['#FFD84D', '#FF8A3D', '#C9B6FF', '#FFFFFF'][i % 4]};animation-delay:${(i % 3) * 20}ms}`).join('');
 const floaters = FLOATERS.map(([l, d, dx], i) => `[data-anim="floaters"]>div:nth-child(${i + 1}){left:${l}%;--dx:${dx}px;animation-delay:${d}s}`).join('');
 
+// Avisos legales (BetaNotice, "Ver reglas", "Cómo funciona": data-legal, components/RulesLink): fuera de TODA animación
+// de entrada con opacidad, ellos y cualquier contenedor que los tenga dentro (:has). Así su estado inicial ya es el final
+// (visible) en el HTML estático, sin JS, y aunque la animación falle, se pause o vaya lenta. Navegador sin :has: sin
+// animaciones de entrada con opacidad en ninguna parte (mejor quieto que un aviso invisible). Neo (legal): no quitar.
+export const LEGAL_ANIMS = ['enter', 'fade', 'pop', 'check', 'swap', 'toast', 'msg'];
+const legalSel = (inner: string) => LEGAL_ANIMS.map((a) => `[data-anim="${a}"]${inner}`).join(',');
+export const LEGAL_CSS = '[data-legal]{animation:none!important}'
+  + `${legalSel(':has([data-legal])')}{animation:none!important}`
+  + `@supports not selector(:has(*)){${legalSel('')}{animation:none!important}}`;
+
 export const MOTION_CSS = `
 @keyframes m-enter{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
 @keyframes m-fade{from{opacity:0}to{opacity:1}}
@@ -85,4 +95,4 @@ html.bg-hidden [data-anim]{animation-play-state:paused}
 [data-anim="confetti"]>div{position:absolute;left:50%;top:50%;width:8px;height:8px;border-radius:2px;opacity:0;animation:m-confetti 900ms ${EASE_OUT} forwards}
 ${confetti}
 @media (prefers-reduced-motion: reduce){[data-anim]{animation-duration:1ms!important;animation-delay:0ms!important;animation-iteration-count:1!important}[data-anim="ring"],[data-anim="confetti"],[data-anim="shock"],[data-anim="shock2"],[data-anim="burst"],[data-anim="floaters"]{display:none!important}*{transition-duration:1ms!important}}
-`.replace(/\n/g, '');
+`.replace(/\n/g, '') + LEGAL_CSS;

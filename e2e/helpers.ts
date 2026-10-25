@@ -101,3 +101,25 @@ export async function searchFeed(page: Page, text: string) {
   await input.press('Enter');
   await expect(input).toHaveCount(0);
 }
+
+/** Neo (legal): ningún aviso legal (data-legal: aviso de beta, "Ver reglas", "Cómo funciona") ni ningún contenedor suyo
+ *  tiene una animación de entrada con opacidad: su estado inicial ya es el final, aunque la animación falle, se pause o
+ *  vaya lenta. Devuelve por aviso: opacidad efectiva (producto con sus ancestros) y las animaciones de entrada que lo tocan. */
+export async function legalNotices(page: Page) {
+  return page.evaluate(() => [...document.querySelectorAll('[data-legal]')].map((el) => {
+    let o = 1; const anims: string[] = [];
+    for (let e: Element | null = el; e; e = e.parentElement) {
+      const cs = getComputedStyle(e); o *= parseFloat(cs.opacity);
+      for (const n of cs.animationName.split(',').map((x) => x.trim())) if (/^m-(enter|fade|pop|swap|toast|msg|ap-)/.test(n)) anims.push(n);
+    }
+    // Además: aunque una animación corriendo se congelara en su primer cuadro, el aviso sigue a opacidad 1.
+    const frozen = el.getAnimations({ subtree: false }).length + anims.length;
+    return { id: (el as HTMLElement).dataset.testid ?? el.textContent?.slice(0, 30), opacity: o, anims, frozen };
+  }));
+}
+export async function expectLegalVisible(page: Page, ids: string[]) {
+  for (const id of ids) await expect(page.getByTestId(id).first()).toBeVisible();
+  const list = await legalNotices(page);
+  for (const id of ids) expect(list.some((l) => l.id === id), `aviso ${id} marcado data-legal`).toBe(true);
+  for (const l of list) expect(l, `aviso ${l.id} fuera de animaciones de entrada`).toMatchObject({ opacity: 1, anims: [], frozen: 0 });
+}

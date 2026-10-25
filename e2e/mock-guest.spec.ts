@@ -1,7 +1,7 @@
 // Build REAL + backend simulado (scripts/e2e/mock-server.mjs): el comprador sin cuenta tal como corre en producción.
 import { test, expect, type Page } from '@playwright/test';
 import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken } from './mock';
-import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle } from './helpers';
+import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle, expectLegalVisible } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -520,6 +520,7 @@ test('MCK-BETA-01 aviso de beta visible en el viewport antes de "Pagar en custod
   expect(n.y).toBeGreaterThanOrEqual(0);
   expect(n.y + n.height).toBeLessThanOrEqual(vh); // dentro del viewport, sin scroll
   expect(n.y + n.height).toBeLessThanOrEqual(b.y); // antes del botón de pagar
+  await expectLegalVisible(page, ['beta-notice', 'rules-hint']); // con la animación de entrada activa: ni él ni sus contenedores se animan
   await notice.getByText('Ver cómo funciona').click();
   await expect(page).toHaveURL(/\/como-funciona/);
 });
