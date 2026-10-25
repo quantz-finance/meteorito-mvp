@@ -18,7 +18,7 @@ export function demoEnabled(flag: string | undefined, host?: string | null): boo
 // Expo inlinea EXPO_PUBLIC_* solo con acceso estático process.env.X.
 export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeof window !== 'undefined' ? window.location?.hostname : null);
 
-import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe, type PayoutView } from '../api/_lib/payout'; // pura y chica (~1 KB)
+import { HOLDER_PLACEHOLDER, IBAN_PLACEHOLDER, SINPE_PLACEHOLDER, type PayoutView } from '../api/_lib/payout'; // pura y chica (~1 KB)
 import { canShowContact, normalizeContactPhone } from '../api/_lib/contact'; // pura
 import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
 import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
@@ -450,10 +450,8 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
       return { payout: st.payout, state: s2 };
     }
     if (body.action === 'payout_set') {
-      const e = crIbanError(body.iban); if (e) throw err(400, 'bad_iban', e);
-      const holder = cleanHolder(body.holder_name); if (holder.length < 3) throw err(400, 'bad_holder', 'Escribe el nombre del titular como aparece en tu cuenta.');
-      const sp = normalizeSinpe(body.sinpe_phone); if (sp === 'invalid') throw err(400, 'bad_sinpe', 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).');
-      st.payout = { method: 'iban', iban_last4: normalizeIban(body.iban).slice(-4), holder_name: holder, sinpe_last4: sp ? sp.slice(-4) : null, stellar_address: st.payout?.stellar_address ?? null, updated_at: now() }; emit();
+      // Igual que el servidor en la beta: lo enviado se descarta y queda el dato de ejemplo.
+      st.payout = { method: 'iban', iban_last4: IBAN_PLACEHOLDER.slice(-4), holder_name: HOLDER_PLACEHOLDER, sinpe_last4: SINPE_PLACEHOLDER.slice(-4), stellar_address: st.payout?.stellar_address ?? null, updated_at: now() }; emit();
       return { payout: st.payout };
     }
     st.store ??= { slug: 'valeria', name: 'Valeria' };

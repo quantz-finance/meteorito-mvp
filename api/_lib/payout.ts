@@ -1,6 +1,17 @@
 // Cuenta IBAN de Costa Rica para cobrar: validación pura (la usan la API y la app). Sin imports de Node.
 // Formato: CR + 2 dígitos de control + 18 dígitos = 22 caracteres. Checksum ISO 13616 (mod 97 == 1).
 
+/** BETA EN TESTNET: nunca guardamos una cuenta real. Lo que llegue en iban / holder_name / sinpe_phone se DESCARTA y se guarda
+ *  este dato de ejemplo (cumple los checks de 011/029: ^CR[0-9]{20}$, 3..80 caracteres y ^[0-9]{8}$). La app lo muestra
+ *  prellenado y de solo lectura. Ver docs/cobro-wallet-iban.md. */
+export const IBAN_PLACEHOLDER = 'CR00000000000000000000';
+export const HOLDER_PLACEHOLDER = 'Dato de ejemplo';
+export const SINPE_PLACEHOLDER = '00000000';
+export const IBAN_LABEL = 'Cuenta bancaria (IBAN) - en la beta es un dato de ejemplo';
+export const IBAN_HELP = 'Beta en testnet: no escribas tu IBAN real. No hacemos pagos al banco ni guardamos tu cuenta; en la beta se cobra solo en USDC de testnet, que no es dinero real.';
+/** Fila que se persiste para la Cuenta IBAN en la beta: siempre el dato de ejemplo, sin importar lo que se mande. */
+export const placeholderPayoutRow = (sub: string, at: string) => ({ sub, iban: IBAN_PLACEHOLDER, holder_name: HOLDER_PLACEHOLDER, sinpe_phone: SINPE_PLACEHOLDER, updated_at: at });
+
 export const normalizeIban = (v: unknown) => String(v ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 /** mod 97 de un número decimal arbitrariamente largo (en trozos, sin BigInt). */

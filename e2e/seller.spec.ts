@@ -51,23 +51,21 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('Guitarra')).toBeVisible();
   });
 
-  test('VEN-05 Mi cuenta: IBAN inválido se rechaza, válido se guarda enmascarado', async ({ page }) => {
+  test('VEN-05 Mi cuenta: Cuenta IBAN en la beta = dato de ejemplo de solo lectura; lo escrito no se guarda', async ({ page }) => {
     await open(page, '/mi-tienda', 'seller', true);
-    await page.getByText('Elige dónde cobrar').click(); // con 029 (el demo la simula): Cuenta IBAN por defecto
-    const iban = page.getByPlaceholder('CR00 0000 0000 0000 0000 00');
+    await page.getByText('Elige dónde cobrar').click();
+    await page.getByTestId('payout-iban').click();
+    const iban = page.getByTestId('payout-iban-input');
+    await expect(iban).toHaveValue('CR00 0000 0000 0000 0000 00');
+    await expect(iban).not.toBeEditable();
+    await iban.press('5').catch(() => {}); // intentar escribir no cambia nada
+    await expect(iban).toHaveValue('CR00 0000 0000 0000 0000 00');
+    await expect(page.getByTestId('payout-sinpe-input')).not.toBeEditable();
     const save = page.getByRole('button', { name: /Guardar cuenta/ });
-    await page.getByPlaceholder('Como aparece en tu cuenta').fill('Valeria Mora');
-    await iban.fill('CR05015202001026284067'); // dígito de control mod-97 malo
-    await expect(save).toBeDisabled();
-    await iban.fill('CR05015202001026284066');
-    await page.getByPlaceholder('8888 1234').fill('8888123');  // SINPE de 7 dígitos
-    await expect(save).toBeDisabled();
-    await page.getByPlaceholder('8888 1234').fill('88881234');
     await expect(save).toBeEnabled();
     await save.click();
-    await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1')!).payout?.iban_last4)).toBe('4066');
-    await expect(page.getByText(/4066/).first()).toBeVisible();
-    await expect(page.getByText('CR05015202001026284066')).toHaveCount(0); // siempre enmascarada
+    await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1')!).payout)).toMatchObject({ method: 'iban', iban_last4: '0000', holder_name: 'Dato de ejemplo', sinpe_last4: '0000' });
+    await expect(page.getByText(/0000/).first()).toBeVisible();
   });
 
   // Importar de un link: el API simulado del demo responde como /api/store {action:'import_listing'} (sin red).
