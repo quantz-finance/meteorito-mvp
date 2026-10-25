@@ -20,6 +20,7 @@ type Demo = NonNullable<ReturnType<typeof import('../api/_lib/demoProducts').dem
 
 export function DemoProductPage({ slug }: { slug: string }) {
   const [p, setP] = useState<Demo | null | undefined>(undefined);
+  const [shown, setShown] = useState(0); // foto grande (0 = la principal); las miniaturas la cambian
   useEffect(() => {
     let live = true;
     if (!FEED_DEMO_PRODUCTS) { setP(null); return; }
@@ -43,9 +44,17 @@ export function DemoProductPage({ slug }: { slug: string }) {
       {p === undefined ? <><Skeleton h={300} r={R.lg} /><Skeleton h={120} r={R.lg} /></> : <>
         <Card style={{ gap: S.sm, padding: 0, overflow: 'hidden' }}>
           <View>
-            <Image testID="demo-product-photo" source={{ uri: p.photo }} accessibilityLabel={`Foto de ${p.title} (ejemplo)`} style={s.photo} resizeMode="cover" />
+            <Image testID="demo-product-photo" source={{ uri: p.photos[shown] ?? p.photo }} accessibilityLabel={`Foto de ${p.title} (ejemplo)`} style={s.photo} resizeMode="cover" />
             <DemoInfo style={s.info} />
           </View>
+          {p.photos.length > 1 ? <View style={s.thumbs} testID="demo-product-thumbs">
+            {p.photos.map((u, i) => (
+              <Pressable key={u} onPress={() => { haptic.tap(); setShown(i); }} accessibilityRole="button" accessibilityLabel={`Ver foto ${i + 1} de ${p.photos.length}`}
+                accessibilityState={{ selected: i === shown }} hitSlop={4} style={[s.thumb, i === shown && s.thumbOn]}>
+                <Image source={{ uri: u }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+              </Pressable>
+            ))}
+          </View> : null}
           <View style={{ gap: S.sm, paddingHorizontal: S.md, paddingBottom: S.md }}>
             <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
               <Chip label={p.condition} tone="muted" />
@@ -53,6 +62,7 @@ export function DemoProductPage({ slug }: { slug: string }) {
             <Text style={T.title} accessibilityRole="header">{p.title}</Text>
             <Text style={T.money}>{formatCRC(p.price_crc)}</Text>
             <View style={s.row}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View>
+            {p.delivery ? <View style={[s.row, { alignItems: 'flex-start' }]} testID="demo-product-delivery"><View style={{ marginTop: 2 }}><Icon name="cube-outline" size={14} color={C.textDim} /></View><Text style={[T.footnote, { flex: 1 }]}>{p.delivery}</Text></View> : null}
             <Text style={T.callout}>{p.description}</Text>
           </View>
         </Card>
@@ -76,5 +86,8 @@ const s = StyleSheet.create({
   photo: { width: '100%', aspectRatio: 1, backgroundColor: C.lilacBg },
   info: { position: 'absolute', top: 10, right: 10 }, // iconito (i) de ejemplo, esquina de la foto
   row: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  thumbs: { flexDirection: 'row', gap: S.sm, paddingHorizontal: S.md },
+  thumb: { width: 56, height: 56, borderRadius: R.sm, overflow: 'hidden', borderWidth: 2, borderColor: 'transparent', backgroundColor: C.lilacBg },
+  thumbOn: { borderColor: C.lilac },
   seller: { flexDirection: 'row', alignItems: 'center', gap: S.sm, padding: S.md, borderRadius: R.lg, backgroundColor: C.surface, borderWidth: 0.5, borderColor: C.line },
 });

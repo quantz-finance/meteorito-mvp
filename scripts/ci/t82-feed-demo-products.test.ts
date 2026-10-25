@@ -1,10 +1,10 @@
 // (82) Productos de ejemplo en Comprar (FEED_DEMO_PRODUCTS): datos ficticios en código (nunca en la base), van DESPUÉS de
-//      los reales, filtro y búsqueda funcionan, nunca en Patrocinado, tiendas /t/<demo> con reseñas, fotos en /public
-//      (≤120 KB, ~800 px) y el pago es imposible (sin fila en la base, orderBySlug 409, ficha sin PayBox). Sin red.
+//      los reales, filtro y búsqueda funcionan, nunca en Patrocinado, tiendas /t/<demo> con reseñas, foto de perfil, redes de
+//      Meteorito y última conexión relativa; fotos en /public (≤120 KB, ~800 px; perfiles ≤40 KB) y el pago es imposible (sin fila en la base, orderBySlug 409, ficha sin PayBox). Sin red.
 import type { T } from './setup';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { __setDbForTests, orderBySlug } from '../../api/_lib/db';
-import { DEMO_PRODUCTS, DEMO_SELLERS, decodeDemoCursor, demoList, demoPage, demoProduct, demoProfile, isDemoStoreSlug, looksLikeDemoProduct, mergeDemo } from '../../api/_lib/demoProducts';
+import { DEMO_PRODUCTS, DEMO_SELLERS, demoActivityBySlug, demoSeen, demoSuggestedStores, decodeDemoCursor, demoList, demoPage, demoProduct, demoProfile, isDemoStoreSlug, looksLikeDemoProduct, mergeDemo } from '../../api/_lib/demoProducts';
 import { BANNED_COPY, COPY } from '../../lib/copy';
 import { fakeDb } from './fakedb';
 import store from '../../api/store/index';
@@ -26,28 +26,55 @@ function jpegSize(b: Buffer): { w: number; h: number } | null {
   }
   return null;
 }
+/** Ancho y alto de un WebP (VP8 / VP8L / VP8X). */
+function webpSize(b: Buffer): { w: number; h: number } | null {
+  if (b.toString('ascii', 0, 4) !== 'RIFF' || b.toString('ascii', 8, 12) !== 'WEBP') return null;
+  const c = b.toString('ascii', 12, 16);
+  if (c === 'VP8X') return { w: 1 + b.readUIntLE(24, 3), h: 1 + b.readUIntLE(27, 3) };
+  if (c === 'VP8 ') return { w: b.readUInt16LE(26) & 0x3fff, h: b.readUInt16LE(28) & 0x3fff };
+  if (c === 'VP8L') { const n = b.readUInt32LE(21); return { w: 1 + (n & 0x3fff), h: 1 + ((n >> 14) & 0x3fff) }; }
+  return null;
+}
+const imgSize = (b: Buffer) => jpegSize(b) ?? webpSize(b);
 
 export async function run(t: T) {
   // --- Datos ---
   const flag = src('api/_lib/demoFlag.ts');
   t.check('flag en código: FEED_DEMO_PRODUCTS = true (un solo lugar para apagarlo)', /export const FEED_DEMO_PRODUCTS = true;/.test(flag));
-  t.check(`${DEMO_PRODUCTS.length} productos (30-40) de ${DEMO_SELLERS.length} vendedores (10-12)`, DEMO_PRODUCTS.length >= 30 && DEMO_PRODUCTS.length <= 40 && DEMO_SELLERS.length >= 10 && DEMO_SELLERS.length <= 12);
+  t.check(`${DEMO_PRODUCTS.length} productos (60-80) de ${DEMO_SELLERS.length} tiendas (12-16)`, DEMO_PRODUCTS.length >= 60 && DEMO_PRODUCTS.length <= 80 && DEMO_SELLERS.length >= 12 && DEMO_SELLERS.length <= 16);
   const conf = DEMO_SELLERS.filter((s) => s.verified).length;
   t.check(`identidad confirmada ~mitad (${conf}/${DEMO_SELLERS.length})`, conf >= 4 && DEMO_SELLERS.length - conf >= 4);
   const slugs = DEMO_PRODUCTS.map((x) => x.slug);
   t.check('slugs ej-… únicos (no chocan con los reales de 6 letras)', new Set(slugs).size === slugs.length && slugs.every((s) => looksLikeDemoProduct(s) && s.length > 6));
   t.check('cada producto es de un vendedor de ejemplo; cada vendedor tiene 2+ productos', DEMO_PRODUCTS.every((x) => DEMO_SELLERS.some((s) => s.store_slug === x.seller)) && DEMO_SELLERS.every((s) => DEMO_PRODUCTS.filter((x) => x.seller === s.store_slug).length >= 2));
-  t.check('pocas reseñas: 0-25 calificaciones, 0-6 comentarios visibles, promedio 1-5 o null sin calificaciones', DEMO_SELLERS.every((s) => s.rating_count <= 25 && s.reviews.length <= 6 && s.reviews.length <= s.rating_count && (s.rating_count === 0 ? s.rating_avg === null : (s.rating_avg ?? 0) >= 1 && (s.rating_avg ?? 9) <= 5)) && DEMO_SELLERS.some((s) => s.rating_count === 0));
+  t.check('reseñas creíbles: 0-60 calificaciones, 0-6 comentarios visibles, promedio 1-5 o null sin calificaciones', DEMO_SELLERS.every((s) => s.rating_count <= 60 && s.reviews.length <= 6 && s.reviews.length <= s.rating_count && (s.rating_count === 0 ? s.rating_avg === null : (s.rating_avg ?? 0) >= 1 && (s.rating_avg ?? 9) <= 5)) && DEMO_SELLERS.some((s) => s.rating_count === 0));
   const price = (slug: string) => DEMO_PRODUCTS.find((x) => x.slug === slug)?.price_crc;
   t.check('precios reales de Marketplace CR: iPhone 13 ₡240.000, PS5 ₡300.000; todos ₡5.000-₡1.000.000', price('ej-iphone-13') === 240000 && price('ej-ps5-lector') === 300000 && DEMO_PRODUCTS.every((x) => x.price_crc >= 5000 && x.price_crc <= 1000000 && x.price_crc % 500 === 0));
   t.check('ubicaciones de Costa Rica', DEMO_SELLERS.every((s) => /San José|Heredia|Alajuela|Cartago|Escazú|Curridabat|Desamparados|Moravia|San Pedro|Tibás|Santo Domingo/.test(s.location)));
-  const bad = DEMO_PRODUCTS.filter((x) => { const f = new URL(`../../public${x.photo}`, import.meta.url); if (!existsSync(f)) return true; const b = readFileSync(f); const d = jpegSize(b); return statSync(f).size > 120 * 1024 || !d || d.w < 600 || d.w > 1000; });
-  t.check('fotos en /public/demo-feed, JPEG ≤120 KB, ~800 px', bad.length === 0 && DEMO_PRODUCTS.every((x) => /^\/demo-feed\/p-[a-z0-9]+\.jpg$/.test(x.photo)), bad.map((x) => x.photo).join());
+  const pub = (p: string) => new URL(`../../public${p}`, import.meta.url);
+  const badImg = (p: string, maxKb: number, minW: number, maxW: number) => { const f = pub(p); if (!existsSync(f)) return true; const d = imgSize(readFileSync(f)); return statSync(f).size > maxKb * 1024 || !d || d.w < minW || d.w > maxW; };
+  const bad = DEMO_PRODUCTS.flatMap((x) => x.photos).filter((ph) => badImg(ph, 120, 600, 1000));
+  t.check('fotos en /public/demo-feed (JPEG o WebP), ≤120 KB, ~800 px; 1 a 3 por producto y la primera = photo', bad.length === 0
+    && DEMO_PRODUCTS.every((x) => x.photos.length >= 1 && x.photos.length <= 3 && x.photos[0] === x.photo && x.photos.every((ph) => /^\/demo-feed\/p-[a-z0-9-]+\.(jpg|webp)$/.test(ph))), bad.join());
+  const badAv = DEMO_SELLERS.filter((x) => !/^\/demo-feed\/a-[a-z0-9-]+\.webp$/.test(x.avatar) || badImg(x.avatar, 40, 128, 512));
+  t.check('cada tienda de ejemplo tiene foto de perfil (WebP ≤40 KB) y el API la manda', badAv.length === 0 && new Set(DEMO_SELLERS.map((x) => x.avatar)).size === DEMO_SELLERS.length
+    && DEMO_SELLERS.every((x) => demoProfile(x.store_slug)?.avatar_url === x.avatar), badAv.map((x) => x.store_slug).join());
+  t.check('cada tienda: seguidores, bio, ubicación y entrega; cada ficha trae "Entrega y plazo"', DEMO_SELLERS.every((x) => x.followers > 0 && x.bio && x.location && /Plazo/.test(x.delivery))
+    && DEMO_PRODUCTS.every((x) => /Plazo/.test(demoProduct(x.slug)?.delivery ?? '')));
+  const cats = ['celulares', 'gamer', 'hogar', 'ruedas', 'sneakers', 'glam', 'closet', 'libros', 'bebe'];
+  t.check('categorías variadas (celulares, consolas, hogar, bicis, tenis, belleza, ropa, libros, bebé)', cats.every((c) => DEMO_SELLERS.some((x) => x.store_slug.includes(c) && DEMO_PRODUCTS.some((p) => p.seller === x.store_slug))));
+  const soc = demoProfile('tecno-sabana')?.socials ?? {};
+  t.check('redes de las tiendas de ejemplo: 2+ y SOLO de Meteorito', Object.keys(soc).length >= 2 && Object.values(soc).every((u) => /^https:\/\/(www\.instagram\.com\/meteorito\.app|pago\.meteorito\.app\/)/.test(String(u))));
+  const t0 = Date.UTC(2026, 9, 24, 12), seenAll = demoActivityBySlug(DEMO_SELLERS.map((x) => x.store_slug), t0);
+  t.check('última conexión: relativa a ahora (la misma tienda se ve reciente un año después), con en línea, minutos, horas y días',
+    JSON.stringify(demoSeen('tecno-sabana', t0)) === JSON.stringify(demoSeen('tecno-sabana', t0 + 365 * 86400e3)) && demoSeen('tecno-sabana', t0)?.k === 'online'
+    && ['online', 'min', 'h', 'days'].every((k) => Object.values(seenAll).some((a) => a.k === k)) && demoSeen('vale') === null);
+  t.check('Siguiendo vacío: tiendas sugeridas (de ejemplo, con foto)', demoSuggestedStores(6).length === 6 && demoSuggestedStores(6).every((x) => x.demo && x.avatar_url));
   const demoFeedSrc = src('lib/demoFeed.ts');
   const legacy = [...demoFeedSrc.matchAll(/'(\/demo-feed\/[^']+\.jpg)'/g)].map((m) => m[1]);
   t.check('modo demo: las 8 fotos de /demo-feed existen', legacy.length >= 8 && legacy.every((p) => existsSync(new URL(`../../public${p}`, import.meta.url))), legacy.filter((p) => !existsSync(new URL(`../../public${p}`, import.meta.url))).join());
   t.check('fotos servidas desde /public (sin require/import de .jpg en JS)', !/require\([^)]*demo-feed|from '[^']*demo-feed[^']*\.jpg'/.test(src('api/_lib/demoProducts.ts') + demoFeedSrc + src('components/DemoProduct.tsx')));
-  const texts = [...DEMO_PRODUCTS.flatMap((x) => [x.title, x.description, x.condition]), ...DEMO_SELLERS.flatMap((s) => [s.display_name, s.bio, ...s.reviews.map((r) => r.comment ?? '')]), ...Object.values(COPY.demoProducts).map(String)];
+  const texts = [...DEMO_PRODUCTS.flatMap((x) => [x.title, x.description, x.condition, x.delivery ?? '']), ...DEMO_SELLERS.flatMap((s) => [s.display_name, s.bio, s.location, s.delivery, ...s.reviews.map((r) => r.comment ?? '')]), ...Object.values(COPY.demoProducts).map(String)];
   t.check('copy sin palabras prohibidas', texts.every((x) => !BANNED_COPY.test(x)), texts.filter((x) => BANNED_COPY.test(x)).join(' | '));
   t.check('copy en tuteo (sin voseo) y sin emojis', texts.every((x) => !/\b(vos|tenés|podés|querés|escribí|tocá|mirá|pagá)\b/i.test(x) && !/\p{Extended_Pictographic}/u.test(x)));
   // Señal SUTIL (pedido del dueño): un iconito discreto que abre un popup, sin etiquetas "Ejemplo" ni avisos grandes.

@@ -14,18 +14,26 @@ export interface SalePost {
   kind: 'sale'; id: string; example: true;
   seller_name: string; buyer_name: string; /** el vendedor (ficticio) tiene identidad confirmada: sale en ese filtro */ verified: boolean;
   stars: 1 | 2 | 3 | 4 | 5; comment: string | null; product: string; /** Ionicons */ icon: string; photo: string | null;
+  /** foto de perfil del vendedor (ficticio, generada) */ avatar: string | null;
 }
-const sale = (id: string, seller_name: string, buyer_name: string, verified: boolean, stars: SalePost['stars'], product: string, icon: string, comment: string | null, photo: string | null = null): SalePost =>
-  ({ kind: 'sale', id, example: true, seller_name, buyer_name, verified, stars, comment, product, icon, photo });
+const sale = (id: string, seller_name: string, buyer_name: string, verified: boolean, stars: SalePost['stars'], product: string, icon: string, comment: string | null, photo: string | null = null, avatar: string | null = null): SalePost =>
+  ({ kind: 'sale', id, example: true, seller_name, buyer_name, verified, stars, comment, product, icon, photo, avatar });
 
-/** Ficticios: nombres inventados, productos genéricos. Fotos: public/demo-feed/venta-*.jpg (generadas, ver su README). */
+/** Ficticios: nombres inventados, productos genéricos. Fotos: public/demo-feed/venta-*.jpg y a-*.webp (ver su README). */
 export const DEMO_SALES: SalePost[] = [
-  sale('ej-1', 'María R.', 'Carlos M.', true, 5, 'Bicicleta de montaña', 'bicycle', 'Llegó igual que en las fotos.', '/demo-feed/venta-bicicleta.jpg'),
-  sale('ej-2', 'Pablo J.', 'Natalia S.', false, 5, 'Control de consola', 'game-controller', 'Muy amable, entregó el mismo día.', '/demo-feed/venta-control.jpg'),
-  sale('ej-3', 'Laura G.', 'Andrés P.', true, 5, 'Audífonos inalámbricos', 'headset', 'Todo bien, recomendada.', '/demo-feed/venta-audifonos.jpg'),
-  sale('ej-4', 'Andrea L.', 'Felipe R.', false, 4, 'Chaqueta de mezclilla', 'shirt', 'Buen estado, como lo describió.', '/demo-feed/venta-chaqueta.jpg'),
-  sale('ej-5', 'Sofía V.', 'Daniel C.', true, 4, 'Cámara instantánea', 'camera', null, '/demo-feed/venta-camara-instantanea.jpg'),
-  sale('ej-6', 'Esteban M.', 'Valeria Q.', false, 5, 'Lámpara de escritorio', 'bulb', null, '/demo-feed/venta-lampara.jpg'),
+  sale('ej-1', 'María R.', 'Carlos M.', true, 5, 'Bicicleta de montaña', 'bicycle', 'Llegó igual que en las fotos.', '/demo-feed/venta-bicicleta.jpg', '/demo-feed/a-maria-r.webp'),
+  sale('ej-2', 'Pablo J.', 'Natalia S.', false, 5, 'Control de consola', 'game-controller', 'Muy amable, entregó el mismo día.', '/demo-feed/venta-control.jpg', '/demo-feed/a-pablo-j.webp'),
+  sale('ej-3', 'Laura G.', 'Andrés P.', true, 5, 'Audífonos inalámbricos', 'headset', 'Todo bien, recomendada.', '/demo-feed/venta-audifonos.jpg', '/demo-feed/a-laura-g.webp'),
+  sale('ej-4', 'Andrea L.', 'Felipe R.', false, 4, 'Chaqueta de mezclilla', 'shirt', 'Buen estado, como lo describió.', '/demo-feed/venta-chaqueta.jpg', '/demo-feed/a-andrea-l.webp'),
+  sale('ej-5', 'Sofía V.', 'Daniel C.', true, 4, 'Cámara instantánea', 'camera', null, '/demo-feed/venta-camara-instantanea.jpg', '/demo-feed/a-sofia-v.webp'),
+  sale('ej-6', 'Esteban M.', 'Valeria Q.', false, 5, 'Lámpara de escritorio', 'bulb', null, '/demo-feed/venta-lampara.jpg', '/demo-feed/a-esteban-m.webp'),
+  // Ventas de las tiendas de ejemplo (api/_lib/demoProducts.ts): mismo nombre y foto de perfil.
+  sale('ej-7', 'Pao Sneakers', 'Priscilla V.', true, 5, 'Tenis para correr', 'bag-check-outline', 'Casi nuevos y súper cómodos.', '/demo-feed/venta-tenis-correr.jpg', '/demo-feed/a-pao-sneakers.webp'),
+  sale('ej-8', 'Bebé Tres Ríos', 'Carolina V.', false, 5, 'Coche para bebé', 'cart', 'Impecable y se pliega fácil.', '/demo-feed/venta-coche-bebe.jpg', '/demo-feed/a-bebe-tres-rios.webp'),
+  sale('ej-9', 'Bella Glam', 'Tatiana L.', true, 5, 'Perfume', 'sparkles-outline', 'Llegó bien empacado.', '/demo-feed/venta-perfume.jpg', '/demo-feed/a-bella-glam.webp'),
+  sale('ej-10', 'Libros Escalante', 'Laura B.', false, 5, 'Libros infantiles', 'bag-check-outline', 'A mis hijos les encantaron.', '/demo-feed/venta-libros-infantiles.jpg', '/demo-feed/a-libros-escalante.webp'),
+  sale('ej-11', 'Mundo Gamer CR', 'Mauricio J.', true, 5, 'Audífonos gamer', 'headset', null, '/demo-feed/venta-audifonos-gamer.jpg', '/demo-feed/a-mundo-gamer-cr.webp'),
+  sale('ej-12', 'Closet Rohrmoser', 'Andrea P.', false, 4, 'Vestido floral', 'shirt', 'Me quedó perfecto.', '/demo-feed/venta-vestido.jpg', '/demo-feed/a-closet-rohrmoser.webp'),
 ];
 
 export const saleHeadline = (p: Pick<SalePost, 'seller_name' | 'buyer_name'>) => `${p.seller_name} le vendió a ${p.buyer_name}`;

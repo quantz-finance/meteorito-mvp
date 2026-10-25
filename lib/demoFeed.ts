@@ -1,5 +1,5 @@
 // Modo demo: feed de Comprar y perfiles públicos simulados (misma forma que GET /api/store?feed / ?profile). Sin red.
-// Fotos: public/demo-feed/p-*.jpg (las mismas de los productos de ejemplo, generadas, sin marcas ni personas).
+// Fotos: public/demo-feed/p-*.jpg (las mismas de los productos de ejemplo, generadas, sin marcas ni personas) y a-*.webp (perfiles).
 // ?feed=empty en la URL simula un feed vacío (para ver el estado vacío).
 // ?ejemplos=1 agrega los productos de EJEMPLO del feed de producción (api/_lib/demoProducts.ts) igual que el API:
 // después de estos, con un iconito (i) discreto, y sus tiendas /t/<usuario> (para probar y fotografiar esa vista sin backend).
@@ -17,9 +17,9 @@ const H = 3600e3;
 const outcome = (n: number) => { const d = n > 10 ? 1 : 0; return { completed: n, no_issues: n - d, disputes_resolved: d, disputes_open: 0 }; };
 interface DemoSeller { store_slug: string; display_name: string; verified: boolean; rating_avg: number | null; rating_count: number; avatar_url: string | null; sales: number; since: string; wa: string | null; seen?: Activity | null }
 const SELLERS: DemoSeller[] = [
-  { store_slug: 'jose-games', display_name: 'José Games', verified: true, rating_avg: 4.9, rating_count: 31, avatar_url: null, sales: 48, since: '2026-05-12T00:00:00Z', wa: 'https://wa.me/50670001234', seen: { k: 'min', n: 15 } },
-  { store_slug: 'ana-solis', display_name: 'Ana Solís', verified: false, rating_avg: null, rating_count: 0, avatar_url: null, sales: 0, since: '2026-10-02T00:00:00Z', wa: null, seen: { k: 'days', n: 4 } },
-  { store_slug: 'carlos-bikes', display_name: 'Carlos Bikes', verified: false, rating_avg: 4.5, rating_count: 4, avatar_url: null, sales: 6, since: '2026-08-20T00:00:00Z', wa: 'https://wa.me/50660004321', seen: { k: 'h', n: 3 } },
+  { store_slug: 'jose-games', display_name: 'José Games', verified: true, rating_avg: 4.9, rating_count: 31, avatar_url: '/demo-feed/a-jose-games.webp', sales: 48, since: '2026-05-12T00:00:00Z', wa: 'https://wa.me/50670001234', seen: { k: 'min', n: 15 } },
+  { store_slug: 'ana-solis', display_name: 'Ana Solís', verified: false, rating_avg: null, rating_count: 0, avatar_url: '/demo-feed/a-ana-solis.webp', sales: 0, since: '2026-10-02T00:00:00Z', wa: null, seen: { k: 'days', n: 4 } },
+  { store_slug: 'carlos-bikes', display_name: 'Carlos Bikes', verified: false, rating_avg: 4.5, rating_count: 4, avatar_url: '/demo-feed/a-carlos-bikes.webp', sales: 6, since: '2026-08-20T00:00:00Z', wa: 'https://wa.me/50660004321', seen: { k: 'h', n: 3 } },
 ];
 const ITEMS: { slug: string; seller: string; title: string; price_crc: number; photo: string | null; ago: number }[] = [
   { slug: 'dmf001', seller: 'jose-games', title: 'PlayStation 5 Digital con control', price_crc: 255000, photo: '/demo-feed/p-ps5digital.jpg', ago: 2 },
@@ -62,6 +62,9 @@ const pub = (s: DemoSeller) => ({ store_slug: s.store_slug, display_name: s.disp
 export async function demoActivity(slugs: string[]): Promise<Record<string, Activity>> {
   const out: Record<string, Activity> = {};
   for (const slug of slugs) { const s = slug === demoStoreSlug() ? valeria() : SELLERS.find((x) => x.store_slug === slug); if (s?.seen) out[slug] = s.seen; }
+  if (demoProductsOn() && slugs.some((x) => !(x in out))) { // tiendas de ejemplo (?ejemplos=1): igual que el API
+    try { Object.assign(out, (await ej()).demoActivityBySlug(slugs.filter((x) => !(x in out)))); } catch { /* sin ejemplos */ }
+  }
   return out;
 }
 

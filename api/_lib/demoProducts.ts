@@ -1,13 +1,17 @@
-// Productos de EJEMPLO del feed de Comprar (y sus tiendas /t/<usuario>). HOY el feed tiene pocos productos reales; para que
-// no se vea vacío se muestran estos, TODOS FICTICIOS: vendedores, nombres de usuario, reseñas, textos y fotos inventados
-// (no se copió ningún anuncio, nombre ni foto real). Fotos: public/demo-feed/p-*.jpg, generadas, sin marcas ni personas.
+// Productos de EJEMPLO del feed de Comprar (y sus tiendas /t/<usuario>). Para que la beta se vea como una app con vida,
+// se muestran estos, TODOS FICTICIOS: vendedores, nombres de usuario, reseñas, textos, fotos de perfil y de producto
+// (no se copió ningún anuncio, nombre ni foto real; las caras son generadas por IA y no son de personas reales).
+// Fotos: public/demo-feed/ (ver su README: origen y licencia de cada una).
 // Reglas:
 //  - Siempre marcados: demo: true -> iconito (i) discreto con popup en la tarjeta, la tienda y la ficha.
 //  - Nunca se pagan: no existen en la base (no hay pedido); la ficha /p/ej-… dice que es un ejemplo y no tiene botón de
 //    pago; orderBySlug rechaza estos slugs (409 demo_product) en todo el API de pagos.
 //  - No están en la base: se agregan al feed DESPUÉS de los productos reales (los reales siempre primero) en el API
 //    (api/store/index.ts, mergeDemo) y nunca en el bloque Patrocinado.
+//  - Redes de las tiendas: SOLO cuentas de Meteorito (nunca de una persona real).
+//  - Última conexión: relativa a "ahora" (seenMin minutos antes de cada pedido), así nunca se ve vieja.
 //  - Apagarlos: FEED_DEMO_PRODUCTS = false en api/_lib/demoFlag.ts (o FEED_DEMO_PRODUCTS=0 en el entorno del servidor).
+//    Borrarlos del todo: este archivo, los usos de demoFlag/demoProducts y public/demo-feed/ (ver su README).
 // PURO (sin red ni base): lo usan la API, el modo demo (lib/demoFeed.ts) y la ficha de ejemplo (components/DemoProduct.tsx).
 import { DEMO_PRODUCT_PREFIX, demoProductsOn, FEED_DEMO_PRODUCTS, looksLikeDemoProduct } from './demoFlag';
 import { FEED_DEFAULT, FEED_MAX, foldText, matchesTokens, searchTokens, type VerifiedFilter } from './feedText';
@@ -19,46 +23,79 @@ export interface DemoReview { stars: 1 | 2 | 3 | 4 | 5; comment: string | null; 
 export interface DemoSeller {
   store_slug: string; display_name: string; verified: boolean; rating_avg: number | null; rating_count: number;
   sales: number; since: string; location: string; bio: string; reviews: DemoReview[];
+  /** foto de perfil (generada, persona ficticia) en /public/demo-feed */ avatar: string; followers: number;
+  /** minutos desde la "última conexión" (relativo a cada pedido) */ seenMin: number;
+  /** cómo entrega (se muestra en cada ficha si el producto no trae la suya) */ delivery: string;
 }
 export interface DemoProduct {
-  slug: string; seller: string; title: string; price_crc: number; photo: string; /** horas desde que se "publicó" */ ago: number;
-  condition: string; description: string;
+  slug: string; seller: string; title: string; price_crc: number; photo: string; /** 1-3 fotos; la primera = photo */ photos: string[];
+  /** horas desde que se "publicó" */ ago: number; condition: string; description: string; delivery: string | null;
 }
 
 const r = (stars: DemoReview['stars'], comment: string | null, buyer_name: string | null, h: number): DemoReview => ({ stars, comment, buyer_name, h });
+const av = (slug: string) => `/demo-feed/a-${slug}.webp`;
+type S = Omit<DemoSeller, 'avatar'>;
+const s = (x: S): DemoSeller => ({ ...x, avatar: av(x.store_slug) });
 
-/** 12 vendedores ficticios: 6 con identidad confirmada y 6 sin confirmar. */
+/** 16 tiendas ficticias en distintas categorías: 7 con identidad confirmada y 9 sin confirmar. */
 export const DEMO_SELLERS: DemoSeller[] = [
-  { store_slug: 'tecno-sabana', display_name: 'Tecno Sabana', verified: true, rating_avg: 4.8, rating_count: 24, sales: 38, since: '2026-04-10T00:00:00Z', location: 'San José',
-    bio: 'Celulares y laptops revisados. Entregas en La Sabana y alrededores.', reviews: [r(5, 'El iPhone llegó tal cual lo describió. Muy atento.', 'Andrés V.', 20), r(5, 'Entrega puntual en la Sabana, todo bien.', 'Melissa R.', 140), r(4, null, null, 400)] },
-  { store_slug: 'gaby-celulares', display_name: 'Gaby Celulares', verified: true, rating_avg: 4.9, rating_count: 17, sales: 29, since: '2026-05-02T00:00:00Z', location: 'Heredia',
-    bio: 'Teléfonos y accesorios. Respondo rápido por el chat.', reviews: [r(5, 'Súper recomendada, me explicó todo antes de pagar.', 'Karla M.', 30), r(5, 'Los audífonos venían como nuevos.', 'José P.', 260)] },
-  { store_slug: 'mundo-gamer-cr', display_name: 'Mundo Gamer CR', verified: true, rating_avg: 4.7, rating_count: 21, sales: 33, since: '2026-03-18T00:00:00Z', location: 'Alajuela',
-    bio: 'Consolas, controles y juegos. Se prueban al entregar.', reviews: [r(5, 'Probamos la consola juntos antes de liberar el pago.', 'Diego S.', 50), r(4, 'Buen trato, llegó un poco tarde.', 'Fabián C.', 210), r(5, null, 'Luis G.', 520)] },
-  { store_slug: 'hogar-escazu', display_name: 'Hogar Escazú', verified: true, rating_avg: 4.6, rating_count: 9, sales: 12, since: '2026-06-21T00:00:00Z', location: 'Escazú',
-    bio: 'Muebles y electrodomésticos por mudanza. Entregas en Escazú y Santa Ana.', reviews: [r(5, 'El sofá estaba impecable.', 'Mariana F.', 90), r(4, null, 'Óscar L.', 300)] },
-  { store_slug: 'ruedas-cartago', display_name: 'Ruedas Cartago', verified: true, rating_avg: 4.8, rating_count: 11, sales: 15, since: '2026-05-27T00:00:00Z', location: 'Cartago',
-    bio: 'Bicis de montaña y de ruta con mantenimiento al día.', reviews: [r(5, 'La bici venía con mantenimiento recién hecho.', 'Esteban Q.', 70), r(5, 'Muy honesto con los detalles.', 'Paula N.', 330)] },
-  { store_slug: 'pao-sneakers', display_name: 'Pao Sneakers', verified: true, rating_avg: 4.9, rating_count: 13, sales: 19, since: '2026-07-08T00:00:00Z', location: 'Curridabat',
-    bio: 'Tenis en buen estado, con caja cuando la tengo.', reviews: [r(5, 'Talla exacta y en excelente estado.', 'Daniela R.', 40), r(5, null, 'Kevin A.', 190)] },
-  { store_slug: 'kevin-mora', display_name: 'Kevin M.', verified: false, rating_avg: 4.3, rating_count: 3, sales: 3, since: '2026-09-01T00:00:00Z', location: 'Desamparados',
-    bio: 'Vendo cosas que ya no uso.', reviews: [r(5, 'Todo bien con la compra.', 'Sofía C.', 100), r(4, null, null, 280), r(4, 'Tardó en responder pero cumplió.', 'Marco V.', 600)] },
-  { store_slug: 'vane-ventas', display_name: 'Vane Ventas', verified: false, rating_avg: 4.5, rating_count: 4, sales: 5, since: '2026-08-14T00:00:00Z', location: 'Moravia',
-    bio: 'Artículos de la casa y tecnología.', reviews: [r(5, 'Muy amable, entregó el mismo día.', 'Gabriela S.', 60), r(4, null, null, 350)] },
-  { store_slug: 'luis-electro', display_name: 'Luis Electro', verified: false, rating_avg: null, rating_count: 0, sales: 0, since: '2026-10-12T00:00:00Z', location: 'San Pedro, Montes de Oca',
-    bio: 'Electrónica nueva y usada.', reviews: [] },
-  { store_slug: 'dani-tibas', display_name: 'Dani Q.', verified: false, rating_avg: 5, rating_count: 2, sales: 2, since: '2026-09-20T00:00:00Z', location: 'Tibás',
-    bio: 'Vendo porque me mudo.', reviews: [r(5, 'Todo perfecto.', 'Natalia B.', 120), r(5, null, null, 500)] },
-  { store_slug: 'marce-cr', display_name: 'Marce C.', verified: false, rating_avg: 4, rating_count: 1, sales: 1, since: '2026-10-01T00:00:00Z', location: 'Santo Domingo, Heredia',
-    bio: 'Fotografía y computadoras.', reviews: [r(4, 'Buen producto, la entrega se movió un día.', 'Ricardo T.', 160)] },
-  { store_slug: 'jorge-alajuela', display_name: 'Jorge A.', verified: false, rating_avg: null, rating_count: 0, sales: 0, since: '2026-10-18T00:00:00Z', location: 'Alajuela',
-    bio: 'Cosas de la casa en buen estado.', reviews: [] },
+  s({ store_slug: 'tecno-sabana', display_name: 'Tecno Sabana', verified: true, rating_avg: 4.8, rating_count: 46, sales: 71, since: '2026-04-10T00:00:00Z', location: 'La Sabana, San José', followers: 412, seenMin: 2,
+    bio: 'Celulares, laptops y monitores revisados. Entregas en La Sabana y alrededores.', delivery: 'Entrega en persona en La Sabana o envío por Correos de Costa Rica. Plazo: 1 a 3 días hábiles.',
+    reviews: [r(5, 'El iPhone llegó tal cual lo describió. Muy atento.', 'Andrés V.', 20), r(5, 'Entrega puntual en la Sabana, todo bien.', 'Melissa R.', 140), r(5, 'El monitor venía impecable y con todos los cables.', 'Jonathan P.', 260), r(4, null, null, 400), r(5, 'Me respondió todas las dudas antes de pagar.', 'Raquel M.', 700)] }),
+  s({ store_slug: 'gaby-celulares', display_name: 'Gaby Celulares', verified: true, rating_avg: 4.9, rating_count: 38, sales: 55, since: '2026-05-02T00:00:00Z', location: 'Heredia', followers: 286, seenMin: 9,
+    bio: 'Teléfonos y accesorios. Respondo rápido por el chat.', delivery: 'Entrega en Heredia centro o envío por mensajería a todo el país. Plazo: 1 a 2 días hábiles.',
+    reviews: [r(5, 'Súper recomendada, me explicó todo antes de pagar.', 'Karla M.', 30), r(5, 'Los audífonos venían como nuevos.', 'José P.', 260), r(5, 'El Galaxy estaba igual que en las fotos.', 'Allan R.', 410), r(4, 'Buen trato, el envío tardó un día más.', 'Silvia H.', 650)] }),
+  s({ store_slug: 'mundo-gamer-cr', display_name: 'Mundo Gamer CR', verified: true, rating_avg: 4.7, rating_count: 52, sales: 80, since: '2026-03-18T00:00:00Z', location: 'Alajuela', followers: 534, seenMin: 1,
+    bio: 'Consolas, controles, juegos y accesorios. Se prueban al entregar.', delivery: 'Entrega en Alajuela centro o en el Aeropuerto; también envío por Correos. Plazo: 1 a 3 días hábiles.',
+    reviews: [r(5, 'Probamos la consola juntos antes de liberar el pago.', 'Diego S.', 50), r(4, 'Buen trato, llegó un poco tarde.', 'Fabián C.', 210), r(5, null, 'Luis G.', 520), r(5, 'Los audífonos suenan increíble.', 'Mauricio J.', 800)] }),
+  s({ store_slug: 'hogar-escazu', display_name: 'Hogar Escazú', verified: true, rating_avg: 4.6, rating_count: 19, sales: 26, since: '2026-06-21T00:00:00Z', location: 'Escazú', followers: 158, seenMin: 95,
+    bio: 'Muebles y electrodomésticos por mudanza. Entregas en Escazú y Santa Ana.', delivery: 'Entrega en Escazú y Santa Ana; flete a otras zonas por cuenta de quien compra. Plazo: 2 a 4 días.',
+    reviews: [r(5, 'El sofá estaba impecable.', 'Mariana F.', 90), r(4, null, 'Óscar L.', 300), r(5, 'La mesa de centro es muy sólida, tal cual las fotos.', 'Verónica A.', 520)] }),
+  s({ store_slug: 'ruedas-cartago', display_name: 'Ruedas Cartago', verified: true, rating_avg: 4.8, rating_count: 22, sales: 31, since: '2026-05-27T00:00:00Z', location: 'Cartago', followers: 203, seenMin: 180,
+    bio: 'Bicis de montaña y de ruta con mantenimiento al día. También cascos y repuestos.', delivery: 'Entrega en Cartago centro o Tres Ríos; la bici va con ajuste de frenos y cambios. Plazo: 1 a 3 días.',
+    reviews: [r(5, 'La bici venía con mantenimiento recién hecho.', 'Esteban Q.', 70), r(5, 'Muy honesto con los detalles.', 'Paula N.', 330), r(5, 'Me ayudó a escoger la talla correcta.', 'Gerardo B.', 610)] }),
+  s({ store_slug: 'pao-sneakers', display_name: 'Pao Sneakers', verified: true, rating_avg: 4.9, rating_count: 29, sales: 40, since: '2026-07-08T00:00:00Z', location: 'Curridabat', followers: 367, seenMin: 14,
+    bio: 'Tenis en buen estado, con caja cuando la tengo. Tallas de la 36 a la 44.', delivery: 'Entrega en Curridabat o San Pedro, o envío por Correos de Costa Rica. Plazo: 1 a 3 días hábiles.',
+    reviews: [r(5, 'Talla exacta y en excelente estado.', 'Daniela R.', 40), r(5, null, 'Kevin A.', 190), r(5, 'Los tenis para correr venían casi nuevos.', 'Priscilla V.', 450), r(4, 'Todo bien, solo cambió la hora de entrega.', 'Marvin S.', 720)] }),
+  s({ store_slug: 'bella-glam', display_name: 'Bella Glam', verified: true, rating_avg: 4.8, rating_count: 34, sales: 47, since: '2026-05-15T00:00:00Z', location: 'Heredia centro', followers: 318, seenMin: 3,
+    bio: 'Maquillaje, perfumes, cuidado de la piel y accesorios. Productos sellados o casi llenos.', delivery: 'Entrega en Heredia centro o envío por mensajería a la GAM. Plazo: 1 a 2 días hábiles.',
+    reviews: [r(5, 'El perfume venía casi lleno, huele delicioso.', 'Tatiana L.', 25), r(5, 'Muy linda la paleta, llegó bien empacada.', 'Yorleny C.', 180), r(4, null, 'Ana Lucía M.', 390), r(5, 'Las argollas son preciosas.', 'Fiorella D.', 640)] }),
+  s({ store_slug: 'closet-rohrmoser', display_name: 'Closet Rohrmoser', verified: false, rating_avg: 4.7, rating_count: 15, sales: 21, since: '2026-07-20T00:00:00Z', location: 'Rohrmoser, San José', followers: 245, seenMin: 28,
+    bio: 'Ropa y bolsos de segunda en muy buen estado. Todo lavado y planchado.', delivery: 'Entrega en Rohrmoser o Pavas, o envío por Correos de Costa Rica. Plazo: 2 a 3 días hábiles.',
+    reviews: [r(5, 'La chaqueta está como nueva.', 'Mónica E.', 60), r(5, 'Me quedó perfecto el vestido.', 'Andrea P.', 230), r(4, null, null, 500)] }),
+  s({ store_slug: 'libros-escalante', display_name: 'Libros Escalante', verified: false, rating_avg: 4.9, rating_count: 12, sales: 16, since: '2026-06-05T00:00:00Z', location: 'Barrio Escalante, San José', followers: 97, seenMin: 240,
+    bio: 'Libros usados: novelas, clásicos, infantiles y novelas gráficas. Pregúntame por títulos.', delivery: 'Entrega en Barrio Escalante o envío por Correos de Costa Rica a todo el país. Plazo: 2 a 4 días hábiles.',
+    reviews: [r(5, 'Los libros venían bien cuidados y envueltos.', 'Ignacio R.', 80), r(5, 'Excelente selección para mis hijos.', 'Laura B.', 340)] }),
+  s({ store_slug: 'bebe-tres-rios', display_name: 'Bebé Tres Ríos', verified: false, rating_avg: 4.8, rating_count: 17, sales: 23, since: '2026-06-28T00:00:00Z', location: 'Tres Ríos, Cartago', followers: 174, seenMin: 50,
+    bio: 'Cosas de bebé que ya no usamos: coches, moisés, sillas y ropa. Todo limpio y revisado.', delivery: 'Entrega en Tres Ríos o Curridabat; envío por mensajería a la GAM. Plazo: 1 a 3 días.',
+    reviews: [r(5, 'El coche está impecable y se pliega fácil.', 'Carolina V.', 45), r(5, 'Ropa muy bonita y limpia.', 'Wendy A.', 260), r(4, null, null, 480)] }),
+  s({ store_slug: 'kevin-mora', display_name: 'Kevin M.', verified: false, rating_avg: 4.3, rating_count: 3, sales: 3, since: '2026-09-01T00:00:00Z', location: 'Desamparados', followers: 23, seenMin: 600,
+    bio: 'Vendo cosas que ya no uso.', delivery: 'Entrega en Desamparados o San José centro. Plazo: 1 a 2 días.',
+    reviews: [r(5, 'Todo bien con la compra.', 'Sofía C.', 100), r(4, null, null, 280), r(4, 'Tardó en responder pero cumplió.', 'Marco V.', 600)] }),
+  s({ store_slug: 'vane-ventas', display_name: 'Vane Ventas', verified: false, rating_avg: 4.5, rating_count: 6, sales: 7, since: '2026-08-14T00:00:00Z', location: 'Moravia', followers: 41, seenMin: 1500,
+    bio: 'Artículos de la casa y tecnología.', delivery: 'Entrega en Moravia o Guadalupe. Plazo: 1 a 3 días.',
+    reviews: [r(5, 'Muy amable, entregó el mismo día.', 'Gabriela S.', 60), r(4, null, null, 350)] }),
+  s({ store_slug: 'luis-electro', display_name: 'Luis Electro', verified: false, rating_avg: null, rating_count: 0, sales: 0, since: '2026-10-12T00:00:00Z', location: 'San Pedro, Montes de Oca', followers: 12, seenMin: 2900,
+    bio: 'Electrónica nueva y usada.', delivery: 'Entrega en San Pedro, frente a la UCR, o envío por Correos. Plazo: 2 a 3 días hábiles.', reviews: [] }),
+  s({ store_slug: 'dani-tibas', display_name: 'Dani Q.', verified: false, rating_avg: 5, rating_count: 2, sales: 2, since: '2026-09-20T00:00:00Z', location: 'Tibás', followers: 18, seenMin: 320,
+    bio: 'Vendo porque me mudo.', delivery: 'Entrega en Tibás o Santo Domingo. Plazo: 1 a 2 días.',
+    reviews: [r(5, 'Todo perfecto.', 'Natalia B.', 120), r(5, null, null, 500)] }),
+  s({ store_slug: 'marce-cr', display_name: 'Marce C.', verified: false, rating_avg: 4, rating_count: 1, sales: 1, since: '2026-10-01T00:00:00Z', location: 'Santo Domingo, Heredia', followers: 9, seenMin: 4300,
+    bio: 'Fotografía y computadoras.', delivery: 'Entrega en Santo Domingo de Heredia o envío por Correos. Plazo: 2 a 4 días hábiles.',
+    reviews: [r(4, 'Buen producto, la entrega se movió un día.', 'Ricardo T.', 160)] }),
+  s({ store_slug: 'jorge-alajuela', display_name: 'Jorge A.', verified: false, rating_avg: null, rating_count: 0, sales: 0, since: '2026-10-18T00:00:00Z', location: 'Alajuela', followers: 6, seenMin: 7000,
+    bio: 'Cosas de la casa en buen estado.', delivery: 'Entrega en Alajuela centro. Plazo: 1 a 3 días.', reviews: [] }),
 ];
 
-const p = (slug: string, seller: string, title: string, price_crc: number, photo: string, ago: number, condition: string, description: string): DemoProduct =>
-  ({ slug: `${DEMO_PRODUCT_PREFIX}${slug}`, seller, title, price_crc, photo: `/demo-feed/p-${photo}.jpg`, ago, condition, description });
+/** Producto con la foto original (.jpg) + un acercamiento (.webp). */
+const p = (slug: string, seller: string, title: string, price_crc: number, photo: string, ago: number, condition: string, description: string, delivery: string | null = null): DemoProduct =>
+  ({ slug: `${DEMO_PRODUCT_PREFIX}${slug}`, seller, title, price_crc, photo: `/demo-feed/p-${photo}.jpg`, photos: [`/demo-feed/p-${photo}.jpg`, `/demo-feed/p-${photo}-2.webp`], ago, condition, description, delivery });
+/** Producto nuevo (.webp): foto principal + 2 acercamientos (w) o 1 (w2: fotos de stock, más chicas). */
+const w = (slug: string, seller: string, title: string, price_crc: number, photo: string, ago: number, condition: string, description: string, delivery: string | null = null): DemoProduct =>
+  ({ slug: `${DEMO_PRODUCT_PREFIX}${slug}`, seller, title, price_crc, photo: `/demo-feed/p-${photo}.webp`, photos: [`/demo-feed/p-${photo}.webp`, `/demo-feed/p-${photo}-2.webp`, `/demo-feed/p-${photo}-3.webp`], ago, condition, description, delivery });
+const w2 = (...a: Parameters<typeof w>): DemoProduct => { const x = w(...a); return { ...x, photos: x.photos.slice(0, 2) }; };
 
-/** 40 productos ficticios con precios de referencia del mercado de segunda mano en Costa Rica. */
+/** 73 productos ficticios con precios de referencia del mercado de segunda mano en Costa Rica. */
 export const DEMO_PRODUCTS: DemoProduct[] = [
   p('iphone-13', 'tecno-sabana', 'iPhone 13 128 GB azul medianoche', 240000, 'iphone13', 3, 'Usado, como nuevo', 'Batería al 88 %, sin golpes y la pantalla sin rayas. Liberado para cualquier operador. Incluye caja y cable. Lo puedes revisar antes de pagar.'),
   p('iphone-15', 'tecno-sabana', 'iPhone 15 128 GB rosado', 430000, 'iphone15', 20, 'Como nuevo', 'Cuatro meses de uso, batería al 98 %. Siempre con protector y estuche. Cable USB-C incluido.'),
@@ -100,6 +137,44 @@ export const DEMO_PRODUCTS: DemoProduct[] = [
   p('camara-reflex', 'marce-cr', 'Cámara réflex Canon EOS Rebel T7 con lente 18-55', 260000, 'camara', 80, 'Usado', 'Pocos disparos, con correa y batería extra.'),
   p('audifonos-inalambricos', 'jorge-alajuela', 'Audífonos inalámbricos de diadema con estuche', 45000, 'audifonos', 11, 'Usado', 'Cancelación de ruido, batería de 30 horas.'),
   p('microondas', 'jorge-alajuela', 'Microondas de acero inoxidable 20 L', 40000, 'microondas', 170, 'Usado', 'Funciona perfecto, perillas mecánicas. Me cambio a uno más grande.'),
+  // --- Ropa ---
+  w2('jeans-recto-30', 'closet-rohrmoser', 'Jeans de mezclilla corte recto talla 30', 14000, 'jeans', 7, 'Usado, como nuevo', 'Mezclilla gruesa azul medio, corte recto. Usados pocas veces, sin roturas ni manchas.'),
+  w2('chaqueta-cuero-m', 'closet-rohrmoser', 'Chaqueta de cuero sintético negra talla M', 22000, 'chaqueta', 31, 'Usado', 'Forro interno suave, cierres funcionando perfecto. Ideal para las noches frías de Cartago o San José.'),
+  w('vestido-floral-s', 'closet-rohrmoser', 'Vestido floral midi talla S', 12000, 'vestido', 3, 'Como nuevo', 'Tela fresca con flores azules, cruzado al frente. Lo usé una vez para una boda.'),
+  w('blusa-lino-m', 'closet-rohrmoser', 'Blusa de lino blanca manga larga talla M', 8500, 'blusa', 64, 'Usado', 'Lino 100 %, botones de nácar. Fresca para el calor.'),
+  w2('bolso-cuero-weekender', 'closet-rohrmoser', 'Bolso de cuero café tipo weekender', 28000, 'bolso', 120, 'Usado', 'Cuero genuino con correa para el hombro. Cabe ropa para un fin de semana en la playa.'),
+  // --- Belleza y accesorios ---
+  w('perfume-100ml', 'bella-glam', 'Perfume de mujer 100 ml (casi lleno)', 32000, 'perfume', 4, 'Usado', 'Aroma ámbar y vainilla, le queda más del 90 %. Frasco de vidrio con tapa dorada.'),
+  w('set-cuidado-piel', 'bella-glam', 'Set de cuidado de la piel: sérum, crema y limpiador', 18500, 'skincare', 22, 'Nuevo', 'Tres productos sellados para piel mixta. Vencen en 2028.'),
+  w2('paleta-sombras-35', 'bella-glam', 'Paleta de sombras de 35 tonos', 9500, 'sombras', 40, 'Nuevo', 'Tonos mate y brillantes, sellada. Ideal para maquillaje de día y de noche.'),
+  w2('set-brochas', 'bella-glam', 'Set de brochas y paleta de maquillaje', 12000, 'brochas', 75, 'Como nuevo', 'Incluye 6 brochas, labiales y una paleta de colores. Las brochas están lavadas.'),
+  w('secadora-difusor', 'bella-glam', 'Secadora de pelo 2000 W con difusor', 18000, 'secadora', 98, 'Usado', 'Tres temperaturas y dos velocidades. El difusor es ideal para cabello rizado.'),
+  w('aretes-plata-925', 'bella-glam', 'Aretes de plata 925 tipo argolla', 9000, 'aretes', 15, 'Nuevo', 'Argollas medianas con cierre de bisagra. Vienen en su cajita.'),
+  w2('lentes-sol-retro', 'bella-glam', 'Lentes de sol estilo retro amarillos', 7500, 'lentesretro', 52, 'Nuevo', 'Marco amarillo con lente oscuro, filtro UV400.'),
+  w2('lentes-sol-aviador', 'bella-glam', 'Lentes de sol tipo aviador con lente espejo', 11000, 'lentesaviador', 130, 'Usado, como nuevo', 'Marco dorado y lente espejo azul. Con estuche rígido.'),
+  // --- Libros ---
+  w2('clasicos-tapa-dura', 'libros-escalante', 'Lote de 7 clásicos de tapa dura', 30000, 'novelas', 10, 'Usado', 'Ediciones antiguas de tapa dura, algunas en inglés. Lomos en buen estado, páginas completas.'),
+  w2('pila-libros-usados', 'libros-escalante', 'Pila de 12 libros variados (novela y ensayo)', 25000, 'clasicos', 46, 'Usado', 'Novelas, ensayos y libros de texto en español. Te mando la lista de títulos por el chat.'),
+  w('libros-infantiles-8', 'libros-escalante', 'Libros infantiles ilustrados (lote de 8)', 14000, 'librosinfantiles', 27, 'Como nuevo', 'Cuentos de animales de tapa dura para niños de 2 a 6 años. Sin rayones.'),
+  w('novelas-graficas-5', 'libros-escalante', 'Novelas gráficas de ciencia ficción (lote de 5)', 18000, 'comics', 88, 'Usado', 'Cinco tomos independientes, en español. Se leen en orden o por separado.'),
+  w2('revistas-coleccion', 'libros-escalante', 'Colección de revistas y libros de bolsillo', 12000, 'revistas', 160, 'Usado', 'Más de 30 ejemplares. Ideal para decorar un estante o para leer en el bus.'),
+  // --- Bebé ---
+  w('coche-bebe-plegable', 'bebe-tres-rios', 'Coche para bebé plegable con canasta', 65000, 'coche', 6, 'Usado', 'Se pliega con una mano, reclinable en 3 posiciones, capota grande y canasta abajo. Llantas en buen estado.'),
+  w('silla-carro-bebe', 'bebe-tres-rios', 'Silla de carro para bebé (0 a 13 kg)', 38000, 'sillacarro', 35, 'Usado', 'Con base y arnés de 5 puntos. Funda lavada. Sin golpes.'),
+  w2('moises-mimbre', 'bebe-tres-rios', 'Moisés de mimbre para bebé', 35000, 'moises', 58, 'Usado', 'Mimbre natural con patas de madera. Incluye colchoneta.'),
+  w2('moises-tul', 'bebe-tres-rios', 'Moisés con tul y base mecedora', 42000, 'moisesbase', 102, 'Usado, como nuevo', 'Tul removible y lavable, base que mece suavecito. Lo usamos 4 meses.'),
+  w2('ropa-bebe-0-3', 'bebe-tres-rios', 'Ropa de bebé 0-3 meses (lote de 12 piezas)', 15000, 'ropabebe', 19, 'Usado', 'Mamelucos, camisetas y pantaloncitos de algodón. Todo lavado y en buen estado.'),
+  // --- Más de las tiendas de siempre ---
+  w('galaxy-a15', 'gaby-celulares', 'Samsung Galaxy A15 128 GB negro', 85000, 'galaxya15', 12, 'Usado, como nuevo', 'Tres meses de uso, batería excelente. Liberado. Incluye cargador.'),
+  w('monitor-27', 'tecno-sabana', 'Monitor de 27" Full HD con bordes delgados', 75000, 'monitor', 17, 'Usado', 'Sin píxeles muertos. Incluye cable HDMI y base original.'),
+  w('teclado-mecanico', 'luis-electro', 'Teclado mecánico compacto con luces', 28000, 'teclado', 9, 'Nuevo (caja abierta)', 'Switches táctiles, luces de colores y cable USB-C desmontable.'),
+  w('audifonos-gamer', 'mundo-gamer-cr', 'Audífonos gamer con micrófono', 22000, 'headset', 13, 'Usado', 'Sonido envolvente, micrófono flexible y almohadillas cómodas. Funcionan en PS5, Xbox y PC.'),
+  w('mesa-centro-madera', 'hogar-escazu', 'Mesa de centro de madera y metal', 60000, 'mesacentro', 24, 'Usado', 'Sobre de madera maciza y patas de hierro negro. Mide 1,10 m x 0,60 m.'),
+  w('casco-ciclismo-m', 'ruedas-cartago', 'Casco de ciclismo blanco talla M', 18000, 'casco', 33, 'Usado', 'Muy liviano, con buena ventilación y ajuste trasero. Nunca ha recibido golpes.'),
+  w('tenis-correr-41', 'pao-sneakers', 'Tenis para correr azul y verde talla 41', 30000, 'teniscorrer', 8, 'Usado, como nuevo', 'Livianos y con buena amortiguación. Menos de 50 km de uso.'),
+  w('cafetera-12-tazas', 'vane-ventas', 'Cafetera de goteo de 12 tazas', 16000, 'cafetera', 70, 'Usado', 'Jarra de vidrio y filtro permanente. Hace un café rico para toda la familia.'),
+  w('licuadora-vidrio', 'jorge-alajuela', 'Licuadora con vaso de vidrio de 1,5 L', 18000, 'licuadora', 54, 'Usado', 'Base de acero, 5 velocidades. Buena para batidos y salsas.'),
+  w('lente-50mm', 'marce-cr', 'Lente 50 mm f/1.8 para cámara réflex', 65000, 'lente50', 29, 'Usado', 'Ideal para retratos con fondo desenfocado. Con tapas delantera y trasera.'),
 ];
 
 const SELLER = new Map(DEMO_SELLERS.map((s) => [s.store_slug, s]));
@@ -110,7 +185,7 @@ export const demoSellerOf = (slug: string) => SELLER.get(foldText(slug)) ?? null
 
 const outcome = (n: number) => { const d = n > 10 ? 1 : 0; return { completed: n, no_issues: n - d, disputes_resolved: d, disputes_open: 0 }; };
 /** Lo mismo que publicSeller (api/_lib/feed.ts) + demo: true. */
-export const demoPublicSeller = (s: DemoSeller) => ({ store_slug: s.store_slug, display_name: s.display_name, avatar_url: null as string | null, verified: s.verified, rating_avg: s.rating_avg, rating_count: s.rating_count, demo: true as const });
+export const demoPublicSeller = (s: DemoSeller) => ({ store_slug: s.store_slug, display_name: s.display_name, avatar_url: s.avatar as string | null, verified: s.verified, rating_avg: s.rating_avg, rating_count: s.rating_count, demo: true as const });
 export type DemoCard = { slug: string; title: string; price_crc: number; photo: string | null; created_at: string; demo: true; seller: ReturnType<typeof demoPublicSeller> };
 const card = (x: DemoProduct, asOf: number): DemoCard => ({ slug: x.slug, title: x.title, price_crc: x.price_crc, photo: x.photo, created_at: new Date(asOf - x.ago * H).toISOString(), demo: true, seller: demoPublicSeller(SELLER.get(x.seller)!) });
 
@@ -168,8 +243,8 @@ export function demoProfile(slug: string, now = Date.now()) {
   if (!s) return null;
   return {
     ...demoPublicSeller(s), bio: s.bio, location: s.location, sales_completed: s.sales, sales: outcome(s.sales),
-    followers: Math.round(s.sales * 2.5) + s.rating_count, member_since: s.since, whatsapp: null as string | null, socials: {},
-    items: DEMO_PRODUCTS.filter((x) => x.seller === s.store_slug).map((x) => ({ slug: x.slug, title: x.title, price_crc: x.price_crc, photo: x.photo, created_at: new Date(now - x.ago * H).toISOString(), demo: true as const })),
+    followers: s.followers, member_since: s.since, whatsapp: null as string | null, socials: demoSocials(),
+    items: DEMO_PRODUCTS.filter((x) => x.seller === s.store_slug).sort((a, b) => a.ago - b.ago).map((x) => ({ slug: x.slug, title: x.title, price_crc: x.price_crc, photo: x.photo, created_at: new Date(now - x.ago * H).toISOString(), demo: true as const })),
     reviews: s.reviews.map((rv) => ({ stars: rv.stars, comment: rv.comment, buyer_name: rv.buyer_name, created_at: new Date(now - rv.h * H).toISOString() })),
   };
 }
@@ -178,5 +253,31 @@ export function demoProduct(slug: string, now = Date.now()) {
   const x = PRODUCT.get(slug);
   if (!x) return null;
   const s = SELLER.get(x.seller)!;
-  return { ...x, created_at: new Date(now - x.ago * H).toISOString(), location: s.location, demo: true as const, payable: false as const, seller: { ...demoPublicSeller(s), sales: outcome(s.sales) } };
+  return { ...x, delivery: x.delivery ?? s.delivery, created_at: new Date(now - x.ago * H).toISOString(), location: s.location, demo: true as const, payable: false as const, seller: { ...demoPublicSeller(s), sales: outcome(s.sales) } };
 }
+
+/** Redes de las tiendas de ejemplo: SOLO cuentas de Meteorito (nunca de una persona real). Forma de seller_profiles.socials. */
+export const demoSocials = () => ({ instagram: 'https://www.instagram.com/meteorito.app', website: 'https://pago.meteorito.app/' });
+
+export type DemoActivity = { k: 'online' } | { k: 'min'; n: number } | { k: 'h'; n: number } | { k: 'yesterday' } | { k: 'days'; n: number };
+/** Última conexión de una tienda de ejemplo, RELATIVA a ahora (mismos rangos que activityOf en api/_lib/activity.ts). */
+export function demoSeen(slug: string, now = Date.now()): DemoActivity | null {
+  const s = demoSellerOf(slug);
+  if (!s) return null;
+  // Se mueve un poco con el tiempo (ciclos de 40 min) para que no sea siempre el mismo número.
+  const min = s.seenMin < 5 ? s.seenMin : s.seenMin + (Math.floor(now / 2400e3) % 4) * (s.seenMin < 60 ? 2 : 10);
+  if (min < 5) return { k: 'online' };
+  if (min < 60) return { k: 'min', n: Math.floor(min / 5) * 5 };
+  if (min < 1440) return { k: 'h', n: Math.floor(min / 60) };
+  if (min < 2880) return { k: 'yesterday' };
+  const d = Math.floor(min / 1440);
+  return d <= 7 ? { k: 'days', n: d } : null;
+}
+/** Igual que activityBySlug, para las tiendas de ejemplo de la lista. */
+export function demoActivityBySlug(slugs: string[], now = Date.now()): Record<string, DemoActivity> {
+  const out: Record<string, DemoActivity> = {};
+  for (const slug of slugs) { const a = demoSeen(slug, now); if (a) out[slug] = a; }
+  return out;
+}
+/** Tiendas de ejemplo para sugerir (Siguiendo vacío): las de más seguidores primero. */
+export const demoSuggestedStores = (n = 6) => [...DEMO_SELLERS].sort((a, b) => b.followers - a.followers).slice(0, n).map(demoPublicSeller);
