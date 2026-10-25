@@ -11,7 +11,7 @@ const st = (page: Page) => page.evaluate(() => JSON.parse(sessionStorage.getItem
 test('SHP-01 vendedor: "Ya lo envié" bloqueado sin la foto de la cámara; con la foto se marca enviado', async ({ page }) => {
   await open(page, '/', 'seller', true);
   const slug = await seed(page, 'fondeado');
-  await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+  await openSellerRow(page, /Envíalo|Entrégalo/, /Ya lo envié/);
   await expect(page.getByText('Marcar como enviado')).toHaveCount(0);
   await expect(page.getByPlaceholder('Número de guía (opcional)')).toHaveCount(0); // discreto: plegado
   await expect(page.getByTestId('ship-photo-required')).toBeVisible();
@@ -38,7 +38,7 @@ test('SHP-03 cámara sin permiso: explica cómo activarla y no ofrece el carrete
   await open(page, '/', 'seller', true);
   await seed(page, 'fondeado');
   await page.evaluate(() => sessionStorage.setItem('meteorito:fake-camera', 'denied'));
-  await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+  await openSellerRow(page, /Envíalo|Entrégalo/, /Ya lo envié/);
   await page.getByLabel('Tomar foto del envío', { exact: true }).click();
   await expect(page.getByTestId('camera-denied')).toBeVisible();
   await expect(page.getByText('Necesitamos tu cámara para tomar la foto')).toBeVisible();
@@ -65,7 +65,7 @@ test('SHP-02 comprador ve su código solo después del envío; el vendedor toma 
   await shot(page, 'comprador-fondeado');
 
   // Vendedor: foto del comprobante + "Ya lo envié"
-  await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+  await openSellerRow(page, /Envíalo|Entrégalo/, /Ya lo envié/);
   await takePhoto(page, 'Tomar foto del envío');
   await expect(page.getByTestId('ship-photo-preview')).toBeVisible();
   await page.getByText('Agregar número de guía (opcional)').click();
