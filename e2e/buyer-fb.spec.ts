@@ -103,7 +103,7 @@ test.describe('Comprar: invitar desde Facebook', () => {
     await page.getByText('Publicar para esta compra').click();
     await expect(page).toHaveURL(/\/vender\?invite=/);
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('Bicicleta de montaña aro 29');
-    await expect(page.getByText('Fotos (1/4)')).toBeVisible(); // la foto del anuncio ya viene; no hay que volver a subirla
+    await expect(page.getByLabel('Quitar foto')).toHaveCount(1); // la foto del anuncio ya viene; no hay que volver a subirla
     await shot(page, info, '6-vendedor-publica');
     await page.getByText('Generar link').click();
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();

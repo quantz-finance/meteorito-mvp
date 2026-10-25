@@ -57,7 +57,7 @@ export async function run(t: T) {
   t.check('Vender: orden Entrega y plazo -> fotos -> círculo (su propio espacio) -> avisos, sin footer flotante ni el texto "De 1 a 4 fotos"',
     ven.indexOf('accessibilityLabel="Entrega y plazo"') < ven.indexOf('testID="sell-photos"') && ven.indexOf('testID="sell-photos"') < ven.indexOf('testID="launch-space"')
     && /<LaunchButton[^]*<RulesHint text=\{SELL_SUMMARY\} from="sell" \/>[^]*<BetaNotice from="sell" \/>/.test(space)
-    && !ven.includes('De 1 a 4 fotos con la cámara')
+    && !ven.includes('De 1 a 4 fotos con la cámara') && !ven.includes('Fotos ({photos.length}/{MAX_PHOTOS})')
     && !/<Screen footerBare title="Vender" subtitle/.test(ven));
   t.check('Vender: los avisos nunca se esconden (sin condición de pantalla chica)', !/\? null : <Text style=\{T\.footnote\}>De 1 a 4/.test(ven) && !/compact \/>/.test(ven));
   t.check('Vender: listo = isListingValid con fotos cargando', /const ready = isListingValid\(\{ title, price: priceNum, photos: photos\.length, photosBusy \}\)/.test(ven));

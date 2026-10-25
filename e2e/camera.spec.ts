@@ -25,7 +25,7 @@ test('CAM-01 Vender: la foto se toma con la cámara de la app, con fecha CR y c�
   await expect(page.getByTestId('camera-shot')).toBeVisible();
   await shot(page, 'foto-con-marca');
   await page.getByText('Usar foto', { exact: true }).click();
-  await expect(page.getByText('FOTOS (1/4)', { exact: false })).toBeVisible();
+  await expect(page.getByLabel('Quitar foto')).toHaveCount(1);
   await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
   await page.getByPlaceholder('0').fill('150000');
   await page.getByText('Generar link').click();
