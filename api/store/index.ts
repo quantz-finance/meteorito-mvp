@@ -36,6 +36,9 @@
 //                                                 esta llave o esta cuenta es el comprador (sin datos del vendedor ni PIN)
 //  POST { action:'payout_get' } / { action:'payout_set', iban, holder_name, sinpe_phone? } (Bearer Cavos)
 //                                                 -> cuenta IBAN para cobrar (migración 011). Solo sale enmascarada.
+//  POST { action:'payout_set', method:'wallet', stellar_address } / { action:'payout_check', stellar_address }
+//                                                 -> cobrar en USDC a su wallet Stellar (029): valida G…, cuenta y trustline USDC.
+//                                                 payout_get devuelve choice:true|false (¿existe 029?). docs/cobro-wallet-iban.md
 //  GET  ?push=key                                 -> llave pública VAPID (o null si no hay push configurado)
 //  POST { action:'push_subscribe'|'push_unsubscribe', subscription } (Bearer Cavos y/o X-Guest-Key)
 //                                                 -> avisos push de los pedidos de esa identidad (migración 011)
@@ -66,6 +69,7 @@ import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
 import { adminContacts, getContacts, linkAccount, redeemAccess, reissuePin, removeContact, requireAdmin, saveContact, sendNotice } from '../_lib/buyerContact';
 import { normalizeEmail } from '../_lib/contactText';
 import { crIbanError, cleanHolder, normalizeIban, normalizeSinpe, payoutView } from '../_lib/payout';
+import { checkWallet, isMissing as isPayoutMissing, isStellarAddress, normalizeStellar, payoutChoiceReady, PAYOUT_ERR } from '../_lib/payoutChoice';
 import { deleteSubscription, isMissingTable, parseSubscription, saveSubscription, vapid } from '../_lib/push';
 import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
 import { checkFacebookUrl } from '../_lib/fbparse';
@@ -417,23 +421,42 @@ export default async function handler(req: any, res: any) {
     }
 
     const user = await requireCavosUser(req);
-    if (b.action === 'payout_get' || b.action === 'payout_set') {
+    if (b.action === 'payout_get' || b.action === 'payout_set' || b.action === 'payout_check') {
       const missing = (e: any) => { if (isMissingTable(e)) throw Object.assign(new HttpError(503, 'Todavía no puedes registrar tu cuenta. Intenta más tarde.'), { code: 'payout_unavailable' }); throw e; };
+      // Elección wallet / Cuenta IBAN (029). Sin 029: solo la Cuenta IBAN, como antes (choice:false).
+      if (b.action === 'payout_check') return json(res, 200, { state: await checkWallet(b.stellar_address) });
       if (b.action === 'payout_get') {
-        const { data, error } = await db().from('seller_payout').select('iban, holder_name, sinpe_phone, updated_at').eq('sub', user.sub).maybeSingle();
+        const { data, error } = await db().from('seller_payout').select('*').eq('sub', user.sub).maybeSingle();
         if (error) missing(error);
-        return json(res, 200, { payout: data ? payoutView(data) : null });
+        return json(res, 200, { payout: data ? payoutView(data) : null, choice: await payoutChoiceReady(data) });
+      }
+      const now = new Date().toISOString();
+      if (b.method === 'wallet') {
+        if (!(await payoutChoiceReady(null))) throw PAYOUT_ERR.unavailable();
+        if (!isStellarAddress(b.stellar_address)) throw PAYOUT_ERR.address();
+        const addr = normalizeStellar(b.stellar_address);
+        if (addr === env.platformPublic()) throw PAYOUT_ERR.platform();
+        const state = await checkWallet(addr);
+        if (state === 'no_account') throw PAYOUT_ERR.noAccount();
+        const { data: cur } = await db().from('seller_payout').select('*').eq('sub', user.sub).maybeSingle();
+        const row = { ...(cur ?? {}), sub: user.sub, payout_method: 'wallet', stellar_address: addr, updated_at: now };
+        const { error } = await db().from('seller_payout').upsert(row, { onConflict: 'sub' });
+        if (error) { if (isPayoutMissing(error)) throw PAYOUT_ERR.unavailable(); throw error; }
+        return json(res, 200, { payout: payoutView(row), state });
       }
       const err = crIbanError(b.iban);
       if (err) throw Object.assign(new HttpError(400, err), { code: 'bad_iban' });
       const holder_name = cleanHolder(b.holder_name);
-      if (holder_name.length < 3) throw Object.assign(new HttpError(400, 'Escribe el nombre del titular como aparece en el banco.'), { code: 'bad_holder' });
+      if (holder_name.length < 3) throw Object.assign(new HttpError(400, 'Escribe el nombre del titular como aparece en tu cuenta.'), { code: 'bad_holder' });
       const sinpe = normalizeSinpe(b.sinpe_phone);
       if (sinpe === 'invalid') throw Object.assign(new HttpError(400, 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).'), { code: 'bad_sinpe' });
-      const row = { sub: user.sub, iban: normalizeIban(b.iban), holder_name, sinpe_phone: sinpe, updated_at: new Date().toISOString() };
-      const { error } = await db().from('seller_payout').upsert(row, { onConflict: 'sub' });
+      const base = { sub: user.sub, iban: normalizeIban(b.iban), holder_name, sinpe_phone: sinpe, updated_at: now };
+      // Con 029 guardar la Cuenta IBAN también la elige para cobrar ('iban'); la wallet guardada se conserva por si vuelve.
+      let row: Record<string, unknown> = { ...base, payout_method: 'iban' };
+      let { error } = await db().from('seller_payout').upsert(row, { onConflict: 'sub' });
+      if (error && missingColumn(error)) { row = base; ({ error } = await db().from('seller_payout').upsert(row, { onConflict: 'sub' })); }
       if (error) missing(error);
-      return json(res, 200, { payout: payoutView(row) });
+      return json(res, 200, { payout: payoutView(row as any) });
     }
     if (b.action === 'orders') {
       // Pedidos del vendedor CON sesión (antes: RPC pública seller_orders con cualquier dirección -> fuga de datos).

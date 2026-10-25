@@ -18,7 +18,7 @@ export function demoEnabled(flag: string | undefined, host?: string | null): boo
 // Expo inlinea EXPO_PUBLIC_* solo con acceso estático process.env.X.
 export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeof window !== 'undefined' ? window.location?.hostname : null);
 
-import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe } from '../api/_lib/payout'; // pura y chica (~1 KB)
+import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe, type PayoutView } from '../api/_lib/payout'; // pura y chica (~1 KB)
 import { canShowContact, normalizeContactPhone } from '../api/_lib/contact'; // pura
 import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
 import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
@@ -40,7 +40,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: { iban_last4: string; holder_name: string; sinpe_last4: string | null; updated_at: string | null } | null }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[] }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -347,8 +347,9 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
     o.delivered_at = now(); o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = now(); emit(); return { released: true, releasedTx: o.released_tx };
   }
   if (p === '/api/escrow/dispute' && typeof body.action === 'string') { // panel admin + respuesta del vendedor: lib/demoAdmin.ts
-    const { demoAdminApi } = await import('./demoAdmin');
-    return demoAdminApi({ admin: !!st.admin, role: st.role, orders: st.orders, audit: (st.audit ??= {}), responses: (st.responses ??= {}), caps: demoCaps, resolve: demoResolve, emit }, body);
+    const { demoAdminApi, demoPayoutSeed } = await import('./demoAdmin');
+    if (st.admin && !st.payouts) st.payouts = demoPayoutSeed();
+    return demoAdminApi({ payouts: st.payouts, admin: !!st.admin, role: st.role, orders: st.orders, audit: (st.audit ??= {}), responses: (st.responses ??= {}), caps: demoCaps, resolve: demoResolve, emit }, body);
   }
   if (p === '/api/escrow/dispute') {
     need('buyer'); const o = get(String(body.slug));
@@ -432,12 +433,23 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
         description: 'Bicicleta en muy buen estado, frenos de disco, 21 velocidades. Entrega en San José.', photos: ['/demo-fb-import.jpg'], photo_urls: ['/demo-fb-import.jpg'], source_url: String(body.url), missing: [] };
     }
     need('seller');
-    if (body.action === 'payout_get') return { payout: st.payout ?? null };
+    // Dónde cobrar (029): el demo simula la migración aplicada (choice:true). payout_check: 'ready', salvo direcciones que
+    // terminan en "TRUST" (sin trustline USDC) o en "NONE" (cuenta inexistente) para probar los avisos.
+    const walletDemo = (a: string) => (/^G[A-Z2-7]{55}$/.test(a) ? (a.endsWith('TRUST') ? 'no_trustline' : a.endsWith('NONE') ? 'no_account' : 'ready') : null);
+    if (body.action === 'payout_get') return { payout: st.payout ?? null, choice: true };
+    if (body.action === 'payout_check') { const s2 = walletDemo(String(body.stellar_address ?? '').toUpperCase()); if (!s2) throw err(400, 'bad_stellar_address', 'Revisa la dirección: empieza con G y tiene 56 caracteres.'); return { state: s2 }; }
+    if (body.action === 'payout_set' && body.method === 'wallet') {
+      const a = String(body.stellar_address ?? '').toUpperCase(); const s2 = walletDemo(a);
+      if (!s2) throw err(400, 'bad_stellar_address', 'Revisa la dirección: empieza con G y tiene 56 caracteres.');
+      if (s2 === 'no_account') throw err(400, 'wallet_no_account', 'Esa wallet todavía no existe en Stellar. Actívala (con un poco de XLM) y vuelve a intentar.');
+      st.payout = { ...(st.payout ?? { iban_last4: null, holder_name: null, sinpe_last4: null }), method: 'wallet', stellar_address: a, updated_at: now() }; emit();
+      return { payout: st.payout, state: s2 };
+    }
     if (body.action === 'payout_set') {
       const e = crIbanError(body.iban); if (e) throw err(400, 'bad_iban', e);
-      const holder = cleanHolder(body.holder_name); if (holder.length < 3) throw err(400, 'bad_holder', 'Escribe el nombre del titular como aparece en el banco.');
+      const holder = cleanHolder(body.holder_name); if (holder.length < 3) throw err(400, 'bad_holder', 'Escribe el nombre del titular como aparece en tu cuenta.');
       const sp = normalizeSinpe(body.sinpe_phone); if (sp === 'invalid') throw err(400, 'bad_sinpe', 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).');
-      st.payout = { iban_last4: normalizeIban(body.iban).slice(-4), holder_name: holder, sinpe_last4: sp ? sp.slice(-4) : null, updated_at: now() }; emit();
+      st.payout = { method: 'iban', iban_last4: normalizeIban(body.iban).slice(-4), holder_name: holder, sinpe_last4: sp ? sp.slice(-4) : null, stellar_address: st.payout?.stellar_address ?? null, updated_at: now() }; emit();
       return { payout: st.payout };
     }
     st.store ??= { slug: 'valeria', name: 'Valeria' };

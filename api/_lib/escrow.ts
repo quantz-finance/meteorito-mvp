@@ -9,6 +9,7 @@ import { HttpError } from './auth';
 import * as tw from './tw';
 import { assertReceiverReady, SELLER_NOT_READY } from './wallet';
 import { tightenTimebounds } from './timebounds';
+import { enqueueIbanPayout, netUsdc, receiverFor, savePayoutRoute } from './payoutChoice';
 
 /** Llamadas on-chain que usan el envío y la liberación. Los tests las reemplazan (sin red). */
 type Chain = Pick<typeof tw, 'releaseGuard' | 'approveMilestone' | 'getBalance' | 'releaseFunds' | 'changeMilestoneStatus' | 'changeMilestoneStatusXdr' | 'resolveDispute'>;
@@ -52,8 +53,11 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
   if (order.contract_id) return order.contract_id as string;
   if (order.status !== 'creado') throw new HttpError(409, `status ${order.status}`);
   if (buyerAddress === order.seller_address || buyerUserId === order.seller_user_id) throw new HttpError(400, 'no puedes comprar tu propio link');
+  // Dónde cobra el vendedor (029): su wallet Stellar, la wallet platform (Cuenta IBAN, pago manual) o, por defecto, su cuenta
+  // en Meteorito. receiverFor ya comprobó la trustline de las dos primeras; la de siempre se comprueba aquí.
+  const payee = await receiverFor(order);
   // Receiver sin cuenta/trustline USDC -> TW responde 400 crudo. Lo detectamos antes con un error accionable.
-  await assertReceiverReady(order.seller_address);
+  if (payee.route === 'cavos') await assertReceiverReady(order.seller_address);
   const amount = grossUsdc(Number(order.price_crc));
   const { contractId, hash } = await tw.deploySingleRelease({
     signerSecret: env.deployerSecret(),
@@ -65,7 +69,7 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
       approver: pub(env.approverSecret()),
       serviceProvider: serviceProviderFor(order),
       releaseSigner: pub(env.releaseSignerSecret()),
-      receiver: order.seller_address,
+      receiver: payee.address,
       disputeResolver: env.disputeResolverPublic(),
       platformAddress: env.platformPublic(),
     },
@@ -78,6 +82,7 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
     amount_usdc: amount, fx_crc_per_usdc: env.crcUsdcRate(), sp_mode: env.spMode(), status: 'escrow_creado',
   });
   await logEvent(order.id, 'escrow_deployed', { contractId, hash, amount });
+  await savePayoutRoute(order.id, payee);
   return contractId;
 }
 
@@ -190,6 +195,8 @@ export async function approveAndRelease(order: any, reason: ApproveReason) {
   const rel = await chain().releaseFunds(order.contract_id, env.releaseSignerSecret());
   await advance(order.id, 'entregado', { released_tx: rel.hash, released_at: new Date().toISOString(), status: 'liberado' });
   await logEvent(order.id, 'released', { hash: rel.hash, reason, hours_to_release: order.funded_at ? Math.round((Date.now() - Date.parse(order.funded_at)) / 36e5 * 10) / 10 : undefined });
+  // Cuenta IBAN: el USDC llegó a 'platform'; queda en la cola manual del admin (/admin/pagos). Nunca tumba la liberación.
+  if (order.payout_method === 'iban') await enqueueIbanPayout(order, { amountUsdc: netUsdc(Number(order.amount_usdc)), amountCrc: Number(order.price_crc) || null, tx: rel.hash }).catch((e) => console.warn('[payout] cola', e?.message));
   return { releasedTx: rel.hash };
 }
 
