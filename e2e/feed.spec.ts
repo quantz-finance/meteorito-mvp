@@ -1,6 +1,6 @@
 // Comprar: feed tipo red social + buscador + filtro de verificación, y perfil público del vendedor (/t/<usuario>). Demo.
 import { test, expect } from '@playwright/test';
-import { expectInputs16, open, settle, VOSEO } from './helpers';
+import { expectInputs16, open, searchFeed, settle, VOSEO } from './helpers';
 
 const noHScroll = async (page: import('@playwright/test').Page) => {
   const w = await page.evaluate(() => ({ sw: document.scrollingElement!.scrollWidth, iw: window.innerWidth }));
@@ -30,16 +30,17 @@ test.describe('Comprar: feed y perfil', () => {
     await expect(unconfirmed.first()).toBeAttached();
     await expect(confirmed).toHaveCount(0);
     // La búsqueda respeta el filtro activo: "playstation" en Sin confirmar no trae los de José Games (confirmado).
-    const search = page.getByLabel('Buscar productos');
-    await search.fill('PLÁYSTATION');
+    await searchFeed(page, 'PLÁYSTATION');
     await expect(page.getByText(/No encontramos/)).toBeVisible();
     await page.getByRole('button', { name: 'Buscar en Identidad confirmada' }).click();
     await expect(page.getByRole('tab', { name: 'Identidad confirmada' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByText('Resultados')).toBeVisible();
     await expect(page.getByTestId('feed-card')).toHaveCount(2);
     await expect(page.getByTestId('feed-sale')).toHaveCount(0); // con búsqueda no se mezclan ventas
+    await page.getByTestId('comprar-search').click();
     await expectInputs16(page);
-    await search.fill('zzzz nada');
+    await page.keyboard.press('Escape');
+    await searchFeed(page, 'zzzz nada');
     await expect(page.getByText(/No encontramos/)).toBeVisible();
     await page.getByRole('button', { name: 'Limpiar búsqueda' }).first().click();
     await expect(page.getByText('Para ti')).toBeVisible();

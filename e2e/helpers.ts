@@ -91,3 +91,13 @@ export async function openSellerRow(page: Page, statusText: string | RegExp, rea
     await expect(typeof ready === 'string' ? page.getByPlaceholder(ready) : page.getByText(ready).last()).toBeVisible({ timeout: 4000 });
   }).toPass({ timeout: 35000 });
 }
+
+/** Buscador de Comprar (modalcito): toca la lupa, escribe y Enter (cierra la hoja y aplica la búsqueda). */
+export async function searchFeed(page: Page, text: string) {
+  await page.getByTestId('comprar-search').click();
+  const input = page.getByLabel('Buscar productos', { exact: true });
+  await expect(input).toBeFocused();
+  await input.fill(text);
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+}

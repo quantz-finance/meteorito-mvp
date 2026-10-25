@@ -385,9 +385,12 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, await setFollow(who, slug, b.action === 'follow'));
     }
     if (b.action === 'feed') {
-      const who = await requireBuyerIdentity(req);
+      // Búsqueda sin llave ni sesión (el texto va en el body, nunca en la URL ni en logs): sin impulso de seguidos.
+      // Siguiendo sí pide identidad.
+      const anon = b.view !== 'following' && !req.headers?.['x-guest-key'] && !String(req.headers?.authorization ?? '').startsWith('Bearer ');
+      const who = anon ? { ids: [] as string[] } : await requireBuyerIdentity(req);
       if (b.view != null && b.view !== 'for_you' && b.view !== 'following') throw Object.assign(new HttpError(400, 'Vista inválida.'), { code: 'bad_view' });
-      const followed = await followedSellerSubs(who.ids);
+      const followed = who.ids.length ? await followedSellerSubs(who.ids) : [];
       if (b.view === 'following') { // Siguiendo: solo las tiendas que sigue; sin ejemplos ni Patrocinado.
         const page = await feedPage({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed, onlyFollowed: true });
         res.setHeader?.('Cache-Control', 'private, no-store');

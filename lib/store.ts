@@ -117,12 +117,19 @@ export type FeedView = 'for_you' | 'following';
 export async function getFeed(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number; personal?: Pick<MeteoritoAuth, 'getAuthToken'> | null; view?: FeedView }): Promise<FeedPage> {
   if (DEMO_ENABLED) { const { demoFeed } = await import('./demoFeed'); return demoFeed(o); }
   let j: any;
-  if (o.personal) {
+  // Con texto de búsqueda: SIEMPRE por POST (el texto va en el body). En la URL quedaría en los logs del servidor y de la
+  // CDN, y la gente escribe nombres o teléfonos. Sin cuenta ni llave, el servidor responde igual (sin impulso de seguidos).
+  if (!o.personal && o.q?.trim()) {
+    let r: Response;
+    try { r = await fetch('/api/store', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'feed', verified: o.verified, q: o.q.trim(), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }) }); }
+    catch { throw new Error(FEED_ERROR); }
+    j = (await r.json().catch(() => null)) ?? {};
+    if (!r.ok) throw new Error(r.status >= 500 ? FEED_ERROR : j.error ?? FEED_ERROR);
+  } else if (o.personal) {
     try { j = await guestApi(o.personal, '/api/store', { action: 'feed', ...(o.view === 'following' ? { view: 'following' } : {}), verified: o.verified, ...(o.q?.trim() ? { q: o.q.trim() } : {}), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }); }
     catch (e: any) { throw new Error(e?.status >= 500 || !e?.status ? FEED_ERROR : e.message || FEED_ERROR); }
   } else {
-    const qs = new URLSearchParams({ feed: '1', verified: o.verified, order: 'rank' });
-    if (o.q?.trim()) qs.set('q', o.q.trim());
+    const qs = new URLSearchParams({ feed: '1', verified: o.verified, order: 'rank' }); // sin q: la búsqueda va por POST (arriba)
     if (o.cursor) qs.set('cursor', o.cursor);
     if (o.limit) qs.set('limit', String(o.limit));
     let r: Response;
