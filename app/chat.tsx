@@ -3,6 +3,8 @@
 // optimista (reintento sin duplicar), respuestas rápidas para el comprador, aviso suave si se comparte un teléfono o un
 // link antes de pagar, compositor fijo abajo (letra 16 px). Polling inteligente (lib/chat.ts). Opciones: ver el
 // producto o la compra, Reportar y (vendedor) Bloquear. Sin la migración 025 muestra un aviso amable.
+// Desde la ficha de un producto (?p=<slug>), estilo Messenger: el primer mensaje lleva la tarjeta del producto (foto,
+// título, precio; tocar abre /p/<slug>) y cada producto nuevo de la misma tienda agrega la suya (030; sin ella, la de arriba).
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -16,8 +18,8 @@ import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { track } from '@/lib/analytics';
 import { useAuth } from '@/lib/cavos';
 import {
-  blockChat, CHAT_MAX, chatPollDelay, dayLabel, hhmm, mergeMessages, newClientId, readChat, refreshUnread, reportChat, sendChat, sharesContact,
-  type ChatConversation, type ChatMsg, type ChatRole,
+  blockChat, CHAT_MAX, chatPollDelay, dayLabel, hhmm, itemCardRows, mergeMessages, newClientId, readChat, refreshUnread, reportChat, sendChat, sharesContact,
+  type ChatConversation, type ChatMsg, type ChatProduct, type ChatRole,
 } from '@/lib/chat';
 import { COPY } from '@/lib/copy';
 import { formatCRC, STATUS_LABEL } from '@/lib/orders';
@@ -26,12 +28,15 @@ const K = COPY.chat;
 const lenBucket = (n: number) => (n < 20 ? '<20' : n < 100 ? '<100' : n < 500 ? '<500' : '>=500');
 
 export default function ChatScreen() {
-  const { c: token, r, src } = useLocalSearchParams<{ c?: string; r?: string; src?: string }>();
+  const { c: token, r, src, p: fromItem } = useLocalSearchParams<{ c?: string; r?: string; src?: string; p?: string }>();
   const auth = useAuth();
   const insets = useSafeAreaInsets();
   const [role, setRole] = useState<ChatRole>(r === 's' ? 'seller' : 'buyer');
   const [conv, setConv] = useState<ChatConversation | null>(null);
   const [msgs, setMsgs] = useState<ChatMsg[]>([]);
+  const [products, setProducts] = useState<Record<string, ChatProduct>>({});
+  const addProducts = (p?: Record<string, ChatProduct>) => { if (p && Object.keys(p).length) setProducts((cur) => ({ ...cur, ...p })); };
+  const noMarkers = useRef(false); // el servidor no guarda tarjetas (sin 030): no dibujarlas en el envío optimista
   const [state, setState] = useState<{ blocked: boolean; other_read_at: string | null; other_typing: boolean; has_more: boolean }>({ blocked: false, other_read_at: null, other_typing: false, has_more: false });
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
@@ -57,7 +62,7 @@ export default function ChatScreen() {
         try {
           const d = await readChat(auth, as, String(token), { full: true });
           if (!live) return;
-          setRole(d.role); setConv(d.conversation ?? null); setMsgs(d.messages); setCanBlock(d.can_block !== false);
+          setRole(d.role); setConv(d.conversation ?? null); setMsgs(d.messages); setCanBlock(d.can_block !== false); addProducts(d.products);
           setState({ blocked: d.blocked, other_read_at: d.other_read_at, other_typing: d.other_typing, has_more: d.has_more });
           track('chat_opened', { role: d.role, kind: d.conversation?.kind ?? 'store', source: typeof src === 'string' && /^[a-z_]{2,20}$/.test(src) ? src : 'link', messages: d.messages.length });
           void refreshUnread(auth, d.role);
@@ -79,7 +84,7 @@ export default function ChatScreen() {
     const after = msgsRef.current.reduce((m, x) => (x.id > m ? x.id : m), 0);
     try {
       const d = await readChat(auth, roleRef.current, String(token), { after, typing: Date.now() - lastTyped.current < 4000 });
-      if (d.messages.length) { lastActivity.current = Date.now(); setMsgs((cur) => mergeMessages(cur, d.messages)); }
+      if (d.messages.length) { lastActivity.current = Date.now(); addProducts(d.products); setMsgs((cur) => mergeMessages(cur, d.messages)); }
       setState((s) => (s.blocked === d.blocked && s.other_read_at === d.other_read_at && s.other_typing === d.other_typing ? s : { ...s, blocked: d.blocked, other_read_at: d.other_read_at, other_typing: d.other_typing }));
     } catch { /* sin red: siguiente ciclo */ }
   }, [token, conv]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -108,7 +113,8 @@ export default function ChatScreen() {
 
   const deliver = useCallback(async (m: ChatMsg) => {
     try {
-      const { message } = await sendChat(auth, roleRef.current, String(token), m.body, m.client_id!);
+      const { message } = await sendChat(auth, roleRef.current, String(token), m.body, m.client_id!, m.item_slug);
+      if (m.item_slug && !message.item_slug) noMarkers.current = true;
       setMsgs((cur) => mergeMessages(cur, [message]));
     } catch (e: any) {
       setMsgs((cur) => cur.map((x) => (x.client_id === m.client_id ? { ...x, pending: 'failed' } : x)));
@@ -123,7 +129,11 @@ export default function ChatScreen() {
     if (!t || !conv || state.blocked) return;
     if ([...t].length > CHAT_MAX) { toast(`El mensaje puede tener hasta ${CHAT_MAX} caracteres.`, 'info'); return; }
     haptic.tap();
-    const m: ChatMsg = { id: -Date.now(), sender: role, body: t, client_id: newClientId(), created_at: new Date().toISOString(), pending: 'sending' };
+    // Tarjeta del producto: el primer mensaje del comprador por el producto con el que abrió (el servidor lo vuelve a decidir).
+    const want = role === 'buyer' && typeof fromItem === 'string' && conv.kind === 'store' && conv.item?.slug === fromItem ? fromItem : null;
+    const lastCard = [...msgs].reverse().find((x) => x.item_slug)?.item_slug ?? null;
+    const item_slug = want && !noMarkers.current && lastCard !== want ? want : null;
+    const m: ChatMsg = { id: -Date.now(), sender: role, body: t, client_id: newClientId(), created_at: new Date().toISOString(), pending: 'sending', item_slug };
     nearBottom.current = true; lastActivity.current = Date.now(); lastTyped.current = 0;
     setMsgs((cur) => [...cur, m]);
     if (quick == null) setText('');
@@ -139,7 +149,7 @@ export default function ChatScreen() {
     try {
       const d = await readChat(auth, role, String(token), { before: first.id });
       nearBottom.current = false;
-      setMsgs((cur) => mergeMessages(cur, d.messages)); setState((s) => ({ ...s, has_more: d.has_more }));
+      addProducts(d.products); setMsgs((cur) => mergeMessages(cur, d.messages)); setState((s) => ({ ...s, has_more: d.has_more }));
     } catch { toast(K.loadError, 'info'); }
   };
 
@@ -153,17 +163,23 @@ export default function ChatScreen() {
   const buyerSent = msgs.filter((m) => m.sender === 'buyer').length;
   const showQuick = role === 'buyer' && !!conv && !conv.paid && !state.blocked && !text && buyerSent < 3;
   const rows = useMemo(() => {
-    const out: ({ k: 'day'; label: string; key: string } | { k: 'msg'; m: ChatMsg; first: boolean; last: boolean; key: string })[] = [];
+    const out: ({ k: 'day'; label: string; key: string } | { k: 'item'; slug: string; mine: boolean; key: string } | { k: 'msg'; m: ChatMsg; first: boolean; last: boolean; key: string })[] = [];
     let day = '';
-    msgs.forEach((m, i) => {
+    const idx = new Map(msgs.map((m, i) => [m, i]));
+    itemCardRows(msgs).forEach((row) => {
+      const m = row.m, i = idx.get(m) ?? 0;
       const d = dayLabel(m.created_at);
       if (d !== day) { day = d; out.push({ k: 'day', label: d, key: `d-${d}-${i}` }); }
+      if (row.k === 'item') { out.push({ k: 'item', slug: row.slug, mine: row.sender === role, key: row.key }); return; }
       const prev = msgs[i - 1], next = msgs[i + 1];
       const same = (a?: ChatMsg) => !!a && a.sender === m.sender && dayLabel(a.created_at) === d && Math.abs(Date.parse(a.created_at) - Date.parse(m.created_at)) < 5 * 60_000;
-      out.push({ k: 'msg', m, first: !same(prev), last: !same(next), key: m.client_id ?? String(m.id) });
+      out.push({ k: 'msg', m, first: !!m.item_slug || !same(prev), last: !same(next) || !!next?.item_slug, key: m.client_id ?? String(m.id) });
     });
     return out;
-  }, [msgs]);
+  }, [msgs, role]);
+  // Datos de la tarjeta: los que manda el servidor, o (envío optimista) los del tema de la conversación.
+  const productOf = (slug: string): ChatProduct | null => products[slug]
+    ?? (conv?.item?.slug === slug ? { slug, title: conv.subject ?? K.seeItem, photo: conv.item_photo, price_crc: conv.item.price_crc, available: true } : null);
 
   if (error) return (
     <View style={st.screen}>
@@ -195,7 +211,12 @@ export default function ChatScreen() {
           </View> : <View style={[s.who, { gap: S.sm }]}><Skeleton w={36} h={36} r={18} /><Skeleton w={140} h={18} /></View>}
         </TopBar>
 
-        {conv && (conv.subject || conv.order) && ctxSlug ? (
+        {conv && conv.kind === 'store' && conv.item_gone ? (
+          <View style={s.ctx} testID="chat-context-gone" accessibilityRole="text">
+            <View style={[s.ctxImg, s.center0]}><Icon name="pricetag-outline" size={18} color={C.textDim} /></View>
+            <Text style={[T.footnote, { flex: 1 }]} numberOfLines={2}>{K.itemGone}</Text>
+          </View>
+        ) : conv && (conv.subject || conv.order) && ctxSlug ? (
           <Pressable accessibilityRole="link" accessibilityLabel={`${conv.kind === 'order' ? K.seeOrder : K.seeItem}: ${conv.subject ?? ''}`} testID="chat-context"
             onPress={() => { haptic.tap(); router.push({ pathname: '/p/[slug]', params: { slug: ctxSlug } }); }}
             style={({ pressed }) => [s.ctx, pressTransition, pressed && { opacity: 0.85 }]}>
@@ -214,6 +235,8 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} testID="chat-messages"
           onContentSizeChange={() => { if (nearBottom.current) scroll.current?.scrollToEnd({ animated: false }); }}>
           {!conv ? <><Skeleton w="60%" h={40} r={18} /><Skeleton w="45%" h={40} r={18} style={{ alignSelf: 'flex-end' }} /></> : null}
+          {/* Antes de pagar, el aviso queda siempre a la vista en la conversación (no solo vacía o con un teléfono/link). */}
+          {conv && !conv.paid && msgs.length > 0 ? <PayInside pinned /> : null}
           {conv && state.has_more ? <PrimaryButton title={K.older} variant="ghost" icon="chevron-up" onPress={loadOlder} /> : null}
           {conv && msgs.length === 0 ? (
             <View style={s.empty} testID="chat-empty">
@@ -224,6 +247,7 @@ export default function ChatScreen() {
           ) : null}
           {rows.map((row) => row.k === 'day'
             ? <View key={row.key} style={s.day}><Text style={s.dayText}>{row.label}</Text></View>
+            : row.k === 'item' ? <ItemCard key={row.key} p={productOf(row.slug)} slug={row.slug} mine={row.mine} />
             : <Bubble key={row.key} m={row.m} mine={row.m.sender === role} first={row.first} last={row.last}
                 read={row.m.id > 0 && mineLastRead >= Date.parse(row.m.created_at)} notice={!conv?.paid && sharesContact(row.m.body)} onRetry={retry} />)}
           {state.other_typing ? <TypingBubble /> : null}
@@ -301,8 +325,8 @@ function Avatar({ name, url, size }: { name: string; url: string | null; size: n
     : <View style={[round, s.center0, { backgroundColor: C.lilac }]}><Text style={{ fontFamily: Fonts.black, fontSize: size / 2.3, color: C.purpleDark }}>{name.replace(/^Comprador · /, '').charAt(0).toUpperCase()}</Text></View>;
 }
 
-function PayInside() {
-  return <View style={s.notice} testID="chat-pay-inside"><Icon name="lock-closed" size={13} color={C.lilac} /><Text style={[T.footnote, { flexShrink: 1 }]}>{K.payInside}</Text></View>;
+function PayInside({ pinned }: { pinned?: boolean }) {
+  return <View style={[s.notice, pinned && { alignSelf: 'center', marginBottom: S.xs }]} testID={pinned ? 'chat-pay-pinned' : 'chat-pay-inside'}><Icon name="lock-closed" size={13} color={C.lilac} /><Text style={[T.footnote, { flexShrink: 1 }]}>{K.payInside}</Text></View>;
 }
 
 function Bubble({ m, mine, first, last, read, notice, onRetry }: { m: ChatMsg; mine: boolean; first: boolean; last: boolean; read: boolean; notice: boolean; onRetry: (m: ChatMsg) => void }) {
@@ -328,6 +352,34 @@ function Bubble({ m, mine, first, last, read, notice, onRetry }: { m: ChatMsg; m
         : <View style={{ maxWidth: '82%' }}>{body}</View>}
       {notice ? <PayInside /> : null}
     </View>
+  );
+}
+
+/** Tarjeta del producto en el hilo (estilo Messenger): foto, título y precio; tocar abre la ficha /p/<slug>. */
+function ItemCard({ p, slug, mine }: { p: ChatProduct | null; slug: string; mine: boolean }) {
+  if (p && p.available === false) return ( // borrado o archivado: la conversación sigue; la tarjeta lo dice, sin link
+    <View testID="chat-item-gone" accessibilityRole="text" style={[s.itemCard, { alignSelf: mine ? 'flex-end' : 'flex-start', borderColor: C.line }]}>
+      <View style={[s.itemImg, s.center0]}><Icon name="pricetag-outline" size={22} color={C.textDim} /></View>
+      <Text style={[T.callout, { flex: 1 }]} numberOfLines={2}>{K.itemGone}</Text>
+    </View>
+  );
+  const title = p?.title ?? K.seeItem;
+  const price = p?.price_crc != null ? formatCRC(p.price_crc) : null;
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={`${K.seeItem}: ${title}${price ? `, ${price}` : ''}`} testID="chat-item-card" {...anim('msg')}
+      onPress={() => { haptic.tap(); track('chat_item_opened', { from: mine ? 'mine' : 'theirs' }); router.push({ pathname: '/p/[slug]', params: { slug } }); }}
+      style={({ pressed }) => [s.itemCard, { alignSelf: mine ? 'flex-end' : 'flex-start' }, pressTransition, pressed && { opacity: 0.85 }]}>
+      {p?.photo ? <Image source={{ uri: p.photo }} style={s.itemImg} accessibilityIgnoresInvertColors />
+        : <View style={[s.itemImg, s.center0]}><Icon name="pricetag-outline" size={22} color={C.lilac} /></View>}
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={[T.body, { fontSize: 15, fontFamily: Fonts.bold }]} numberOfLines={2}>{title}</Text>
+        {price ? <Text style={[T.footnote, { color: C.text, fontFamily: Fonts.bold }]}>{price}</Text> : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+          <Text style={[T.footnote, { color: C.lilac, fontFamily: Fonts.bold }]}>{K.seeItem}</Text>
+          <Icon name="chevron-forward" size={14} color={C.lilac} />
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -372,6 +424,8 @@ const s = StyleSheet.create({
   who: { flexDirection: 'row', alignItems: 'center', gap: S.sm + 2, minWidth: 0 },
   ctx: { flexDirection: 'row', alignItems: 'center', gap: S.sm, marginHorizontal: S.md, marginTop: S.sm, padding: S.sm, borderRadius: R.md, backgroundColor: C.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
   ctxImg: { width: 40, height: 40, borderRadius: 10, backgroundColor: C.lilacBg },
+  itemCard: { flexDirection: 'row', alignItems: 'center', gap: S.sm + 2, width: '78%', maxWidth: 340, marginTop: S.md, padding: S.sm, borderRadius: 18, backgroundColor: C.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(201,182,255,0.45)' },
+  itemImg: { width: 64, height: 64, borderRadius: 12, backgroundColor: C.lilacBg },
   list: { paddingHorizontal: S.md, paddingTop: S.sm, paddingBottom: S.md, gap: 0, flexGrow: 1, justifyContent: 'flex-end' },
   empty: { alignItems: 'center', gap: S.sm, paddingVertical: S.xl, paddingHorizontal: S.md, marginBottom: 'auto', marginTop: 'auto' },
   emptyIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: C.lilac, alignItems: 'center', justifyContent: 'center' },

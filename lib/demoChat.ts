@@ -1,12 +1,12 @@
 // Chat en MODO DEMO: misma forma de respuesta que /api/store (acciones chat_*), sin red. En sessionStorage, como el
 // resto del demo. El comprador y el vendedor del demo comparten el navegador: se cambia de vista con ?role=.
-import { blockLock, buyerLabel, chatPreview, cleanChatText, CHAT_BLOCK_LOCKED, CHAT_MAX, isUnread, type ChatRole } from '../api/_lib/chatText'; // pura
+import { blockLock, buyerLabel, chatItemMarker, chatPreview, cleanChatText, CHAT_BLOCK_LOCKED, CHAT_MAX, isUnread, type ChatRole } from '../api/_lib/chatText'; // pura
 import { canShowContact } from '../api/_lib/contact'; // pura
 
 const KEY = 'meteorito:demo:chat:v1';
 interface Conv { token: string; store: string; store_name: string; buyer: string; ctx: string; order_slug: string | null; item_slug: string | null; subject: string | null; item_photo: string | null;
   blocked: boolean; last_message_at: string | null; last_sender: ChatRole | null; last_preview: string | null; buyer_read_at: string | null; seller_read_at: string | null }
-interface Msg { id: number; sender: ChatRole; body: string; client_id: string | null; created_at: string }
+interface Msg { id: number; sender: ChatRole; body: string; client_id: string | null; created_at: string; item_slug?: string | null }
 interface St { seq: number; convs: Record<string, Conv>; msgs: Record<string, Msg[]>; reports: string[] }
 export interface DemoChatCtx {
   role: 'buyer' | 'seller'; buyer: string; sellerSlug: string; sellerName: string;
@@ -34,6 +34,11 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
       const o = x.orders[String(body.order_slug)];
       if (!o || (role === 'buyer' && o.buyer !== x.buyer)) throw err(404, 'chat_not_found', 'No encontramos esta conversación.');
       store = x.sellerSlug; store_name = x.sellerName; ctx = `order:${o.slug}`; order_slug = o.slug; subject = title(o); item_photo = o.photos[0] ?? null;
+    } else if (body.store_slug == null && body.item_slug) { // desde la ficha, sin esperar el perfil (como el servidor)
+      const it = x.orders[String(body.item_slug)];
+      if (!it) throw err(404, 'not_found', 'Este producto no existe.');
+      if (role === 'seller') throw err(400, 'self_chat', 'Es tu propio producto.');
+      store = x.sellerSlug; store_name = x.sellerName; ctx = 'store'; item_slug = it.slug; subject = title(it); item_photo = it.photos[0] ?? null;
     } else {
       const p = await x.profile(String(body.store_slug ?? ''));
       if (!p) throw err(404, 'not_found', 'Este perfil no existe.');
@@ -56,7 +61,7 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
     const unread = mine.filter((c) => isUnread(c, as)).length;
     if (body.summary === true) return { unread, total: mine.length };
     return { unread, conversations: mine.map((c) => ({ token: c.token, role: as, kind: c.order_slug ? 'order' : 'store', order_slug: c.order_slug, subject: c.subject,
-      photo: as === 'seller' ? c.item_photo : null, name: as === 'buyer' ? c.store_name : buyerLabel(c.buyer), last_preview: c.last_preview ?? '', last_sender: c.last_sender,
+      item_slug: c.order_slug ? null : c.item_slug, photo: as === 'seller' ? c.item_photo : null, name: as === 'buyer' ? c.store_name : buyerLabel(c.buyer), last_preview: c.last_preview ?? '', last_sender: c.last_sender,
       last_message_at: c.last_message_at, unread: isUnread(c, as), blocked: c.blocked })) };
   }
   const c = get(body.token);
@@ -66,12 +71,16 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
     const after = Number(body.after) || 0;
     const messages = after ? all.filter((m) => m.id > after) : all.slice(-60);
     if (isUnread(c, role)) { c[`${role}_read_at`] = now; save(s); }
-    const st = { role, blocked: c.blocked, other_read_at: c[`${other}_read_at`], other_typing: false, has_more: false, messages };
+    // Tarjetas del producto (030): datos públicos de los productos de estos mensajes.
+    // Precio ACTUAL; borrado/cancelado -> available:false (la tarjeta dice "ya no está disponible", sin link).
+    const products = Object.fromEntries(messages.filter((m) => m.item_slug).map((m) => { const o = x.orders[m.item_slug!]; const gone = !o || o.status === 'cancelado' || (o as any).listing_status === 'archivada';
+      return [m.item_slug!, gone ? { slug: m.item_slug!, title: null, photo: null, price_crc: null, available: false } : { slug: o.slug, title: title(o), photo: o.photos[0] ?? null, price_crc: o.price_crc, available: true }]; }));
+    const st = { role, blocked: c.blocked, other_read_at: c[`${other}_read_at`], other_typing: false, has_more: false, messages, ...(Object.keys(products).length || body.full === true ? { products } : {}) };
     if (body.full !== true) return st;
     const ref = c.order_slug ?? c.item_slug; const o = ref ? x.orders[ref] : null;
     const p = role === 'buyer' ? await x.profile(c.store) : null;
     return { ...st, can_block: role === 'seller' && !lockOf(c), conversation: { token: c.token, kind: c.order_slug ? 'order' : 'store', subject: c.subject, item_photo: c.item_photo,
-      item: o && !c.order_slug ? { slug: o.slug, price_crc: o.price_crc } : null, order: o && c.order_slug ? { slug: o.slug, status: o.status, price_crc: o.price_crc } : null,
+      item: o && !c.order_slug && o.status !== 'cancelado' ? { slug: o.slug, price_crc: o.price_crc } : null, item_gone: !c.order_slug && !!c.item_slug && (!o || o.status === 'cancelado'), order: o && c.order_slug ? { slug: o.slug, status: o.status, price_crc: o.price_crc } : null,
       paid: !!(o && c.order_slug && canShowContact(o.status)),
       other: role === 'buyer' ? { name: c.store_name, store_slug: c.store, avatar_url: p?.avatar_url ?? null } : { name: buyerLabel(c.buyer), store_slug: null, avatar_url: null } } };
   }
@@ -84,7 +93,9 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
     const dup = body.client_id ? list.find((m) => m.client_id === body.client_id) : null;
     if (dup) return { message: dup };
     await new Promise((r) => setTimeout(r, 250)); // deja ver el estado "enviando"
-    const m: Msg = { id: ++s.seq, sender: role, body: text, client_id: body.client_id ?? null, created_at: new Date().toISOString() };
+    const lastMarker = [...list].reverse().find((x0) => x0.item_slug)?.item_slug ?? null;
+    const item_slug = chatItemMarker({ role, want: body.item_slug, convItem: c.item_slug, lastMarker, order: !!c.order_slug });
+    const m: Msg = { id: ++s.seq, sender: role, body: text, client_id: body.client_id ?? null, created_at: new Date().toISOString(), item_slug };
     list.push(m);
     Object.assign(c, { last_message_at: m.created_at, last_sender: role, last_preview: chatPreview(text, 120), [`${role}_read_at`]: m.created_at });
     save(s); return { message: m };

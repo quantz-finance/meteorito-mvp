@@ -149,6 +149,7 @@ export const COPY = {
     sending: 'Enviando', sent: 'Enviado', read: 'Leído', failed: 'No se envió. Toca para reintentar.',
     today: 'Hoy', yesterday: 'Ayer', older: 'Ver mensajes anteriores',
     payInside: 'Para que tu compra quede en custodia, paga dentro de Meteorito.',
+    itemGone: 'Este producto ya no está disponible',
     count: (n: number, max: number) => `${n}/${max}`,
     options: 'Opciones de la conversación',
     report: 'Reportar', reportTitle: 'Reportar conversación', reportText: 'Cuéntanos qué pasa. El equipo de Meteorito lo revisa. No le avisamos que la reportaste.',
