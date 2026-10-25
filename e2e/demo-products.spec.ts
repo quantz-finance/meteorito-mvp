@@ -2,7 +2,7 @@
 // etiquetas "Ejemplo" ni avisos grandes; los dos filtros con contenido, buscar "iPhone", tienda de ejemplo /t/<demo> y
 // ficha /p/ej-… con el pago desactivado. Demo con ?ejemplos=1 (en producción los sirve el API). Rápido: solo iPhone SE.
 import { test, expect, type Page } from '@playwright/test';
-import { open, VOSEO } from './helpers';
+import { open, searchFeed, VOSEO } from './helpers';
 
 const BODY = 'Lo pusimos para mostrarte cómo se ve el feed. No está a la venta.';
 
@@ -28,8 +28,7 @@ test.describe('Comprar: productos de ejemplo', () => {
     await open(page, '/comprar?ejemplos=1', 'buyer', true);
     await expect(page.getByTestId('feed-card').first()).toBeVisible();
     // Buscar "iPhone": aparecen iPhones de ejemplo en Identidad confirmada, con el iconito y SIN etiqueta "Ejemplo".
-    const search = page.getByLabel('Buscar productos');
-    await search.fill('iPhone');
+    await searchFeed(page, 'iPhone');
     await expect(page.getByText('Resultados')).toBeVisible();
     const card = page.getByTestId('feed-card').filter({ has: page.getByTestId('demo-info') }).first();
     await expect(card).toBeVisible();
