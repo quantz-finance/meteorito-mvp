@@ -32,6 +32,12 @@ export async function run(t: T) {
   t.check('hint y aviso de cuentas no verificadas (texto exacto)', src('components/SocialLinks.tsx').includes('Se muestran en tu tienda, a la vista de cualquiera que la visite. Puedes quitarlas cuando quieras.')
     && src('components/SocialLinks.tsx').includes('Meteorito no verifica estas cuentas. Para que tu compra quede en custodia, paga dentro de Meteorito.'));
 
+  // Bug de prod: el editor solo estaba dentro de "Editar nombre o usuario". Fila propia en "Tu tienda" y redes en la tarjeta.
+  const tools = src('components/OwnerTools.tsx'), page = src('app/t/[store].tsx');
+  t.check('"Tus redes (opcional)" tiene su fila en las herramientas del dueño', tools.includes('testID="owner-socials"') && tools.includes("openEdit('socials')"));
+  t.check('la tarjeta de la tienda muestra iconos + aviso (sin condición de demo ni de dueño)', /testID="hero-socials"[\s\S]{0,80}<SocialRow socials=\{p\.socials\} \/>/.test(page)
+    && !/!p\.demo \? <SocialRow/.test(page));
+
   // API: quitar una red la borra de verdad; todas vacías -> columna null; nunca se loguea el link
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = ''; delete process.env.ADMIN_EMAILS;
   const db = fakeDb(); __setDbForTests(db as any);
