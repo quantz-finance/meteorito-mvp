@@ -1,7 +1,7 @@
 // Seguir vendedores (demo): botón Seguir / Siguiendo en el perfil y en la tarjeta del feed, el mismo estado en las dos,
 // número de seguidores (nunca quiénes), sin scroll horizontal en iPhone SE.
 import { test, expect } from '@playwright/test';
-import { open, settle } from './helpers';
+import { open, searchFeed, settle } from './helpers';
 
 test('FOLLOW-01 seguir desde el perfil: Siguiendo + seguidores; la tarjeta del feed lo muestra igual', async ({ page }) => {
   await open(page, '/t/jose-games', 'buyer', true);
@@ -36,7 +36,7 @@ test('FOLLOW-02 Siguiendo: vacío en tuteo sin seguir a nadie; después solo la 
   await expect(empty).toContainText('Cuando sigas una, sus publicaciones aparecen aquí.');
   await expect(page.getByTestId('feed-card')).toHaveCount(0);
   await expect(page.getByTestId('feed-filter')).toBeVisible(); // filtro y buscador siguen arriba
-  await expect(page.getByLabel('Buscar productos')).toBeVisible();
+  await expect(page.getByTestId('comprar-search')).toBeVisible(); // la lupa sigue arriba
   for (const n of ['Para ti', 'Siguiendo']) {
     const fs = await page.getByRole('tab', { name: n }).locator('div[dir="auto"]').first().evaluate((e) => parseFloat(getComputedStyle(e).fontSize));
     expect(fs, `"${n}" 16 px`).toBeGreaterThanOrEqual(16);
@@ -59,7 +59,7 @@ test('FOLLOW-02 Siguiendo: vacío en tuteo sin seguir a nadie; después solo la 
   await page.getByRole('button', { name: 'Ver Identidad confirmada' }).click();
   await expect(page.getByTestId('feed-card').first()).toBeVisible();
   // El buscador también.
-  await page.getByLabel('Buscar productos').fill('zzzz nada');
+  await searchFeed(page, 'zzzz nada');
   await expect(page.getByText(/No encontramos/)).toBeVisible();
   await page.getByRole('button', { name: 'Limpiar búsqueda' }).first().click();
   await expect(page.getByTestId('feed-card').first()).toBeVisible();
