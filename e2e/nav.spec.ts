@@ -26,7 +26,7 @@ test.describe('Navegación', () => {
     await page.evaluate(() => (window as any).__meteoritoDemo.seed('fondeado', { title: 'Bici', price_crc: 150000 }));
     await open(page, '/pedidos', 'seller');
     await expect(page.getByText('Tus ventas', { exact: true })).toBeVisible();
-    await expect(page.getByLabel('En curso: 1')).toBeVisible();
+    await expect(page.getByLabel('Vendiendo: 1')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Mi cuenta' })).toBeVisible();
     await expect(page.getByLabel('Actualizar', { exact: true })).toHaveCount(0);
     await page.waitForTimeout(500);

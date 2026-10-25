@@ -32,5 +32,5 @@ export async function run(t: T) {
   t.check('Home: etiqueta de la pestaña', /name="pedidos" options=\{\{ title: 'Home' \}\}/.test(src('app/(tabs)/_layout.tsx')));
   t.check('Home: título de la pantalla (la ruta sigue /pedidos)', /<Screen title="Home"/.test(src('app/(tabs)/pedidos.tsx')));
   t.check('Home: ícono de casa en la pestaña (no la caja)', /pedidos: \(\{ color, fill \}\) => <><Path d="M3 10a2 2 0 0 1 \.7-1\.5l7-6/.test(src('components/TabBar.tsx')) && !/M11 21\.7a2 2 0 0 0 2 0l7-4/.test(src('components/TabBar.tsx')));
-  t.check('Tus ventas: meteorito decorativo', /testID="ventas-mascot"/.test(src('components/SalesSummary.tsx')) && /LivelyMascot/.test(src('components/SalesSummary.tsx')));
+  t.check('Tus ventas: meteorito decorativo', /testID="ventas-mascot"/.test(src('components/HomeSections.tsx')) && /LivelyMascot/.test(src('components/HomeSections.tsx')));
 }
