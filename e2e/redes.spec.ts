@@ -27,8 +27,20 @@ test('REDES-01 edita sus redes y se ven en el perfil público', async ({ page },
   await expect(page.getByTestId('social-website')).toHaveAttribute('href', 'https://valeria.cr/');
   await expect(page.getByTestId('social-x')).toHaveCount(0);
   await expect(page.getByTestId('social-youtube')).toHaveCount(0);
+  await expect(page.getByTestId('socials-note')).toHaveText('Meteorito no verifica estas cuentas. Para que tu compra quede en custodia, paga dentro de Meteorito.');
   await settle(page);
   const w = await page.evaluate(() => ({ sw: document.scrollingElement!.scrollWidth, iw: window.innerWidth }));
   expect(w.sw).toBeLessThanOrEqual(w.iw + 1);
   if (se) await page.screenshot({ path: 'test-results/redes-perfil.png' });
+
+  // Quitarlas: dejar vacío borra la red; sin ninguna, ni iconos ni aviso.
+  await open(page, '/t/valeria', 'seller');
+  await page.getByText('Editar nombre o usuario', { exact: true }).click();
+  for (const k of ['instagram', 'tiktok', 'website']) await page.getByTestId(`social-input-${k}`).fill('');
+  await page.getByRole('button', { name: 'Guardar' }).click();
+  await expect(page.getByTestId('social-input-instagram')).toHaveCount(0);
+  await open(page, '/t/valeria', 'buyer');
+  await expect(page.getByTestId('profile-hero')).toBeVisible();
+  await expect(page.getByTestId('store-socials')).toHaveCount(0);
+  await expect(page.getByTestId('socials-note')).toHaveCount(0);
 });

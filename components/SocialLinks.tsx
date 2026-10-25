@@ -15,6 +15,7 @@ export function SocialRow({ socials }: { socials?: Socials | null }) {
   const keys = SOCIAL_KEYS.filter((k) => typeof socials?.[k] === 'string' && socials[k]!.startsWith('https://'));
   if (!keys.length) return null;
   return (
+    <View style={{ gap: 4, marginTop: S.xs }}>
     <View style={s.row} testID="store-socials">
       {keys.map((k) => {
         const href = socials![k]!;
@@ -25,6 +26,8 @@ export function SocialRow({ socials }: { socials?: Socials | null }) {
           </Pressable>
         );
       })}
+    </View>
+    <Text style={T.footnote} testID="socials-note">Meteorito no verifica estas cuentas. Para que tu compra quede en custodia, paga dentro de Meteorito.</Text>
     </View>
   );
 }
@@ -42,12 +45,12 @@ export function SocialInputs({ value, onChange }: { value: Partial<Record<Social
             autoCapitalize="none" autoCorrect={false} keyboardType="url" accessibilityLabel={SOCIAL_LABEL[k]} testID={`social-input-${k}`} />
         </View>
       ))}
-      <Text style={T.footnote}>Se muestran en tu tienda para que te conozcan mejor.</Text>
+      <Text style={T.footnote}>Se muestran en tu tienda, a la vista de cualquiera que la visite. Puedes quitarlas cuando quieras.</Text>
     </View>
   );
 }
 
 const s = StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: S.sm, marginTop: S.xs },
+  row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: S.sm },
   dot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: C.lilacBg, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
 });

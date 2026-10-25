@@ -11,6 +11,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OwnerTools } from '@/components/OwnerTools';
 import { SocialRow } from '@/components/SocialLinks';
+import { clearStoreSocials, useIsAdmin } from '@/lib/admin';
 import { FollowButton } from '@/components/FollowButton';
 import { ChatButton } from '@/components/ChatButton';
 import { DemoInfo } from '@/components/DemoInfo';
@@ -45,6 +46,7 @@ export default function PerfilVendedor() {
     return () => { live = false; };
   }, [auth.isAuthenticated, auth.address]);
   const owner = !!p && isOwnerView(auth, mine?.store_slug, slug);
+  const admin = useIsAdmin(auth); // solo para el botón 'Borrar redes' (el servidor decide)
   const acts = useActivity(p ? [p.store_slug] : []); // última conexión: aparte y sin caché
   useEffect(() => {
     if (!slug) return;
@@ -68,7 +70,8 @@ export default function PerfilVendedor() {
       {error ? <Notice icon="cloud-offline-outline" title="No pudimos abrir este perfil" text={error} />
         : p === null ? <Notice icon="storefront-outline" title="Este perfil no existe" text="Revisa el link o pídele al vendedor que te lo mande de nuevo." />
         : p === undefined ? <ProfileSkeleton /> : <Profile p={owner && mine ? { ...p, display_name: mine.display_name, avatar_url: mine.avatar_url ?? null, socials: mine.socials ?? p.socials } : p}
-          activity={acts[p.store_slug] ?? null} owner={owner} mine={mine} onMine={setMine} onManage={setManaging}
+          activity={acts[p.store_slug] ?? null} owner={owner} admin={admin === true && !owner}
+          onClearSocials={async () => { try { await clearStoreSocials(auth, p.store_slug); setP({ ...p, socials: {} }); toast('Redes borradas'); } catch (e) { toast((e as Error).message); } }} mine={mine} onMine={setMine} onManage={setManaging}
           tools={owner && mine ? <OwnerTools store={mine} onStore={setMine} managing={managing} onCloseManage={() => setManaging(null)} /> : null} />}
     </Screen>
   );
@@ -90,7 +93,7 @@ function openWhatsApp(p: SellerProfile) {
   Linking.openURL(`${p.whatsapp}?text=${msg}`).catch(() => {});
 }
 
-function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: SellerProfile; activity: Activity | null; owner: boolean; mine: Store | null; onMine: (s: Store) => void; onManage: (it: StoreItem) => void; tools: ReactNode }) {
+function Profile({ p, activity, owner, admin, onClearSocials, mine, onMine, onManage, tools }: { p: SellerProfile; activity: Activity | null; owner: boolean; admin: boolean; onClearSocials: () => void; mine: Store | null; onMine: (s: Store) => void; onManage: (it: StoreItem) => void; tools: ReactNode }) {
   // Dueño: sus productos de la sesión (incluye los en pausa) y tocar uno lo gestiona; visitante: los activos y tocar abre la ficha.
   const managed = new Set(owner && mine ? mine.items.map((i) => i.slug) : []);
   const items: StoreItem[] = owner && mine ? [...mine.items, ...p.items.filter((i) => !managed.has(i.slug))] : p.items;
@@ -116,6 +119,7 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
             <ActivityLine activity={activity} />
             {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
             {!p.demo ? <SocialRow socials={p.socials} /> : null}
+            {admin && !p.demo && p.socials && Object.keys(p.socials).length ? <PrimaryButton title="Borrar redes" icon="close-circle" variant="ghost" testID="admin-clear-socials" onPress={onClearSocials} /> : null}
             {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={[T.footnote, { flexShrink: 1 }]}>{COPY.identity.unconfirmed}</Text></View> : null}
             {!owner && !p.demo ? <View style={{ alignItems: 'flex-start', marginTop: S.xs }}>
               <FollowButton store={p} source="profile" onFollowers={(n, on) => setFollowers((cur) => (n != null ? n : cur == null ? null : Math.max(0, cur + (on ? 1 : -1))))} />
