@@ -1,4 +1,4 @@
-// (89) Home = resumen + "Tus ventas" + "Tus compras" (filas compactas). Sin la UI del proceso (línea de tiempo, pasos,
+// (90) Home = resumen + "Tus ventas" + "Tus compras" (filas compactas). Sin la UI del proceso (línea de tiempo, pasos,
 //      acciones): eso vive en la hoja del pedido. Solo datos reales; lo que te toca primero; sin función nueva.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
