@@ -1,4 +1,4 @@
-// (82) Productos de ejemplo en Comprar (interruptor "Datos de ejemplo", 032): datos ficticios en código (nunca en la base), van DESPUÉS de
+// (82) Productos de ejemplo en Comprar (modo "Datos de ejemplo", ?ejemplos=1): datos ficticios en código (nunca en la base), van DESPUÉS de
 //      los reales, filtro y búsqueda funcionan, nunca en Patrocinado, tiendas /t/<demo> con reseñas, foto de perfil, redes de
 //      Meteorito y última conexión relativa; fotos en /public (≤120 KB, ~800 px; perfiles ≤40 KB) y el pago es imposible (sin fila en la base, orderBySlug 409, ficha sin PayBox). Sin red.
 import type { T } from './setup';
@@ -11,7 +11,7 @@ import store from '../../api/store/index';
 
 const call = async (o: { method?: string; body?: any; query?: any; guest?: string }) => {
   const r: any = { code: 0, body: null, headers: {} }; r.status = (c: number) => { r.code = c; return r; }; r.setHeader = (k: string, v: string) => { r.headers[k.toLowerCase()] = v; return r; }; r.send = (b: string) => { r.body = JSON.parse(b); return r; };
-  await store({ method: o.method ?? 'GET', headers: o.guest ? { 'x-guest-key': o.guest } : {}, body: o.body ?? {}, query: o.query ?? {} }, r); return r;
+  await store({ method: o.method ?? 'GET', headers: o.guest ? { 'x-guest-key': o.guest } : {}, body: { ejemplos: true, ...o.body }, query: { ejemplos: '1', ...o.query } }, r); return r; // modo "Datos de ejemplo"
 };
 const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 /** Ancho y alto de un JPEG (marcador SOF). */
@@ -40,7 +40,7 @@ const imgSize = (b: Buffer) => jpegSize(b) ?? webpSize(b);
 export async function run(t: T) {
   // --- Datos ---
   const flag = src('api/_lib/demoFlag.ts');
-  t.check('un solo interruptor: sin flag en código (lo decide app_settings en el servidor; FEED_DEMO_PRODUCTS=0 solo como freno)', !/FEED_DEMO_PRODUCTS = (true|false)/.test(flag) && /demoKilledByEnv/.test(flag) && !/FEED_DEMO_SALES/.test(src('lib/feedSales.ts')));
+  t.check('sin flag en código: lo decide cada pedido (demoWanted, ?ejemplos=1); FEED_DEMO_PRODUCTS=0 solo como freno', !/FEED_DEMO_PRODUCTS = (true|false)/.test(flag) && /demoKilledByEnv/.test(flag) && /export function demoWanted/.test(flag) && !/FEED_DEMO_SALES/.test(src('lib/feedSales.ts')));
   t.check(`${DEMO_PRODUCTS.length} productos (60-80) de ${DEMO_SELLERS.length} tiendas (12-16)`, DEMO_PRODUCTS.length >= 60 && DEMO_PRODUCTS.length <= 80 && DEMO_SELLERS.length >= 12 && DEMO_SELLERS.length <= 16);
   const conf = DEMO_SELLERS.filter((s) => s.verified).length;
   t.check(`identidad confirmada ~mitad (${conf}/${DEMO_SELLERS.length})`, conf >= 4 && DEMO_SELLERS.length - conf >= 4);
@@ -108,7 +108,6 @@ export async function run(t: T) {
   process.env.FEED_DEMO_PRODUCTS = '1';
   try {
     const db = fakeDb(); __setDbForTests(db as any);
-    db.tables.app_settings = [{ key: 'demo_data_enabled', value: true }]; // "Datos de ejemplo" encendido
     const at = (h: number) => new Date(Date.now() - h * 3600e3).toISOString();
     db.tables.seller_profiles = [
       { sub: 's-v', store_slug: 'vale', display_name: 'Valeria', verified: true, created_at: at(900) },

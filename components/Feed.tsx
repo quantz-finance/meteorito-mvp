@@ -29,6 +29,7 @@ import { useAuth } from '@/lib/cavos';
 import { followsSome, loadFollowing } from '@/lib/follows';
 import { clearSearch, openSearch, useFeedSearch } from '@/lib/feedSearch';
 import { SearchSheet } from '@/components/SearchSheet';
+import { useAppMode } from '@/lib/demoPref';
 import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
 
 export const SEARCH_DEBOUNCE_MS = 300;
@@ -58,11 +59,12 @@ export function Feed({ header }: { header: ReactElement }) {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [more, setMore] = useState(false);
   const [sponsored, setSponsored] = useState<SponsoredItem[]>([]); // bloque Patrocinado (024): solo si hay activos
-  const [sales, setSales] = useState<SalePost[]>([]); // ventas de ejemplo: solo si el servidor las manda ("Datos de ejemplo" encendido)
+  const [sales, setSales] = useState<SalePost[]>([]); // ventas de ejemplo: solo si el servidor las manda (modo "Datos de ejemplo")
   const [example, setExample] = useState(false);
   const req = useRef(0);
   const viewed = useRef(false);
   const auth = useAuth();
+  const mode = useAppMode(); // "Modo de la app" (Mi cuenta): al cambiarlo, el feed se vuelve a pedir
   // Algoritmo: si sigues a alguien, el feed se pide personalizado (sus productos suben); si no, el mismo para todos.
   const personal = async () => { await loadFollowing(auth); return followsSome() ? auth : null; };
 
@@ -86,7 +88,7 @@ export function Feed({ header }: { header: ReactElement }) {
       if (q) track('feed_search', { results: page.items.length, more: !!page.next_cursor, filter, q_len: q.length });
       else if (!viewed.current) { viewed.current = true; track('feed_viewed', { items: page.items.length, filter }); }
     } catch { if (id === req.current) setPhase('error'); }
-  }, [q, filter, view]);
+  }, [q, filter, view, mode]);
   useEffect(() => { load(); }, [load]);
 
   const loadMore = async () => {
@@ -278,7 +280,7 @@ export const SaleCard = memo(function SaleCard({ post: p, onPress }: { post: Sal
 
 type Suggested = DemoSuggestedStore;
 /** Siguiendo sin seguir a nadie: tiendas de EJEMPLO para empezar (ficticias, con su iconito (i)). Las manda el servidor
- *  solo con "Datos de ejemplo" encendido; apagado, no se muestra nada. */
+ *  solo en el modo "Datos de ejemplo"; en Testnet, no se muestra nada. */
 function SuggestedStores() {
   const [list, setList] = useState<Suggested[]>([]);
   useEffect(() => {

@@ -1,5 +1,5 @@
 // Supabase en memoria para tests (subset de la API de PostgREST que usa api/_lib). PK por tabla → 23505.
-const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id', user_wallets: 'sub', session_nonces: 'nonce', invitations: 'code', seller_ratings: 'order_id', seller_profiles: 'sub', app_settings: 'key' };
+const PK: Record<string, string> = { orders: 'id', ramp_mock_payments: 'order_id', disputes: 'order_id', order_events: 'id', user_wallets: 'sub', session_nonces: 'nonce', invitations: 'code', seller_ratings: 'order_id', seller_profiles: 'sub' };
 /** Índices únicos además de la PK (→ 23505). */
 const UNIQUE: Record<string, string[][]> = { seller_follows: [['follower_id', 'seller_user_id']],
   chat_conversations: [['token'], ['buyer_id', 'seller_user_id', 'ctx']], chat_messages: [['conversation_id', 'client_id']], chat_reports: [['conversation_id', 'reporter_role']],

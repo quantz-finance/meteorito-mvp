@@ -1,136 +1,112 @@
-// (95) Interruptor "Datos de ejemplo" (032, pedido de Rolando): un solo ajuste global en el servidor (app_settings), que
-//      solo cambia el admin maestro. Apagado (default): feed, búsqueda, ventas, sugeridas y /t/<ejemplo> sin ningún
-//      ejemplo (404). Encendido: los ejemplos se ven para todos. No admin -> 404. Auditoría demo_toggle. Sin función nueva.
+// (95) "Modo de la app" (pedido de Rolando): Datos de ejemplo / Testnet / Mainnet (Próximamente, desactivado). Cada
+//      persona en su dispositivo (lib/demoPref.ts); default Testnet = solo reales. La app manda ?ejemplos=1 en el modo
+//      "Datos de ejemplo" y el servidor decide POR PEDIDO (demoWanted): sin estado global, lo de uno no afecta a otro.
+//      Sin el parámetro: feed, búsqueda, ventas, sugeridas y /t/<ejemplo> sin ningún ejemplo (404). No toca red ni pagos.
 import type { T } from './setup';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { installTestJwks, req, res, token } from './jwt';
+import { res } from './jwt';
 import { fakeDb } from './fakedb';
 import { __setDbForTests } from '../../api/_lib/db';
-import { __resetDemoDataCache, DEMO_CACHE_MS, demoDataOn } from '../../api/_lib/appSettings';
+import { demoWanted } from '../../api/_lib/demoFlag';
 import { DEMO_PRODUCTS } from '../../api/_lib/demoProducts';
 import { BANNED_COPY, COPY } from '../../lib/copy';
 import store from '../../api/store/index';
-import dispute from '../../api/escrow/dispute';
 
 const src = (f: string) => readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8');
-const admin = async (tok: string | null, body: any) => { const r = res(); await dispute(req(tok, { action: 'admin_demo_data', ...body }), r); return r; };
 const get = async (query: any) => { const r = res(); await store({ method: 'GET', headers: {}, body: {}, query }, r); return r; };
 const post = async (body: any, guest?: string) => { const r = res(); await store({ method: 'POST', headers: guest ? { 'x-guest-key': guest } : {}, body, query: {} }, r); return r; };
 const hasDemo = (items: any[]) => (items ?? []).some((i) => i.demo || i.seller?.demo || String(i.slug).startsWith('ej-'));
+const EJ = { ejemplos: '1' };
 
 export async function run(t: T) {
-  await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = ''; delete process.env.ADMIN_EMAILS;
-  const prevEnv = process.env.FEED_DEMO_PRODUCTS; delete process.env.FEED_DEMO_PRODUCTS; // sin freno: decide el interruptor
+  const prevEnv = process.env.FEED_DEMO_PRODUCTS; delete process.env.FEED_DEMO_PRODUCTS; // sin freno: decide cada pedido
   try {
-    const db = fakeDb(); __setDbForTests(db as any); __resetDemoDataCache();
+    const db = fakeDb(); __setDbForTests(db as any);
     const at = (h: number) => new Date(Date.now() - h * 3600e3).toISOString();
     db.tables.seller_profiles = [{ sub: 's-r', store_slug: 'real95', display_name: 'Real', verified: true, created_at: at(900) }];
     db.tables.public_stores = [];
     db.tables.orders = [{ id: 'id-r', slug: 'real01', kind: 'listing', status: 'creado', listing_status: 'activa', listing_slug: null, seller_user_id: 's-r', brand: '', model: 'iPhone real',
       description: null, price_crc: 25000, photos: ['https://x/r.jpg'], created_at: at(5) }];
-    const feed = () => get({ feed: '1', order: 'rank', verified: 'all', limit: '20' });
+    const feed = (extra: any = {}) => get({ feed: '1', order: 'rank', verified: 'all', limit: '20', ...extra });
 
-    // --- Sin migración (sin tabla): apagado ---
+    // --- Testnet (default: la app no manda el parámetro) ---
     let r = await feed();
-    t.check('sin la tabla 032: apagado (solo reales, sin ventas)', r.code === 200 && r.body.items.length === 1 && !hasDemo(r.body.items) && !r.body.sales);
-
-    // --- Apagado (fila en false, el default de 032) ---
-    db.tables.app_settings = [{ key: 'demo_data_enabled', value: false }]; __resetDemoDataCache();
-    r = await feed();
-    t.check('apagado: feed Para ti solo con reales y sin ventas de ejemplo', r.code === 200 && r.body.items.length === 1 && r.body.items[0].slug === 'real01' && !hasDemo(r.body.items) && !('sales' in r.body), JSON.stringify(r.body).slice(0, 160));
+    t.check('Testnet (default): feed Para ti solo con reales y sin ventas de ejemplo', r.code === 200 && r.body.items.length === 1 && r.body.items[0].slug === 'real01' && !hasDemo(r.body.items) && !('sales' in r.body), JSON.stringify(r.body).slice(0, 160));
     r = await post({ action: 'feed', verified: 'all', q: 'iPhone', limit: '20' });
-    t.check('apagado: búsqueda sin ejemplos', r.code === 200 && r.body.items.length === 1 && !hasDemo(r.body.items));
+    t.check('Testnet: búsqueda sin ejemplos', r.code === 200 && r.body.items.length === 1 && !hasDemo(r.body.items));
     r = await post({ action: 'feed', verified: 'all', limit: '20' }, 'a'.repeat(64));
-    t.check('apagado: feed personalizado (POST) sin ejemplos', r.code === 200 && !hasDemo(r.body.items) && !r.body.sales);
+    t.check('Testnet: feed personalizado (POST) sin ejemplos', r.code === 200 && !hasDemo(r.body.items) && !r.body.sales);
     r = await get({ profile: 'tecno-sabana' });
-    t.check('apagado: /t/<tienda de ejemplo> = 404 (no encontrado)', r.code === 404);
+    t.check('Testnet: /t/<tienda de ejemplo> = 404 (no encontrado)', r.code === 404);
     r = await get({ profile: 'real95' });
-    t.check('apagado: las tiendas reales siguen igual', r.code === 200 && r.body.store_slug === 'real95');
+    t.check('Testnet: las tiendas reales siguen igual', r.code === 200 && r.body.store_slug === 'real95');
     r = await get({ demo: 'suggested' });
-    t.check('apagado: Siguiendo sin tiendas sugeridas de ejemplo', r.code === 200 && Array.isArray(r.body.stores) && r.body.stores.length === 0);
+    t.check('Testnet: Siguiendo sin tiendas sugeridas de ejemplo', r.code === 200 && Array.isArray(r.body.stores) && r.body.stores.length === 0);
     r = await get({ demo: 'product', slug: 'ej-iphone-13' });
-    t.check('apagado: ficha /p/ej-… = 404', r.code === 404);
+    t.check('Testnet: ficha /p/ej-… = 404', r.code === 404);
     r = await get({ activity: 'tecno-sabana' });
-    t.check('apagado: sin última conexión de ejemplo', r.code === 200 && !('tecno-sabana' in (r.body.activity ?? {})));
+    t.check('Testnet: sin última conexión de ejemplo', r.code === 200 && !('tecno-sabana' in (r.body.activity ?? {})));
+    t.check('solo ejemplos=1 / ejemplos:true lo pide (nada de "true", "si" ni otros)', !demoWanted({ query: { ejemplos: 'true' } }) && !demoWanted({ query: { ejemplos: 'si' } }) && !demoWanted({ body: { ejemplos: '1' } }) && !demoWanted(null)
+      && demoWanted({ query: { ejemplos: '1' } }) && demoWanted({ body: { ejemplos: true } }));
 
-    // --- Solo el admin maestro ---
-    const userTok = await token({ sub: 'u95' });
-    r = await admin(userTok, { enabled: true });
-    t.check('no admin: cambiarlo -> 404 y no cambia', r.code === 404 && db.tables.app_settings[0].value === false, `${r.code}`);
-    r = await admin(userTok, {});
-    t.check('no admin: leerlo -> 404', r.code === 404);
-    r = await admin(null, { enabled: true });
-    t.check('sin sesión -> 401', r.code === 401 && db.tables.app_settings[0].value === false, `${r.code}`);
-    const adminTok = await token({ sub: 'admin-sub', email: 'bobbyaliensshop@gmail.com' });
-    r = await admin(adminTok, {});
-    t.check('admin lo lee: apagado', r.code === 200 && r.body.enabled === false && r.body.available === true);
-    r = await admin(adminTok, { enabled: 'si' });
-    t.check('valor inválido -> 400', r.code === 400);
-
-    // --- Encendido ---
-    r = await admin(adminTok, { enabled: true });
-    const audit = db.tables.admin_audit ?? [];
-    t.check('admin lo enciende + auditoría demo_toggle', r.code === 200 && r.body.enabled === true && db.tables.app_settings[0].value === true
-      && audit.length === 1 && audit[0].kind === 'demo_toggle' && audit[0].admin_email === 'bobbyaliensshop@gmail.com' && audit[0].detail?.enabled === true && audit[0].detail?.before === false);
-    r = await feed();
-    t.check('encendido: reales primero y después los ejemplos, con ventas de ejemplo', r.code === 200 && r.body.items[0].slug === 'real01' && r.body.items.slice(1).every((i: any) => i.demo) && r.body.items.length > 5
+    // --- Datos de ejemplo (la app manda ?ejemplos=1) ---
+    r = await feed(EJ);
+    t.check('Datos de ejemplo: reales primero y después los ejemplos, con ventas de ejemplo', r.code === 200 && r.body.items[0].slug === 'real01' && r.body.items.slice(1).every((i: any) => i.demo) && r.body.items.length > 5
       && Array.isArray(r.body.sales) && r.body.sales.length > 0 && r.body.sales.every((s: any) => s.example === true));
-    r = await get({ feed: '1', order: 'rank', verified: 'all', limit: '20', cursor: r.body.next_cursor });
-    t.check('encendido: la 2.ª página sin ventas repetidas', r.code === 200 && !r.body.sales);
-    r = await post({ action: 'feed', verified: 'all', q: 'iPhone', limit: '20' });
-    t.check('encendido: búsqueda con ejemplos y sin ventas mezcladas', r.code === 200 && hasDemo(r.body.items) && !r.body.sales);
-    r = await get({ profile: 'tecno-sabana' });
-    t.check('encendido: /t/<tienda de ejemplo> = 200', r.code === 200 && r.body.demo === true);
-    r = await get({ demo: 'suggested' });
-    t.check('encendido: tiendas sugeridas de ejemplo', r.code === 200 && r.body.stores.length === 6 && r.body.stores.every((s: any) => s.demo === true));
-    r = await get({ demo: 'product', slug: DEMO_PRODUCTS[0].slug });
-    t.check('encendido: ficha de ejemplo, nunca pagable', r.code === 200 && r.body.demo === true && r.body.payable === false);
-    r = await get({ demo: 'product', slug: 'real01' });
-    t.check('encendido: ?demo=product con un slug real -> 404', r.code === 404);
-    r = await post({ action: 'feed', view: 'following', verified: 'all', limit: '20' }, 'b'.repeat(64));
-    t.check('encendido: Siguiendo igual sin ejemplos', r.code === 200 && !hasDemo(r.body.items) && !r.body.sales);
+    r = await feed({ ...EJ, cursor: r.body.next_cursor });
+    t.check('Datos de ejemplo: la 2.ª página sin ventas repetidas', r.code === 200 && !r.body.sales);
+    r = await post({ action: 'feed', ejemplos: true, verified: 'all', q: 'iPhone', limit: '20' });
+    t.check('Datos de ejemplo: búsqueda con ejemplos y sin ventas mezcladas', r.code === 200 && hasDemo(r.body.items) && !r.body.sales);
+    r = await get({ profile: 'tecno-sabana', ...EJ });
+    t.check('Datos de ejemplo: /t/<tienda de ejemplo> = 200', r.code === 200 && r.body.demo === true);
+    r = await get({ demo: 'suggested', ...EJ });
+    t.check('Datos de ejemplo: tiendas sugeridas de ejemplo', r.code === 200 && r.body.stores.length === 6 && r.body.stores.every((s: any) => s.demo === true));
+    r = await get({ demo: 'product', slug: DEMO_PRODUCTS[0].slug, ...EJ });
+    t.check('Datos de ejemplo: ficha de ejemplo, nunca pagable', r.code === 200 && r.body.demo === true && r.body.payable === false);
+    r = await get({ demo: 'product', slug: 'real01', ...EJ });
+    t.check('?demo=product con un slug real -> 404', r.code === 404);
+    r = await post({ action: 'feed', ejemplos: true, view: 'following', verified: 'all', limit: '20' }, 'b'.repeat(64));
+    t.check('Datos de ejemplo: Siguiendo igual sin ejemplos', r.code === 200 && !hasDemo(r.body.items) && !r.body.sales);
+
+    // --- Lo de una persona no afecta a otra (al mismo tiempo, misma instancia) ---
+    const [a, b, c] = await Promise.all([feed(EJ), feed(), get({ profile: 'tecno-sabana' })]);
+    t.check('a la vez: quien eligió Datos de ejemplo los ve; otra persona en Testnet no', hasDemo(a.body.items) && !!a.body.sales && !hasDemo(b.body.items) && !b.body.sales && c.code === 404);
+    r = await feed();
+    t.check('después de que otro pidió ejemplos, Testnet sigue sin ejemplos (sin estado global)', !hasDemo(r.body.items) && !r.body.sales);
 
     // --- Freno de emergencia ---
     process.env.FEED_DEMO_PRODUCTS = '0';
-    r = await feed();
-    t.check('FEED_DEMO_PRODUCTS=0 apaga aunque el interruptor esté encendido', r.code === 200 && !hasDemo(r.body.items) && !r.body.sales);
-    r = await admin(adminTok, {});
-    t.check('el admin ve que el freno está puesto (killed)', r.code === 200 && r.body.enabled === true && r.body.killed === true);
+    r = await feed(EJ);
+    t.check('FEED_DEMO_PRODUCTS=0 apaga los ejemplos para todos', r.code === 200 && !hasDemo(r.body.items) && !r.body.sales);
     delete process.env.FEED_DEMO_PRODUCTS;
+  } finally { if (prevEnv == null) delete process.env.FEED_DEMO_PRODUCTS; else process.env.FEED_DEMO_PRODUCTS = prevEnv; }
 
-    // --- Apagarlo otra vez ---
-    r = await admin(adminTok, { enabled: false });
-    t.check('admin lo apaga (2.ª auditoría)', r.code === 200 && r.body.enabled === false && (db.tables.admin_audit ?? []).length === 2);
-    r = await feed();
-    t.check('apagado otra vez: sin ejemplos al instante en esta instancia', !hasDemo(r.body.items) && !r.body.sales);
-    r = await get({ profile: 'tecno-sabana' });
-    t.check('apagado otra vez: /t/<ejemplo> = 404', r.code === 404);
+  // --- Modo en el dispositivo: default Testnet, Mainnet no se puede elegir ---
+  const store_: Record<string, string> = {};
+  (globalThis as any).localStorage = { getItem: (k: string) => store_[k] ?? null, setItem: (k: string, v: string) => { store_[k] = String(v); } };
+  try {
+    const m = await import('../../lib/demoPref');
+    t.check('modo por defecto: Testnet (sin ejemplos)', m.getAppMode() === 'testnet' && m.demoPrefOn() === false);
+    t.check('elegir Datos de ejemplo: pide los ejemplos', m.setAppMode('ejemplos') === true && m.getAppMode() === 'ejemplos' && m.demoPrefOn() === true);
+    t.check('Mainnet: no se puede elegir (no cambia nada)', m.setAppMode('mainnet') === false && m.getAppMode() === 'ejemplos' && !m.SELECTABLE_MODES.includes('mainnet'));
+    store_['meteorito:modo-app'] = 'mainnet';
+    t.check('un "mainnet" guardado a mano no vale: vuelve al modo de memoria, nunca Mainnet', m.getAppMode() !== 'mainnet');
+    t.check('volver a Testnet', m.setAppMode('testnet') === true && m.demoPrefOn() === false);
+  } finally { delete (globalThis as any).localStorage; }
 
-    // --- Caché corta (no lee la base en cada pedido) ---
-    t.check('caché ≤ 60 s', DEMO_CACHE_MS > 0 && DEMO_CACHE_MS <= 60_000);
-    let reads = 0; const realFrom = db.from.bind(db);
-    (db as any).from = (tb: string) => { if (tb === 'app_settings') reads++; return realFrom(tb); };
-    __resetDemoDataCache(); const t0 = Date.now();
-    await demoDataOn(t0); await demoDataOn(t0 + 1000); await demoDataOn(t0 + 2000);
-    const cached = reads;
-    await demoDataOn(t0 + DEMO_CACHE_MS + 1);
-    t.check('caché: 3 consultas seguidas = 1 lectura; vencida, vuelve a leer', cached === 1 && reads === 2, `${cached}/${reads}`);
-    (db as any).from = realFrom;
-  } finally { if (prevEnv == null) delete process.env.FEED_DEMO_PRODUCTS; else process.env.FEED_DEMO_PRODUCTS = prevEnv; __resetDemoDataCache(); }
-
-  // --- Migración 032 ---
-  const sql = src('supabase/migrations/032_app_settings.sql');
-  t.check('032: app_settings (key pk, value jsonb, updated_at), RLS y solo el servidor', /create table if not exists public\.app_settings/.test(sql) && /key\s+text primary key/.test(sql) && /value\s+jsonb not null/.test(sql)
-    && /updated_at\s+timestamptz/.test(sql) && /enable row level security/.test(sql) && /revoke all on public\.app_settings from anon, authenticated/.test(sql));
-  t.check('032: demo_data_enabled = false por defecto (sin pisar un valor existente)', /'demo_data_enabled', 'false'::jsonb\) on conflict \(key\) do nothing/.test(sql));
-
-  // --- UI: solo el admin maestro, accesible, el único texto nuevo ---
-  const tog = src('components/DemoDataToggle.tsx');
-  t.check('label exacto "Datos de ejemplo" y sin palabras prohibidas', COPY.demoData.label === 'Datos de ejemplo' && !BANNED_COPY.test(COPY.demoData.label) && !/proteg/i.test(COPY.demoData.label));
-  t.check('interruptor accesible (role switch, label, estado) y ≥44 px', /<Switch value=\{on === true\}/.test(tog) && /accessibilityLabel=\{COPY\.demoData\.label\}/.test(tog) && /minHeight: 44/.test(tog));
-  t.check('solo lo ve el admin (el servidor decide con admin_me)', /useIsAdmin\(auth\)/.test(tog) && /if \(admin !== true\) return null/.test(tog));
-  t.check('vive en Mi cuenta', /<DemoDataToggle \/>/.test(src('components/AccountSheet.tsx')));
+  // --- UI: cualquier cuenta, accesible (radiogroup/radio), textos exactos ---
+  const ui = src('components/AppModePicker.tsx');
+  t.check('textos exactos: Modo de la app / Datos de ejemplo / Testnet / Mainnet / Próximamente', JSON.stringify(COPY.appMode) === JSON.stringify({ label: 'Modo de la app', ejemplos: 'Datos de ejemplo', testnet: 'Testnet', mainnet: 'Mainnet', soon: 'Próximamente' }));
+  t.check('sin palabras prohibidas', Object.values(COPY.appMode).every((x) => !BANNED_COPY.test(x) && !/proteg/i.test(x)));
+  t.check('accesible: radiogroup + radio con estado (checked/disabled) y filas de 44 px', /accessibilityRole="radiogroup"/.test(ui) && /accessibilityRole="radio"/.test(ui) && /accessibilityState=\{\{ checked: on, disabled: off \}\}/.test(ui) && /minHeight: 44/.test(ui));
+  t.check('Mainnet: visible pero desactivado (disabled, no hace nada al tocar)', /disabled=\{off\}/.test(ui) && /if \(off \|\| on\) return/.test(ui) && /COPY\.appMode\.soon/.test(ui));
+  const sheet = src('components/AccountSheet.tsx');
+  t.check('en Mi cuenta para cualquier cuenta (sin condición de admin)', /<AppModePicker \/>/.test(sheet) && !/useIsAdmin|admin/.test(ui + sheet));
+  const st = src('lib/store.ts');
+  t.check('la app manda ejemplos solo en el modo Datos de ejemplo (feed GET/POST, perfil, actividad, sugeridas, ficha)', /demoPrefOn\(\)/.test(st) && /qs\.set\('ejemplos', '1'\)/.test(st)
+    && (st.match(/ej\(\) \? \{ ejemplos: true \}/g) ?? []).length === 2 && (st.match(/\$\{ejQs\(\)\}/g) ?? []).length === 4);
+  t.check('el modo no toca la red, los escrows ni el pago', !/demoPref|getAppMode/.test(src('lib/chain.ts') + src('lib/wallet.ts') + src('components/PayBox.tsx') + src('lib/orders.ts')));
   t.check('la app no decide sola: sin flags de demo en el cliente', !/FEED_DEMO_PRODUCTS|FEED_DEMO_SALES|demoProductsOn/.test(src('components/Feed.tsx') + src('components/DemoProduct.tsx') + src('lib/feedSales.ts') + src('lib/demoFeed.ts')));
 
   // --- Sin función nueva de Vercel: siguen siendo 12 ---

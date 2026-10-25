@@ -45,8 +45,8 @@ export const COPY = {
   ficha: { seeProfile: 'Ver perfil del vendedor', soldBy: (name: string) => `Vendido por ${name}` },
   // Productos y tiendas de EJEMPLO del feed (api/_lib/demoProducts.ts; interruptor "Datos de ejemplo"): ficticios, nunca se pagan.
   // Señal SUTIL: un iconito (i) discreto que abre un popup chico; nada de etiquetas "Ejemplo" ni avisos grandes.
-  // Interruptor del admin maestro (Mi cuenta): enciende o apaga los datos de ejemplo para todos (032). Único texto visible.
-  demoData: { label: 'Datos de ejemplo' },
+  // "Modo de la app" (Mi cuenta, cada persona en su dispositivo; lib/demoPref.ts). Textos pedidos por Rolando.
+  appMode: { label: 'Modo de la app', ejemplos: 'Datos de ejemplo', testnet: 'Testnet', mainnet: 'Mainnet', soon: 'Próximamente' },
   demoProducts: {
     cardLabel: (title: string, price: string) => `Ejemplo. ${title}, ${price}`, // solo lector de pantalla
     info: {

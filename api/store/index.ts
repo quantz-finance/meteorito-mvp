@@ -5,9 +5,11 @@
 //                                                 nuevo primero, paginado por cursor. Sin datos privados. Caché corta.
 //       [&order=rank]                            -> con el algoritmo (api/_lib/feedRank.ts), sin personalizar (caché pública)
 //                                                 + productos de EJEMPLO (demo: true) DESPUÉS de los reales, cursor e…_…
-//                                                 + sales: ventas de ejemplo (1.ª página sin búsqueda). Todo SOLO con el
-//                                                 interruptor "Datos de ejemplo" encendido (api/_lib/appSettings.ts, 032)
-//  GET  ?demo=suggested | ?demo=product&slug=ej-… -> tiendas sugeridas / ficha de ejemplo (apagado: [] / 404)
+//                                                 + sales: ventas de ejemplo (1.ª página sin búsqueda). Todo SOLO si el pedido
+//                                                 trae &ejemplos=1 (o ejemplos:true en POST): el "Modo de la app" de esa
+//                                                 persona en "Datos de ejemplo" (lib/demoPref.ts). Sin el parámetro: solo reales.
+//  GET  ?demo=suggested | ?demo=product&slug=ej-… [&ejemplos=1] -> tiendas sugeridas / ficha de ejemplo (sin él: [] / 404)
+//  GET  ?profile=<ejemplo> sin &ejemplos=1 -> 404
 //                                                 + sponsored: bloque Patrocinado (024), solo en la 1.ª página, [] si no hay
 //  POST { action:'feed', q?, verified?, cursor?, limit? } (X-Guest-Key y/o Bearer) -> el mismo feed con el algoritmo y el
 //                                                 impulso de los vendedores que SIGUE quien pide (022). Sin caché.
@@ -91,7 +93,7 @@ import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile, social
 import { normalizeSocials, socialError } from '../_lib/socials';
 import { decodeDemoCursor, demoActivityBySlug, demoPage, demoProduct, demoProfile, demoSuggestedStores, isDemoStoreSlug, looksLikeDemoProduct, mergeDemo } from '../_lib/demoProducts';
 import { DEMO_SALES } from '../_lib/demoSales';
-import { demoDataOn } from '../_lib/appSettings';
+import { demoWanted } from '../_lib/demoFlag';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -181,7 +183,7 @@ async function reviewPairGuard(order: any) {
 /** Vista previa al compartir /t/<usuario>: el HTML de la app (mismo deploy) con los meta OG del vendedor. */
 async function ogPage(req: any, res: any) {
   const slug = normalizeStoreSlug(req.query.og);
-  const p = validStoreSlug(slug) ? ((await demoDataOn()) && demoProfile(slug)) || await sellerProfile(slug).catch(() => null) : null;
+  const p = validStoreSlug(slug) ? (demoWanted(req) && demoProfile(slug)) || await sellerProfile(slug).catch(() => null) : null;
   const url = `https://pago.meteorito.app/t/${slug}`;
   let appHtml: string | null = null;
   const host = String(req.headers?.host ?? '');
@@ -197,12 +199,12 @@ async function ogPage(req: any, res: any) {
   res.send(injectMeta(appHtml, meta, url));
 }
 
-/** Feed + datos de EJEMPLO (solo con el algoritmo, que es lo que pide la app y solo con el interruptor "Datos de ejemplo"
- *  encendido, api/_lib/appSettings.ts): los reales primero; cuando se terminan, los productos de ejemplo rellenan la página
+/** Feed + datos de EJEMPLO (solo con el algoritmo, que es lo que pide la app, y solo si quien pide eligió el modo
+ *  "Datos de ejemplo": `demo` = demoWanted(req)): los reales primero; cuando se terminan, los productos de ejemplo rellenan la página
  *  y siguen con el cursor e…_…; en la 1.ª página sin búsqueda van también las ventas de ejemplo (`sales`, la app las mezcla).
- *  Apagado (default): el feed de siempre, solo reales, sin ningún ejemplo. */
-async function feedWithDemo(p: FeedQuery) {
-  if (p.order !== 'rank' || !(await demoDataOn())) return feedPage(p);
+ *  Modo Testnet (default): el feed de siempre, solo reales, sin ningún ejemplo. */
+async function feedWithDemo(p: FeedQuery, demo: boolean) {
+  if (p.order !== 'rank' || !demo) return feedPage(p);
   const dc = decodeDemoCursor(p.cursor);
   let verified;
   try { verified = parseVerified(p.verified); } catch (e: any) { throw Object.assign(new HttpError(400, e.message), { code: 'bad_filter' }); }
@@ -227,14 +229,14 @@ export default async function handler(req: any, res: any) {
       return json(res, 200, { key: vapid()?.publicKey ?? null });
     }
     if (req.method === 'GET' && req.query?.feed != null) {
-      const page = await withSponsored(await feedWithDemo({ q: req.query.q, cursor: req.query.cursor, limit: req.query.limit, verified: req.query.verified, order: req.query.order }), req.query);
+      const page = await withSponsored(await feedWithDemo({ q: req.query.q, cursor: req.query.cursor, limit: req.query.limit, verified: req.query.verified, order: req.query.order }, demoWanted(req)), req.query);
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=15, stale-while-revalidate=60');
       return json(res, 200, page);
     }
     if (req.method === 'GET' && req.query?.profile != null) {
       const slug = normalizeStoreSlug(req.query.profile);
       // Tiendas de ejemplo (ficticias, demo: true): sus usuarios están reservados, así que nunca tapan una tienda real.
-      const p = validStoreSlug(slug) ? ((await demoDataOn()) && demoProfile(slug)) || await sellerProfile(slug) : null;
+      const p = validStoreSlug(slug) ? (demoWanted(req) && demoProfile(slug)) || await sellerProfile(slug) : null;
       if (!p) throw new HttpError(404, 'Este perfil no existe.');
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=120');
       return json(res, 200, p);
@@ -244,15 +246,15 @@ export default async function handler(req: any, res: any) {
       const slugs = [...new Set(String(req.query.activity).split(',').map(normalizeStoreSlug).filter(validStoreSlug))].slice(0, 60);
       res.setHeader('Cache-Control', 'private, no-store, max-age=0');
       // Tiendas de ejemplo: última conexión relativa a ahora (ficticia, api/_lib/demoProducts.ts); las reales, de la base.
-      const demo = (await demoDataOn()) ? demoActivityBySlug(slugs.filter((x) => isDemoStoreSlug(x))) : {};
+      const demo = demoWanted(req) ? demoActivityBySlug(slugs.filter((x) => isDemoStoreSlug(x))) : {};
       const real = slugs.filter((x) => !(x in demo));
       return json(res, 200, { activity: { ...(real.length ? await activityBySlug(real) : {}), ...demo } });
     }
     if (req.method === 'GET' && req.query?.og != null) return ogPage(req, res);
     if (req.method === 'GET' && req.query?.demo != null) {
-      // Datos de ejemplo que la app pide aparte (ficha /p/ej-… y tiendas sugeridas en Siguiendo): solo con el interruptor
-      // encendido; apagado, 404 (la ficha dice que ya no está) y ninguna tienda sugerida.
-      const on = await demoDataOn();
+      // Datos de ejemplo que la app pide aparte (ficha /p/ej-… y tiendas sugeridas en Siguiendo): solo con &ejemplos=1
+      // (preferencia de quien pide); sin él, 404 (la ficha dice que ya no está) y ninguna tienda sugerida.
+      const on = demoWanted(req);
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=30, stale-while-revalidate=30');
       if (req.query.demo === 'suggested') return json(res, 200, { stores: on ? demoSuggestedStores(6) : [] });
       const item = on && req.query.demo === 'product' && looksLikeDemoProduct(String(req.query.slug ?? '')) ? demoProduct(String(req.query.slug)) : null;
@@ -418,7 +420,7 @@ export default async function handler(req: any, res: any) {
         res.setHeader?.('Cache-Control', 'private, no-store');
         return json(res, 200, { ...page, items: page.items.filter((i: any) => !looksLikeDemoProduct(i.slug) && !i.seller?.demo), sponsored: [], view: 'following' });
       }
-      const page = await withSponsored(await feedWithDemo({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed }), b);
+      const page = await withSponsored(await feedWithDemo({ q: b.q, cursor: b.cursor, limit: b.limit, verified: b.verified, order: 'rank', followed }, demoWanted(req)), b);
       res.setHeader?.('Cache-Control', 'private, no-store');
       return json(res, 200, page);
     }

@@ -1,7 +1,7 @@
 // Publicaciones de "venta cerrada" en el feed de Comprar ("María R. le vendió a Carlos M. · ganó 5 estrellas").
 // HOY SOLO HAY EJEMPLOS (api/_lib/demoSales.ts), con un iconito (i) discreto y una hoja que lo explica al tocarlo.
-// Nunca se presentan como reales. Sin montos. Llegan del servidor (FeedPage.sales) SOLO con los datos de ejemplo
-// encendidos (un solo interruptor: app_settings.demo_data_enabled, api/_lib/appSettings.ts); sin ellas no se mezcla nada.
+// Nunca se presentan como reales. Sin montos. Llegan del servidor (FeedPage.sales) SOLO en el modo "Datos de ejemplo"
+// (lib/demoPref.ts -> ?ejemplos=1); sin ellas no se mezcla nada.
 import type { VerifiedFilter } from '../api/_lib/feedText';
 import type { SalePost } from '../api/_lib/demoSales';
 

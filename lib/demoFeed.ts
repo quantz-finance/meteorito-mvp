@@ -5,7 +5,8 @@
 // después de estos, con un iconito (i) discreto, y sus tiendas /t/<usuario> (para probar y fotografiar esa vista sin backend).
 import type { Activity } from './activity';
 import { foldText, matchesTokens, searchTokens, type VerifiedFilter } from '../api/_lib/feedText';
-import { demoDataLocal, demoGetStore, demoStoreSlug } from './demo';
+import { demoGetStore, demoStoreSlug } from './demo';
+import { demoPrefOn as demoDataLocal } from './demoPref';
 import { decodeRankCursor, encodeRankCursor, rankFeed } from '../api/_lib/feedRank';
 // Los datos de ejemplo se cargan en diferido (mismo chunk que usa la ficha /p/ej-…; un import estático aquí los duplicaba).
 const ej = () => import('../api/_lib/demoProducts');
@@ -79,16 +80,16 @@ export async function demoFeed(o: { q?: string; cursor?: string | null; verified
     const p = await basePage(o, (i) => mine.has(i.seller.store_slug));
     return { ...p, sponsored: [] };
   }
-  // Ventas de ejemplo: como el API, en la 1.ª página sin búsqueda y solo con "Datos de ejemplo" encendido.
+  // Ventas de ejemplo: como el API, en la 1.ª página sin búsqueda y solo en el modo "Datos de ejemplo".
   const sales = async () => (demoDataLocal() && !o.cursor && !o.q?.trim() ? { sales: (await import('../api/_lib/demoSales')).DEMO_SALES } : {});
   if (!ejemplos()) return { ...(await basePage(o)), ...(await sales()) };
   const { decodeDemoCursor, demoPage, mergeDemo } = await ej();
   const dc = decodeDemoCursor(o.cursor);
   return dc ? { ...demoPage({ q: o.q, verified: o.verified, cursor: dc, limit: o.limit }), sponsored: [] } : { ...mergeDemo(await basePage(o), { q: o.q, verified: o.verified, limit: o.limit }), ...(await sales()) };
 }
-/** Igual que GET /api/store?demo=suggested: tiendas de ejemplo sugeridas, [] con "Datos de ejemplo" apagado. */
+/** Igual que GET /api/store?demo=suggested: tiendas de ejemplo sugeridas, [] fuera del modo "Datos de ejemplo". */
 export async function demoSuggested() { return demoDataLocal() ? (await ej()).demoSuggestedStores(6) : []; }
-/** Igual que GET /api/store?demo=product: la ficha de ejemplo, null con "Datos de ejemplo" apagado. */
+/** Igual que GET /api/store?demo=product: la ficha de ejemplo, null fuera del modo "Datos de ejemplo". */
 export async function demoProductLocal(slug: string) { return demoDataLocal() ? (await ej()).demoProduct(slug) : null; }
 async function basePage(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }, only: (i: FeedItem) => boolean = () => true): Promise<FeedPage> {
   const tokens = searchTokens(o.q);

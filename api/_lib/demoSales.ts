@@ -1,7 +1,7 @@
 // Ventas cerradas de EJEMPLO del feed de Comprar ("María R. le vendió a Carlos M. · ganó 5 estrellas"): usuarios y
 // productos FICTICIOS, definidos aquí (no en la base de datos). Nunca se presentan como reales. Sin montos.
-// El servidor las manda en la 1.ª página del feed SOLO con los datos de ejemplo encendidos (app_settings.demo_data_enabled,
-// api/_lib/appSettings.ts); la app las mezcla (lib/feedSales.ts mixFeed). PURO (sin red ni base).
+// El servidor las manda en la 1.ª página del feed SOLO a quien eligió el modo "Datos de ejemplo" (?ejemplos=1,
+// api/_lib/demoFlag.ts demoWanted); la app las mezcla (lib/feedSales.ts mixFeed). PURO (sin red ni base).
 // TODO(ventas reales): mostrar ventas cerradas reales SOLO si el vendedor lo autoriza (opt-in explícito, Ley 8968, plan F
 // de Gary). Ese opt-in todavía no existe: no se publica ninguna venta real.
 export interface SalePost {

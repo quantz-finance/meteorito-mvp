@@ -20,7 +20,6 @@ export async function run(t: T) {
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
   const prevDemo = process.env.FEED_DEMO_PRODUCTS; process.env.FEED_DEMO_PRODUCTS = '1'; // con ejemplos encendidos (como prod)
   const db = fakeDb(); __setDbForTests(db as any);
-  db.tables.app_settings = [{ key: 'demo_data_enabled', value: true }]; // "Datos de ejemplo" encendido: igual Siguiendo no los muestra
   const at = (h: number) => new Date(Date.now() - h * 3600e3).toISOString();
   db.tables.seller_profiles = [
     { sub: 's-conf', store_slug: 'confirmada', display_name: 'Tienda Confirmada', verified: true, created_at: at(900) },

@@ -2,6 +2,10 @@
 import type { Socials } from '../api/_lib/socials';
 import type { Activity } from './activity';
 import type { SalePost } from '../api/_lib/demoSales';
+import { demoPrefOn } from './demoPref';
+/** Modo "Datos de ejemplo" de este dispositivo (lib/demoPref.ts): se manda en cada pedido; el servidor decide por pedido. */
+const ej = () => demoPrefOn();
+const ejQs = () => (ej() ? '&ejemplos=1' : '');
 import { api, guestApi } from './api';
 import { DEMO_ENABLED, demoApi, demoGetStore } from './demo';
 import { PUBLIC_BASE_URL } from './orders';
@@ -99,7 +103,7 @@ export interface FeedItem { slug: string; title: string; price_crc: number; phot
   /** Producto de EJEMPLO (api/_lib/demoProducts.ts): iconito (i) discreto con popup, ficha sin pago. */ demo?: boolean }
 /** Producto del bloque Patrocinado (migración 024): un vendedor pagó para mostrarlo ahí. */
 export interface SponsoredItem { id: number; slug: string; title: string; price_crc: number; photo: string | null; seller: FeedSeller }
-export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[]; /** Ventas de EJEMPLO (solo con "Datos de ejemplo" encendido, 1.ª página). */ sales?: SalePost[] }
+export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[]; /** Ventas de EJEMPLO (solo en el modo "Datos de ejemplo", 1.ª página). */ sales?: SalePost[] }
 export interface Review { stars: number; comment: string | null; /** Nombre corto que eligió el comprador; null = "Compra verificada". */ buyer_name: string | null; created_at: string | null }
 /** Cómo salieron las ventas, sin montos. completed = no_issues + disputes_resolved. */
 export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
@@ -124,17 +128,18 @@ export async function getFeed(o: { q?: string; cursor?: string | null; verified:
   // CDN, y la gente escribe nombres o teléfonos. Sin cuenta ni llave, el servidor responde igual (sin impulso de seguidos).
   if (!o.personal && o.q?.trim()) {
     let r: Response;
-    try { r = await fetch('/api/store', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'feed', verified: o.verified, q: o.q.trim(), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }) }); }
+    try { r = await fetch('/api/store', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'feed', ...(ej() ? { ejemplos: true } : {}), verified: o.verified, q: o.q.trim(), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }) }); }
     catch { throw new Error(FEED_ERROR); }
     j = (await r.json().catch(() => null)) ?? {};
     if (!r.ok) throw new Error(r.status >= 500 ? FEED_ERROR : j.error ?? FEED_ERROR);
   } else if (o.personal) {
-    try { j = await guestApi(o.personal, '/api/store', { action: 'feed', ...(o.view === 'following' ? { view: 'following' } : {}), verified: o.verified, ...(o.q?.trim() ? { q: o.q.trim() } : {}), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }); }
+    try { j = await guestApi(o.personal, '/api/store', { action: 'feed', ...(ej() ? { ejemplos: true } : {}), ...(o.view === 'following' ? { view: 'following' } : {}), verified: o.verified, ...(o.q?.trim() ? { q: o.q.trim() } : {}), ...(o.cursor ? { cursor: o.cursor } : {}), ...(o.limit ? { limit: o.limit } : {}) }); }
     catch (e: any) { throw new Error(e?.status >= 500 || !e?.status ? FEED_ERROR : e.message || FEED_ERROR); }
   } else {
     const qs = new URLSearchParams({ feed: '1', verified: o.verified, order: 'rank' }); // sin q: la búsqueda va por POST (arriba)
     if (o.cursor) qs.set('cursor', o.cursor);
     if (o.limit) qs.set('limit', String(o.limit));
+    if (ej()) qs.set('ejemplos', '1');
     let r: Response;
     try { r = await fetch(`/api/store?${qs}`); } catch { throw new Error(FEED_ERROR); }
     j = (await r.json().catch(() => null)) ?? {};
@@ -144,16 +149,17 @@ export async function getFeed(o: { q?: string; cursor?: string | null; verified:
 }
 export type DemoSuggestedStore = ReturnType<typeof import('../api/_lib/demoProducts').demoSuggestedStores>[number];
 export type DemoProductView = NonNullable<ReturnType<typeof import('../api/_lib/demoProducts').demoProduct>>;
-/** Tiendas de EJEMPLO sugeridas (Siguiendo vacío). El servidor decide: con "Datos de ejemplo" apagado, []. Silencioso. */
+/** Tiendas de EJEMPLO sugeridas (Siguiendo vacío). Solo en el modo "Datos de ejemplo"; si no, []. Silencioso. */
 export async function getDemoSuggested(): Promise<DemoSuggestedStore[]> {
   if (DEMO_ENABLED) { const { demoSuggested } = await import('./demoFeed'); return demoSuggested(); }
-  try { const r = await fetch('/api/store?demo=suggested'); const j: any = r.ok ? await r.json().catch(() => null) : null; return Array.isArray(j?.stores) ? j.stores : []; }
+  if (!ej()) return [];
+  try { const r = await fetch(`/api/store?demo=suggested${ejQs()}`); const j: any = r.ok ? await r.json().catch(() => null) : null; return Array.isArray(j?.stores) ? j.stores : []; }
   catch { return []; }
 }
-/** Ficha de un producto de EJEMPLO (/p/ej-…). null si no existe o "Datos de ejemplo" está apagado (el servidor responde 404). */
+/** Ficha de un producto de EJEMPLO (/p/ej-…). null si no existe o el modo no es "Datos de ejemplo" (el servidor responde 404). */
 export async function getDemoProduct(slug: string): Promise<DemoProductView | null> {
   if (DEMO_ENABLED) { const { demoProductLocal } = await import('./demoFeed'); return demoProductLocal(slug); }
-  const r = await fetch(`/api/store?demo=product&slug=${encodeURIComponent(slug)}`);
+  const r = await fetch(`/api/store?demo=product&slug=${encodeURIComponent(slug)}${ejQs()}`);
   if (r.status === 404) return null;
   if (!r.ok) throw new Error(`Error ${r.status}`);
   return (await r.json()) as DemoProductView;
@@ -162,7 +168,7 @@ export async function getDemoProduct(slug: string): Promise<DemoProductView | nu
 export async function getSellerProfile(slug: string): Promise<SellerProfile | null> {
   if (DEMO_ENABLED) { const { demoProfile } = await import('./demoFeed'); return demoProfile(slug); }
   let r: Response;
-  try { r = await fetch(`/api/store?profile=${encodeURIComponent(slug)}`); }
+  try { r = await fetch(`/api/store?profile=${encodeURIComponent(slug)}${ejQs()}`); }
   catch { throw new Error('No pudimos cargar el perfil. Revisa tu conexión e intenta de nuevo.'); }
   if (r.status === 404) return null;
   const j: any = await r.json().catch(() => ({}));
@@ -177,7 +183,7 @@ export async function getActivity(slugs: string[]): Promise<Record<string, Activ
   if (!list.length) return {};
   if (DEMO_ENABLED) { const { demoActivity } = await import('./demoFeed'); return demoActivity(list); }
   try {
-    const r = await fetch(`/api/store?activity=${encodeURIComponent(list.join(','))}`, { cache: 'no-store' });
+    const r = await fetch(`/api/store?activity=${encodeURIComponent(list.join(','))}${ejQs()}`, { cache: 'no-store' });
     const j: any = r.ok ? await r.json().catch(() => null) : null;
     return j?.activity && typeof j.activity === 'object' ? j.activity : {};
   } catch { return {}; }
