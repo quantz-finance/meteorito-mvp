@@ -99,8 +99,8 @@ export function demoAdminApi(c: DemoAdminCtx, body: any): any {
 export function demoPayoutSeed(at = Date.now()): any[] {
   const iso = (h: number) => new Date(at - h * 3_600_000).toISOString();
   return [
-    { slug: 'pay001', state: 'pendiente', amount_usdc: 293.24, amount_crc: 150000, iban: 'CR05015202001026284066', holder_name: 'Valeria Mora', released_tx: 'a'.repeat(64), created_at: iso(3), paid_at: null, paid_by: null, note: null, product: 'Apple iPhone 13' },
-    { slug: 'pay002', state: 'pendiente', amount_usdc: 58.65, amount_crc: 30000, iban: 'CR05015202001026284066', holder_name: 'Valeria Mora', released_tx: 'b'.repeat(64), created_at: iso(26), paid_at: null, paid_by: null, note: null, product: 'Guitarra acústica' },
-    { slug: 'pay003', state: 'pagado', amount_usdc: 97.75, amount_crc: 50000, iban: 'CR05015202001026284066', holder_name: 'Valeria Mora', released_tx: 'c'.repeat(64), created_at: iso(72), paid_at: iso(50), paid_by: 'admin@demo.meteorito.app', note: 'Transferencia 88412', product: 'Bicicleta aro 29' },
+    { slug: 'pay001', state: 'pendiente', amount_usdc: 293.24, amount_crc: 150000, iban: 'CR00000000000000000000', holder_name: 'Dato de ejemplo', released_tx: 'a'.repeat(64), created_at: iso(3), paid_at: null, paid_by: null, note: null, product: 'Apple iPhone 13' },
+    { slug: 'pay002', state: 'pendiente', amount_usdc: 58.65, amount_crc: 30000, iban: 'CR00000000000000000000', holder_name: 'Dato de ejemplo', released_tx: 'b'.repeat(64), created_at: iso(26), paid_at: null, paid_by: null, note: null, product: 'Guitarra acústica' },
+    { slug: 'pay003', state: 'pagado', amount_usdc: 97.75, amount_crc: 50000, iban: 'CR00000000000000000000', holder_name: 'Dato de ejemplo', released_tx: 'c'.repeat(64), created_at: iso(72), paid_at: iso(50), paid_by: 'admin@demo.meteorito.app', note: 'Transferencia 88412', product: 'Bicicleta aro 29' },
   ];
 }

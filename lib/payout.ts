@@ -33,8 +33,9 @@ export function stellarAddressError(v: string): string | null {
   if (s.length !== 56) return `Le ${s.length < 56 ? 'faltan' : 'sobran'} ${Math.abs(56 - s.length)} caracteres (son 56).`;
   return null;
 }
-export async function savePayout(auth: MeteoritoAuth, v: { iban: string; holder_name: string; sinpe_phone?: string }): Promise<PayoutView> {
-  try { return (await api<{ payout: PayoutView }>(auth, '/api/store', { action: 'payout_set', ...v })).payout; } catch (e) { return friendly(e); }
+/** Beta en testnet: elige Cuenta IBAN sin mandar ningún dato de cuenta (el servidor guarda el dato de ejemplo). */
+export async function savePayout(auth: MeteoritoAuth): Promise<PayoutView> {
+  try { return (await api<{ payout: PayoutView }>(auth, '/api/store', { action: 'payout_set', method: 'iban' })).payout; } catch (e) { return friendly(e); }
 }
 
 /** Pasos del perfil (la verificación con cédula todavía no está activa y no cuenta para el %). */

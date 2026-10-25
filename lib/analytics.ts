@@ -62,7 +62,7 @@ export function initAnalytics() {
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST, person_profiles: 'identified_only',
       autocapture: false, capture_pageview: false, capture_pageleave: true,
-      disable_session_recording: true, disable_surveys: true, mask_all_text: true, mask_all_element_attributes: true,
+      disable_session_recording: true, session_recording: { maskAllInputs: true, blockClass: 'ph-no-capture' }, disable_surveys: true, mask_all_text: true, mask_all_element_attributes: true,
       persistence: 'localStorage', ip: false, property_denylist: ['$ip'], opt_out_capturing_by_default: optedOut,
       sanitize_properties: (p: any) => { delete p.$ip; if (typeof p.$current_url === 'string') p.$current_url = scrub(p.$current_url); return p; },
     } as any);

@@ -1,4 +1,4 @@
-// Pago con cripto: USDC o XLM en Stellar. Se abre desde el botón discreto "Cripto" de "Elige cómo pagar" (la tarjeta sigue siendo
+// Pago con cripto: USDC o XLM en Stellar TESTNET (no es dinero real; aviso de beta en la hoja). Se abre desde el botón discreto "Cripto" de "Elige cómo pagar" (la tarjeta sigue siendo
 // el camino principal). Muestra monto, dirección, memo, QR (SEP-7) y botones para copiar; detecta el pago solo (consulta al
 // servidor cada 4 s, que lo busca en Horizon) y al llegar sigue igual que un pago con tarjeta. Sirve para invitados.
 import { useEffect, useRef, useState } from 'react';
@@ -12,8 +12,12 @@ import { Fonts } from '@/constants/Colors';
 import { CRYPTO_POLL_MS, countdown, fmtAmount, shortAddress, statusLine, type CryptoAsset, type CryptoQuoteView, type CryptoStatusView } from '@/lib/cryptoPay';
 import { formatCRC } from '@/lib/orders';
 import { track } from '@/lib/analytics';
+import { BetaNotice } from '@/components/RulesLink';
 
-export const CRYPTO_ONLY = 'Por ahora solo USDC o XLM en Stellar.';
+// Testnet: todo el pago con cripto es de prueba (Stellar testnet, sin dinero real). El servidor solo acepta la red de prueba
+// (api/_lib/crypto.ts: passphrase testnet, USDC del emisor de testnet, Horizon testnet).
+export const CRYPTO_ONLY = 'Solo USDC o XLM de testnet (no es dinero real).';
+export const CRYPTO_ESCROW_NOTE = 'El pago queda en el escrow de testnet, en USDC.';
 
 export function CryptoSheet({ visible, priceCrc, onClose, onBack, call, onFunded }: {
   visible: boolean; priceCrc: number; onClose: () => void; onBack: () => void;
@@ -76,10 +80,10 @@ export function CryptoSheet({ visible, priceCrc, onClose, onBack, call, onFunded
       <Text style={T.callout}>{CRYPTO_ONLY}</Text>
       <View style={s.seg} accessibilityRole="tablist">
         {(['USDC', 'XLM'] as const).map((a) => (
-          <Pressable key={a} accessibilityRole="tab" accessibilityState={{ selected: asset === a }} accessibilityLabel={`${a} en Stellar`} testID={`crypto-${a}`}
+          <Pressable key={a} accessibilityRole="tab" accessibilityState={{ selected: asset === a }} accessibilityLabel={`${a} de Stellar testnet`} testID={`crypto-${a}`}
             onPress={() => pick(a)} style={({ pressed }) => [s.segBtn, asset === a && s.segOn, pressTransition, pressed && { opacity: 0.85 }]}>
             <Text style={[s.segText, asset === a && { color: C.purple }]}>{a}</Text>
-            <Text style={[T.footnote, asset === a && { color: C.purple }]}>Stellar</Text>
+            <Text style={[T.footnote, asset === a && { color: C.purple }]}>testnet</Text>
           </Pressable>
         ))}
       </View>
@@ -92,7 +96,7 @@ export function CryptoSheet({ visible, priceCrc, onClose, onBack, call, onFunded
                   autoCapitalize="characters" autoCorrect={false} accessibilityLabel="Tu dirección de Stellar" testID="crypto-buyer" />
                 <Text style={T.footnote}>Tu wallet hace un path payment: envía XLM y aquí llegan {fmtAmount(quote.amountUsdc)} USDC exactos.</Text>
               </View>
-            : <Qr value={quote.uri} size={116} label={`Código QR para pagar ${fmtAmount(quote.amount)} ${quote.asset}`} />}
+            : <Qr value={quote.uri} size={104} label={`Código QR para pagar ${fmtAmount(quote.amount)} ${quote.asset}`} />}
           {!path ? <View style={{ flex: 1, gap: 2, minWidth: 0 }}>
             <Text style={T.caption}>Monto exacto</Text>
             <CopyRow label={`${fmtAmount(quote.amount)} ${quote.asset}`} big onCopy={() => copy(quote.amount, 'Monto')} testID="crypto-amount" />
@@ -114,7 +118,8 @@ export function CryptoSheet({ visible, priceCrc, onClose, onBack, call, onFunded
           ? <Pressable onPress={() => { haptic.tap(); setPath((x) => !x); }} accessibilityRole="button" hitSlop={6} testID="crypto-path-toggle">
               <Text style={[T.footnote, { color: C.lilac, textAlign: 'center' }]}>{path ? 'Ver QR y memo' : '¿Tu wallet firma transacciones? Usa path payment'}</Text>
             </Pressable>
-          : <Text style={[T.footnote, { textAlign: 'center' }]}>El pago queda en custodia en USDC, igual que con tarjeta.</Text>}
+          : <Text style={[T.footnote, { textAlign: 'center' }]} testID="crypto-escrow-note">{CRYPTO_ESCROW_NOTE}</Text>}
+        <BetaNotice from="crypto" onNavigate={onClose} />
         </View>
       </> : busy ? <View style={{ height: 180, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={C.lilac} /></View> : null}
     </Sheet>
@@ -150,7 +155,7 @@ const s = StyleSheet.create({
   segText: { fontFamily: Fonts.black, fontSize: 16, color: C.text },
   top: { flexDirection: 'row', gap: S.md, alignItems: 'center' },
   box: { backgroundColor: C.surface2, borderRadius: R.md, paddingHorizontal: S.md },
-  field: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 48, paddingVertical: 4 },
+  field: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44, paddingVertical: 2 },
   sep: { height: StyleSheet.hairlineWidth, backgroundColor: C.line },
   copyBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 44, paddingLeft: S.sm },
   status: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 24 },

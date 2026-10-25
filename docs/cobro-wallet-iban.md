@@ -20,3 +20,13 @@ Hace falta un off-ramp USDC → colones con salida SINPE/IBAN en Costa Rica (anc
 con API de payouts locales). Lendara hoy es solo on-ramp. Con eso, `payout_queue` pasaría de "pendiente" a "enviado" por API.
 
 Pruebas: `scripts/ci/t89-cobro-wallet-iban.test.ts`, `e2e/cobro.spec.ts`.
+
+## Beta en testnet: la Cuenta IBAN es un dato de ejemplo (revisión legal, Neo)
+- El flujo IBAN sigue armado (elección, `payout_queue`, /admin/pagos), pero **nunca se guarda una cuenta real**: `payout_set`
+  descarta lo que llegue y guarda `iban='CR00000000000000000000'`, `holder_name='Dato de ejemplo'`, `sinpe_phone='00000000'`
+  (cumplen `^CR[0-9]{20}$` y `^[0-9]{8}$`). La cola copia siempre el mismo dato de ejemplo.
+- La app manda solo `{action:'payout_set', method:'iban'}`. Los campos vienen prellenados, de solo lectura y con `ph-no-capture`
+  (clase + `data-ph-no-capture`). PostHog: `autocapture:false`, `disable_session_recording:true`, `maskAllInputs` como respaldo.
+- No hay pagos al banco. "Marcar como pagado" solo guarda la nota (update en `payout_queue` + evento), sin proveedor de pagos.
+- No se tocan datos existentes en la base.
+- Pruebas: `scripts/ci/t90-neo-testnet-privacy.test.ts` y `e2e/cobro.spec.ts` (COB-01).

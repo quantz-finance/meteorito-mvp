@@ -34,8 +34,8 @@
 //                                                 corto ("María R."), una por pedido, solo con el pedido Liberado (018)
 //  POST { action:'buyer_orders' }               (X-Guest-Key y/o Bearer Cavos) -> Mis compras: SOLO los pedidos de los que
 //                                                 esta llave o esta cuenta es el comprador (sin datos del vendedor ni PIN)
-//  POST { action:'payout_get' } / { action:'payout_set', iban, holder_name, sinpe_phone? } (Bearer Cavos)
-//                                                 -> cuenta IBAN para cobrar (migración 011). Solo sale enmascarada.
+//  POST { action:'payout_get' } / { action:'payout_set' } (Bearer Cavos) -> Cuenta IBAN para cobrar (011). BETA: lo enviado en
+//                                                 iban/holder_name/sinpe_phone se descarta y se guarda el dato de ejemplo.
 //  POST { action:'payout_set', method:'wallet', stellar_address } / { action:'payout_check', stellar_address }
 //                                                 -> cobrar en USDC a su wallet Stellar (029): valida G…, cuenta y trustline USDC.
 //                                                 payout_get devuelve choice:true|false (¿existe 029?). docs/cobro-wallet-iban.md
@@ -68,7 +68,7 @@ import { HttpError, requireCavosUser } from '../_lib/auth';
 import { isBuyerOf, requireBuyerIdentity } from '../_lib/guest';
 import { adminContacts, getContacts, linkAccount, redeemAccess, reissuePin, removeContact, requireAdmin, saveContact, sendNotice } from '../_lib/buyerContact';
 import { normalizeEmail } from '../_lib/contactText';
-import { crIbanError, cleanHolder, normalizeIban, normalizeSinpe, payoutView } from '../_lib/payout';
+import { payoutView, placeholderPayoutRow } from '../_lib/payout';
 import { checkWallet, isMissing as isPayoutMissing, isStellarAddress, normalizeStellar, payoutChoiceReady, PAYOUT_ERR } from '../_lib/payoutChoice';
 import { deleteSubscription, isMissingTable, parseSubscription, saveSubscription, vapid } from '../_lib/push';
 import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
@@ -438,19 +438,16 @@ export default async function handler(req: any, res: any) {
         if (addr === env.platformPublic()) throw PAYOUT_ERR.platform();
         const state = await checkWallet(addr);
         if (state === 'no_account') throw PAYOUT_ERR.noAccount();
-        const { data: cur } = await db().from('seller_payout').select('*').eq('sub', user.sub).maybeSingle();
-        const row = { ...(cur ?? {}), sub: user.sub, payout_method: 'wallet', stellar_address: addr, updated_at: now };
+        // Solo las columnas de la wallet: el resto de la fila (si existe) no se lee ni se reescribe.
+        const row = { sub: user.sub, payout_method: 'wallet', stellar_address: addr, updated_at: now };
         const { error } = await db().from('seller_payout').upsert(row, { onConflict: 'sub' });
         if (error) { if (isPayoutMissing(error)) throw PAYOUT_ERR.unavailable(); throw error; }
-        return json(res, 200, { payout: payoutView(row), state });
+        const { data: saved } = await db().from('seller_payout').select('*').eq('sub', user.sub).maybeSingle();
+        return json(res, 200, { payout: payoutView(saved ?? row), state });
       }
-      const err = crIbanError(b.iban);
-      if (err) throw Object.assign(new HttpError(400, err), { code: 'bad_iban' });
-      const holder_name = cleanHolder(b.holder_name);
-      if (holder_name.length < 3) throw Object.assign(new HttpError(400, 'Escribe el nombre del titular como aparece en tu cuenta.'), { code: 'bad_holder' });
-      const sinpe = normalizeSinpe(b.sinpe_phone);
-      if (sinpe === 'invalid') throw Object.assign(new HttpError(400, 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).'), { code: 'bad_sinpe' });
-      const base = { sub: user.sub, iban: normalizeIban(b.iban), holder_name, sinpe_phone: sinpe, updated_at: now };
+      // Beta en testnet: el IBAN, el titular y el SINPE que lleguen se DESCARTAN (nunca se validan, guardan ni registran);
+      // se guarda el dato de ejemplo. Así ningún error de la base ni log puede contener una cuenta real.
+      const base = placeholderPayoutRow(user.sub, now);
       // Con 029 guardar la Cuenta IBAN también la elige para cobrar ('iban'); la wallet guardada se conserva por si vuelve.
       let row: Record<string, unknown> = { ...base, payout_method: 'iban' };
       let { error } = await db().from('seller_payout').upsert(row, { onConflict: 'sub' });
