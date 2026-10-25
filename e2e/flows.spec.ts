@@ -26,7 +26,7 @@ test.describe('Productos permanentes', () => {
     expect(s.orders[prod].status).toBe('creado');
     expect([s.orders[a].status, s.orders[b].status]).toEqual(['fondeado', 'fondeado']);
     await open(page, '/pedidos', 'seller');
-    await expect(page.getByRole('button').filter({ hasText: 'Pagado · fondos apartados' })).toHaveCount(2);
+    await expect(page.getByTestId('home-sale-row-todo')).toHaveCount(2); // los dos pedidos pagados, primero y resaltados ("Envíalo")
     await open(page, '/t/valeria', 'buyer');
     await expect(page.getByText('Bici de montaña')).toBeVisible();
   });
@@ -231,7 +231,7 @@ test.describe('Calificaciones y push (demo)', () => {
     await open(page, '/', 'seller', true);
     const prod = await seed(page, 'creado');
     const slug = await buyerPays(page, prod, 'A'); // pagó en este navegador: aquí puede calificar
-    await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+    await openSellerRow(page, /Envíalo|Entrégalo/, /Ya lo envié/);
     await takePhoto(page, 'Tomar foto del envío'); // obligatoria, con la cámara de la app
     await page.getByText('Ya lo envié', { exact: true }).last().click();
     await expect.poll(() => orderStatus(page, slug)).toBe('enviado');

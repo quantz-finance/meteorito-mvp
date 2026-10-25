@@ -40,7 +40,7 @@ test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
   test('ESC-01 ciclo completo: pagado → enviado → PIN → liberado', async ({ page }) => {
     await open(page, '/', 'seller', true);
     const slug = await seed(page, 'fondeado');
-    await openSellerRow(page, 'Pagado · fondos apartados', /Ya lo envié/);
+    await openSellerRow(page, /Envíalo|Entrégalo/, /Ya lo envié/);
     await takePhoto(page, 'Tomar foto del envío'); // obligatoria, con la cámara de la app
     await page.getByText('Ya lo envié', { exact: true }).last().click();
     await expect.poll(() => orderStatus(page, slug)).toBe('enviado');
