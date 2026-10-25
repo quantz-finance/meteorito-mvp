@@ -1,8 +1,9 @@
 // Ficha de un producto de EJEMPLO del feed (/p/ej-…): foto, título, precio, estado, zona, descripción y su tienda de
 // ejemplo, con un iconito (i) discreto que abre un popup (components/DemoInfo.tsx). NUNCA se paga: no hay PayBox ni
 // ningún botón de pago (solo uno desactivado con un motivo corto), el producto no
-// existe en la base y el API rechaza su slug (orderBySlug -> 409 demo_product). Los datos (ficticios) se cargan aparte
-// (import dinámico de api/_lib/demoProducts.ts) para no sumar peso al resto de la app. Textos: COPY.demoProducts.
+// existe en la base y el API rechaza su slug (orderBySlug -> 409 demo_product). Los datos (ficticios) los manda el servidor
+// (lib/store.ts getDemoProduct) SOLO en el modo "Datos de ejemplo"; si no, 404 y la ficha dice que ya no está.
+// Textos: COPY.demoProducts.
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -14,17 +15,16 @@ import { Fonts } from '@/constants/Colors';
 import { C, R, S, T } from '@/constants/theme';
 import { COPY } from '@/lib/copy';
 import { formatCRC } from '@/lib/orders';
-import { FEED_DEMO_PRODUCTS } from '../api/_lib/demoFlag';
+import { getDemoProduct, type DemoProductView } from '@/lib/store';
 
-type Demo = NonNullable<ReturnType<typeof import('../api/_lib/demoProducts').demoProduct>>;
+type Demo = DemoProductView;
 
 export function DemoProductPage({ slug }: { slug: string }) {
   const [p, setP] = useState<Demo | null | undefined>(undefined);
   const [shown, setShown] = useState(0); // foto grande (0 = la principal); las miniaturas la cambian
   useEffect(() => {
     let live = true;
-    if (!FEED_DEMO_PRODUCTS) { setP(null); return; }
-    import('../api/_lib/demoProducts').then((m) => live && setP(m.demoProduct(slug))).catch(() => live && setP(null));
+    getDemoProduct(slug).then((x) => live && setP(x)).catch(() => live && setP(null));
     return () => { live = false; };
   }, [slug]);
   // Pago desactivado sereno: botón secundario apagado + una línea corta con el motivo. Sin avisos grandes.

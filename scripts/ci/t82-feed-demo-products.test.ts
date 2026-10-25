@@ -1,4 +1,4 @@
-// (82) Productos de ejemplo en Comprar (FEED_DEMO_PRODUCTS): datos ficticios en código (nunca en la base), van DESPUÉS de
+// (82) Productos de ejemplo en Comprar (modo "Datos de ejemplo", ?ejemplos=1): datos ficticios en código (nunca en la base), van DESPUÉS de
 //      los reales, filtro y búsqueda funcionan, nunca en Patrocinado, tiendas /t/<demo> con reseñas, foto de perfil, redes de
 //      Meteorito y última conexión relativa; fotos en /public (≤120 KB, ~800 px; perfiles ≤40 KB) y el pago es imposible (sin fila en la base, orderBySlug 409, ficha sin PayBox). Sin red.
 import type { T } from './setup';
@@ -11,7 +11,7 @@ import store from '../../api/store/index';
 
 const call = async (o: { method?: string; body?: any; query?: any; guest?: string }) => {
   const r: any = { code: 0, body: null, headers: {} }; r.status = (c: number) => { r.code = c; return r; }; r.setHeader = (k: string, v: string) => { r.headers[k.toLowerCase()] = v; return r; }; r.send = (b: string) => { r.body = JSON.parse(b); return r; };
-  await store({ method: o.method ?? 'GET', headers: o.guest ? { 'x-guest-key': o.guest } : {}, body: o.body ?? {}, query: o.query ?? {} }, r); return r;
+  await store({ method: o.method ?? 'GET', headers: o.guest ? { 'x-guest-key': o.guest } : {}, body: { ejemplos: true, ...o.body }, query: { ejemplos: '1', ...o.query } }, r); return r; // modo "Datos de ejemplo"
 };
 const src = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), 'utf8');
 /** Ancho y alto de un JPEG (marcador SOF). */
@@ -40,7 +40,7 @@ const imgSize = (b: Buffer) => jpegSize(b) ?? webpSize(b);
 export async function run(t: T) {
   // --- Datos ---
   const flag = src('api/_lib/demoFlag.ts');
-  t.check('flag en código: FEED_DEMO_PRODUCTS = true (un solo lugar para apagarlo)', /export const FEED_DEMO_PRODUCTS = true;/.test(flag));
+  t.check('sin flag en código: lo decide cada pedido (demoWanted, ?ejemplos=1); FEED_DEMO_PRODUCTS=0 solo como freno', !/FEED_DEMO_PRODUCTS = (true|false)/.test(flag) && /demoKilledByEnv/.test(flag) && /export function demoWanted/.test(flag) && !/FEED_DEMO_SALES/.test(src('lib/feedSales.ts')));
   t.check(`${DEMO_PRODUCTS.length} productos (60-80) de ${DEMO_SELLERS.length} tiendas (12-16)`, DEMO_PRODUCTS.length >= 60 && DEMO_PRODUCTS.length <= 80 && DEMO_SELLERS.length >= 12 && DEMO_SELLERS.length <= 16);
   const conf = DEMO_SELLERS.filter((s) => s.verified).length;
   t.check(`identidad confirmada ~mitad (${conf}/${DEMO_SELLERS.length})`, conf >= 4 && DEMO_SELLERS.length - conf >= 4);
@@ -143,11 +143,11 @@ export async function run(t: T) {
     t.check('/t/kevin-mora: sin confirmar', r.code === 200 && r.body.demo === true && r.body.verified === false);
     t.check('slugs de tiendas de ejemplo reservados', isDemoStoreSlug('tecno-sabana') && !isDemoStoreSlug('vale') && /isDemoStoreSlug\(/.test(src('api/store/index.ts')));
 
-    process.env.FEED_DEMO_PRODUCTS = '0';
+    process.env.FEED_DEMO_PRODUCTS = '0'; // freno de emergencia: apaga aunque el interruptor esté encendido
     r = await call({ query: { feed: '1', order: 'rank', verified: 'all', limit: '20' } });
-    t.check('flag apagado: el feed solo tiene reales', r.code === 200 && r.body.items.length === 2 && r.body.items.every((i: any) => !i.demo));
+    t.check('freno FEED_DEMO_PRODUCTS=0: el feed solo tiene reales', r.code === 200 && r.body.items.length === 2 && r.body.items.every((i: any) => !i.demo));
     r = await call({ query: { profile: 'tecno-sabana' } });
-    t.check('flag apagado: /t/<ejemplo> = 404', r.code === 404);
+    t.check('freno FEED_DEMO_PRODUCTS=0: /t/<ejemplo> = 404', r.code === 404);
   } finally { process.env.FEED_DEMO_PRODUCTS = '0'; }
 
   // --- Pago imposible ---
@@ -159,7 +159,7 @@ export async function run(t: T) {
   const page = src('app/p/[slug].tsx'); const ui = src('components/DemoProduct.tsx').replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   t.check('/p/ej-…: muestra DemoProductPage antes de cargar la ficha real', /looksLikeDemoProduct\([^)]*\)+\s*return <DemoProductPage/.test(page) && /function LinkDeVentaReal/.test(page));
   t.check('ficha de ejemplo: sin PayBox ni llamadas de pago; botón desactivado', !/PayBox|['"]\/api\/|fetch\(/.test(ui) && /testID="demo-pay-disabled"/.test(ui) && /disabled/.test(ui));
-  t.check('ficha de ejemplo carga los datos en diferido (no infla el bundle inicial)', /import\('\.\.\/api\/_lib\/demoProducts'\)/.test(ui) && !/from '\.\.\/api\/_lib\/demoProducts'/.test(ui));
+  t.check('ficha de ejemplo: los datos los manda el servidor (getDemoProduct), nunca del bundle', /getDemoProduct\(slug\)/.test(ui) && !/from '\.\.\/api\/_lib\/demoProducts'|import\('\.\.\/api\/_lib\/demoProducts'\)/.test(ui));
   const feed = src('components/Feed.tsx'); const st = src('app/t/[store].tsx');
   const strip = (x: string) => x.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
   const info = strip(src('components/DemoInfo.tsx'));

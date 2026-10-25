@@ -8,7 +8,8 @@ import { installTestJwks, token } from './jwt';
 import { __setDbForTests } from '../../api/_lib/db';
 import { guestSubFromReq } from '../../api/_lib/guest';
 import { __resetFollowLimits } from '../../api/_lib/follows';
-import { DEMO_SALES, isSale, mixFeed, saleHeadline } from '../../lib/feedSales';
+import { isSale, mixFeed, saleHeadline } from '../../lib/feedSales';
+import { DEMO_SALES } from '../../api/_lib/demoSales';
 import { fakeDb } from './fakedb';
 import store from '../../api/store/index';
 
@@ -87,7 +88,7 @@ export async function run(t: T) {
   t.check('app: ninguna pantalla ni componente con la lista de seguidores', offenders.length === 0, offenders.join());
 
   // El feed sigue mostrando las ventas cerradas ("X le vendió a Y") como parte del feed.
-  const mixed = mixFeed(Array.from({ length: 10 }, (_, i) => ({ slug: `p${i}` })), 'all', '');
+  const mixed = mixFeed(Array.from({ length: 10 }, (_, i) => ({ slug: `p${i}` })), 'all', '', DEMO_SALES);
   t.check('feed: las ventas cerradas siguen mezcladas (1 de cada 6) con quién le compró a quién', mixed.filter(isSale).length === 2 && /le vendió a/.test(saleHeadline(DEMO_SALES[0])) && DEMO_SALES.every((s) => !!s.buyer_name));
   const feed = readFileSync(new URL('../../components/Feed.tsx', import.meta.url), 'utf8');
   t.check('feed: la tarjeta de venta cerrada se sigue pintando', /isSale\(item\) \? <SaleCard post=\{item\}/.test(feed) && /\{saleHeadline\(p\)\}/.test(feed));

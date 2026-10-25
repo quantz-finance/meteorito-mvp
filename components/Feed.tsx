@@ -3,8 +3,8 @@
 // que sigues, con la misma identidad que el botón Seguir; buscador y filtro aplican igual; sin ejemplos ni Patrocinado).
 // con buscador, filtro por identidad en dos mitades iguales (Identidad confirmada por defecto / Sin confirmar; textos en
 // lib/copy.ts), paginación infinita por cursor, skeletons y estados vacíos. Lecturas públicas: GET /api/store?feed.
-// Ventas cerradas: hoy solo EJEMPLOS ficticios con un iconito (i) discreto (lib/feedSales.ts, FEED_DEMO_SALES), 1 de cada 6.
-// Productos de ejemplo (demo: true, api/_lib/demoProducts.ts, FEED_DEMO_PRODUCTS): llegan del API después de los reales,
+// Ventas cerradas: hoy solo EJEMPLOS ficticios con un iconito (i) discreto (lib/feedSales.ts; llegan del API en FeedPage.sales), 1 de cada 6.
+// Productos de ejemplo (demo: true, api/_lib/demoProducts.ts): llegan del API después de los reales,
 // con un iconito (i) discreto que abre un popup (components/DemoInfo.tsx) y sin botón Seguir; su ficha (/p/ej-…) no permite pagar.
 import { Appear, appearItem, appearSkip, useAppear } from '@/components/Appear';
 import { COPY } from '@/lib/copy';
@@ -24,13 +24,13 @@ import { Fonts } from '@/constants/Colors';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
 import { track } from '@/lib/analytics';
 import { formatCRC } from '@/lib/orders';
-import { FEED_ERROR, getFeed, type FeedItem, type FeedView, type SponsoredItem, type VerifiedFilter } from '@/lib/store';
+import { FEED_ERROR, getDemoSuggested, getFeed, type DemoSuggestedStore, type FeedItem, type FeedView, type SponsoredItem, type VerifiedFilter } from '@/lib/store';
 import { useAuth } from '@/lib/cavos';
 import { followsSome, loadFollowing } from '@/lib/follows';
 import { clearSearch, openSearch, useFeedSearch } from '@/lib/feedSearch';
 import { SearchSheet } from '@/components/SearchSheet';
+import { useAppMode } from '@/lib/demoPref';
 import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
-import { FEED_DEMO_PRODUCTS } from '../api/_lib/demoFlag';
 
 export const SEARCH_DEBOUNCE_MS = 300;
 const PAGE = 10;
@@ -59,10 +59,12 @@ export function Feed({ header }: { header: ReactElement }) {
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>('loading');
   const [more, setMore] = useState(false);
   const [sponsored, setSponsored] = useState<SponsoredItem[]>([]); // bloque Patrocinado (024): solo si hay activos
+  const [sales, setSales] = useState<SalePost[]>([]); // ventas de ejemplo: solo si el servidor las manda (modo "Datos de ejemplo")
   const [example, setExample] = useState(false);
   const req = useRef(0);
   const viewed = useRef(false);
   const auth = useAuth();
+  const mode = useAppMode(); // "Modo de la app" (Mi cuenta): al cambiarlo, el feed se vuelve a pedir
   // Algoritmo: si sigues a alguien, el feed se pide personalizado (sus productos suben); si no, el mismo para todos.
   const personal = async () => { await loadFollowing(auth); return followsSome() ? auth : null; };
 
@@ -77,16 +79,16 @@ export function Feed({ header }: { header: ReactElement }) {
   };
   const load = useCallback(async () => {
     const id = ++req.current;
-    setPhase('loading'); setItems([]); setCursor(null); setSponsored([]); setFollowsNone(false);
+    setPhase('loading'); setItems([]); setCursor(null); setSponsored([]); setSales([]); setFollowsNone(false);
     try {
       if (following) { await loadFollowing(auth); if (id !== req.current) return; if (!followsSome()) { setFollowsNone(true); setPhase('ready'); return; } }
       const page = await fetchPage(null);
       if (id !== req.current) return;
-      setItems(page.items); setCursor(page.next_cursor); setSponsored(page.sponsored ?? []); setPhase('ready');
+      setItems(page.items); setCursor(page.next_cursor); setSponsored(page.sponsored ?? []); setSales(following ? [] : page.sales ?? []); setPhase('ready');
       if (q) track('feed_search', { results: page.items.length, more: !!page.next_cursor, filter, q_len: q.length });
       else if (!viewed.current) { viewed.current = true; track('feed_viewed', { items: page.items.length, filter }); }
     } catch { if (id === req.current) setPhase('error'); }
-  }, [q, filter, view]);
+  }, [q, filter, view, mode]);
   useEffect(() => { load(); }, [load]);
 
   const loadMore = async () => {
@@ -188,7 +190,7 @@ export function Feed({ header }: { header: ReactElement }) {
   // Ventas cerradas de ejemplo mezcladas (1 de cada 6, mismo filtro); relleno invisible si queda una sola en la última fila.
   const acts = useActivity(items.map((i) => i.seller.store_slug)); // última conexión: aparte y sin caché
   // Siguiendo: sin ventas de ejemplo mezcladas (solo publicaciones de las tiendas que sigues).
-  const mixed: Cell[] = phase !== 'ready' ? [] : following ? items : mixFeed<FeedItem>(items, filter, q);
+  const mixed: Cell[] = phase !== 'ready' ? [] : following ? items : mixFeed<FeedItem>(items, filter, q, sales);
   const cells: Cell[] = mixed.length % 2 ? [...mixed, { kind: 'filler', id: 'filler' }] : mixed;
   return (
     <>
@@ -276,13 +278,14 @@ export const SaleCard = memo(function SaleCard({ post: p, onPress }: { post: Sal
   );
 });
 
-type Suggested = ReturnType<typeof import('../api/_lib/demoProducts').demoSuggestedStores>[number];
-/** Siguiendo sin seguir a nadie: tiendas de EJEMPLO para empezar (ficticias, con su iconito (i)). Datos en diferido. */
+type Suggested = DemoSuggestedStore;
+/** Siguiendo sin seguir a nadie: tiendas de EJEMPLO para empezar (ficticias, con su iconito (i)). Las manda el servidor
+ *  solo en el modo "Datos de ejemplo"; en Testnet, no se muestra nada. */
 function SuggestedStores() {
   const [list, setList] = useState<Suggested[]>([]);
   useEffect(() => {
     let live = true;
-    if (FEED_DEMO_PRODUCTS) import('../api/_lib/demoProducts').then((m) => live && m.demoProductsOn() && setList(m.demoSuggestedStores(6))).catch(() => {});
+    getDemoSuggested().then((l) => live && setList(l)).catch(() => {});
     return () => { live = false; };
   }, []);
   if (!list.length) return null;

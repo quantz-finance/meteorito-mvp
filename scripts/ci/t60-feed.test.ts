@@ -130,7 +130,7 @@ export async function run(t: T) {
   const visible = strings(COPY);
   t.check('copy visible sin palabras prohibidas (lib/copy.ts)', visible.every((x) => !BANNED_COPY.test(x)), visible.filter((x) => BANNED_COPY.test(x)).join(' | '));
   const lits = (f: string) => [...readFileSync(new URL(`../../${f}`, import.meta.url), 'utf8').replace(/^\s*(\/\/|\*|\/\*\*).*$/gm, '').matchAll(/(['"`>])([^'"`<>{}\n]*[A-Za-zÁÉÍÓÚáéíóúñ]{3,}[^'"`<>{}\n]*)\1?/g)].map((m) => m[2]);
-  const files = ['components/Feed.tsx', 'components/SellerBits.tsx', 'app/t/[store].tsx', 'app/(tabs)/comprar/index.tsx', 'app/(tabs)/comprar/link.tsx', 'lib/demoFeed.ts', 'lib/feedSales.ts'];
+  const files = ['components/Feed.tsx', 'components/SellerBits.tsx', 'app/t/[store].tsx', 'app/(tabs)/comprar/index.tsx', 'app/(tabs)/comprar/link.tsx', 'lib/demoFeed.ts', 'lib/feedSales.ts', 'api/_lib/demoSales.ts', 'components/AppModePicker.tsx'];
   const bad = files.flatMap((f) => lits(f).filter((x) => BANNED_COPY.test(x) && !/verified|Verified/.test(x)).map((x) => `${f}: ${x}`));
   t.check('feed, perfil y ficha sin palabras prohibidas en textos', bad.length === 0, bad.join(' | '));
   t.check('feed_search manda el número de resultados y NO el texto', /track\('feed_search', \{[^}]*results/.test(src) && !/track\('feed_search', \{[^}]*\b(q|query|text)\s*[:,}]/.test(src));

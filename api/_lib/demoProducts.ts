@@ -10,13 +10,14 @@
 //    (api/store/index.ts, mergeDemo) y nunca en el bloque Patrocinado.
 //  - Redes de las tiendas: SOLO cuentas de Meteorito (nunca de una persona real).
 //  - Última conexión: relativa a "ahora" (seenMin minutos antes de cada pedido), así nunca se ve vieja.
-//  - Apagarlos: FEED_DEMO_PRODUCTS = false en api/_lib/demoFlag.ts (o FEED_DEMO_PRODUCTS=0 en el entorno del servidor).
+//  - Verlos: cada persona elige el "Modo de la app" "Datos de ejemplo" en Mi cuenta (lib/demoPref.ts; la app manda
+//    ?ejemplos=1). Default "Testnet": no se ven. Freno de emergencia: FEED_DEMO_PRODUCTS=0 en el entorno del servidor.
 //    Borrarlos del todo: este archivo, los usos de demoFlag/demoProducts y public/demo-feed/ (ver su README).
 // PURO (sin red ni base): lo usan la API, el modo demo (lib/demoFeed.ts) y la ficha de ejemplo (components/DemoProduct.tsx).
-import { DEMO_PRODUCT_PREFIX, demoProductsOn, FEED_DEMO_PRODUCTS, looksLikeDemoProduct } from './demoFlag';
+import { DEMO_PRODUCT_PREFIX, looksLikeDemoProduct } from './demoFlag';
 import { FEED_DEFAULT, FEED_MAX, foldText, matchesTokens, searchTokens, type VerifiedFilter } from './feedText';
 import { rankFeed } from './feedRank';
-export { DEMO_PRODUCT_PREFIX, demoProductsOn, FEED_DEMO_PRODUCTS, looksLikeDemoProduct };
+export { DEMO_PRODUCT_PREFIX, looksLikeDemoProduct };
 
 const H = 3600e3;
 export interface DemoReview { stars: 1 | 2 | 3 | 4 | 5; comment: string | null; buyer_name: string | null; h: number }

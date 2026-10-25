@@ -1,16 +1,19 @@
-// (67) Feed de Comprar: ventas cerradas. Hoy SOLO ejemplos ficticios (lib/feedSales.ts), con un iconito discreto (i), sin montos,
-// detrás de FEED_DEMO_SALES, mezclados 1 de cada 6 tarjetas y respetando el filtro de identidad. Ventas reales: no (falta opt-in).
+// (67) Feed de Comprar: ventas cerradas. Hoy SOLO ejemplos ficticios (api/_lib/demoSales.ts), con un iconito discreto (i), sin montos,
+// solo con "Datos de ejemplo" encendido (el servidor las manda), mezclados 1 de cada 6 tarjetas y respetando el filtro de identidad. Ventas reales: no (falta opt-in).
 import { existsSync, readFileSync } from 'node:fs';
 import type { T } from './setup';
-import { DEMO_SALES, FEED_DEMO_SALES, isSale, mixFeed, SALE_EVERY, saleHeadline, saleLabel, saleStars, type SalePost } from '../../lib/feedSales';
+import { isSale, mixFeed as mix, SALE_EVERY, saleHeadline, saleLabel, saleStars, type SalePost } from '../../lib/feedSales';
+import { DEMO_SALES } from '../../api/_lib/demoSales';
 import { COPY } from '../../lib/copy';
 
 const BANNED = /segur|garant|verificad|empresa|fintech|banco|billetera|proteg/i;
 const VOSEO = /\b(tenés|podés|querés|tocá|mirá|escribí|fijate)\b/i;
+/** Con las ventas que manda el servidor cuando "Datos de ejemplo" está encendido. */
+const mixFeed = <X>(it: X[], f: any, q: string, sales: SalePost[] = DEMO_SALES) => mix(it, f, q, sales);
 const items = (n: number) => Array.from({ length: n }, (_, i) => ({ slug: `p${i}` }));
 
 export async function run(t: T) {
-  t.check('flag FEED_DEMO_SALES encendido y fácil de apagar (constante)', FEED_DEMO_SALES === true && /export const FEED_DEMO_SALES = (true|false);/.test(readFileSync('lib/feedSales.ts', 'utf8')));
+  t.check('sin flag en código: sin ventas del servidor no se mezcla nada (apagado = solo publicaciones)', !/FEED_DEMO_SALES/.test(readFileSync('lib/feedSales.ts', 'utf8')) && mix(items(12), 'true', '').length === 12);
   t.check('todas las ventas son ejemplos ficticios, con confirmados y sin confirmar', DEMO_SALES.length >= 4 && DEMO_SALES.every((s) => s.example === true && s.kind === 'sale')
     && DEMO_SALES.some((s) => s.verified) && DEMO_SALES.some((s) => !s.verified));
   const feedSrc = readFileSync('components/Feed.tsx', 'utf8');
@@ -22,7 +25,7 @@ export async function run(t: T) {
   t.check('sin montos (ni ₡ ni números de precio)', !/₡|\$|colones|\d{3}/.test(txt), txt);
   t.check('accesible: dice que es un ejemplo', DEMO_SALES.every((s) => saleLabel(s).startsWith('Ejemplo.')));
   t.check('copy en tuteo y sin palabras prohibidas', !BANNED.test(txt + JSON.stringify(COPY.sales)) && !VOSEO.test(txt + JSON.stringify(COPY.sales)));
-  t.check('sin emojis', !/\p{Extended_Pictographic}/u.test(readFileSync('lib/feedSales.ts', 'utf8') + JSON.stringify(COPY.sales)));
+  t.check('sin emojis', !/\p{Extended_Pictographic}/u.test(readFileSync('lib/feedSales.ts', 'utf8') + readFileSync('api/_lib/demoSales.ts', 'utf8') + JSON.stringify(COPY.sales)));
 
   // Mezcla: 1 de cada 6 (después de cada 5 publicaciones), respetando el filtro.
   const m = mixFeed(items(12), 'true', '');
@@ -35,11 +38,11 @@ export async function run(t: T) {
   t.check('con búsqueda no se mezclan (no son productos)', mixFeed(items(12), 'true', 'bici').every((x) => !isSale(x)));
   t.check('feed vacío: no se inventa nada (estado vacío)', mixFeed([], 'true', '').length === 0);
   t.check('pocas publicaciones: una venta de ejemplo al final', mixFeed(items(2), 'true', '').length === 3 && isSale(mixFeed(items(2), 'true', '')[2]));
-  t.check('FEED_DEMO_SALES apagado (sin ventas) -> solo publicaciones', mixFeed(items(12), 'true', '', []).length === 12);
+  t.check('Datos de ejemplo apagado (sin ventas) -> solo publicaciones', mixFeed(items(12), 'true', '', []).length === 12);
   t.check('nunca más ventas de las que hay', mixFeed(items(60), 'true', '').filter(isSale).length === DEMO_SALES.filter((s) => s.verified).length);
 
   // Ventas reales: no se publican sin opt-in del vendedor (TODO en el código, ningún endpoint las expone).
-  const src = readFileSync('lib/feedSales.ts', 'utf8');
+  const src = readFileSync('api/_lib/demoSales.ts', 'utf8');
   t.check('TODO de ventas reales con opt-in (Ley 8968)', /TODO\(ventas reales\)/.test(src) && /opt-in/.test(src) && /8968/.test(src));
   t.check('el feed usa mixFeed, abre la hoja de ejemplo y no navega a nada real', /mixFeed/.test(readFileSync('components/Feed.tsx', 'utf8')) && /COPY\.sales\.sheetTitle/.test(readFileSync('components/Feed.tsx', 'utf8')));
 

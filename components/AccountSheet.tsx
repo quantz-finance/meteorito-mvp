@@ -4,6 +4,7 @@ import { Text } from 'react-native';
 import { router } from 'expo-router';
 import { Card, ErrorText, ListRow, PrimaryButton, Sheet, SkeletonCard } from '@/components/ds';
 import { AnalyticsToggle, LegalLinks } from '@/components/LegalLinks';
+import { AppModePicker } from '@/components/AppModePicker';
 import { RulesLink } from '@/components/RulesLink';
 import { C, T } from '@/constants/theme';
 import { Icon } from '@/components/ds';
@@ -26,6 +27,7 @@ export function AccountSheet({ visible, onClose, products }: { visible: boolean;
       <Card><RulesLink from="account" onNavigate={onClose} /></Card>
       <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{auth.email ?? '—'}</Text></Card>
       <Card><AnalyticsToggle /></Card>
+      <AppModePicker />
       <LegalLinks onNavigate={onClose} />
     </Sheet>
   );

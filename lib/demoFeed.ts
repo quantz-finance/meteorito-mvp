@@ -6,8 +6,8 @@
 import type { Activity } from './activity';
 import { foldText, matchesTokens, searchTokens, type VerifiedFilter } from '../api/_lib/feedText';
 import { demoGetStore, demoStoreSlug } from './demo';
+import { demoPrefOn as demoDataLocal } from './demoPref';
 import { decodeRankCursor, encodeRankCursor, rankFeed } from '../api/_lib/feedRank';
-import { demoProductsOn } from '../api/_lib/demoFlag';
 // Los datos de ejemplo se cargan en diferido (mismo chunk que usa la ficha /p/ej-…; un import estático aquí los duplicaba).
 const ej = () => import('../api/_lib/demoProducts');
 import { followedSlugs } from './follows';
@@ -44,7 +44,7 @@ const EJ_KEY = 'meteorito:demo-ejemplos';
 /** ?ejemplos=1 queda activo en la pestaña (sessionStorage) aunque la navegación cambie la URL. */
 const ejemplos = () => {
   try {
-    if (!demoProductsOn()) return false;
+    if (!demoDataLocal()) return false;
     if (new URLSearchParams(window.location.search).get('ejemplos') === '1') window.sessionStorage.setItem(EJ_KEY, '1');
     return window.sessionStorage.getItem(EJ_KEY) === '1';
   } catch { return false; }
@@ -62,7 +62,7 @@ const pub = (s: DemoSeller) => ({ store_slug: s.store_slug, display_name: s.disp
 export async function demoActivity(slugs: string[]): Promise<Record<string, Activity>> {
   const out: Record<string, Activity> = {};
   for (const slug of slugs) { const s = slug === demoStoreSlug() ? valeria() : SELLERS.find((x) => x.store_slug === slug); if (s?.seen) out[slug] = s.seen; }
-  if (demoProductsOn() && slugs.some((x) => !(x in out))) { // tiendas de ejemplo (?ejemplos=1): igual que el API
+  if (demoDataLocal() && slugs.some((x) => !(x in out))) { // tiendas de ejemplo (?ejemplos=1): igual que el API
     try { Object.assign(out, (await ej()).demoActivityBySlug(slugs.filter((x) => !(x in out)))); } catch { /* sin ejemplos */ }
   }
   return out;
@@ -80,11 +80,17 @@ export async function demoFeed(o: { q?: string; cursor?: string | null; verified
     const p = await basePage(o, (i) => mine.has(i.seller.store_slug));
     return { ...p, sponsored: [] };
   }
-  if (!ejemplos()) return basePage(o);
+  // Ventas de ejemplo: como el API, en la 1.ª página sin búsqueda y solo en el modo "Datos de ejemplo".
+  const sales = async () => (demoDataLocal() && !o.cursor && !o.q?.trim() ? { sales: (await import('../api/_lib/demoSales')).DEMO_SALES } : {});
+  if (!ejemplos()) return { ...(await basePage(o)), ...(await sales()) };
   const { decodeDemoCursor, demoPage, mergeDemo } = await ej();
   const dc = decodeDemoCursor(o.cursor);
-  return dc ? { ...demoPage({ q: o.q, verified: o.verified, cursor: dc, limit: o.limit }), sponsored: [] } : mergeDemo(await basePage(o), { q: o.q, verified: o.verified, limit: o.limit });
+  return dc ? { ...demoPage({ q: o.q, verified: o.verified, cursor: dc, limit: o.limit }), sponsored: [] } : { ...mergeDemo(await basePage(o), { q: o.q, verified: o.verified, limit: o.limit }), ...(await sales()) };
 }
+/** Igual que GET /api/store?demo=suggested: tiendas de ejemplo sugeridas, [] fuera del modo "Datos de ejemplo". */
+export async function demoSuggested() { return demoDataLocal() ? (await ej()).demoSuggestedStores(6) : []; }
+/** Igual que GET /api/store?demo=product: la ficha de ejemplo, null fuera del modo "Datos de ejemplo". */
+export async function demoProductLocal(slug: string) { return demoDataLocal() ? (await ej()).demoProduct(slug) : null; }
 async function basePage(o: { q?: string; cursor?: string | null; verified: VerifiedFilter; limit?: number }, only: (i: FeedItem) => boolean = () => true): Promise<FeedPage> {
   const tokens = searchTokens(o.q);
   const list = all().filter((i) => only(i) && (o.verified === 'all' || String(i.seller.verified) === o.verified)
@@ -103,7 +109,7 @@ async function basePage(o: { q?: string; cursor?: string | null; verified: Verif
   return { items: page, next_cursor: end < ranked.length ? encodeRankCursor(end, now) : null, sponsored };
 }
 export async function demoProfile(slug: string): Promise<SellerProfile | null> {
-  if (demoProductsOn()) { // tienda de ejemplo (productos de ejemplo del feed)
+  if (demoDataLocal()) { // tienda de ejemplo (productos de ejemplo del feed)
     const m = await ej();
     if (m.isDemoStoreSlug(slug)) return m.demoProfile(slug);
   }
