@@ -22,7 +22,7 @@
 //  GET  ?activity=<usuario>[,<usuario>…]        -> última conexión en rango grueso SOLO de quienes consintieron (021+023).
 //                                                 Sin caché: apagarla se nota de inmediato. Nunca la hora exacta.
 //  POST { action:'seen' }                        (Bearer Cavos) -> marca actividad (última conexión); solo con consentimiento; máx. 1 escritura / 5 min
-//  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone?, whatsapp_public?, show_last_seen? } (Bearer Cavos) -> cambiar usuario, nombre,
+//  POST { action:'update', store_slug?, display_name?, avatar_url?, contact_phone?, whatsapp_public?, show_last_seen?, socials? } (Bearer Cavos) -> cambiar usuario, nombre,
 //                                                 foto o WhatsApp de contacto (foto: solo una subida a SU carpeta por
 //                                                 /api/photos/upload-url; null la quita. Teléfono: CR, se guarda +506XXXXXXXX;
 //                                                 '' o null lo quita. Migración 016. whatsapp_public: mostrarlo en el
@@ -85,7 +85,8 @@ import { FOLLOW_IP_PER_MIN, followedSellerSubs, followingSlugs, followRateLimite
 import { sponsoredFor } from '../_lib/sponsored';
 import { blockChat, chatAvailable, listChats, openChat, readChat, reportChat, sendChat } from '../_lib/chat';
 import { parseVerified, searchTokens } from '../_lib/feedText';
-import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile, type FeedQuery } from '../_lib/feed';
+import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile, socialsOf, type FeedQuery } from '../_lib/feed';
+import { normalizeSocials, socialError } from '../_lib/socials';
 import { decodeDemoCursor, demoPage, demoProductsOn, demoProfile, isDemoStoreSlug, looksLikeDemoProduct, mergeDemo } from '../_lib/demoProducts';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
@@ -481,8 +482,8 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'me') {
       const p = await myProfile(user.sub, user.email);
-      const [mine, contact_phone, whatsapp_public, ls] = await Promise.all([ownerStore(user.sub, p), contactPhoneOf(user.sub), whatsappPublicOf(user.sub), lastSeenStateOf(user.sub), touchSeen(user.sub)]);
-      return json(res, 200, { ...mine, contact_phone, whatsapp_public: !!contact_phone && whatsapp_public, show_last_seen: ls.show, last_seen_decided: ls.decided });
+      const [mine, contact_phone, whatsapp_public, ls, socials] = await Promise.all([ownerStore(user.sub, p), contactPhoneOf(user.sub), whatsappPublicOf(user.sub), lastSeenStateOf(user.sub), socialsOf(user.sub), touchSeen(user.sub)]);
+      return json(res, 200, { ...mine, socials, contact_phone, whatsapp_public: !!contact_phone && whatsapp_public, show_last_seen: ls.show, last_seen_decided: ls.decided });
     }
     if (b.action === 'listing_set') {
       if (!LISTING_STATUSES.includes(b.status)) throw new HttpError(400, 'Estado inválido.');
@@ -532,6 +533,16 @@ export default async function handler(req: any, res: any) {
           throw e;
         }
       }
+      // Redes (031): validadas aquí (https, dominio de cada red, largo) y guardadas aparte para que sin la columna lo demás funcione.
+      let socials: Record<string, string> | undefined;
+      if (b.socials !== undefined) {
+        const r = normalizeSocials(b.socials);
+        if ('bad' in r) throw Object.assign(new HttpError(400, socialError(r.bad)), { code: 'bad_social', field: r.bad });
+        const { error: se } = await db().from('seller_profiles').update({ socials: Object.keys(r.socials).length ? r.socials : null }).eq('sub', user.sub);
+        if (se && missingColumn(se)) throw Object.assign(new HttpError(503, 'Todavía no puedes agregar tus redes. Intenta más tarde.'), { code: 'socials_unavailable' });
+        if (se) storeDbErr(se);
+        socials = r.socials;
+      }
       let { error } = await db().from('seller_profiles').update(patch).eq('sub', user.sub); // solo el perfil del dueño
       if (error && 'whatsapp_public' in patch && missingColumn(error) && /whatsapp_public/.test(String(error.message ?? ''))) {
         if (!implicitWa) throw Object.assign(new HttpError(503, 'Todavía no puedes mostrar tu WhatsApp en el perfil. Intenta más tarde.'), { code: 'whatsapp_public_unavailable' });
@@ -548,7 +559,8 @@ export default async function handler(req: any, res: any) {
       const contact_phone = 'contact_phone' in patch ? patch.contact_phone as string | null : await contactPhoneOf(user.sub);
       const whatsapp_public = 'whatsapp_public' in patch ? patch.whatsapp_public === true : await whatsappPublicOf(user.sub);
       const show_last_seen = lastSeen ?? (await lastSeenStateOf(user.sub)).show;
-      return json(res, 200, { ...('avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh), contact_phone, whatsapp_public: !!contact_phone && whatsapp_public, show_last_seen });
+      socials ??= await socialsOf(user.sub);
+      return json(res, 200, { socials, ...('avatar_url' in patch ? { ...fresh, avatar_url: patch.avatar_url } : fresh), contact_phone, whatsapp_public: !!contact_phone && whatsapp_public, show_last_seen });
     }
     throw new HttpError(400, 'acción inválida');
   } catch (e) { return fail(res, e); }

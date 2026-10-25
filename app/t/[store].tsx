@@ -10,6 +10,7 @@ import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OwnerTools } from '@/components/OwnerTools';
+import { SocialRow } from '@/components/SocialLinks';
 import { FollowButton } from '@/components/FollowButton';
 import { ChatButton } from '@/components/ChatButton';
 import { DemoInfo } from '@/components/DemoInfo';
@@ -66,7 +67,7 @@ export default function PerfilVendedor() {
       </View>
       {error ? <Notice icon="cloud-offline-outline" title="No pudimos abrir este perfil" text={error} />
         : p === null ? <Notice icon="storefront-outline" title="Este perfil no existe" text="Revisa el link o pídele al vendedor que te lo mande de nuevo." />
-        : p === undefined ? <ProfileSkeleton /> : <Profile p={owner && mine ? { ...p, display_name: mine.display_name, avatar_url: mine.avatar_url ?? null } : p}
+        : p === undefined ? <ProfileSkeleton /> : <Profile p={owner && mine ? { ...p, display_name: mine.display_name, avatar_url: mine.avatar_url ?? null, socials: mine.socials ?? p.socials } : p}
           activity={acts[p.store_slug] ?? null} owner={owner} mine={mine} onMine={setMine} onManage={setManaging}
           tools={owner && mine ? <OwnerTools store={mine} onStore={setMine} managing={managing} onCloseManage={() => setManaging(null)} /> : null} />}
     </Screen>
@@ -114,6 +115,7 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
           <ActivityLine activity={activity} center />
           {p.bio ? <Text style={[T.body, { textAlign: 'center', marginTop: S.xs }]} numberOfLines={4}>{p.bio}</Text> : null}
           {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
+          {!p.demo ? <SocialRow socials={p.socials} /> : null}
           {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{COPY.identity.unconfirmed}</Text></View> : null}
         </View>
         {!owner && !p.demo ? <View style={{ alignItems: 'center', marginTop: 2 }}>

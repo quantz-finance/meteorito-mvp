@@ -1,4 +1,5 @@
 // Tienda personal del vendedor: pago.meteorito.app/t/<usuario>. API: /api/store (migración 010).
+import type { Socials } from '../api/_lib/socials';
 import type { Activity } from './activity';
 import { api, guestApi } from './api';
 import { DEMO_ENABLED, demoApi, demoGetStore } from './demo';
@@ -7,7 +8,7 @@ import type { MeteoritoAuth } from './types';
 export { ratingLabel } from './rating';
 
 export interface StoreItem { slug: string; title: string; price_crc: number; photo: string | null; /** Producto de EJEMPLO (ficticio, no se puede pagar). */ demo?: boolean; /** Solo en Mi tienda (migración 012). */ listing_status?: 'activa' | 'pausada' }
-export interface Store { store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null;
+export interface Store { /** Solo Mi tienda: redes del vendedor (031), links canónicos. */ socials?: Socials; store_slug: string; display_name: string; /** Foto de la tienda (migración 014); null = inicial. */ avatar_url?: string | null;
   /** Solo Mi tienda (dueño): WhatsApp de contacto +506XXXXXXXX (migración 016); null = sin teléfono. Nunca en la tienda pública. */ contact_phone?: string | null;
   /** Solo Mi tienda: el vendedor eligió mostrar su WhatsApp en el perfil público (migración 020). */ whatsapp_public?: boolean; /** Solo Mi tienda: muestra su última conexión (solo con consentimiento; apagada por defecto). */ show_last_seen?: boolean;
   /** Solo Mi tienda: ya eligió alguna vez (hay registro de consentimiento). */ last_seen_decided?: boolean; rating_avg: number | null; rating_count: number; items: StoreItem[] }
@@ -33,7 +34,7 @@ export async function pingSeen(auth: MeteoritoAuth): Promise<void> {
 export async function getMyStore(auth: MeteoritoAuth): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'me' }));
 }
-export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null; contact_phone?: string | null; whatsapp_public?: boolean; show_last_seen?: boolean }): Promise<Store> {
+export async function updateMyStore(auth: MeteoritoAuth, patch: { store_slug?: string; display_name?: string; avatar_url?: string | null; contact_phone?: string | null; whatsapp_public?: boolean; show_last_seen?: boolean; socials?: Socials }): Promise<Store> {
   return friendly(() => api<Store>(auth, '/api/store', { action: 'update', ...patch }));
 }
 /** Reseña del comprador (llave de invitado o sesión), una por pedido y solo con la compra liberada.
@@ -105,6 +106,7 @@ export interface SellerProfile extends FeedSeller {
   bio: string | null; location: string | null; sales_completed: number; sales?: SalesOutcome; member_since: string | null;
   /** Número de seguidores (migración 022). Nunca quiénes. null/ausente = no disponible: no se muestra. */ followers?: number | null;
   /** https://wa.me/506… solo si el vendedor puso su WhatsApp; null si no. */ whatsapp: string | null;
+  /** Redes del vendedor (031): solo las que puso, links https canónicos. */ socials?: Socials;
   items: (StoreItem & { created_at?: string | null })[]; reviews: Review[];
 }
 export const FEED_ERROR = 'No pudimos cargar las publicaciones. Revisa tu conexión e intenta de nuevo.';
