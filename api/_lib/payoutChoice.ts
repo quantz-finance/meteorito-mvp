@@ -10,6 +10,7 @@ import { HttpError } from './auth';
 import { isMissingTable } from './push';
 import { missingColumn } from './listings';
 import { walletState, type WalletState } from './wallet';
+import { HOLDER_PLACEHOLDER, IBAN_PLACEHOLDER } from './payout';
 
 export type PayoutMethod = 'wallet' | 'iban';
 export type PayoutRoute = 'cavos' | PayoutMethod;
@@ -84,10 +85,9 @@ export const netUsdc = (gross: number) => Math.floor(gross * (1 - env.twFee()) *
 /** Cola manual: la parte del vendedor llegó a 'platform'; falta transferir a su Cuenta IBAN. Idempotente por pedido. */
 export async function enqueueIbanPayout(order: any, p: { amountUsdc: number; amountCrc: number | null; tx: string | null }) {
   if (order.payout_method !== 'iban') return { queued: false };
-  const pref = await payoutPref(order.seller_user_id).catch(() => null);
-  if (!pref?.iban || !pref.holder_name) { await logEvent(order.id, 'payout_queue_failed', { reason: 'sin cuenta IBAN' }); return { queued: false }; }
+  // Beta en testnet: la cola nunca copia una cuenta real; siempre el dato de ejemplo (no hay pagos al banco).
   const row = { order_id: order.id, slug: order.slug, seller_sub: order.seller_user_id, amount_usdc: p.amountUsdc, amount_crc: p.amountCrc,
-    iban: pref.iban, holder_name: pref.holder_name, state: 'pendiente', released_tx: p.tx, created_at: new Date().toISOString() };
+    iban: IBAN_PLACEHOLDER, holder_name: HOLDER_PLACEHOLDER, state: 'pendiente', released_tx: p.tx, created_at: new Date().toISOString() };
   const { error } = await db().from('payout_queue').upsert(row, { onConflict: 'order_id', ignoreDuplicates: true });
   if (error) { console.warn('[payout] cola IBAN falló', error.code ?? error.message); await logEvent(order.id, 'payout_queue_failed', { reason: String(error.message ?? error.code).slice(0, 200) }); return { queued: false }; }
   await logEvent(order.id, 'payout_queued', { amount_usdc: p.amountUsdc, amount_crc: p.amountCrc, tx: p.tx });
@@ -95,6 +95,9 @@ export async function enqueueIbanPayout(order: any, p: { amountUsdc: number; amo
 }
 
 /* ---------- Admin ---------- */
+/** Evento de "Marcar como revisado". Antes se llamaba payout_paid: quien lea order_events debe aceptar ambos.
+ *  El estado en payout_queue sigue siendo 'pagado' (dato, constraint de 029); en pantalla se muestra "Revisado". */
+export const PAYOUT_REVIEWED_KINDS: readonly string[] = ['payout_reviewed', 'payout_paid'];
 export interface AdminPayoutRow { slug: string; state: 'pendiente' | 'pagado'; amount_usdc: number; amount_crc: number | null; iban: string; holder_name: string; released_tx: string | null; created_at: string; paid_at: string | null; paid_by: string | null; note: string | null; product: string | null }
 export async function adminPayouts(): Promise<{ available: boolean; payouts: AdminPayoutRow[]; counts: { pendiente: number; pagado: number } }> {
   const { data, error } = await db().from('payout_queue').select('*').order('created_at', { ascending: false }).limit(200);
@@ -120,6 +123,6 @@ export async function markPayoutPaid(slug: unknown, by: { sub: string; email: st
   const at = new Date().toISOString();
   const { error: e2 } = await db().from('payout_queue').update({ state: 'pagado', paid_at: at, paid_by: by.email ?? by.sub, note: clean }).eq('order_id', data.order_id).eq('state', 'pendiente');
   if (e2) throw e2;
-  await logEvent(data.order_id, 'payout_paid', { by: by.email ?? by.sub, note: clean });
+  await logEvent(data.order_id, 'payout_reviewed', { by: by.email ?? by.sub, note: clean });
   return { done: true, already: false, paid_at: at };
 }

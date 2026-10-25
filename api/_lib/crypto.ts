@@ -20,7 +20,19 @@ export type CryptoAsset = 'USDC' | 'XLM';
 export const CRYPTO_ASSETS: readonly CryptoAsset[] = ['USDC', 'XLM'];
 /** Memo de texto del pedido (= referencia SINPE que ya ve el comprador). ≤ 28 bytes. */
 export const cryptoMemo = (slug: string) => `MET-${String(slug).toUpperCase()}`;
-export const cryptoEnabled = () => process.env.CRYPTO_PAY !== '0' && !!process.env.TREASURY_SECRET;
+/* ---------- Solo TESTNET (beta, sin dinero real) ----------
+ * Fijo en el código, no en variables de entorno: passphrase de testnet, Horizon de testnet y USDC del emisor de testnet.
+ * Si el entorno apunta a otra red o a otro emisor de USDC (p. ej. Circle en mainnet), el pago con cripto se APAGA, y un
+ * pago con otro activo (USDC de mainnet u otro emisor) nunca cuenta. Los pagos de mainnet no existen en Horizon testnet. */
+export const TESTNET_PASSPHRASE = 'Test SDF Network ; September 2015';
+export const TESTNET_HORIZON = 'https://horizon-testnet.stellar.org';
+export const TESTNET_USDC_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+export function testnetOnly(): boolean {
+  try {
+    return Networks.TESTNET === TESTNET_PASSPHRASE && env.network() === 'testnet' && env.horizon() === TESTNET_HORIZON && env.usdcIssuer() === TESTNET_USDC_ISSUER;
+  } catch { return false; }
+}
+export const cryptoEnabled = () => process.env.CRYPTO_PAY !== '0' && !!process.env.TREASURY_SECRET && testnetOnly();
 export const quoteMinutes = () => { const n = Number(process.env.CRYPTO_QUOTE_MINUTES ?? '15'); return Number.isFinite(n) && n >= 1 && n <= 120 ? n : 15; };
 export const xlmSlippage = () => { const n = Number(process.env.CRYPTO_XLM_SLIPPAGE ?? '0.03'); return Number.isFinite(n) && n >= 0 && n <= 0.25 ? n : 0.03; };
 /** Polvo: por debajo de esto no se devuelve (el fee y la reserva no lo justifican). */
@@ -55,12 +67,12 @@ interface Deps {
   now: () => number;
 }
 const treasuryPublic = () => Keypair.fromSecret(env.treasurySecret()).publicKey();
-export const usdcAsset = () => new Asset('USDC', env.usdcIssuer());
+export const usdcAsset = () => new Asset('USDC', TESTNET_USDC_ISSUER);
 const assetOf = (a: any) => (a.asset_type === 'native' ? Asset.native() : new Asset(a.asset_code, a.asset_issuer));
 
 async function treasuryTx(build: (b: TransactionBuilder, me: string) => TransactionBuilder, memo: string): Promise<string> {
   env.network();
-  const server = new Horizon.Server(env.horizon());
+  const server = new Horizon.Server(TESTNET_HORIZON);
   const kp = Keypair.fromSecret(env.treasurySecret());
   const acct = await server.loadAccount(kp.publicKey());
   const tx = build(new TransactionBuilder(acct, { fee: '10000', networkPassphrase: Networks.TESTNET }), kp.publicKey()).addMemo(Memo.text(memo)).setTimeout(60).build();
@@ -74,13 +86,13 @@ const realDeps = (): Deps => ({
   fund: (id, meta) => mockRampFund(id, meta, { locked: true }),
   convert: async ({ usdc, sendMax, path, memo }) => {
     const hash = await treasuryTx((b, me) => b.addOperation(Operation.pathPaymentStrictReceive({ sendAsset: Asset.native(), sendMax, destination: me, destAsset: usdcAsset(), destAmount: usdc, path })), memo);
-    const ops: any = await (await globalThis.fetch(`${env.horizon()}/transactions/${hash}/operations`)).json().catch(() => null);
+    const ops: any = await (await globalThis.fetch(`${TESTNET_HORIZON}/transactions/${hash}/operations`)).json().catch(() => null);
     const op = ops?._embedded?.records?.find((o: any) => o.type === 'path_payment_strict_receive');
     return { hash, xlmSpent: op ? Number(op.source_amount) : Number(sendMax) };
   },
   refund: async ({ to, asset, amount, memo }) => ({ hash: await treasuryTx((b) => b.addOperation(Operation.payment({ destination: to, asset: asset === 'XLM' ? Asset.native() : usdcAsset(), amount })), memo) }),
   sequence: async (account) => {
-    const r = await globalThis.fetch(`${env.horizon()}/accounts/${account}`);
+    const r = await globalThis.fetch(`${TESTNET_HORIZON}/accounts/${account}`);
     if (r.status === 404) return null;
     const j: any = await r.json(); return String(j.sequence);
   },
@@ -98,8 +110,8 @@ async function getJson(url: string): Promise<{ status: number; body: any }> {
 
 /** XLM necesario para recibir `usdc` USDC en la tesorería (mejor ruta del DEX de testnet). null = sin ruta. */
 export async function xlmForUsdc(usdc: number): Promise<{ xlm: number; path: any[] } | null> {
-  const q = new URLSearchParams({ source_assets: 'native', destination_asset_type: 'credit_alphanum4', destination_asset_code: 'USDC', destination_asset_issuer: env.usdcIssuer(), destination_amount: up7(usdc) });
-  const r = await getJson(`${env.horizon()}/paths/strict-receive?${q}`);
+  const q = new URLSearchParams({ source_assets: 'native', destination_asset_type: 'credit_alphanum4', destination_asset_code: 'USDC', destination_asset_issuer: TESTNET_USDC_ISSUER, destination_amount: up7(usdc) });
+  const r = await getJson(`${TESTNET_HORIZON}/paths/strict-receive?${q}`);
   const recs: any[] = (r.body?._embedded?.records ?? []).filter((x: any) => Number(x.source_amount) > 0 && x.source_asset_type === 'native');
   if (r.status !== 200 || !recs.length) return null;
   const best = recs.reduce((a, b) => (Number(b.source_amount) < Number(a.source_amount) ? b : a));
@@ -109,7 +121,7 @@ export async function xlmForUsdc(usdc: number): Promise<{ xlm: number; path: any
 /** SEP-7 (web+stellar:pay): monto, destino, memo y red (testnet). Lo abren LOBSTR y otros wallets; también va en el QR. */
 export function sep7Pay(p: { destination: string; amount: string; asset: CryptoAsset; memo: string; msg: string }) {
   const q: [string, string][] = [['destination', p.destination], ['amount', p.amount]];
-  if (p.asset === 'USDC') q.push(['asset_code', 'USDC'], ['asset_issuer', env.usdcIssuer()]);
+  if (p.asset === 'USDC') q.push(['asset_code', 'USDC'], ['asset_issuer', TESTNET_USDC_ISSUER]);
   q.push(['memo', p.memo], ['memo_type', 'MEMO_TEXT'], ['msg', p.msg.slice(0, 300)], ['network_passphrase', Networks.TESTNET]);
   return 'web+stellar:pay?' + q.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
 }
@@ -152,7 +164,7 @@ export async function cryptoQuote(order: any, asset: unknown, buyer?: unknown) {
   await logEvent(order.id, 'crypto_quote', { ...q, ...(pathTx ? { pathTx: true } : {}) });
   return {
     asset, amount: q.amount, amountUsdc, destination, memo, memoType: 'text', expiresAt, network: 'testnet',
-    ...(asset === 'USDC' ? { issuer: env.usdcIssuer() } : { slippage: q.slippage }),
+    ...(asset === 'USDC' ? { issuer: TESTNET_USDC_ISSUER } : { slippage: q.slippage }),
     uri: sep7Pay({ destination, amount: q.amount, asset, memo, msg }),
     ...(pathTx ? { pathTx } : {}),
   };
@@ -162,7 +174,7 @@ export interface CryptoPayment { id: string; from: string; asset: CryptoAsset; a
 /** Pagos a la tesorería con el memo del pedido desde `since` (Horizon, más nuevo primero, hasta 5 páginas). */
 export async function cryptoPayments(order: any, since: string): Promise<CryptoPayment[]> {
   const t = deps.treasury(); const memo = cryptoMemo(order.slug); const out: CryptoPayment[] = [];
-  let url = `${env.horizon()}/accounts/${t}/payments?order=desc&limit=200&join=transactions`;
+  let url = `${TESTNET_HORIZON}/accounts/${t}/payments?order=desc&limit=200&join=transactions`;
   for (let page = 0; page < 5 && url; page++) {
     const r = await getJson(url);
     if (r.status === 404) return out;
@@ -175,12 +187,13 @@ export async function cryptoPayments(order: any, since: string): Promise<CryptoP
       const tx = o.transaction ?? {};
       if (tx.memo_type !== 'text' || tx.memo !== memo) continue;
       if (!['payment', 'path_payment_strict_receive', 'path_payment_strict_send'].includes(o.type)) continue;
-      const asset: CryptoAsset | null = o.asset_type === 'native' ? 'XLM' : o.asset_code === 'USDC' && o.asset_issuer === env.usdcIssuer() ? 'USDC' : null;
+      const asset: CryptoAsset | null = o.asset_type === 'native' ? 'XLM' : o.asset_code === 'USDC' && o.asset_issuer === TESTNET_USDC_ISSUER ? 'USDC' : null;
       if (!asset || !(Number(o.amount) > 0)) continue;
       out.push({ id: String(o.id), from: String(o.from), asset, amount: Number(o.amount), hash: String(o.transaction_hash), at: String(o.created_at) });
     }
     if (older || recs.length < 200) break;
     url = r.body?._links?.next?.href ?? '';
+    if (!url.startsWith(TESTNET_HORIZON + '/')) break; // nunca seguir un link fuera de Horizon testnet
   }
   return out;
 }
@@ -207,6 +220,7 @@ export interface CryptoStatus {
 
 /** ¿Llegó el pago? Si cubre el pedido: (convierte XLM) -> fondea el escrow -> devuelve el excedente. Idempotente. */
 export async function cryptoStatus(order: any): Promise<CryptoStatus> {
+  if (!testnetOnly()) throw CRYPTO_ERR.unavailable();
   const evs = await events(order.id, ['crypto_quote', 'crypto_refund', 'funded']);
   const quotes = evs.filter((e) => e.kind === 'crypto_quote');
   const last: Quote | null = quotes.length ? quotes[quotes.length - 1].detail : null;

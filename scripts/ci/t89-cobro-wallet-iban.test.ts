@@ -9,7 +9,7 @@ import { fakeDb } from './fakedb';
 import { __setDbForTests } from '../../api/_lib/db';
 import { __setChainForTests, approveAndRelease } from '../../api/_lib/escrow';
 import { __setHorizonForTests } from '../../api/_lib/wallet';
-import { __resetPayoutChoiceCache, netUsdc, receiverFor, savePayoutRoute, sellerPayee } from '../../api/_lib/payoutChoice';
+import { __resetPayoutChoiceCache, netUsdc, receiverFor, savePayoutRoute, sellerPayee, PAYOUT_REVIEWED_KINDS } from '../../api/_lib/payoutChoice';
 import { resolveOrderDispute } from '../../api/_lib/disputeResolve';
 import { stellarAddressError } from '../../lib/payout';
 import { payoutView } from '../../api/_lib/payout';
@@ -104,19 +104,19 @@ export async function run(t: T) {
       getBalance: async () => 2.006, releaseFunds: async () => ({ hash: 'f'.repeat(64) } as any) });
     await approveAndRelease({ ...order }, 'buyer_confirm');
     const q = db.tables.payout_queue ?? [];
-    t.check('liberado con Cuenta IBAN -> fila "pendiente" en la cola con IBAN, titular y monto neto', q.length === 1 && q[0].state === 'pendiente' && q[0].iban === IBAN && q[0].holder_name === 'Valeria Mora' && q[0].amount_usdc === netUsdc(2.006) && q[0].released_tx === 'f'.repeat(64), JSON.stringify(q[0]));
+    t.check('liberado con Cuenta IBAN -> fila "pendiente" en la cola con el IBAN/titular de ejemplo (beta) y monto neto', q.length === 1 && q[0].state === 'pendiente' && q[0].iban === 'CR00000000000000000000' && q[0].holder_name === 'Dato de ejemplo' && q[0].amount_usdc === netUsdc(2.006) && q[0].released_tx === 'f'.repeat(64), JSON.stringify(q[0]));
 
     // Admin
     const adminTok = await token({ sub: 'admin-sub', email: MASTER });
     r = await call(dispute, seller, { action: 'admin_payouts' });
     t.check('admin_payouts: no admin -> 404', r.code === 404, String(r.code));
     r = await call(dispute, adminTok, { action: 'admin_payouts' });
-    t.check('admin_payouts: lista con estado, IBAN completo (solo admin) y producto', r.code === 200 && r.body.available && r.body.counts.pendiente === 1 && r.body.payouts[0].iban === IBAN, JSON.stringify(r.body).slice(0, 200));
-    r = await call(dispute, adminTok, { action: 'admin_payout_paid', slug: 'cob001', note: '' });
-    t.check('Marcar como pagado sin nota -> 400', r.code === 400 && r.body.code === 'note_required');
-    r = await call(dispute, adminTok, { action: 'admin_payout_paid', slug: 'cob001', note: 'Transferencia 88412' });
-    t.check('Marcar como pagado: estado pagado, quién, cuándo y nota + order_events', r.code === 200 && q[0].state === 'pagado' && q[0].paid_by === MASTER && q[0].note === 'Transferencia 88412' && db.tables.order_events.some((e: any) => e.kind === 'payout_paid'));
-    r = await call(dispute, adminTok, { action: 'admin_payout_paid', slug: 'cob001', note: 'otra vez' });
+    t.check('admin_payouts: lista con estado, IBAN completo (solo admin) y producto', r.code === 200 && r.body.available && r.body.counts.pendiente === 1 && r.body.payouts[0].iban === 'CR00000000000000000000', JSON.stringify(r.body).slice(0, 200));
+    r = await call(dispute, adminTok, { action: 'admin_payout_reviewed', slug: 'cob001', note: '' });
+    t.check('Marcar como revisado sin nota -> 400', r.code === 400 && r.body.code === 'note_required');
+    r = await call(dispute, adminTok, { action: 'admin_payout_reviewed', slug: 'cob001', note: 'Transferencia 88412' });
+    t.check('Marcar como revisado: estado (dato) pagado, quién, cuándo y nota + evento payout_reviewed', r.code === 200 && q[0].state === 'pagado' && q[0].paid_by === MASTER && q[0].note === 'Transferencia 88412' && db.tables.order_events.some((e: any) => e.kind === 'payout_reviewed'));
+    r = await call(dispute, adminTok, { action: 'admin_payout_paid', slug: 'cob001', note: 'otra vez' }); // acción vieja: sigue aceptada
     t.check('marcar dos veces: idempotente (already)', r.code === 200 && r.body.already === true && q[0].note === 'Transferencia 88412');
 
     // Disputa: la parte del vendedor va a payout_address y se encola
@@ -136,7 +136,7 @@ export async function run(t: T) {
     r = await call(store, seller, { action: 'payout_get' });
     t.check('sin 029: payout_get choice:false', r.code === 200 && r.body.choice === false, JSON.stringify(r.body));
     r = await call(store, seller, { action: 'payout_set', iban: IBAN, holder_name: 'Valeria Mora' });
-    t.check('sin 029: guardar Cuenta IBAN sigue funcionando (como 011)', r.code === 200 && r.body.payout.iban_last4 === '4066' && db3.tables.seller_payout?.[0]?.iban === IBAN && !('payout_method' in db3.tables.seller_payout[0]), JSON.stringify(r.body));
+    t.check('sin 029: guardar Cuenta IBAN sigue funcionando (como 011)', r.code === 200 && r.body.payout.iban_last4 === '0000' && db3.tables.seller_payout?.[0]?.iban === 'CR00000000000000000000' && !('payout_method' in db3.tables.seller_payout[0]), JSON.stringify(r.body));
     r = await call(store, seller, { action: 'payout_set', method: 'wallet', stellar_address: ready });
     t.check('sin 029: wallet -> 503 payout_unavailable', r.code === 503 && r.body.code === 'payout_unavailable');
     rc = await receiverFor(o);
@@ -154,9 +154,10 @@ export async function run(t: T) {
     const src = readFileSync('components/Payout.tsx', 'utf8') + readFileSync('app/admin/pagos.tsx', 'utf8');
     const seller_copy = readFileSync('components/Payout.tsx', 'utf8');
     t.check('copy del vendedor sin palabras prohibidas (seguro, garantía, verificado, empresa, fintech, banco, billetera, proteg*)', !/\b(segur[oa]|garant\w*|verificad[oa]|empresa|fintech|banco|billetera|proteg\w*)\b/i.test(seller_copy), seller_copy.match(/\b(segur[oa]|garant\w*|verificad[oa]|empresa|fintech|banco|billetera|proteg\w*)\b/i)?.[0]);
-    t.check('no promete depósitos automáticos a la Cuenta IBAN', !/autom[áa]tic/i.test(seller_copy) && /a mano/.test(seller_copy));
+    t.check('no promete depósitos a la Cuenta IBAN (beta: dato de ejemplo, sin pagos al banco)', !/autom[áa]tic/i.test(seller_copy) && !/a mano|días hábiles/.test(seller_copy) && /no hacemos pagos al banco/i.test(readFileSync('api/_lib/payout.ts', 'utf8')));
     t.check('copy en tuteo (sin voseo)', !/\b(podés|tenés|querés|elegí|pegá|revisá|agregá|activala)\b/i.test(src));
-    t.check('admin: "Pendiente pagar al banco" y "Marcar como pagado"', /Pendiente pagar al banco/.test(src) && /Marcar como pagado/.test(src));
+    t.check('admin: "Beta: sin pago al banco", "Marcar como revisado" y "Revisado" (sin "pagado" visible)', /Beta: sin pago al banco/.test(src) && /Marcar como revisado/.test(src) && /'Revisado'/.test(src) && !/Pendiente pagar al banco|Marcar como pagado|Marcado como pagado|'Pagados?'|>Pagado /.test(src));
+    t.check('compatibilidad: eventos viejos payout_paid cuentan como revisión', PAYOUT_REVIEWED_KINDS.includes('payout_paid') && PAYOUT_REVIEWED_KINDS.includes('payout_reviewed'));
   } finally {
     __setChainForTests(null); __setHorizonForTests(() => { throw new Error('reset'); });
     if (prevEnv.adm === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevEnv.adm;
