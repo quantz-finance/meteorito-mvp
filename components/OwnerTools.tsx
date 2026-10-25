@@ -16,7 +16,7 @@ import { COPY } from '@/lib/copy';
 import { track } from '@/lib/analytics';
 import { formatCRC, orderLink } from '@/lib/orders';
 import { HISTORY_TITLE, type AdInput } from '@/lib/sellerTools';
-import { SocialInputs } from '@/components/SocialLinks';
+import { SOCIAL_ICON, SOCIALS_TITLE, SocialInputs, socialKeysOf } from '@/components/SocialLinks';
 import { SOCIAL_KEYS, type SocialKey } from '../api/_lib/socials';
 import { setListingStatus, updateMyStore, type Store, type StoreItem } from '@/lib/store';
 const PayoutEntry = lazy(() => import('@/components/Payout').then((m) => ({ default: m.PayoutEntry }))); // diferido
@@ -25,13 +25,14 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
   store: Store; onStore: (s: Store) => void; managing: StoreItem | null; onCloseManage: () => void;
 }) {
   const auth = useAuth();
-  const [editing, setEditing] = useState(false); const [account, setAccount] = useState(false);
+  const [editing, setEditing] = useState<false | 'all' | 'socials'>(false); const [account, setAccount] = useState(false); // 'socials': la hoja solo con las redes (fila "Tus redes")
   const [ad, setAd] = useState<AdInput | null>(null);
   const [promote, setPromote] = useState(false); // "Promocionar este producto": por ahora solo avisa (sin cobro)
   const [slug, setSlug] = useState(''); const [name, setName] = useState('');
   const [socials, setSocials] = useState<Partial<Record<SocialKey, string>>>({});
   const [err, setErr] = useState<string | null>(null); const [saving, setSaving] = useState(false);
 
+  function openEdit(mode: 'all' | 'socials') { setSlug(store.store_slug); setName(store.display_name); setSocials({ ...store.socials }); setErr(null); setEditing(mode); }
   async function save() {
     setErr(null); setSaving(true);
     try {
@@ -65,7 +66,13 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
       </View>
       <Text style={T.footnote}>{COPY.store.ownerHint}</Text>
       <ListRow icon="create-outline" title={COPY.store.edit} right={<Icon name="chevron-forward" size={18} color={C.lilac} />}
-        onPress={() => { setSlug(store.store_slug); setName(store.display_name); setSocials({ ...store.socials }); setErr(null); setEditing(true); }} />
+        onPress={() => openEdit('all')} />
+      {/* Redes (031): fila propia para que cualquier vendedor las encuentre (antes solo dentro de "Editar nombre o usuario"). */}
+      <ListRow icon="link-outline" title={SOCIALS_TITLE} testID="owner-socials" onPress={() => openEdit('socials')}
+        right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {socialKeysOf(store.socials).map((k) => <Icon key={k} name={SOCIAL_ICON[k]} size={16} color={C.textDim} />)}
+          <Icon name="chevron-forward" size={18} color={C.lilac} />
+        </View>} />
       <ListRow icon="person-circle-outline" title={COPY.store.account} subtitle={COPY.store.accountHint} right={<Icon name="chevron-forward" size={18} color={C.lilac} />}
         onPress={() => setAccount(true)} />
       <ListRow icon="receipt-outline" title={HISTORY_TITLE} right={<Icon name="chevron-forward" size={18} color={C.lilac} />} onPress={() => router.push('/ventas')} />
@@ -99,8 +106,9 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
           <Text style={[T.callout, { textAlign: 'center' }]}>{COPY.sponsored.promoteText}</Text>
         </View>
       </Sheet>
-      <Sheet visible={editing} onClose={() => setEditing(false)} title="Editar mi tienda"
+      <Sheet visible={!!editing} onClose={() => setEditing(false)} title={editing === 'socials' ? SOCIALS_TITLE : 'Editar mi tienda'}
         footer={<PrimaryButton title="Guardar" loading={saving} onPress={save} />}>
+        {editing !== 'socials' ? <>
         <Text style={T.caption}>Tu nombre</Text>
         <TextInput style={ui.input} value={name} onChangeText={setName} maxLength={40} placeholder="Ej. Rolando" placeholderTextColor={C.textDim} accessibilityLabel="Tu nombre" />
         <Text style={T.caption}>Nombre de usuario</Text>
@@ -110,7 +118,8 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
             onChangeText={(v) => setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))} maxLength={30} autoCapitalize="none" autoCorrect={false} accessibilityLabel="Nombre de usuario" />
         </View>
         <Text style={T.footnote}>De 3 a 30 letras, números o guiones. Si lo cambias, el link anterior deja de funcionar. Tu tienda muestra tu nombre, tu puntuación y tus productos; nunca tu correo ni tu teléfono.</Text>
-        <SocialInputs value={socials} onChange={setSocials} />
+        </> : null}
+        <SocialInputs value={socials} onChange={setSocials} hideTitle={editing === 'socials'} />
         {err ? <ErrorText>{err}</ErrorText> : null}
       </Sheet>
     </Card></View>

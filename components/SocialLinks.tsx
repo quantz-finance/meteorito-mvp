@@ -10,10 +10,14 @@ export const SOCIAL_ICON: Record<SocialKey, IconName> = {
   instagram: 'logo-instagram', tiktok: 'logo-tiktok', facebook: 'logo-facebook', x: 'logo-x', youtube: 'logo-youtube', website: 'globe-outline',
 };
 const REL = 'noopener noreferrer nofollow';
+/** Título de la sección de redes (copy aprobado en #114): campo en "Editar mi tienda" y fila propia en "Tu tienda". */
+export const SOCIALS_TITLE = 'Tus redes (opcional)';
+/** Redes válidas (https canónico) en el orden de siempre. */
+export const socialKeysOf = (socials?: Socials | null): SocialKey[] => SOCIAL_KEYS.filter((k) => typeof socials?.[k] === 'string' && socials[k]!.startsWith('https://'));
 
 export function SocialRow({ socials }: { socials?: Socials | null }) {
-  const keys = SOCIAL_KEYS.filter((k) => typeof socials?.[k] === 'string' && socials[k]!.startsWith('https://'));
-  if (!keys.length) return null;
+  const keys = socialKeysOf(socials);
+  if (!keys.length) return null; // sin redes: ni iconos ni aviso
   return (
     <View style={{ gap: 4, marginTop: S.xs }}>
     <View style={s.row} testID="store-socials">
@@ -32,10 +36,10 @@ export function SocialRow({ socials }: { socials?: Socials | null }) {
   );
 }
 
-export function SocialInputs({ value, onChange }: { value: Partial<Record<SocialKey, string>>; onChange: (v: Partial<Record<SocialKey, string>>) => void }) {
+export function SocialInputs({ value, onChange, hideTitle }: { value: Partial<Record<SocialKey, string>>; onChange: (v: Partial<Record<SocialKey, string>>) => void; hideTitle?: boolean }) {
   return (
-    <View style={{ gap: S.sm }}>
-      <Text style={T.caption}>Tus redes (opcional)</Text>
+    <View style={{ gap: S.sm }} testID="social-inputs">
+      {hideTitle ? null : <Text style={T.caption}>{SOCIALS_TITLE}</Text>}
       {SOCIAL_KEYS.map((k) => (
         <View key={k} style={[ui.input, { flexDirection: 'row', alignItems: 'center', gap: S.sm }]}>
           <Icon name={SOCIAL_ICON[k]} size={20} color={C.lilac} />

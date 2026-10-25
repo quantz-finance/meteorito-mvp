@@ -10,7 +10,7 @@ import * as Clipboard from 'expo-clipboard';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OwnerTools } from '@/components/OwnerTools';
-import { SocialRow } from '@/components/SocialLinks';
+import { SocialRow, socialKeysOf } from '@/components/SocialLinks';
 import { clearStoreSocials, useIsAdmin } from '@/lib/admin';
 import { FollowButton } from '@/components/FollowButton';
 import { ChatButton } from '@/components/ChatButton';
@@ -118,14 +118,18 @@ function Profile({ p, activity, owner, admin, onClearSocials, mine, onMine, onMa
             {followers != null ? <Text style={T.footnote} testID="followers-count"><Text style={{ color: C.text, fontFamily: Fonts.bold }}>{followers}</Text> {COPY.follow.followers(followers)}</Text> : null}
             <ActivityLine activity={activity} />
             {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
-            {!p.demo ? <SocialRow socials={p.socials} /> : null}
-            {admin && !p.demo && p.socials && Object.keys(p.socials).length ? <PrimaryButton title="Borrar redes" icon="close-circle" variant="ghost" testID="admin-clear-socials" onPress={onClearSocials} /> : null}
             {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={[T.footnote, { flexShrink: 1 }]}>{COPY.identity.unconfirmed}</Text></View> : null}
             {!owner && !p.demo ? <View style={{ alignItems: 'flex-start', marginTop: S.xs }}>
               <FollowButton store={p} source="profile" onFollowers={(n, on) => setFollowers((cur) => (n != null ? n : cur == null ? null : Math.max(0, cur + (on ? 1 : -1))))} />
             </View> : null}
           </View>
         </View>
+        {/* Redes (031) a todo el ancho de la tarjeta (en la columna angosta no cabían en iPhone SE): iconos sin insignias y el
+            aviso pegado a ellos, solo si hay al menos una. También en tiendas de ejemplo si traen redes. */}
+        {socialKeysOf(p.socials).length ? <View style={{ paddingHorizontal: S.md }} testID="hero-socials">
+          <SocialRow socials={p.socials} />
+          {admin && !p.demo ? <PrimaryButton title="Borrar redes" icon="close-circle" variant="ghost" testID="admin-clear-socials" onPress={onClearSocials} /> : null}
+        </View> : null}
         {p.bio ? <Text style={[T.body, { paddingHorizontal: S.md }]} numberOfLines={4}>{p.bio}</Text> : null}
         <View style={s.stats}>
           <Stat icon="star" iconColor="#FFD84D" value={rated ? avg.toFixed(1) : 'Nuevo'} label={rated ? `${p.rating_count} reseña${p.rating_count === 1 ? '' : 's'}` : 'sin reseñas'} />

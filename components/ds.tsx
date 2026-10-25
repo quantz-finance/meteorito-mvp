@@ -337,7 +337,7 @@ export function ToastHost() {
 }
 
 /* ---------- Lista ---------- */
-export function ListRow({ icon, title, subtitle, right, onPress }: { icon?: IconName; title: string; subtitle?: string; right?: ReactNode; onPress?: () => void }) {
+export function ListRow({ icon, title, subtitle, right, onPress, testID }: { icon?: IconName; title: string; subtitle?: string; right?: ReactNode; onPress?: () => void; testID?: string }) {
   const inner = <>
     {icon ? <View style={st.rowIcon}><Icon name={icon} size={20} color={C.lilac} /></View> : null}
     <View style={{ flex: 1 }}>
@@ -346,8 +346,8 @@ export function ListRow({ icon, title, subtitle, right, onPress }: { icon?: Icon
     </View>
     {right}
   </>;
-  if (!onPress) return <View style={st.listRow}>{inner}</View>;
-  return <Pressable onPress={() => { haptic.tap(); onPress(); }} style={({ pressed }) => [st.listRow, pressTransition, pressed && st.pressed]}>{inner}</Pressable>;
+  if (!onPress) return <View style={st.listRow} testID={testID}>{inner}</View>;
+  return <Pressable testID={testID} onPress={() => { haptic.tap(); onPress(); }} style={({ pressed }) => [st.listRow, pressTransition, pressed && st.pressed]}>{inner}</Pressable>;
 }
 
 export const ErrorText = ({ children }: { children: ReactNode }) =>
