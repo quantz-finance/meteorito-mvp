@@ -48,6 +48,6 @@ export function SocialInputs({ value, onChange }: { value: Partial<Record<Social
 }
 
 const s = StyleSheet.create({
-  row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: S.sm, marginTop: 2 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-start', gap: S.sm, marginTop: S.xs },
   dot: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: C.lilacBg, borderWidth: StyleSheet.hairlineWidth, borderColor: C.line },
 });

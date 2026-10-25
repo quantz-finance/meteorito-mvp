@@ -39,6 +39,22 @@ test.describe('Tienda: una sola página', () => {
     if (info.project.name === 'webkit-iphone-se') await page.screenshot({ path: 'test-results/tienda-visitante.png' });
   });
 
+  test('STORE-05 tarjeta horizontal: foto, nombre, seguidores, reseñas y Seguir a la vista sin scroll', async ({ page }) => {
+    await open(page, '/t/jose-games', 'buyer', true);
+    const hero = page.getByTestId('profile-hero');
+    await expect(hero.getByRole('heading', { name: 'José Games' })).toBeVisible();
+    await expect(hero.getByText('@jose-games')).toBeVisible();
+    await expect(hero.getByTestId('followers-count')).toBeVisible();
+    await expect(hero.getByText(/reseña|sin reseñas/).first()).toBeVisible();
+    await expect(hero.getByText('miembro desde')).toBeVisible();
+    await expect(page.getByTestId('store-cover')).toHaveCount(0);
+    const follow = page.getByTestId('follow-profile');
+    await expect(follow).toBeVisible();
+    await settle(page); await noHScroll(page);
+    const vh = page.viewportSize()!.height;
+    expect((await hero.boundingBox())!.y + (await hero.boundingBox())!.height, 'tarjeta completa en la primera pantalla').toBeLessThanOrEqual(vh);
+  });
+
   test('STORE-03 compartir: navigator.share con el link de la tienda; sin share, copia el link', async ({ page }) => {
     await page.addInitScript(() => { (window as any).__shared = null; (navigator as any).share = async (d: unknown) => { (window as any).__shared = d; }; });
     await open(page, '/t/valeria', 'buyer', true);

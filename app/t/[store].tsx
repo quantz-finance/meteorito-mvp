@@ -17,7 +17,6 @@ import { DemoInfo } from '@/components/DemoInfo';
 import { useAuth } from '@/lib/cavos';
 import { isOwnerView, shareLink } from '@/lib/storePage';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
-const STORE_BANNER = require('../../assets/images/banner-tienda.jpg');
 import { haptic, Icon, IconButton, PrimaryButton, Screen, Skeleton, st, toast, type IconName } from '@/components/ds';
 import { BackButton } from '@/components/BackButton';
 import { StoreAvatar } from '@/components/StoreAvatar';
@@ -103,26 +102,27 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
   return (
     <View style={{ gap: S.lg }}>
       <View style={s.hero} testID="profile-hero">
-        {/* Portada fija, igual para todas las tiendas (nunca una foto subida ni de producto). */}
-        <View style={s.cover} testID="store-cover"><Image source={STORE_BANNER} style={s.coverImg} resizeMode="cover" accessibilityIgnoresInvertColors /></View>
-        <View style={s.avatarRing}>{owner && mine ? <StoreAvatar store={mine} size={92} editable onChange={onMine} /> : <StoreAvatar store={p} size={92} />}</View>
-        <View style={{ alignItems: 'center', gap: 2, paddingHorizontal: S.md }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
-            <Text style={[T.title, { flexShrink: 1, textAlign: 'center' }]} numberOfLines={2} accessibilityRole="header">{p.display_name}</Text>
-            {p.verified ? <VerifiedBadge size={20} /> : null}
-            {p.demo ? <DemoInfo kind="store" onDark={false} /> : null}
+        {/* Tarjeta horizontal: foto a la izquierda; nombre, insignias, seguidores, actividad y Seguir a la derecha. */}
+        <View style={s.top}>
+          {owner && mine ? <StoreAvatar store={mine} size={72} editable onChange={onMine} /> : <StoreAvatar store={p} size={72} />}
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
+              <Text style={[T.title, { flexShrink: 1, fontSize: 22, lineHeight: 27 }]} numberOfLines={2} accessibilityRole="header">{p.display_name}</Text>
+              {p.verified ? <VerifiedBadge size={18} /> : null}
+              {p.demo ? <DemoInfo kind="store" onDark={false} /> : null}
+            </View>
+            <Text style={T.callout} numberOfLines={1}>@{p.store_slug}</Text>
+            {followers != null ? <Text style={T.footnote} testID="followers-count"><Text style={{ color: C.text, fontFamily: Fonts.bold }}>{followers}</Text> {COPY.follow.followers(followers)}</Text> : null}
+            <ActivityLine activity={activity} />
+            {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
+            {!p.demo ? <SocialRow socials={p.socials} /> : null}
+            {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={[T.footnote, { flexShrink: 1 }]}>{COPY.identity.unconfirmed}</Text></View> : null}
+            {!owner && !p.demo ? <View style={{ alignItems: 'flex-start', marginTop: S.xs }}>
+              <FollowButton store={p} source="profile" onFollowers={(n, on) => setFollowers((cur) => (n != null ? n : cur == null ? null : Math.max(0, cur + (on ? 1 : -1))))} />
+            </View> : null}
           </View>
-          <Text style={T.callout} numberOfLines={1}>@{p.store_slug}</Text>
-          {followers != null ? <Text style={T.footnote} testID="followers-count"><Text style={{ color: C.text, fontFamily: Fonts.bold }}>{followers}</Text> {COPY.follow.followers(followers)}</Text> : null}
-          <ActivityLine activity={activity} center />
-          {p.bio ? <Text style={[T.body, { textAlign: 'center', marginTop: S.xs }]} numberOfLines={4}>{p.bio}</Text> : null}
-          {p.location ? <View style={s.metaRow}><Icon name="location-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{p.location}</Text></View> : null}
-          {!p.demo ? <SocialRow socials={p.socials} /> : null}
-          {!p.verified ? <View style={s.unverified} testID="unverified-note"><Icon name="information-circle-outline" size={14} color={C.textDim} /><Text style={T.footnote}>{COPY.identity.unconfirmed}</Text></View> : null}
         </View>
-        {!owner && !p.demo ? <View style={{ alignItems: 'center', marginTop: 2 }}>
-          <FollowButton store={p} source="profile" onFollowers={(n, on) => setFollowers((cur) => (n != null ? n : cur == null ? null : Math.max(0, cur + (on ? 1 : -1))))} />
-        </View> : null}
+        {p.bio ? <Text style={[T.body, { paddingHorizontal: S.md }]} numberOfLines={4}>{p.bio}</Text> : null}
         <View style={s.stats}>
           <Stat icon="star" iconColor="#FFD84D" value={rated ? avg.toFixed(1) : 'Nuevo'} label={rated ? `${p.rating_count} reseña${p.rating_count === 1 ? '' : 's'}` : 'sin reseñas'} />
           <View style={s.statSep} />
@@ -202,8 +202,7 @@ function Empty({ icon, text }: { icon: IconName; text: string }) {
 function ProfileSkeleton() {
   return (
     <View style={{ gap: S.md, alignItems: 'center' }} testID="profile-skeleton">
-      <Skeleton h={96} r={R.lg} /><Skeleton w={92} h={92} r={46} style={{ marginTop: -60 }} />
-      <Skeleton w="55%" h={24} /><Skeleton w="30%" h={16} /><Skeleton h={60} r={R.md} /><Skeleton h={50} r={R.pill} />
+      <View style={{ flexDirection: 'row', gap: S.md, alignSelf: 'stretch', alignItems: 'center' }}><Skeleton w={72} h={72} r={36} /><View style={{ flex: 1, gap: S.xs }}><Skeleton w="70%" h={24} /><Skeleton w="40%" h={16} /></View></View><Skeleton h={60} r={R.md} /><Skeleton h={50} r={R.pill} />
       <View style={{ flexDirection: 'row', gap: S.sm, alignSelf: 'stretch' }}><Skeleton w="48%" h={180} r={R.md} /><Skeleton w="48%" h={180} r={R.md} /></View>
     </View>
   );
@@ -219,13 +218,10 @@ function Notice({ icon, title, text }: { icon: IconName; title: string; text: st
 }
 
 const s = StyleSheet.create({
-  hero: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 0.5, borderColor: C.line, paddingBottom: S.md, gap: S.sm },
-  cover: { height: 96, backgroundColor: C.purple, overflow: 'hidden' },
-  // El asset ya viene recortado a la franja del meteorito (1280×400): con cover la cara (derecha) queda siempre a la vista.
-  coverImg: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
-  avatarRing: { alignSelf: 'center', marginTop: -58, padding: 4, borderRadius: 60, backgroundColor: C.surface },
+  hero: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 0.5, borderColor: C.line, paddingTop: S.md, paddingBottom: S.md, gap: S.sm },
+  top: { flexDirection: 'row', alignItems: 'flex-start', gap: S.md, paddingHorizontal: S.md },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  unverified: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: S.xs, paddingHorizontal: 10, paddingVertical: 3, borderRadius: R.pill, backgroundColor: 'rgba(255,255,255,0.06)' },
+  unverified: { alignSelf: 'flex-start', maxWidth: '100%', flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: S.xs, paddingHorizontal: 10, paddingVertical: 3, borderRadius: R.pill, backgroundColor: 'rgba(255,255,255,0.06)' },
   stats: { flexDirection: 'row', alignItems: 'flex-start', marginHorizontal: S.md, marginTop: S.xs, paddingTop: S.sm + 4, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.line },
   statSep: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch', backgroundColor: C.line },
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: S.sm },
