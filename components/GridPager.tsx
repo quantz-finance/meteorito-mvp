@@ -1,5 +1,6 @@
 // Cuadrícula paginada sin scroll: mide el espacio real disponible y decide cuántas columnas y filas caben.
 // Si no caben todos, pagina con flechas y puntos (sin scroll vertical). Cambio de página con un fundido suave.
+import { appearItem, appearSkip, useAppear } from '@/components/Appear';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useStableWindow } from '@/lib/viewport';
@@ -35,14 +36,15 @@ export function GridPager<T>({ items, keyOf, renderItem, minCellW, minCellH, gap
   const slice = items.slice(p * L.per, p * L.per + L.per);
   const go = (d: number) => { const n = Math.max(0, Math.min(L.pages - 1, p + d)); if (n !== p) { haptic.tap(); setPage(n); } };
 
+  const cycle = useAppear(); // cada celda entra escalonada (también al cambiar de página)
   const rows: T[][] = [];
   for (let i = 0; i < slice.length; i += L.cols) rows.push(slice.slice(i, i + L.cols));
   return (
-    <View style={{ flex: 1, minHeight: minCellH }} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (Math.abs(width - box.w) > 1 || Math.abs(height - box.h) > 1) setBox({ w: width, h: height }); }}>
-      <View key={`${p}-${L.per}`} {...anim('fade')} style={{ gap }}>
+    <View {...appearSkip} style={{ flex: 1, minHeight: minCellH }} onLayout={(e) => { const { width, height } = e.nativeEvent.layout; if (Math.abs(width - box.w) > 1 || Math.abs(height - box.h) > 1) setBox({ w: width, h: height }); }}>
+      <View key={`${p}-${L.per}`} style={{ gap }}>
         {rows.map((r, i) => (
           <View key={i} style={{ flexDirection: 'row', gap }}>
-            {r.map((t) => <View key={keyOf(t)} style={{ width: L.cellW, height: L.cellH }}>{renderItem(t, { width: L.cellW, height: L.cellH })}</View>)}
+            {r.map((t, j) => <View key={keyOf(t)} {...appearItem(cycle, i * L.cols + j)} style={{ width: L.cellW, height: L.cellH }}>{renderItem(t, { width: L.cellW, height: L.cellH })}</View>)}
           </View>
         ))}
       </View>

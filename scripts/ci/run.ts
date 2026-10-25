@@ -83,6 +83,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '85', name: 'Comprador sin cuenta: avisos por WhatsApp/correo/cuenta con consentimiento, link de acceso firmado, vínculo con cuenta, avisos por estado con tope, sin 028 no rompe', file: './t85-contacto-comprador.test.ts', onchain: false },
   { id: '89', name: 'Dónde cobrar (029): wallet Stellar con trustline o Cuenta IBAN con cola manual del admin, sin 029 como antes', file: './t89-cobro-wallet-iban.test.ts', onchain: false },
   { id: '88', name: 'Pago con cripto (USDC o XLM en Stellar): cotización con colchón y vencimiento, SEP-7, detección en Horizon, conversión XLM->USDC, de menos/de más/doble pago, invitado, cron', file: './t88-crypto-pay.test.ts', onchain: false },
+  { id: '91', name: 'Animación de entrada única: fade + subida 10 px, 280 ms, escalonada 40 ms con tope (~0,5 s), se repite al enfocar, instantánea con reducir movimiento y en tests; toda la app', file: './t91-animacion-entrada.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

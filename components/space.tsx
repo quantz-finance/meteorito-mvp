@@ -1,10 +1,10 @@
 // Fondo espacial de Meteorito (portado de meteorito.app): capas de imagen, no cientos de nodos.
 // Solo anima transform/opacity con Reanimated (hilo UI). Respeta "Reducir movimiento".
-import { createContext, memo, useContext, useEffect, type ReactNode } from 'react';
+import { createContext, memo, useContext, useEffect } from 'react';
 import { Image, Platform, StyleSheet, View, type ImageStyle, type StyleProp, type ViewStyle } from 'react-native';
 import { useStableWindow } from '@/lib/viewport';
 import Animated, {
-  cancelAnimation, Easing, FadeIn, FadeInDown, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue,
+  cancelAnimation, Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue,
   withDelay, withRepeat, withSequence, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { C } from '@/constants/theme';
@@ -80,12 +80,7 @@ export const SpaceBackground = memo(function SpaceBackground({ mode = 'full', sc
   );
 });
 
-/** Entrada escalonada (fade + slide). Con reducir movimiento: solo fade. */
-export const Reveal = memo(function Reveal({ i = 0, children, style }: { i?: number; children: ReactNode; style?: StyleProp<ViewStyle> }) {
-  const reduce = useReducedMotion();
-  const entering = reduce ? FadeIn.duration(200) : FadeInDown.delay(40 + i * 50).duration(300);
-  return <Animated.View entering={entering} style={style}>{children}</Animated.View>;
-});
+// Entrada de pantallas y bloques: components/Appear (animación única de la app).
 
 /* ---------- Mascota con estela (port exacto de .meteor en meteorito.app) ----------
  * Mismas capas que el landing: 3 llamas (f1-f3), 3 líneas de velocidad (l1-l3) y 10 brasas (e1-e10)

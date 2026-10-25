@@ -1,3 +1,4 @@
+import { AppearSub } from '@/components/Appear';
 import { DEVICE_NOT_AUTHORIZED, ensureSellerWalletOnLoad } from '@/lib/wallet';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
@@ -91,7 +92,7 @@ export default function Pedidos() {
       right={<><AdminDisputesButton /><SellerInboxButton /><IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} /></>}>
       {/* Sin botón "Actualizar" (era de pruebas): Home carga al enfocar, hace polling mientras haya pedidos no finales y
           vuelve a pedir al regresar a la app/pestaña (useFocusEffect + useOrdersRefresh). */}
-      <View style={{ flex: 1, gap: S.sm }}>
+      <AppearSub style={{ flex: 1, gap: S.sm }}>
       <SalesSummary orders={orders} compact={short} onHistory={() => router.push('/ventas')} />
       <RulesLink from="home" />
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
@@ -108,7 +109,7 @@ export default function Pedidos() {
           </Card>
         ) : <GridPager items={orders} keyOf={(o) => o.slug} minCellW={300} minCellH={short ? 66 : 118} maxCols={2} label="Página de pedidos"
             renderItem={(o) => <OrderCard order={o} timeline={!short} fill onPress={() => setOpenSlug(o.slug)} />} />}
-      </View>
+      </AppearSub>
 
       <AdTemplateSheet visible={!!ad} onClose={() => setAd(null)} ad={ad} />
       <AccountSheet visible={account} onClose={() => setAccount(false)} products={(orders ?? []).length} />
