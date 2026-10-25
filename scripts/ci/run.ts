@@ -90,6 +90,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '90', name: 'Chat con el producto (estilo Messenger): botón siempre en la ficha, tarjeta en el hilo, bandeja del vendedor con el producto, sin 030 como antes', file: './t90-chat-producto.test.ts', onchain: false },
   { id: '90', name: 'Home: resumen real + Tus ventas + Tus compras en filas compactas (sin la UI del proceso), lo que te toca primero, sin scroll, sin función nueva', file: './t90-home.test.ts', onchain: false },
   { id: '91', name: 'Buscador privado: el texto nunca va a analítica, logs ni URLs (POST, solo largo y resultados)', file: './t91-busqueda-privada.test.ts', onchain: false },
+  { id: '92', name: 'Pie del producto: texto exacto de custodia (sin "Protección: 7 días"), aviso legal una vez, barrido de la UI', file: './t92-pie-custodia.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

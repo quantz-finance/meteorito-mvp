@@ -43,7 +43,8 @@ export function ChatButton({ as, target, source, title = COPY.chat.send, icon = 
 
 /** "Preguntar al vendedor" en la ficha de un producto: siempre visible (sin cuenta, con la llave), sin esperar el perfil
  *  de la tienda (sin storeSlug abre solo con el producto). Se oculta si quien mira es el dueño de la tienda. */
-export function AskSellerButton({ storeSlug, itemSlug }: { storeSlug: string | null | undefined; itemSlug: string }) {
+/** Tienda propia de quien mira (undefined: cargando; null: sin cuenta o sin tienda). */
+export function useMyStoreSlug() {
   const auth = useAuth();
   const [mineSlug, setMineSlug] = useState<string | null | undefined>(auth.isAuthenticated ? undefined : null);
   useEffect(() => {
@@ -52,6 +53,12 @@ export function AskSellerButton({ storeSlug, itemSlug }: { storeSlug: string | n
     getMyStore(auth).then((x) => live && setMineSlug(x.store_slug)).catch(() => live && setMineSlug(null));
     return () => { live = false; };
   }, [auth.isAuthenticated, auth.address]);
+  return mineSlug;
+}
+
+export function AskSellerButton({ storeSlug, itemSlug }: { storeSlug: string | null | undefined; itemSlug: string }) {
+  const auth = useAuth();
+  const mineSlug = useMyStoreSlug();
   // Con sesión se espera a saber de quién es la tienda (undefined = cargando) para no mostrárselo un instante al dueño.
   if (mineSlug === undefined || (auth.isAuthenticated && storeSlug === undefined) || (storeSlug && isOwnerView(auth, mineSlug, storeSlug))) return null;
   const target: ChatTarget = storeSlug ? { store_slug: storeSlug, item_slug: itemSlug } : { item_slug: itemSlug };

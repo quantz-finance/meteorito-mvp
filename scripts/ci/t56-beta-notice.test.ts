@@ -56,7 +56,7 @@ export async function run(t: T) {
   t.check('nadie copia el texto a mano (solo lib/rules.ts)', files.every((f) => !read(f).includes('Beta en testnet')));
   const pay = read('components/PayBox.tsx');
   const payFooter = pay.slice(pay.indexOf("if (order.status === 'creado'"), pay.indexOf('} else if (sinpe'));
-  t.check('pago: <BetaNotice> ANTES del botón "Pagar en custodia"', payFooter.includes('<BetaNotice from="pay"') && payFooter.indexOf('<BetaNotice') < payFooter.indexOf('Pagar en custodia'));
+  t.check('pago: <BetaNotice custody> (pie de custodia) ANTES del botón "Pagar en custodia"', payFooter.includes('<BetaNotice from="pay" custody') && payFooter.indexOf('<BetaNotice') < payFooter.indexOf('Pagar en custodia'));
   const pinSheet = pay.slice(pay.indexOf("sheet === 'paid'"), pay.indexOf("sheet === 'photo'"));
   t.check('hoja tras pagar (antes del PIN): aviso (y cierra la hoja al ir a las reglas)', /<BetaNotice from="pin"[^>]*onNavigate/.test(pinSheet));
   t.check('hoja de disputa: aviso', /<BetaNotice from="dispute" onNavigate=\{onClose\}/.test(read('components/DisputeSheet.tsx')));
@@ -83,7 +83,7 @@ export async function run(t: T) {
   t.check(`contraste AA (≥4.5:1) de cada color del aviso (${fgTokens.join(', ')}) en ${Object.keys(bgs).length} fondos/temas`,
     fgTokens.length >= 2 && Object.keys(named).length >= 1 && worst.r >= 4.5, `mínimo ${worst.r.toFixed(2)} (C.${worst.f} sobre ${worst.b})`);
   const helpers = read('e2e/helpers.ts');
-  t.check('e2e "sin testnet/prueba": la excepción es SOLO BETA_NOTICE (documentada)', /withoutBetaNotice = \(text: string\) => text\.split\(BETA_NOTICE\)\.join\(''\)/.test(helpers)
+  t.check('e2e "sin testnet/prueba": las excepciones son SOLO BETA_NOTICE y CUSTODY_NOTICE (documentadas)', /withoutBetaNotice = \(text: string\) => text\.split\(CUSTODY_NOTICE\)\.join\(''\)\.split\(BETA_NOTICE\)\.join\(''\)/.test(helpers)
     && ['e2e/layout.spec.ts', 'e2e/buyer-fb.spec.ts', 'e2e/prod/smoke.spec.ts'].every((f) => !/expect\(text\)\.not\.toMatch\(\/[^/]*testnet/.test(read(f))));
   t.check('e2e MCK-BETA-01 (iPhone SE): aviso visible antes del botón de pagar', /MCK-BETA-01/.test(read('e2e/mock-guest.spec.ts')));
   // Animación de entrada (Neo): los avisos legales nunca arrancan en opacidad 0 ni dependen de que la animación termine.

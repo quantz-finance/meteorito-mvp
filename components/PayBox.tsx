@@ -7,7 +7,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { DisputeSheet } from '@/components/DisputeSheet';
 import { Image, Pressable, Text, View } from 'react-native';
 import { deliveryCodeVisible, F2F_CODE_HINT, F2F_PAID, PAID_WAITING } from '@/lib/shipping';
-import { agreementSummary } from '../api/_lib/agreement';
+import { agreementSummary, deliveryPhrase } from '../api/_lib/agreement';
+import { CUSTODY_RELEASE } from '@/lib/rules';
 import { ExtensionBox } from '@/components/ExtensionBox';
 import { Card, ErrorText, Icon, PrimaryButton, Sheet, SuccessCheck } from '@/components/ds';
 import { Fonts } from '@/constants/Colors';
@@ -64,7 +65,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const ext = buyerHere ? <ExtensionBox order={order} role="buyer" onChange={onChange} call={(b) => guestApi(auth, '/api/escrow/confirm', { slug: order.slug, ...b })} /> : null;
   const left = order.auto_release_at ? timeLeft(order.auto_release_at) : win;
   const releaseNote = <Text style={[T.footnote, { textAlign: 'center' }]}>
-    El pago se libera solo{left ? ` en ${left}` : f2f ? ' 24 h después del pago' : ' 7 días después del envío'} si no reportas un problema.
+    {left ? `El pago se libera solo en ${left} si no reportas un problema.` : `El pago ${CUSTODY_RELEASE}.`}
   </Text>;
   const codeBox = (hint: string) => pin ? <View style={{ alignItems: 'center', gap: 2 }}>
     <Text style={T.caption}>Tu código de entrega</Text>
@@ -152,7 +153,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.money}>{formatCRC(sinpe.priceCrc)}</Text>
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
-        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${agreement}.`} />
+        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${deliveryPhrase(order.delivery_mode)}; el pago ${CUSTODY_RELEASE}.`} />
       </>}
     </Sheet>
     <CardSheet visible={sheet === 'card' && !!sinpe && order.status === 'escrow_creado'} amountCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
@@ -174,7 +175,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
           <Text style={T.footnote}>Referencia {sinpe.reference}</Text>
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
-        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${agreement}.`} />
+        <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={`Al pagar aceptas: ${deliveryPhrase(order.delivery_mode)}; el pago ${CUSTODY_RELEASE}.`} />
         <Row icon="information-circle-outline" text='No envíes dinero: toca "Ya pagué" para continuar.' />
       </>}
     </Sheet>
@@ -208,7 +209,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       {err && !sheet && <ErrorText>{err}</ErrorText>}
       {agreementRow}
       {mine ? <PrimaryButton title="Ver mi pedido" icon="receipt-outline" variant="ghost" onPress={() => router.push({ pathname: '/p/[slug]', params: { slug: mine } })} /> : null}
-      <BetaNotice from="pay" />
+      <BetaNotice from="pay" custody />
       <PrimaryButton title={busy ? 'Preparando…' : `Pagar en custodia ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
         onPress={() => run(async () => {
           const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'start' });

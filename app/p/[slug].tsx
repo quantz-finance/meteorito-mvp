@@ -22,7 +22,9 @@ import { redeemAccess } from '@/lib/buyerContact';
 import { rememberPurchase } from '@/lib/purchases';
 import { SellerContact } from '@/components/SellerContact';
 import { OrderChatCard } from '@/components/OrderChat';
-import { AskSellerButton } from '@/components/ChatButton';
+import { AskSellerButton, useMyStoreSlug } from '@/components/ChatButton';
+import { FollowButton } from '@/components/FollowButton';
+import { isOwnerView } from '@/lib/storePage';
 import { canShowContact } from '../../api/_lib/contact';
 import { haptic } from '@/components/ds';
 import { getOrderSeller, rateOrder, ratedStars, rememberRated, type OrderSeller } from '@/lib/store';
@@ -270,6 +272,9 @@ function TrustBlock({ order }: { order: PublicOrder }) {
   const [seller, setSeller] = useState<OrderSeller | null | undefined>(undefined); // undefined: cargando
   useEffect(() => { let on = true; getOrderSeller(order.slug).then((x) => { if (on) setSeller(x); }); return () => { on = false; }; }, [order.slug]);
   const name = seller?.display_name ?? order.seller_name ?? null;
+  const auth = useAuth(), mineSlug = useMyStoreSlug();
+  // Seguir desde la ficha: no en tiendas/productos de ejemplo ni para el dueño (espera a saber de quién es la tienda).
+  const canFollow = !!seller && !seller.demo && !(order as any).demo && mineSlug !== undefined && !isOwnerView(auth, mineSlug, seller.store_slug);
   return (
     <View style={{ gap: S.sm }}>
       {name ? (
@@ -286,6 +291,7 @@ function TrustBlock({ order }: { order: PublicOrder }) {
               </View>
               {seller ? <StarsInline avg={seller.rating_avg} count={seller.rating_count} /> : null}
             </View>
+            {canFollow ? <FollowButton store={seller!} source="product" size="sm" /> : null}
             {seller ? <Icon name="chevron-forward" size={18} color={C.textDim} /> : null}
           </View>
           {seller ? <SalesOutcomeLine sales={seller.sales} /> : null}
