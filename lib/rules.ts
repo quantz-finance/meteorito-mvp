@@ -36,9 +36,8 @@ export const RULES: Rule[] = [
   { id: 'codigo', icon: 'key', title: 'Código de entrega',
     text: 'Con envío, el comprador ve su código cuando el pedido va en camino. Cara a cara, lo ve apenas paga y se lo da al vendedor cuando revisa el producto. Con ese código se libera el pago.' },
   { id: 'liberacion', icon: 'timer-outline', title: 'Liberación automática',
-    // Texto aprobado por Neo, ajustado al código: plazos 24 h/3/7 días u otro hasta 30; cara a cara cuenta desde el pago
-    // (24 h por defecto); el mínimo en producción es 24 h (nunca "poco después" del envío).
-    text: `Liberación por tiempo: quien vende elige el plazo (${C.minWindowHours} h, 3 días, ${C.autoReleaseDays} días u otro hasta ${C.maxWindowDays} días; por defecto, ${C.autoReleaseDays} días) y empieza a contar cuando marca el pedido como enviado (cara a cara, desde el pago; por defecto, ${C.faceToFaceHours} h). Ese plazo se puede extender. En la beta, la liberación por tiempo puede pasar desde ${C.minWindowHours} h después de que quien vende marca el pedido como enviado. Si algo no cuadra, abre la disputa antes de que se cumpla el plazo: con la disputa abierta, el pago queda en pausa, no se libera solo y se revisa a mano.`,
+    // Texto aprobado por Neo (literal).
+    text: `Liberación por tiempo: quien vende elige el plazo (${C.minWindowHours} h, 3 días o ${C.autoReleaseDays} días; por defecto, ${C.autoReleaseDays} días) y empieza a contar cuando marca el pedido como enviado. Ese plazo se puede extender. En la beta, la liberación por tiempo puede pasar poco después de que quien vende marca el pedido como enviado. Si algo no cuadra, abre la disputa antes de que se cumpla el plazo: con la disputa abierta, el pago queda en pausa, no se libera solo y se revisa a mano.`,
     points: [
       `El vendedor elige el plazo al crear el link, de ${C.minWindowHours} h a ${C.maxWindowDays} días. El comprador lo ve antes de pagar.`,
       `Cualquiera de los dos puede pedir ${C.extensionDays.join(', ').replace(/, (\d+)$/, ' o $1')} días más; el otro acepta o rechaza. Nunca más de ${C.maxWindowDays} días desde el pago.`,
