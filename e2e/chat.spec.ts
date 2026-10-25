@@ -115,7 +115,7 @@ test('CHAT-02 chat dentro de una compra: comprador en el seguimiento, vendedor e
   await shot(page, 'order');
 
   // Vendedor: desde la venta en Home (hoja del pedido) -> "Chatear con el comprador"
-  await openSellerRow(page, /Pagado/, /Chatear con el comprador/);
+  await openSellerRow(page, /Envíalo|Entrégalo/, /Chatear con el comprador/);
   await page.getByTestId('order-chat-seller').click();
   await expect(page).toHaveURL(/\/chat\?c=.+&r=s/);
   await expect(page.getByTestId('chat-context')).toContainText('Bici de montaña');

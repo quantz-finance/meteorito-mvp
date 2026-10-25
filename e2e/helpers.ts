@@ -79,8 +79,12 @@ export const VOSEO = word('tenés|podés|querés|sabés|pagás|confirmá|tocá|e
 export async function openSellerRow(page: Page, statusText: string | RegExp, ready: string | RegExp) {
   await expect(async () => {
     await open(page, '/pedidos', 'seller');
-    // Cada fila trae la línea de tiempo (Pagado/Enviado/…): se excluye el producto publicado («Disponible»)
-    const row = page.getByRole('button').filter({ hasText: statusText }).filter({ hasNotText: 'Disponible' }).first();
+    // Home: filas de "Tus ventas" con una pastilla corta (Envíalo/Entrégalo cuando te toca, Enviado, En disputa…).
+    // Si la venta no cabe en la pantalla, está en "Ver todas · N" (hoja con la lista completa).
+    const sel = () => page.locator('[data-testid^="home-sale-row"]').filter({ hasText: statusText }).first();
+    await expect(page.locator('[data-testid^="home-sale-row"]').first()).toBeVisible({ timeout: 5000 });
+    if (!(await sel().isVisible())) { const more = page.getByRole('button', { name: /\(ventas\)$/ }); if (await more.count()) await more.click(); }
+    const row = sel();
     await expect(row).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(250);
     await row.click({ timeout: 5000 });
