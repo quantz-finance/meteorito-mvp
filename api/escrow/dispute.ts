@@ -13,7 +13,7 @@
 //                                                  -> auditoría + resolución on-chain (si el servidor tiene DISPUTE_RESOLVER_SECRET;
 //                                                     si no, queda 'pending_onchain' con el comando del script)
 //   { action:'admin_guest_refund', slug, note? }   -> marca como hecha la devolución por fuera al comprador invitado
-//   { action:'admin_payouts' } / { action:'admin_payout_paid', slug, note } -> cola de pagos a Cuenta IBAN (029; sin ella available:false)
+//   { action:'admin_payouts' } / { action:'admin_payout_reviewed', slug, note } (alias viejo: admin_payout_paid) -> cola de pagos a Cuenta IBAN (029; sin ella available:false)
 //  Vendedor del pedido (Bearer Cavos):
 //   { action:'seller_response_get', slug }         -> { available, open, response, deadline, can_respond }
 //   { action:'seller_respond', slug, body, photo?, capture? } -> su versión (texto + foto de la cámara, token 'dispute' propio)
@@ -50,7 +50,7 @@ async function action(req: any, res: any, a: string) {
   if (a === 'admin_guest_refund') return json(res, 200, await markGuestRefunded(await orderBySlug(b.slug), admin, b.note));
   // Cola manual de pagos a Cuenta IBAN (029): el escrow liberó a 'platform'; el equipo transfiere y la marca como pagada.
   if (a === 'admin_payouts') return json(res, 200, await adminPayouts());
-  if (a === 'admin_payout_paid') return json(res, 200, await markPayoutPaid(b.slug, admin, b.note));
+  if (a === 'admin_payout_reviewed' || a === 'admin_payout_paid') return json(res, 200, await markPayoutPaid(b.slug, admin, b.note));
   throw new HttpError(400, 'acción inválida');
 }
 

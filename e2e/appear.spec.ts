@@ -5,8 +5,9 @@ import { expect, test, type Page } from '@playwright/test';
 import { open } from './helpers';
 
 const enable = (page: Page) => page.addInitScript(() => localStorage.setItem('meteorito:e2e-anim', '1'));
-/** Animación de entrada de los hijos de un grupo: [nombre, duración ms, retraso ms]. */
-const groupAnims = (page: Page, sel: string) => page.evaluate((s) => Array.from(document.querySelectorAll(`${s}>*`)).map((e) => {
+/** Animación de entrada de los hijos de un grupo: [nombre, duración ms, retraso ms]. Sin los avisos legales (y bloques que
+ *  los contienen): esos nunca se animan (Neo; e2e/legal-visible.spec.ts). */
+const groupAnims = (page: Page, sel: string) => page.evaluate((s) => Array.from(document.querySelectorAll(`${s}>*`)).filter((e) => e.matches('[data-appear-sub]') || (!e.matches('[data-legal]') && !e.querySelector('[data-legal]'))).map((e) => {
   const c = getComputedStyle(e); return [c.animationName, parseFloat(c.animationDuration) * 1000, parseFloat(c.animationDelay) * 1000] as [string, number, number];
 }), sel);
 
@@ -21,6 +22,8 @@ test.describe('Entrada', () => {
     const sub = await groupAnims(page, '[data-appear-sub]');
     expect(sub.length).toBeGreaterThanOrEqual(4); // importar, nombre, precio, fotos…
     for (const [name, dur] of sub) { expect(name).toMatch(/^m-ap-[ab]$/); expect(dur).toBe(280); }
+    // el aviso de beta (hijo del mismo grupo) queda fuera: sin animación de entrada
+    await expect(page.locator('[data-appear-sub]>[data-legal][data-testid="beta-notice"]')).toHaveCSS('animation-name', 'none');
     const delays = sub.map((x) => x[2]);
     expect(delays[1]).toBeGreaterThan(delays[0]); // escalonado
     expect(Math.max(...delays) + 280).toBeLessThanOrEqual(560); // todo visible en ~0,5 s

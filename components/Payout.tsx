@@ -1,7 +1,7 @@
 // "Arma un gran perfil": progreso del perfil + dónde cobrar (Cuenta IBAN o wallet Stellar, 029) + WhatsApp de contacto (opcional). Se carga diferido (React.lazy) desde
 // Mi cuenta y Mi tienda: no pesa en la bienvenida ni en /p/.
 import { COPY } from '@/lib/copy';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { ErrorText, haptic, Icon, PrimaryButton, Sheet, Skeleton, toast } from '@/components/ds';
 import { ui } from '@/components/ui';
@@ -11,10 +11,11 @@ import { useAuth } from '@/lib/cavos';
 import { getMyStore, updateMyStore, type Store } from '@/lib/store';
 import { contactPhoneError, formatContactPhone, normalizeContactPhone } from '../api/_lib/contact';
 import { StoreAvatar } from '@/components/StoreAvatar';
-import { checkPayoutWallet, crIbanError, formatIban, getPayoutState, maskIban, maskPhone, normalizeIban, normalizeSinpe, profilePct, profileSteps, savePayout, savePayoutWallet, shortStellar, stellarAddressError, type PayoutView, type WalletCheck } from '@/lib/payout';
+import { checkPayoutWallet, formatIban, getPayoutState, maskIban, maskPhone, profilePct, profileSteps, savePayout, savePayoutWallet, shortStellar, stellarAddressError, type PayoutView, type WalletCheck } from '@/lib/payout';
 import { userMessage } from '@/lib/cavosSession';
+import { HOLDER_PLACEHOLDER, IBAN_HELP, IBAN_LABEL, IBAN_PLACEHOLDER, SINPE_PLACEHOLDER } from '../api/_lib/payout';
 
-const PAYOUT_COPY = 'Aquí te llega el dinero cuando se libere una venta.';
+const PAYOUT_COPY = 'Elige a dónde se libera cada venta.';
 
 /** Estado compartido de la tarjeta: tienda (nombre/usuario/productos) + cuenta para cobrar. */
 function useProfile() {
@@ -201,16 +202,24 @@ function PayoutRow({ payout, error, onPress, compact, choice }: { payout: Payout
   );
 }
 
+/** Campo de solo lectura con el dato de ejemplo. Nunca entra a PostHog: clase y data-attr ph-no-capture (además de
+ *  autocapture apagado y sin grabación de sesión en lib/analytics.ts). */
+function PrivateInput({ value, label, testID, mono }: { value: string; label: string; testID: string; mono?: boolean }) {
+  const ref = useRef<any>(null);
+  useEffect(() => { const el = ref.current as HTMLElement | null; el?.classList?.add?.('ph-no-capture'); }, []);
+  return (
+    <TextInput ref={ref} style={[ui.input, { opacity: 0.75 }, mono && { fontVariant: ['tabular-nums'], letterSpacing: 0.5 }]} value={value} editable={false} readOnly
+      selectTextOnFocus={false} accessibilityLabel={label} testID={testID} autoComplete="off" {...({ dataSet: { phNoCapture: 'true' } } as object)} />
+  );
+}
+
 const inputPlain = { flex: 1, minWidth: 0, fontSize: 16, color: C.text, paddingVertical: S.sm, outlineStyle: 'none' } as object;
 
 type Method = 'iban' | 'wallet';
 const METHOD_LABEL: Record<Method, string> = { iban: 'Cuenta IBAN', wallet: 'Wallet Stellar' };
 export const PAYOUT_TEXT = {
   ibanTitle: 'Recibir en tu cuenta (IBAN)',
-  walletTitle: 'Recibir USDC en tu wallet Stellar',
-  ibanManual: 'Al liberarse una venta, te transferimos a esta cuenta. Lo hacemos a mano, en días hábiles.',
-  ibanOnlyRegister: 'Por ahora solo registras la cuenta. Solo tú la ves, y siempre enmascarada. Tu tienda pública nunca la muestra.',
-  ibanPrivate: 'Solo tú la ves, enmascarada.',
+  walletTitle: 'Recibir USDC de testnet en tu wallet Stellar (no es dinero real)',
   walletNote: 'Al liberarse la venta, el USDC llega directo a esta dirección. Revisa bien: un envío a otra dirección no se puede revertir.',
   walletReady: 'Lista para recibir USDC.',
   walletNoTrust: 'Tu wallet todavía no acepta USDC. Agrega USDC (trustline) en tu wallet; mientras tanto, cobras en tu cuenta de Meteorito.',
@@ -221,19 +230,15 @@ export const PAYOUT_TEXT = {
 export function PayoutSheet({ visible, onClose, payout, onSaved, choice = false }: { visible: boolean; onClose: () => void; payout: PayoutView | null; onSaved: (p: PayoutView) => void; choice?: boolean }) {
   const auth = useAuth();
   const [method, setMethod] = useState<Method>('iban');
-  const [iban, setIban] = useState(''); const [holder, setHolder] = useState(''); const [sinpe, setSinpe] = useState('');
   const [addr, setAddr] = useState(''); const [check, setCheck] = useState<WalletCheck | 'checking' | null>(null);
   const [touched, setTouched] = useState(false); const [err, setErr] = useState<string | null>(null); const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!visible) return;
-    setMethod(choice && payout?.method === 'wallet' ? 'wallet' : 'iban');
-    setIban(''); setHolder(payout?.holder_name ?? ''); setSinpe(''); setAddr(payout?.stellar_address ?? ''); setCheck(null); setTouched(false); setErr(null);
+    setMethod(choice && payout?.method !== 'iban' ? 'wallet' : 'iban');
+    setAddr(payout?.stellar_address ?? ''); setCheck(null); setTouched(false); setErr(null);
   }, [visible]);
-  const raw = normalizeIban(iban);
-  const ibanErr = crIbanError(raw);
-  const showIbanErr = (touched || raw.length >= 22) && raw.length > 0 && ibanErr;
-  const sinpeN = normalizeSinpe(sinpe);
-  const okIban = !ibanErr && holder.trim().length >= 3 && sinpeN !== 'invalid';
+  // Beta en testnet: la Cuenta IBAN es un dato de ejemplo fijo (solo lectura). El servidor descarta lo que llegue y guarda este.
+  const okIban = true;
   const a = addr.trim().toUpperCase();
   const addrErr = stellarAddressError(a);
   const showAddrErr = a.length > 0 && (a.length >= 56 || touched) && addrErr;
@@ -250,7 +255,7 @@ export function PayoutSheet({ visible, onClose, payout, onSaved, choice = false 
     setTouched(true); if (!ok) return;
     setBusy(true); setErr(null);
     try {
-      const p = method === 'wallet' ? (await savePayoutWallet(auth, a)).payout : await savePayout(auth, { iban: raw, holder_name: holder, sinpe_phone: sinpeN || undefined });
+      const p = method === 'wallet' ? (await savePayoutWallet(auth, a)).payout : await savePayout(auth);
       haptic.success(); toast(method === 'wallet' ? 'Wallet guardada' : 'Cuenta guardada'); onSaved(p);
     }
     catch (e) { haptic.error(); setErr(userMessage((e as Error).message)); }
@@ -260,7 +265,7 @@ export function PayoutSheet({ visible, onClose, payout, onSaved, choice = false 
     <Sheet visible={visible} onClose={onClose} title={choice ? 'Dónde cobrar' : payout ? 'Cambiar cuenta para cobrar' : 'Tu cuenta para cobrar'}
       footer={<PrimaryButton title={method === 'wallet' ? 'Guardar wallet' : 'Guardar cuenta'} icon="checkmark" loading={busy} disabled={!ok} onPress={save} />}>
       {choice ? <View style={s.seg} accessibilityRole="tablist">
-        {(['iban', 'wallet'] as Method[]).map((m) => {
+        {(['wallet', 'iban'] as Method[]).map((m) => {
           const on = m === method;
           return (
             <Pressable key={m} testID={`payout-${m}`} accessibilityRole="tab" accessibilityState={{ selected: on }} accessibilityLabel={m === 'iban' ? PAYOUT_TEXT.ibanTitle : PAYOUT_TEXT.walletTitle}
@@ -290,28 +295,14 @@ export function PayoutSheet({ visible, onClose, payout, onSaved, choice = false 
         {err ? <ErrorText>{err}</ErrorText> : null}
         <Text style={T.footnote}>{PAYOUT_TEXT.walletNote} {PAYOUT_TEXT.fromNow}</Text>
       </> : <>
-        <Text style={T.callout}>{choice ? PAYOUT_TEXT.ibanTitle : PAYOUT_COPY}</Text>
-        {payout?.iban_last4 ? <Text style={T.footnote}>Actual: {maskIban(payout.iban_last4)}. Escribe la cuenta completa para cambiarla.</Text> : null}
-        <Text style={T.caption}>Cuenta IBAN</Text>
-        <View style={[ui.input, s.inRow, showIbanErr ? { borderColor: C.orange } : !ibanErr ? { borderColor: C.success } : null]}>
-          <TextInput style={[inputPlain, { fontVariant: ['tabular-nums'], letterSpacing: 0.5 }]} value={formatIban(iban)} onChangeText={(v) => setIban(normalizeIban(v).slice(0, 22))}
-            onBlur={() => setTouched(true)} placeholder="CR00 0000 0000 0000 0000 00" placeholderTextColor={C.textDim} autoCapitalize="characters" autoCorrect={false}
-            maxLength={27} accessibilityLabel="Cuenta IBAN" autoComplete="off" />
-          {!ibanErr ? <Icon name="checkmark-circle" size={20} color={C.success} /> : null}
-        </View>
-        {showIbanErr ? <ErrorText>{ibanErr}</ErrorText> : <Text style={T.footnote}>CR y 20 números. La ves en los datos de tu cuenta.</Text>}
+        <Text style={[T.caption, { textTransform: 'none' }]} testID="payout-iban-label">{IBAN_LABEL}</Text>
+        <PrivateInput value={formatIban(IBAN_PLACEHOLDER)} label="Cuenta IBAN de ejemplo" testID="payout-iban-input" mono />
         <Text style={T.caption}>Nombre del titular</Text>
-        <TextInput style={ui.input} value={holder} onChangeText={setHolder} maxLength={80} placeholder="Como aparece en tu cuenta" placeholderTextColor={C.textDim}
-          autoComplete="name" accessibilityLabel="Nombre del titular" />
-        <Text style={T.caption}>SINPE Móvil (opcional)</Text>
-        <View style={[ui.input, s.inRow]}>
-          <Text style={[T.body, { color: C.textDim }]}>+506</Text>
-          <TextInput style={inputPlain} value={sinpe} onChangeText={(v) => setSinpe(v.replace(/[^\d ]/g, '').slice(0, 9))} keyboardType="phone-pad"
-            placeholder="8888 1234" placeholderTextColor={C.textDim} accessibilityLabel="SINPE Móvil, opcional" autoComplete="tel-national" />
-        </View>
-        {sinpeN === 'invalid' && sinpe.replace(/\D/g, '').length >= 8 ? <ErrorText>El SINPE Móvil son 8 dígitos (ej. 8888 1234).</ErrorText> : null}
+        <PrivateInput value={HOLDER_PLACEHOLDER} label="Titular de ejemplo" testID="payout-holder-input" />
+        <Text style={T.caption}>SINPE Móvil</Text>
+        <PrivateInput value={`+506 ${SINPE_PLACEHOLDER.replace(/(\d{4})(\d{4})/, '$1 $2')}`} label="SINPE Móvil de ejemplo" testID="payout-sinpe-input" mono />
         {err ? <ErrorText>{err}</ErrorText> : null}
-        <Text style={T.footnote}>{choice ? `${PAYOUT_TEXT.ibanManual} ${PAYOUT_TEXT.ibanPrivate}` : PAYOUT_TEXT.ibanOnlyRegister}</Text>
+        <Text style={T.footnote} testID="payout-iban-help">{IBAN_HELP}</Text>
       </>}
     </Sheet>
   );

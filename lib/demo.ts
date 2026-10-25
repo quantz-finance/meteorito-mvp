@@ -18,7 +18,7 @@ export function demoEnabled(flag: string | undefined, host?: string | null): boo
 // Expo inlinea EXPO_PUBLIC_* solo con acceso estático process.env.X.
 export const DEMO_ENABLED = demoEnabled(process.env.EXPO_PUBLIC_DEMO_MODE, typeof window !== 'undefined' ? window.location?.hostname : null);
 
-import { cleanHolder, crIbanError, normalizeIban, normalizeSinpe, type PayoutView } from '../api/_lib/payout'; // pura y chica (~1 KB)
+import { HOLDER_PLACEHOLDER, IBAN_PLACEHOLDER, SINPE_PLACEHOLDER, type PayoutView } from '../api/_lib/payout'; // pura y chica (~1 KB)
 import { canShowContact, normalizeContactPhone } from '../api/_lib/contact'; // pura
 import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/fbparse'; // pura
 import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
@@ -159,8 +159,12 @@ const DEMO_CAPTURE_TTL = 5 * 60_000;
 /** JPEG mínimo (1x1) para los pedidos sembrados como enviados. */
 const DEMO_SHIP_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
 
+/** Latencia simulada (ms) de cada llamada: 0 por defecto. Los tests y capturas la suben para ver el estado "cargando". */
+let demoLatency = 0;
+
 /** Reemplazo de los endpoints /api/*: misma forma de respuesta, sin red. */
 export async function demoApi(path: string, body: any = {}, token?: string | null): Promise<any> {
+  if (demoLatency > 0) await new Promise((r) => setTimeout(r, demoLatency));
   const st = S(); const p = path.split('?')[0];
   // Sesión vencida simulada: como producción, el token viejo ya no sirve y se pide volver a entrar (sin perder nada).
   if (st.session?.expired && token !== undefined) throw err(401, 'session_relogin_required', 'Tu sesión venció. Vuelve a entrar con la misma cuenta para continuar.');
@@ -446,10 +450,8 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
       return { payout: st.payout, state: s2 };
     }
     if (body.action === 'payout_set') {
-      const e = crIbanError(body.iban); if (e) throw err(400, 'bad_iban', e);
-      const holder = cleanHolder(body.holder_name); if (holder.length < 3) throw err(400, 'bad_holder', 'Escribe el nombre del titular como aparece en tu cuenta.');
-      const sp = normalizeSinpe(body.sinpe_phone); if (sp === 'invalid') throw err(400, 'bad_sinpe', 'El SINPE Móvil son 8 dígitos (ej. 8888 1234).');
-      st.payout = { method: 'iban', iban_last4: normalizeIban(body.iban).slice(-4), holder_name: holder, sinpe_last4: sp ? sp.slice(-4) : null, stellar_address: st.payout?.stellar_address ?? null, updated_at: now() }; emit();
+      // Igual que el servidor en la beta: lo enviado se descarta y queda el dato de ejemplo.
+      st.payout = { method: 'iban', iban_last4: IBAN_PLACEHOLDER.slice(-4), holder_name: HOLDER_PLACEHOLDER, sinpe_last4: SINPE_PLACEHOLDER.slice(-4), stellar_address: st.payout?.stellar_address ?? null, updated_at: now() }; emit();
       return { payout: st.payout };
     }
     st.store ??= { slug: 'valeria', name: 'Valeria' };
@@ -563,6 +565,7 @@ if (DEMO_ENABLED && hasWindow()) {
     setBuyer: (b: string) => { S().buyer = b; emit(); }, advance: (ms: number) => { S().clock = (S().clock ?? 0) + ms; emit(); },
     cron: demoRunCron, resolve: demoResolve, state: () => S(), expireSession: demoExpireSession,
     api: demoApi, setAdmin: (v: boolean) => { S().admin = v; emit(); },
+    setLatency: (ms: number) => { demoLatency = Math.max(0, Math.min(10_000, Number(ms) || 0)); },
     /** Simula que llegó el pago con cripto del pedido (lo detecta el siguiente crypto_status). */
     cryptoPay: (slug: string, asset: 'USDC' | 'XLM' = 'USDC', amount = 1) => { const st = S(); st.cryptoPaid = { ...(st.cryptoPaid ?? {}), [slug]: { asset, amount } }; emit(); },
   };

@@ -51,23 +51,21 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('Guitarra')).toBeVisible();
   });
 
-  test('VEN-05 Mi cuenta: IBAN inválido se rechaza, válido se guarda enmascarado', async ({ page }) => {
+  test('VEN-05 Mi cuenta: Cuenta IBAN en la beta = dato de ejemplo de solo lectura; lo escrito no se guarda', async ({ page }) => {
     await open(page, '/mi-tienda', 'seller', true);
-    await page.getByText('Elige dónde cobrar').click(); // con 029 (el demo la simula): Cuenta IBAN por defecto
-    const iban = page.getByPlaceholder('CR00 0000 0000 0000 0000 00');
+    await page.getByText('Elige dónde cobrar').click();
+    await page.getByTestId('payout-iban').click();
+    const iban = page.getByTestId('payout-iban-input');
+    await expect(iban).toHaveValue('CR00 0000 0000 0000 0000 00');
+    await expect(iban).not.toBeEditable();
+    await iban.press('5').catch(() => {}); // intentar escribir no cambia nada
+    await expect(iban).toHaveValue('CR00 0000 0000 0000 0000 00');
+    await expect(page.getByTestId('payout-sinpe-input')).not.toBeEditable();
     const save = page.getByRole('button', { name: /Guardar cuenta/ });
-    await page.getByPlaceholder('Como aparece en tu cuenta').fill('Valeria Mora');
-    await iban.fill('CR05015202001026284067'); // dígito de control mod-97 malo
-    await expect(save).toBeDisabled();
-    await iban.fill('CR05015202001026284066');
-    await page.getByPlaceholder('8888 1234').fill('8888123');  // SINPE de 7 dígitos
-    await expect(save).toBeDisabled();
-    await page.getByPlaceholder('8888 1234').fill('88881234');
     await expect(save).toBeEnabled();
     await save.click();
-    await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1')!).payout?.iban_last4)).toBe('4066');
-    await expect(page.getByText(/4066/).first()).toBeVisible();
-    await expect(page.getByText('CR05015202001026284066')).toHaveCount(0); // siempre enmascarada
+    await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('meteorito:demo:v1')!).payout)).toMatchObject({ method: 'iban', iban_last4: '0000', holder_name: 'Dato de ejemplo', sinpe_last4: '0000' });
+    await expect(page.getByText(/0000/).first()).toBeVisible();
   });
 
   // Importar de un link: el API simulado del demo responde como /api/store {action:'import_listing'} (sin red).
@@ -160,5 +158,55 @@ test.describe('Vendedor (demo)', () => {
     expect(beta!.y + beta!.height).toBeLessThanOrEqual(btn!.y);
     await expect(page.getByText('Modo prueba', { exact: false })).toHaveCount(0);
     if (info.project.name === 'webkit-iphone-se') { await page.screenshot({ path: 'test-results/import-2-vista-previa.png' }); }
+  });
+  test('VEN-10 círculo "Generar link": grande, apagado hasta que todo está listo, tiembla si falta algo, onda y cargando al lanzar', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    const btn = page.getByRole('button', { name: 'Generar link' });
+    await expect(btn).toBeVisible();
+    await expect(btn).toBeInViewport({ ratio: 1 }); // alcanzable sin scroll
+    const b = (await btn.boundingBox())!;
+    expect(b.width).toBeGreaterThanOrEqual(96);
+    expect(Math.abs(b.width - b.height)).toBeLessThanOrEqual(1); // círculo
+    expect(await btn.evaluate((e) => getComputedStyle(e).borderRadius)).toMatch(/^(4[8-9]|[5-9]\d|\d{3})px$/);
+    await expect(btn).toHaveAttribute('data-state', 'idle'); // apagado: falta nombre, precio y foto
+    await expect(btn).toBeEnabled(); // pero se puede tocar: muestra qué falta
+    await btn.click();
+    await expect(page.getByText('Escribe qué vendes.')).toBeVisible();
+    await expect(page.getByText('¡Tu link está listo!')).toHaveCount(0);
+    await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
+    await page.getByPlaceholder('0').fill('150000');
+    await expect(btn).toHaveAttribute('data-state', 'idle'); // sin foto sigue apagado
+    await takePhoto(page);
+    await expect(btn).toHaveAttribute('data-state', 'ready');
+    await expectNoScroll(page);
+    await expectInputs16(page);
+    // Lanzar: se ve cargando (latencia simulada del demo) y luego el link
+    await page.evaluate(() => {
+      (window as any).__meteoritoDemo.setLatency(800);
+      const el = document.querySelector('[data-testid="launch-button"]')!; (window as any).__states = [];
+      new MutationObserver(() => (window as any).__states.push(el.getAttribute('data-state'))).observe(el, { attributes: true, attributeFilter: ['data-state'] });
+    });
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-busy', 'true');
+    await expect(page.locator('[data-anim="shock"]')).toHaveCount(1); // onda expansiva
+    await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__states)).toContain('busy');
+  });
+});
+
+test.describe('Vendedor (demo) con reducir movimiento', () => {
+  test.use({ reducedMotion: 'reduce' });
+  test('VEN-11 círculo quieto: sin partículas ni onda, órbitas sin bucle; sigue funcionando', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
+    await page.getByPlaceholder('0').fill('150000');
+    await takePhoto(page);
+    const btn = page.getByRole('button', { name: 'Generar link' });
+    await expect(btn).toHaveAttribute('data-state', 'ready');
+    await expect(page.locator('[data-anim="floaters"]')).toHaveCSS('display', 'none');
+    const orbit = await page.locator('[data-anim="orbit"]').evaluate((e) => getComputedStyle(e).animationIterationCount);
+    expect(orbit).toBe('1');
+    await btn.click();
+    await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
   });
 });
