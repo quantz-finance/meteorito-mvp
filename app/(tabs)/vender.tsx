@@ -10,6 +10,7 @@ import type { MeteoritoAuth } from '@/lib/types';
 import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { COPY } from '@/lib/copy';
@@ -34,6 +35,7 @@ import { CameraCapture } from '@/components/CameraCapture';
 import type { CapturedPhoto } from '@/lib/capture';
 import { formatPriceInput, isListingValid, parsePrice, TITLE_MAX, validateListing, type ListingErrors } from '@/lib/listing';
 import { LaunchButton } from '@/components/LaunchButton';
+import { LAUNCH_STAGE_MIN, launchSize } from '@/lib/launchCore';
 import { supabaseConfigured } from '@/lib/supabase';
 import { loadSellDraft, saveSellDraft } from '@/lib/sellDraft';
 import { priceBucket, track, trackError } from '@/lib/analytics';
@@ -84,7 +86,11 @@ function VenderForm() {
   const [customDays, setCustomDays] = useState('');
   const customMin = customOpen ? daysToMinutes(customDays) : null;
   const pickMode = (m: DeliveryMode) => { haptic.tap(); setMode(m); setWindowMin(DEFAULT_PROTECTION_MIN[m]); setCustomOpen(false); setCustomDays(''); };
-  const short = useStableWindow().height < 740; // iPhone SE y similares: menos aire, todo en una pantalla
+  const winH = useStableWindow().height;
+  const short = winH < 740; // iPhone SE y similares: menos aire, todo en una pantalla
+  // Alto útil real (PWA en iPhone: sin la barra de estado ni la del home): con < 800 px el formulario va compacto para
+  // que el círculo tenga su espacio grande (iPhone 14/15 en pantalla completa).
+  const insets = useSafeAreaInsets();
 
   // Respuesta a una invitación del comprador (?invite=codigo): nombre y precio precargados; el precio acordado no se cambia.
   const { invite: inviteParam } = useLocalSearchParams<{ invite?: string }>();
@@ -109,12 +115,13 @@ function VenderForm() {
   }, [waitWallet, auth.wallet?.state]);
   // Segundo dispositivo (cuenta creada en otro): paso "Confirma que eres tú" con la passkey, antes de intentar publicar.
   useEffect(() => { if (auth.wallet?.state === 'needs-approval') setOrphan(true); }, [auth.wallet?.state]);
+  // Con un aviso arriba (importado, invitación, confirmar dispositivo) también va compacto: el círculo conserva su espacio.
+  const compact = short || winH - insets.top - insets.bottom < 800 || !!fbNotice || !!invite || orphan;
   const priceNum = parsePrice(price);
   const photosBusy = photos.some((p) => p.status === 'processing');
-  // Con un aviso arriba (importado, invitación, confirmar dispositivo) hay menos espacio: "Ver reglas" baja junto al círculo y en
-  // iPhone SE se aprieta un poco más (fotos y espacios), para que el aviso de beta nunca quede bajo el círculo.
-  const extra = !!fbNotice || !!invite || orphan;
-  const tight = short || extra, tiny = short && extra;
+  // Escenario propio del círculo "Generar link": el alto libre entre "Entrega y plazo" y los avisos decide su tamaño.
+  const [stage, setStage] = useState({ h: 0, w: 343 });
+  const launch = launchSize(stage.h || (short ? LAUNCH_STAGE_MIN + 16 : 170), stage.w);
   const ready = isListingValid({ title, price: priceNum, photos: photos.length, photosBusy }); // el círculo se enciende cuando todo está listo
   useEffect(() => { if (!created) saveSellDraft({ owner: address, title, price, description, photos: photos.map((p) => ({ url: p.url, uri: p.uri })), mode, windowMin, source }); }, [address, title, price, description, photos, mode, windowMin, source, created]);
   const clearErr = (k: keyof ListingErrors) => setErrors((e) => (e[k] ? { ...e, [k]: undefined } : e));
@@ -232,19 +239,17 @@ function VenderForm() {
     </Screen>
   );
 
+  // Un solo flujo, sin nada flotando: formulario compacto -> el círculo en su propio espacio (centrado) -> los avisos.
+  // Llena la pantalla; si algo extra no cabe (p. ej. errores en iPhone SE), hace scroll en vez de encimar.
   return (
-    <Screen footerBare title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} scroll={false}
-      footer={<View style={s.dock}>{/* el círculo al centro; en iPhone SE "Ver reglas" a su izquierda (no cabe arriba sin scroll) */}
-        <View style={s.dockSide}>{tight ? <RulesHint text={SELL_SUMMARY} from="sell" compact /> : null}</View>
-        <LaunchButton label="Generar link" ready={ready} busy={busy} short={short} onPress={() => submit()} />
-        <View style={s.dockSide} />
-      </View>}>
-      <AppearSub style={{ flex: 1, gap: tiny ? 6 : short ? S.sm : S.md }}>{/* iPhone SE: menos aire para que "Entrega y plazo" y el aviso de beta quepan sin scroll */}
+    <Screen title="Vender" subtitle={short ? undefined : 'Nombre, precio y fotos. Nada más.'} right={right} fill headerGap={short ? S.sm : compact ? S.sm + 4 : S.lg}
+      contentStyle={{ paddingBottom: S.sm }}>
+      <AppearSub style={{ flexGrow: 1, gap: short ? 4 : compact ? S.sm : S.sm + 4 }}>{/* iPhone SE: menos aire para que el círculo y los tres avisos quepan sin scroll */}
       {orphan ? <OrphanWalletCard compact={short} onRestored={(r) => { setOrphan(false); if (title.trim() && photos.length) submit(r); }} /> : null}
       {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {`${invite.brand} ${invite.model}`.trim()} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
       {invite ? null : fbNotice ? (
-        <Card style={[s.fbNotice, short && { padding: S.sm }, fbNotice.failed && { borderColor: C.orange }]}>{/* iPhone SE: aviso compacto (1 línea + 1 línea) para que el aviso de beta no quede bajo "Generar link" */}
+        <Card style={[s.fbNotice, short && { padding: S.sm }, fbNotice.failed && { borderColor: C.orange }]}>{/* iPhone SE: aviso compacto (1 línea + 1 línea) para que todo quepa sin scroll */}
           <View style={[s.fbIcon, fbNotice.failed && { backgroundColor: C.warnBg }]}><Icon name={fbNotice.failed ? 'alert-circle' : (fbNotice.icon ?? 'link') as IconName} size={20} color={fbNotice.failed ? C.orange : C.lilac} /></View>
           <View style={{ flex: 1, minWidth: 0, gap: short ? 0 : 2 }}>
             <Text style={[T.headline, { fontSize: 15 }]} numberOfLines={short ? 1 : 2}>{fbNotice.title}</Text>
@@ -268,39 +273,41 @@ function VenderForm() {
       )}
 
       <View style={{ gap: S.xs }}>{/* etiqueta dentro del campo: mismo texto, menos alto (el círculo cabe sin scroll) */}
-        <View style={[s.field, title.trim() ? s.fieldOn : null, errors.title && s.inputErr]}>
+        <View style={[s.field, compact && s.fieldSm, title.trim() ? s.fieldOn : null, errors.title && s.inputErr]}>
           <Text style={s.fieldLabel}>Nombre del producto</Text>
-          <TextInput style={s.fieldInput} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim}
+          <TextInput style={[s.fieldInput, short && s.inputSm]} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim}
             value={title} onChangeText={(v) => { setTitle(v); clearErr('title'); }} maxLength={TITLE_MAX} returnKeyType="next" accessibilityLabel="Nombre del producto" />
         </View>
         {errors.title ? <ErrorText>{errors.title}</ErrorText> : null}
       </View>
 
       <View style={{ gap: S.xs }}>
-        <View style={[s.field, priceNum > 0 ? s.fieldOn : null, errors.price && s.inputErr, invite && { opacity: 0.7 }]}>
+        <View style={[s.field, compact && s.fieldSm, priceNum > 0 ? s.fieldOn : null, errors.price && s.inputErr, invite && { opacity: 0.7 }]}>
           <Text style={s.fieldLabel}>Precio en colones</Text>
           <View style={s.priceRow}>
             <Text style={s.currency}>₡</Text>
-            <TextInput style={s.priceInput} placeholder="0" placeholderTextColor={C.textDim} keyboardType="number-pad" inputMode="numeric"
+            <TextInput style={[s.priceInput, short && s.inputSm]} placeholder="0" placeholderTextColor={C.textDim} keyboardType="number-pad" inputMode="numeric"
               value={formatPriceInput(price)} onChangeText={(v) => { setPrice(v); clearErr('price'); }} editable={!invite} accessibilityLabel="Precio en colones" />
           </View>
         </View>
         {errors.price ? <ErrorText>{errors.price}</ErrorText> : null}
       </View>
 
-      <View style={{ gap: S.xs }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={T.caption}>Fotos ({photos.length}/{MAX_PHOTOS})</Text>
-          {photos.length > 0 && !errors.photos ? <Text style={T.footnote}>Toca una para quitarla</Text> : null}
-        </View>
-        <View style={s.grid}>
-          {photos.map((p, i) => <PhotoTile key={p.key} photo={p} index={i} total={photos.length} small={short} tiny={tiny} onRemove={busy ? undefined : removePhoto} />)}
-          {photos.length < MAX_PHOTOS && (
-            <Pressable onPress={() => { haptic.tap(); setCamOpen(true); }} accessibilityRole="button" accessibilityLabel="Tomar foto" style={({ pressed }) => [s.photo, short && s.photoSm, tiny && s.photoXs, s.photoAdd, errors.photos && { borderColor: C.orange }, pressed && { opacity: 0.8 }]}>
-              <Icon name="camera" size={24} color={C.lilac} />
-              <Text style={[T.footnote, { color: C.lilac }]}>Tomar</Text>
-            </Pressable>
-          )}
+      <View style={{ gap: S.xs }}>{/* pantallas bajas: "Fotos (n/4)" a la izquierda de las fotos (una fila menos) */}
+        <View style={compact ? s.photoRow : { gap: S.xs }}>
+          <View style={compact ? s.photoHead : { flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={T.caption}>Fotos ({photos.length}/{MAX_PHOTOS})</Text>
+            {photos.length > 0 && !errors.photos ? <Text style={T.footnote}>Toca una para quitarla</Text> : null}
+          </View>
+          <View style={[s.grid, compact && { flex: 1, flexWrap: 'nowrap', gap: 6 }]}>
+            {photos.map((p, i) => <PhotoTile key={p.key} photo={p} index={i} total={photos.length} small={compact} tiny={short} onRemove={busy ? undefined : removePhoto} />)}
+            {photos.length < MAX_PHOTOS && (
+              <Pressable onPress={() => { haptic.tap(); setCamOpen(true); }} accessibilityRole="button" accessibilityLabel="Tomar foto" style={({ pressed }) => [s.photo, compact && s.photoSm, short && s.photoXs, s.photoAdd, errors.photos && { borderColor: C.orange }, pressed && { opacity: 0.8 }]}>
+                <Icon name="camera" size={short ? 20 : 24} color={C.lilac} />
+                <Text style={[T.footnote, { color: C.lilac }]}>Tomar</Text>
+              </Pressable>
+            )}
+          </View>
         </View>
         {errors.photos ? <ErrorText>{errors.photos}</ErrorText> : null}
       </View>
@@ -313,8 +320,16 @@ function VenderForm() {
         <Icon name="chevron-forward" size={16} color={C.textDim} />
       </Pressable>
       {error && <ErrorText>{error}</ErrorText>}
-      {tight ? null : <Text style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>}
-      {tight ? null : <RulesHint text={SELL_SUMMARY} from="sell" /* iPhone SE o con aviso: "Ver reglas" va junto al círculo, abajo */ />}
+
+      {/* Escenario propio de "Generar link": toma el alto libre (flex), el círculo se centra adentro y nunca se sale */}
+      <View testID="launch-space" pointerEvents="box-none" style={[s.launchSpace, { minHeight: LAUNCH_STAGE_MIN }]}
+        onLayout={(e) => { const { height: h, width: w } = e.nativeEvent.layout; if (Math.abs(h - stage.h) > 1 || Math.abs(w - stage.w) > 1) setStage({ h, w }); }}>
+        <LaunchButton label="Generar link" ready={ready} busy={busy} size={launch.core} inner={launch.inner} outer={launch.outer} onPress={() => submit()} />
+      </View>
+
+      {/* Avisos: siempre completos, en el mismo orden, debajo del círculo (nunca tapados) */}
+      <Text testID="sell-photo-help" style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>
+      <RulesHint text={SELL_SUMMARY} from="sell" />
       <BetaNotice from="sell" />
       </AppearSub>
 
@@ -413,10 +428,13 @@ const s = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'center' },
   currency: { fontFamily: Fonts.black, fontSize: 22, color: C.orange, marginRight: S.xs },
   priceInput: { flex: 1, minWidth: 0, fontFamily: Fonts.black, fontSize: 22, color: C.text, paddingVertical: 2, minHeight: 32, fontVariant: ['tabular-nums'], outlineStyle: 'none' } as object,
-  photoSm: { width: 64 },
-  photoXs: { width: 56 },
-  dock: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  dockSide: { flex: 1, minWidth: 0 },
+  photoSm: { width: 58 },
+  photoXs: { width: 52 },
+  launchSpace: { flexGrow: 1, flexBasis: 0, alignSelf: 'stretch' },
+  fieldSm: { paddingTop: 5, paddingBottom: 1 },
+  inputSm: { paddingVertical: 1, minHeight: 28 },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: S.sm },
+  photoHead: { width: 84, gap: 2 },
   inputErr: { borderColor: C.orange, borderWidth: 1 },
   fbBtn: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44, paddingHorizontal: S.md, borderRadius: R.md, borderWidth: 1, borderColor: C.lilac, backgroundColor: C.lilacBg },
   fbNotice: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, padding: S.sm + 2, borderWidth: 1, borderColor: C.lilac },

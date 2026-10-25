@@ -38,15 +38,16 @@ export const SPARKS: Spark[] = [ // en cruz: en huecos del Vender (nunca sobre t
   [52, 57, 3.9, -1.8, 'x', '255,255,255'], [71, 86, 4.6, -0.2, 'o', '201,182,255'], [38, 6, 2.9, -1.4, 'o', '255,255,255'],
   [40, 70, 5.9, -4.1, 'x', '255,214,170'], [30, 24, 3.2, -2.6, 'o', '201,182,255'], [84, 66, 4.4, -3.7, 'o', '255,255,255'],
 ];
-/** Planetas: pocos, chicos, tenues y lentos (decoran sin competir con la UI). Colocados en zonas libres del Vender
- *  (a la derecha de las fotos y a los lados del círculo "Generar link") en 375×667 y 390×844 (e2e ANIM-05). */
+/** Planetas: pocos, chicos, tenues y lentos (decoran sin competir con la UI). Colocados en zonas libres del Vender: a los
+ *  costados del círculo "Generar link" (su escenario propio, ~60–70 vh en 375×667, 390×844 y 390×844 con la barra de estado
+ *  del PWA), nunca detrás de textos ni avisos (e2e ANIM-05). */
 export const PLANETS = [
   // gigante con anillo (morado/índigo con una banda naranja), inclinado, se mece y deriva ~70 s
-  { id: 'planet-ringed', cls: 'u-pl1', left: '74vw', top: '44.5vh', size: 46, opacity: 0.68, anim: 'u-p1', dur: 70, ring: true },
+  { id: 'planet-ringed', cls: 'u-pl1', left: '84vw', top: '59.5vh', size: 46, opacity: 0.68, anim: 'u-p1', dur: 70, ring: true },
   // luna naranja con cráteres suaves (~48 s)
-  { id: 'planet-moon', cls: 'u-pl2', left: '9vw', top: '82vh', size: 20, opacity: 0.62, anim: 'u-p2', dur: 48, ring: false },
+  { id: 'planet-moon', cls: 'u-pl2', left: '3vw', top: '67vh', size: 20, opacity: 0.62, anim: 'u-p2', dur: 48, ring: false },
   // planeta lejano, un punto lila-azul (~36 s)
-  { id: 'planet-tiny', cls: 'u-pl3', left: '88vw', top: '76vh', size: 8, opacity: 0.6, anim: 'u-p3', dur: 36, ring: false },
+  { id: 'planet-tiny', cls: 'u-pl3', left: '10vw', top: '62vh', size: 8, opacity: 0.6, anim: 'u-p3', dur: 36, ring: false },
 ];
 
 /** Propiedades que las @keyframes pueden tocar (el test lo verifica): nada que dispare layout ni paint. */

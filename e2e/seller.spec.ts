@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { open, takePhoto, expectNoScroll, expectInputs16, expectTitleAt16 } from './helpers';
+import { open, takePhoto, expectNoScroll, expectInputs16, expectTitleAt16, expectVenderLayout } from './helpers';
 
 test.describe('Vendedor (demo)', () => {
   test('VEN-01 crea un link con título, precio y foto', async ({ page }) => {
@@ -152,10 +152,8 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByPlaceholder('0')).toHaveValue('197 400');
     await page.waitForTimeout(400);
     await expectNoScroll(page);
-    // El aviso de beta (Ley 7472) no puede quedar tapado por "Generar link" con el aviso de importación abierto
-    const beta = await page.getByText(/Beta en testnet/).boundingBox();
-    const btn = await page.getByRole('button', { name: 'Generar link' }).boundingBox();
-    expect(beta!.y + beta!.height).toBeLessThanOrEqual(btn!.y);
+    // Los avisos (Ley 7472) nunca quedan tapados por "Generar link", tampoco con el aviso de importación abierto
+    await expectVenderLayout(page);
     await expect(page.getByText('Modo prueba', { exact: false })).toHaveCount(0);
     if (info.project.name === 'webkit-iphone-se') { await page.screenshot({ path: 'test-results/import-2-vista-previa.png' }); }
   });
@@ -191,6 +189,25 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.locator('[data-anim="shock"]')).toHaveCount(1); // onda expansiva
     await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
     expect(await page.evaluate(() => (window as any).__states)).toContain('busy');
+  });
+});
+
+test.describe('Vendedor (demo): "Generar link" en su propio espacio', () => {
+  test('VEN-12 el círculo no tapa los avisos y todo se ve sin scroll (vacío y listo con 4 fotos)', async ({ page }, info) => {
+    const se = info.project.name === 'webkit-iphone-se';
+    await open(page, '/vender', 'seller', true);
+    await expectVenderLayout(page, { minCore: se ? 110 : 120 });
+    const btn = page.getByRole('button', { name: 'Generar link' });
+    // sólido y legible también apagado: sin transparencia en el círculo ni en sus contenedores
+    const op = await btn.evaluate((el) => { let o = 1; for (let e: Element | null = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity); return o; });
+    expect(op).toBeGreaterThanOrEqual(0.99);
+    if (se) await page.screenshot({ path: 'test-results/vender-hero-se-vacio.png' });
+    await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
+    await page.getByPlaceholder('0').fill('150000');
+    for (let i = 0; i < 4; i++) await takePhoto(page);
+    await expect(btn).toHaveAttribute('data-state', 'ready');
+    await expectVenderLayout(page, { minCore: se ? 110 : 120 });
+    if (se) await page.screenshot({ path: 'test-results/vender-hero-se-listo.png' });
   });
 });
 

@@ -123,3 +123,43 @@ export async function expectLegalVisible(page: Page, ids: string[]) {
   for (const id of ids) expect(list.some((l) => l.id === id), `aviso ${id} marcado data-legal`).toBe(true);
   for (const l of list) expect(l, `aviso ${l.id} fuera de animaciones de entrada`).toMatchObject({ opacity: 1, anims: [], frozen: 0 });
 }
+/** Vender: "Generar link" en su propio espacio (debajo de "Entrega y plazo"), sin encimarse con nada; los tres avisos (fotos,
+ *  "El pago se libera… Ver reglas" y beta) completos, en orden, debajo del círculo y arriba de las pestañas; todo sin scroll. */
+export async function expectVenderLayout(page: Page, o: { minCore?: number } = {}) {
+  await settle(page);
+  const get = async (l: ReturnType<Page['locator']>, name: string) => { const b = await l.first().boundingBox(); expect(b, `no encontré ${name}`).not.toBeNull(); return b!; };
+  const btn = await get(page.getByTestId('launch-button'), 'el círculo');
+  const space = await get(page.getByTestId('launch-space'), 'el espacio del círculo');
+  const agree = await get(page.getByRole('button', { name: 'Entrega y plazo' }), 'Entrega y plazo');
+  const help = await get(page.getByText('De 1 a 4 fotos con la cámara, en este momento.'), 'el texto de fotos');
+  const lock = await get(page.getByTestId('rules-hint'), 'el aviso de liberación');
+  const beta = await get(page.getByTestId('beta-notice'), 'el aviso de beta');
+  const tabs = await get(page.getByRole('tablist'), 'las pestañas');
+  const vp = page.viewportSize()!;
+  type B = { x: number; y: number; width: number; height: number };
+  const hit = (a: B, b: B) => a.x < b.x + b.width - 0.5 && a.x + a.width > b.x + 0.5 && a.y < b.y + b.height - 0.5 && a.y + a.height > b.y + 0.5;
+  expect(btn.width, 'círculo grande').toBeGreaterThanOrEqual(o.minCore ?? 96);
+  expect(Math.abs(btn.width - btn.height)).toBeLessThanOrEqual(1);
+  // el círculo vive dentro de su espacio, que va entre "Entrega y plazo" y los avisos
+  expect(btn.y).toBeGreaterThanOrEqual(space.y - 0.5); expect(btn.y + btn.height).toBeLessThanOrEqual(space.y + space.height + 0.5);
+  expect(space.y).toBeGreaterThanOrEqual(agree.y + agree.height - 0.5);
+  for (const [n, b] of [['Entrega y plazo', agree], ['texto de fotos', help], ['aviso de liberación', lock], ['aviso de beta', beta], ['pestañas', tabs]] as const)
+    expect(hit(btn, b), `"Generar link" ${JSON.stringify(btn)} se encima con ${n} ${JSON.stringify(b)}`).toBe(false);
+  // orden: Entrega y plazo -> círculo -> fotos -> liberación -> beta -> pestañas
+  expect(agree.y + agree.height).toBeLessThanOrEqual(btn.y);
+  expect(btn.y + btn.height).toBeLessThanOrEqual(help.y);
+  expect(help.y + help.height).toBeLessThanOrEqual(lock.y + 0.5);
+  expect(lock.y + lock.height).toBeLessThanOrEqual(beta.y + 0.5);
+  expect(beta.y + beta.height).toBeLessThanOrEqual(tabs.y);
+  for (const b of [btn, help, lock, beta]) { expect(b.y).toBeGreaterThanOrEqual(0); expect(b.y + b.height).toBeLessThanOrEqual(vp.height); }
+  // nada encima de los avisos: el punto medio de cada línea es del propio aviso
+  const covered = await page.evaluate(() => ['rules-hint', 'beta-notice'].flatMap((id) => {
+    const el = document.querySelector(`[data-testid="${id}"]`)!; const r = el.getBoundingClientRect();
+    return [0.25, 0.75].map((f) => { const t = document.elementFromPoint(r.x + r.width / 2, r.y + r.height * f); return t && el.contains(t) ? null : `${id}@${f}: ${t?.outerHTML.slice(0, 80)}`; }).filter(Boolean);
+  }));
+  expect(covered, 'avisos tapados').toEqual([]);
+  // sin scroll: ni la página ni el contenedor de la pantalla
+  const sc = await page.getByTestId('beta-notice').evaluate((el) => { for (let e = el.parentElement; e; e = e.parentElement) { const cs = getComputedStyle(e); if (/(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 1) return e.scrollHeight - e.clientHeight; } return 0; });
+  expect(sc, 'Vender hace scroll').toBe(0);
+  await expectNoScroll(page);
+}

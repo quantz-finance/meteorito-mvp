@@ -7,6 +7,8 @@ import { burstPoints, FLOATERS } from '@/lib/launchCore';
 
 export const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
 export const SPRING = 'cubic-bezier(0.34, 1.4, 0.64, 1)';
+/** easeInOutSine: cada medio vaivén se parece a un coseno (dos osciladores desfasados = órbita elíptica). */
+export const SINE = 'cubic-bezier(0.37, 0, 0.63, 1)';
 
 /** Props para animar en web; en nativo no hace nada. */
 export const anim = (name: string): object => (Platform.OS === 'web' ? { dataSet: { anim: name } } : {});
@@ -22,6 +24,8 @@ const confetti = Array.from({ length: 14 }, (_, i) => {
 }).join('');
 
 // Botón circular de Vender ("Generar link"): chispas del impacto y partículas que flotan (posiciones en lib/launchCore).
+// Órbitas: ox/oy mueven al planetita y al meteorito por una elipse (translate en % del propio alto/ancho = semiejes);
+// of muestra la copia delantera solo en la mitad de la vuelta que pasa por delante del círculo.
 const burst = burstPoints(10, 92).map((p, i) => `[data-anim="burst"]>div:nth-child(${i + 1}){--x:${p.x}px;--y:${p.y}px;background:${['#FFD84D', '#FF8A3D', '#C9B6FF', '#FFFFFF'][i % 4]};animation-delay:${(i % 3) * 20}ms}`).join('');
 const floaters = FLOATERS.map(([l, d, dx], i) => `[data-anim="floaters"]>div:nth-child(${i + 1}){left:${l}%;--dx:${dx}px;animation-delay:${d}s}`).join('');
 
@@ -81,8 +85,25 @@ export const MOTION_CSS = `${appearCss()}
 @keyframes m-rise{0%{opacity:0;transform:translate3d(0,0,0) scale(.5)}25%{opacity:.9}100%{opacity:0;transform:translate3d(var(--dx),-56px,0) scale(1)}}
 @keyframes m-shake{0%,100%{transform:none}20%{transform:translate3d(-7px,0,0)}40%{transform:translate3d(6px,0,0)}60%{transform:translate3d(-4px,0,0)}80%{transform:translate3d(2px,0,0)}}
 @keyframes m-ignite{0%{transform:scale(.9)}55%{transform:scale(1.07)}100%{transform:scale(1)}}
-[data-anim="orbit"]{animation:m-orbit 16s linear infinite}
-[data-anim="orbit-r"]{animation:m-orbit 26s linear infinite reverse}
+@keyframes m-glow{0%,100%{opacity:.15}50%{opacity:.6}}
+@keyframes m-glow-calm{0%,100%{opacity:.1}50%{opacity:.35}}
+@keyframes m-sonar{0%{opacity:.55;transform:scale(1)}100%{opacity:0;transform:scale(1.3)}}
+@keyframes m-halo-calm{0%,100%{opacity:.45;transform:scale(1)}50%{opacity:.75;transform:scale(1.04)}}
+@keyframes m-ox{0%,100%{transform:translate3d(100%,0,0)}50%{transform:translate3d(-100%,0,0)}}
+@keyframes m-oy{0%,100%{transform:translate3d(0,100%,0)}50%{transform:translate3d(0,-100%,0)}}
+@keyframes m-front{0%,49%{opacity:0}51%,100%{opacity:1}}
+[data-anim="orbit"]{animation:m-orbit 22s linear infinite}
+[data-anim="glow"]{animation:m-glow 2.8s ease-in-out infinite}
+[data-anim="glow-calm"]{animation:m-glow-calm 4.2s ease-in-out infinite}
+[data-anim="sonar"]{animation:m-sonar 2.8s ease-out infinite;pointer-events:none}
+[data-anim="halo-calm"]{animation:m-halo-calm 4.2s ease-in-out infinite}
+[data-anim="ox1"]{animation:m-ox 9s ${SINE} infinite}
+[data-anim="oy1"]{animation:m-oy 9s ${SINE} -2.25s infinite}
+[data-anim="of1"]{animation:m-front 9s linear infinite}
+[data-anim="ox2"]{animation:m-ox 14s ${SINE} infinite}
+[data-anim="oy2"]{animation:m-oy 14s ${SINE} -3.5s infinite}
+[data-anim="of2"]{animation:m-front 14s linear infinite}
+[data-anim="orbit-r"]{animation:m-orbit 34s linear infinite reverse}
 [data-anim="spin"]{animation:m-orbit .9s linear infinite}
 [data-anim="halo"]{animation:m-halo 2.8s ease-in-out infinite}
 [data-anim="shock"]{animation:m-shock 650ms cubic-bezier(.2,.7,.3,1) both;pointer-events:none}
