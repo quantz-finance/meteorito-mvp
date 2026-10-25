@@ -20,6 +20,7 @@ export const COPY = {
     forYou: 'Para ti', following: 'Siguiendo', viewsLabel: 'Qué publicaciones ver',
     followingEmptyTitle: 'Aún no sigues tiendas',
     followingEmptyText: 'Cuando sigas una, sus publicaciones aparecen aquí.',
+    suggestedStores: 'Tiendas para empezar',
     followingNoneTitle: 'Nada nuevo de las tiendas que sigues',
     followingNoneText: (label: string) => `Las tiendas que sigues no tienen publicaciones en ${label}.`,
     seeForYou: 'Ver Para ti',

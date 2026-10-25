@@ -87,7 +87,7 @@ import { blockChat, chatAvailable, listChats, openChat, readChat, reportChat, se
 import { parseVerified, searchTokens } from '../_lib/feedText';
 import { feedPage, injectMeta, profileMeta, sellerOfOrder, sellerProfile, socialsOf, type FeedQuery } from '../_lib/feed';
 import { normalizeSocials, socialError } from '../_lib/socials';
-import { decodeDemoCursor, demoPage, demoProductsOn, demoProfile, isDemoStoreSlug, looksLikeDemoProduct, mergeDemo } from '../_lib/demoProducts';
+import { decodeDemoCursor, demoActivityBySlug, demoPage, demoProductsOn, demoProfile, isDemoStoreSlug, looksLikeDemoProduct, mergeDemo } from '../_lib/demoProducts';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
@@ -235,7 +235,10 @@ export default async function handler(req: any, res: any) {
       // Última conexión: aparte del feed y del perfil (que se cachean) para que apagarla no deje rastro en ninguna caché.
       const slugs = [...new Set(String(req.query.activity).split(',').map(normalizeStoreSlug).filter(validStoreSlug))].slice(0, 60);
       res.setHeader('Cache-Control', 'private, no-store, max-age=0');
-      return json(res, 200, { activity: await activityBySlug(slugs) });
+      // Tiendas de ejemplo: última conexión relativa a ahora (ficticia, api/_lib/demoProducts.ts); las reales, de la base.
+      const demo = demoProductsOn() ? demoActivityBySlug(slugs.filter((x) => isDemoStoreSlug(x))) : {};
+      const real = slugs.filter((x) => !(x in demo));
+      return json(res, 200, { activity: { ...(real.length ? await activityBySlug(real) : {}), ...demo } });
     }
     if (req.method === 'GET' && req.query?.og != null) return ogPage(req, res);
     if (req.method === 'GET' && req.query?.chat === 'status') {

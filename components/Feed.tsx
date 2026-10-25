@@ -30,6 +30,7 @@ import { followsSome, loadFollowing } from '@/lib/follows';
 import { clearSearch, openSearch, useFeedSearch } from '@/lib/feedSearch';
 import { SearchSheet } from '@/components/SearchSheet';
 import { isSale, mixFeed, saleHeadline, saleLabel, saleStars, type SalePost } from '@/lib/feedSales';
+import { FEED_DEMO_PRODUCTS } from '../api/_lib/demoFlag';
 
 export const SEARCH_DEBOUNCE_MS = 300;
 const PAGE = 10;
@@ -148,8 +149,11 @@ export function Feed({ header }: { header: ReactElement }) {
   if (phase === 'loading') empty = <View style={{ gap: S.md }}><FeedSkeleton /><FeedSkeleton /></View>;
   else if (phase === 'error') empty = <EmptyState icon="cloud-offline-outline" title="No pudimos cargar el feed" text={FEED_ERROR} actions={<PrimaryButton title="Reintentar" icon="refresh" variant="secondary" onPress={load} />} />;
   else if (following && followsNone) empty = (
-    <EmptyState icon="people-outline" title={COPY.feed.followingEmptyTitle} text={COPY.feed.followingEmptyText} testID="feed-following-empty"
-      actions={<PrimaryButton title={COPY.feed.seeForYou} icon="sparkles-outline" variant="secondary" onPress={() => pickView('for_you')} />} />
+    <View style={{ gap: S.md }}>
+      <EmptyState icon="people-outline" title={COPY.feed.followingEmptyTitle} text={COPY.feed.followingEmptyText} testID="feed-following-empty"
+        actions={<PrimaryButton title={COPY.feed.seeForYou} icon="sparkles-outline" variant="secondary" onPress={() => pickView('for_you')} />} />
+      <SuggestedStores />
+    </View>
   );
   else if (q) empty = (
     <EmptyState icon="search" title={`No encontramos “${q.length > 24 ? q.slice(0, 24) + '…' : q}”`}
@@ -258,7 +262,7 @@ export const SaleCard = memo(function SaleCard({ post: p, onPress }: { post: Sal
       </View>
       <View style={s.cardBody}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <Icon name="bag-check-outline" size={14} color={C.success} />
+          {p.avatar ? <StoreAvatar store={{ display_name: p.seller_name, avatar_url: p.avatar }} size={20} /> : <Icon name="bag-check-outline" size={14} color={C.success} />}
           <Text style={[T.footnote, { color: C.text, flexShrink: 1 }]} numberOfLines={2}>{saleHeadline(p)}</Text>
           {p.verified ? <VerifiedBadge size={14} /> : null}
         </View>
@@ -271,6 +275,40 @@ export const SaleCard = memo(function SaleCard({ post: p, onPress }: { post: Sal
     </Pressable>
   );
 });
+
+type Suggested = ReturnType<typeof import('../api/_lib/demoProducts').demoSuggestedStores>[number];
+/** Siguiendo sin seguir a nadie: tiendas de EJEMPLO para empezar (ficticias, con su iconito (i)). Datos en diferido. */
+function SuggestedStores() {
+  const [list, setList] = useState<Suggested[]>([]);
+  useEffect(() => {
+    let live = true;
+    if (FEED_DEMO_PRODUCTS) import('../api/_lib/demoProducts').then((m) => live && m.demoProductsOn() && setList(m.demoSuggestedStores(6))).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  if (!list.length) return null;
+  return (
+    <View style={{ gap: S.sm }} testID="feed-suggested-stores">
+      <Text style={T.caption}>{COPY.feed.suggestedStores}</Text>
+      {list.map((st) => (
+        <View key={st.store_slug} style={s.sugRow}>
+          <Pressable onPress={() => { haptic.tap(); router.push({ pathname: '/t/[store]', params: { store: st.store_slug } }); }} accessibilityRole="link"
+            accessibilityLabel={`Ver el perfil de ${st.display_name}`} style={({ pressed }) => [s.sugMain, pressed && { opacity: 0.85 }]}>
+            <StoreAvatar store={st} size={40} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text style={[T.headline, { flexShrink: 1 }]} numberOfLines={1}>{st.display_name}</Text>
+                {st.verified ? <VerifiedBadge size={14} /> : null}
+              </View>
+              {st.rating_count ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><StarRow value={Math.round(st.rating_avg ?? 0)} size={12} /><Text style={T.footnote}>{st.rating_count}</Text></View> : null}
+            </View>
+            <Icon name="chevron-forward" size={18} color={C.textDim} />
+          </Pressable>
+          <DemoInfo kind="store" onDark={false} />
+        </View>
+      ))}
+    </View>
+  );
+}
 
 export function FeedSkeleton() {
   const half = (
@@ -321,6 +359,8 @@ const s = StyleSheet.create({
   cardBody: { gap: 2, paddingHorizontal: S.sm, paddingTop: S.sm, paddingBottom: S.xs + 2 },
   title: { fontFamily: Fonts.regular, fontSize: 15, lineHeight: 19, color: C.text },
   demoInfo: { position: 'absolute', top: 6, right: 6 }, // iconito (i) de ejemplo: esquina, no tapa la foto
+  sugRow: { flexDirection: 'row', alignItems: 'center', gap: S.xs, padding: S.sm, borderRadius: R.lg, backgroundColor: C.surface, borderWidth: 0.5, borderColor: C.line },
+  sugMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 44 },
   empty: { alignItems: 'center', gap: S.sm, paddingVertical: S.lg, paddingHorizontal: S.sm },
   emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: C.lilacBg, alignItems: 'center', justifyContent: 'center', marginBottom: S.xs },
 });
