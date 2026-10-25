@@ -103,7 +103,7 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
     <View style={{ gap: S.lg }}>
       <View style={s.hero} testID="profile-hero">
         {/* Portada fija, igual para todas las tiendas (nunca una foto subida ni de producto). */}
-        <View style={s.cover} testID="store-cover"><Image source={STORE_BANNER} style={s.coverImg} resizeMode="cover" accessibilityIgnoresInvertColors /><View style={s.coverShade} /></View>
+        <View style={s.cover} testID="store-cover"><Image source={STORE_BANNER} style={s.coverImg} resizeMode="cover" accessibilityIgnoresInvertColors /></View>
         <View style={s.avatarRing}>{owner && mine ? <StoreAvatar store={mine} size={92} editable onChange={onMine} /> : <StoreAvatar store={p} size={92} />}</View>
         <View style={{ alignItems: 'center', gap: 2, paddingHorizontal: S.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
@@ -219,8 +219,8 @@ function Notice({ icon, title, text }: { icon: IconName; title: string; text: st
 const s = StyleSheet.create({
   hero: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 0.5, borderColor: C.line, paddingBottom: S.md, gap: S.sm },
   cover: { height: 96, backgroundColor: C.purple, overflow: 'hidden' },
+  // El asset ya viene recortado a la franja del meteorito (1280×400): con cover la cara (derecha) queda siempre a la vista.
   coverImg: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
-  coverShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, backgroundColor: 'rgba(8,4,24,0.35)' },
   avatarRing: { alignSelf: 'center', marginTop: -58, padding: 4, borderRadius: 60, backgroundColor: C.surface },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   unverified: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: S.xs, paddingHorizontal: 10, paddingVertical: 3, borderRadius: R.pill, backgroundColor: 'rgba(255,255,255,0.06)' },
