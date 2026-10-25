@@ -9,6 +9,8 @@ import { installTestJwks, token } from './jwt';
 import { __setDbForTests } from '../../api/_lib/db';
 import { guestSubFromReq } from '../../api/_lib/guest';
 import { __resetChat } from '../../api/_lib/chat';
+import { CHAT_BUYER_PER_HOUR, CHAT_OPEN_PER_HOUR, CHAT_SEND_PER_MIN } from '../../api/_lib/chatText';
+import { COPY } from '../../lib/copy';
 import { fakeDb } from './fakedb';
 import store from '../../api/store/index';
 import { itemCardRows } from '../../api/_lib/chatText';
@@ -89,6 +91,69 @@ export async function run(t: T) {
   const row = r.body?.conversations?.[0];
   t.check('bandeja del vendedor: foto y título del producto de la pregunta', r.code === 200 && row?.subject === 'Silla gamer' && row?.photo === 'https://x/silla.jpg' && row?.item_slug === 'silla1', JSON.stringify(row));
 
+  /* ---------- Neo 1: precio ACTUAL en la tarjeta ---------- */
+  db.tables.orders.find((o: any) => o.slug === 'bici01').price_crc = 140000;
+  r = await call({ guest: KEY_A, body: { action: 'chat_get', token: tk, full: true } });
+  t.check('la tarjeta muestra el precio actual del producto (no el del momento del mensaje)', r.body?.products?.bici01?.price_crc === 140000 && r.body?.products?.bici01?.available === true, JSON.stringify(r.body?.products?.bici01));
+
+  /* ---------- Neo 4: producto borrado (archivado, cancelado o sin fila) -> la conversación sigue ---------- */
+  db.tables.orders.find((o: any) => o.slug === 'bici01').listing_status = 'archivada';
+  db.tables.orders = db.tables.orders.filter((o: any) => o.slug !== 'silla1');
+  r = await call({ guest: KEY_A, body: { action: 'chat_get', token: tk, full: true } });
+  const gone1 = r.body?.products?.bici01, gone2 = r.body?.products?.silla1;
+  t.check('producto archivado o borrado: available:false, sin precio ni foto', r.code === 200 && gone1?.available === false && gone2?.available === false && gone1.price_crc == null && gone2.photo == null, JSON.stringify(r.body?.products));
+  t.check('producto borrado: la cabecera no lo enlaza (item null) y se marca no disponible', r.body?.conversation?.item == null && r.body?.conversation?.item_gone === true, JSON.stringify(r.body?.conversation));
+  r = await call({ guest: KEY_A, body: { action: 'chat_send', token: tk, body: '¿Lo vas a volver a publicar?', client_id: 'cli_00000006' } });
+  t.check('con el producto borrado la conversación sigue (se puede escribir)', r.code === 200);
+
+  /* ---------- Neo 3: límite por llave / cuenta en TODAS sus conversaciones (en la base, entre instancias) ---------- */
+  t.check('límites razonables: 12/min por conversación, 20 conversaciones/h, 60 mensajes/h por comprador', CHAT_SEND_PER_MIN === 12 && CHAT_OPEN_PER_HOUR === 20 && CHAT_BUYER_PER_HOUR === 60);
+  {
+    const db2 = setup();
+    db2.tables.seller_profiles.push(...Array.from({ length: 6 }, (_, i) => ({ sub: `s${i}`, store_slug: `tienda-${i}`, display_name: `T${i}` })));
+    const toks: string[] = [];
+    for (let i = 0; i < 6; i++) { const o = await call({ guest: KEY_B, body: { action: 'chat_open', store_slug: `tienda-${i}` } }); toks.push(o.body.token); }
+    // 59 mensajes del comprador en la última hora repartidos en 6 conversaciones (como si vinieran de otras instancias).
+    const convs = db2.tables.chat_conversations; const iso = new Date(Date.now() - 20 * 60_000).toISOString();
+    for (let i = 0; i < 59; i++) { const c = convs[i % 6]; db2.tables.chat_messages ??= []; db2.tables.chat_messages.push({ id: 10_000 + i, conversation_id: c.id, sender: 'buyer', body: 'x', client_id: null, created_at: iso }); c.last_message_at = iso; }
+    __resetChat(); // memoria de la instancia vacía: el límite sale de la base
+    let rr = await call({ guest: KEY_B, body: { action: 'chat_send', token: toks[0], body: 'uno más', client_id: 'cli_lim00001' } });
+    t.check('mensaje 60 de la hora -> pasa', rr.code === 200, `${rr.code} ${JSON.stringify(rr.body)}`);
+    rr = await call({ guest: KEY_B, body: { action: 'chat_send', token: toks[1], body: 'otro', client_id: 'cli_lim00002' } });
+    t.check('mensaje 61 en otra conversación -> 429 chat_rate_limited con mensaje amable', rr.code === 429 && rr.body?.code === 'chat_rate_limited' && /Espera un rato/.test(rr.body?.error ?? '') && !BANNED_COPY.test(rr.body?.error ?? '') && !/proteg/i.test(rr.body?.error ?? ''), `${rr.code} ${JSON.stringify(rr.body)}`);
+    rr = await call({ tok: await token({ sub: 's1' }), body: { action: 'chat_send', token: toks[1], body: 'Hola', client_id: 'cli_lim00003' } });
+    t.check('el vendedor puede responder igual (el límite es del comprador)', rr.code === 200, `${rr.code}`);
+    // Conversaciones nuevas por hora, en la base (no solo en memoria).
+    const db3 = setup();
+    db3.tables.seller_profiles.push(...Array.from({ length: 22 }, (_, i) => ({ sub: `x${i}`, store_slug: `shop-${i}`, display_name: `S${i}` })));
+    const guestB = guestSubFromReq({ headers: { 'x-guest-key': KEY_B } })!;
+    db3.tables.chat_conversations = Array.from({ length: 20 }, (_, i) => ({ id: `c${i}`, token: `${'T'.repeat(30)}${String(i).padStart(2, '0')}`, seller_user_id: `x${i}`, buyer_id: guestB, ctx: 'store', created_at: new Date(Date.now() - 10 * 60_000).toISOString(), last_message_at: null }));
+    __resetChat();
+    rr = await call({ guest: KEY_B, body: { action: 'chat_open', store_slug: 'shop-21' } });
+    t.check('conversación 21 de la hora (contada en la base) -> 429', rr.code === 429 && rr.body?.code === 'chat_rate_limited', `${rr.code} ${JSON.stringify(rr.body)}`);
+  }
+
+  /* ---------- Neo 2: el chat del invitado sigue las mismas reglas ---------- */
+  {
+    const db4 = setup();
+    const guestA2 = guestSubFromReq({ headers: { 'x-guest-key': KEY_A } })!;
+    let rr = await call({ guest: KEY_A, body: { action: 'chat_open', item_slug: 'bici01' } });
+    const tg = rr.body.token;
+    await call({ guest: KEY_A, body: { action: 'chat_send', token: tg, body: 'hola', client_id: 'cli_g0000001', item_slug: 'bici01' } });
+    t.check('invitado: buyer_id = guest:<hash> (nunca la llave cruda)', db4.tables.chat_conversations[0].buyer_id === guestA2 && !JSON.stringify(db4.tables).includes(KEY_A));
+    rr = await call({ guest: KEY_A, body: { action: 'chat_report', token: tg, reason: 'spam' } });
+    t.check('invitado: puede reportar', rr.code === 200 && rr.body?.reported === true);
+    // Regla de bloqueo (#94): con una compra en curso del MISMO invitado con ese vendedor, el vendedor no puede bloquear.
+    db4.tables.orders.push({ id: 'o9', slug: 'comp99', kind: 'single', seller_user_id: 'seller1', buyer_user_id: guestA2, brand: 'Bici', model: '', photos: [], status: 'fondeado', price_crc: 150000 });
+    rr = await call({ tok: tokSeller, body: { action: 'chat_block', token: tg, blocked: true } });
+    t.check('invitado: el vendedor no puede bloquear con una compra en curso (409)', rr.code === 409 && rr.body?.code === 'chat_block_locked', `${rr.code}`);
+    db4.tables.orders.find((o: any) => o.slug === 'comp99').status = 'liberado';
+    rr = await call({ tok: tokSeller, body: { action: 'chat_block', token: tg, blocked: true } });
+    t.check('invitado: sin compra en curso el vendedor sí puede bloquear y el invitado ya no escribe', rr.code === 200 && (await call({ guest: KEY_A, body: { action: 'chat_send', token: tg, body: 'x', client_id: 'cli_g0000002' } })).code === 403);
+    const ret = read('supabase/migrations/026_chat_retention_dispute.sql');
+    t.check('retención 12 meses en pausa con disputa: misma regla por buyer_id (invitado o cuenta)', /o\.buyer_user_id = c\.buyer_id/.test(ret) && /interval '12 months'/.test(ret) && /not coalesce\(conv\.dispute_open, false\)/.test(ret));
+  }
+
   /* ---------- Sin la migración 030 (sin chat_messages.item_slug) ---------- */
   db = setup();
   const realFrom = db.from;
@@ -126,6 +191,10 @@ export async function run(t: T) {
     === JSON.stringify(['item:bici01:buyer', 'msg:1', 'msg:2', 'item:silla1:buyer', 'msg:3', 'msg:4']), JSON.stringify(rows));
 
   /* ---------- App ---------- */
+  const chatSrc = read('app/chat.tsx');
+  t.check('aviso "paga dentro" siempre visible en la conversación antes de pagar (también con mensajes)', COPY.chat.payInside === 'Para que tu compra quede en custodia, paga dentro de Meteorito.' && /'chat-pay-pinned'/.test(chatSrc) && /!conv\.paid && msgs\.length > 0 \? <PayInside pinned \/>/.test(chatSrc));
+  t.check('producto no disponible: texto exacto, sin link', COPY.chat.itemGone === 'Este producto ya no está disponible' && /testID="chat-item-gone"/.test(chatSrc) && /K\.itemGone/.test(chatSrc));
+
   const ficha = read('app/p/[slug].tsx');
   t.check('/p/<slug>: "Preguntar al vendedor" sin esperar el perfil de la tienda (no depende de seller &&)', /<AskSellerButton storeSlug=\{seller === undefined \? undefined : seller\?\.store_slug \?\? null\} itemSlug=\{order\.slug\}/.test(ficha) && !/seller && \(order\.status === 'creado'/.test(ficha));
   t.check('/p/<slug>: después de pagar, el comprador usa el chat de su compra (no dos botones)', /!\(canShowContact\(order\.status\) && isBuyerDevice\(order\.slug\)\) \? <AskSellerButton/.test(ficha));

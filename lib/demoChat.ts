@@ -72,13 +72,15 @@ export async function demoChatApi(body: any, x: DemoChatCtx): Promise<any> {
     const messages = after ? all.filter((m) => m.id > after) : all.slice(-60);
     if (isUnread(c, role)) { c[`${role}_read_at`] = now; save(s); }
     // Tarjetas del producto (030): datos públicos de los productos de estos mensajes.
-    const products = Object.fromEntries(messages.filter((m) => m.item_slug && x.orders[m.item_slug]).map((m) => { const o = x.orders[m.item_slug!]; return [o.slug, { slug: o.slug, title: title(o), photo: o.photos[0] ?? null, price_crc: o.price_crc }]; }));
+    // Precio ACTUAL; borrado/cancelado -> available:false (la tarjeta dice "ya no está disponible", sin link).
+    const products = Object.fromEntries(messages.filter((m) => m.item_slug).map((m) => { const o = x.orders[m.item_slug!]; const gone = !o || o.status === 'cancelado' || (o as any).listing_status === 'archivada';
+      return [m.item_slug!, gone ? { slug: m.item_slug!, title: null, photo: null, price_crc: null, available: false } : { slug: o.slug, title: title(o), photo: o.photos[0] ?? null, price_crc: o.price_crc, available: true }]; }));
     const st = { role, blocked: c.blocked, other_read_at: c[`${other}_read_at`], other_typing: false, has_more: false, messages, ...(Object.keys(products).length || body.full === true ? { products } : {}) };
     if (body.full !== true) return st;
     const ref = c.order_slug ?? c.item_slug; const o = ref ? x.orders[ref] : null;
     const p = role === 'buyer' ? await x.profile(c.store) : null;
     return { ...st, can_block: role === 'seller' && !lockOf(c), conversation: { token: c.token, kind: c.order_slug ? 'order' : 'store', subject: c.subject, item_photo: c.item_photo,
-      item: o && !c.order_slug ? { slug: o.slug, price_crc: o.price_crc } : null, order: o && c.order_slug ? { slug: o.slug, status: o.status, price_crc: o.price_crc } : null,
+      item: o && !c.order_slug && o.status !== 'cancelado' ? { slug: o.slug, price_crc: o.price_crc } : null, item_gone: !c.order_slug && !!c.item_slug && (!o || o.status === 'cancelado'), order: o && c.order_slug ? { slug: o.slug, status: o.status, price_crc: o.price_crc } : null,
       paid: !!(o && c.order_slug && canShowContact(o.status)),
       other: role === 'buyer' ? { name: c.store_name, store_slug: c.store, avatar_url: p?.avatar_url ?? null } : { name: buyerLabel(c.buyer), store_slug: null, avatar_url: null } } };
   }

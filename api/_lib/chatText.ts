@@ -7,6 +7,9 @@ export const CHAT_SEND_PER_MIN = 12;
 export const CHAT_SEND_IP_PER_MIN = 30;
 /** Conversaciones nuevas por hora por identidad (anti-spam a vendedores). */
 export const CHAT_OPEN_PER_HOUR = 20;
+/** Mensajes por hora de un comprador (su llave y/o su cuenta) sumando TODAS sus conversaciones; contado en la base. */
+export const CHAT_BUYER_PER_HOUR = 60;
+export const CHAT_BUYER_LIMITED = 'Enviaste muchos mensajes en poco tiempo. Espera un rato e intenta de nuevo.';
 /** Aviso push a la otra parte: como mucho uno cada CHAT_PUSH_COOLDOWN_MIN por conversación mientras no lea. */
 export const CHAT_PUSH_COOLDOWN_MIN = 10;
 /** Si la otra parte tuvo la conversación abierta hace menos de esto, no se le manda push (ya lo está viendo). */

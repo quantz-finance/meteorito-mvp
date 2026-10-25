@@ -49,6 +49,7 @@ test('CHATP-01 ficha -> Preguntar al vendedor: tarjeta del producto en el hilo, 
   await page.getByTestId('chat-send').click();
   await delivered(page);
   await expect(card).toHaveCount(1);
+  await expect(page.getByTestId('chat-pay-pinned')).toContainText('Para que tu compra quede en custodia, paga dentro de Meteorito.');
   await shot(page, 'hilo');
   const text = await page.locator('body').innerText();
   expect(text).not.toMatch(BANNED); expect(text).not.toMatch(VOSEO);
@@ -86,4 +87,29 @@ test('CHATP-02 el dueño no ve "Preguntar al vendedor" en su propio producto', a
   await expect(page.getByText(/Silla gamer/).first()).toBeVisible();
   await page.waitForTimeout(800);
   await expect(page.getByTestId('ask-seller')).toHaveCount(0);
+});
+
+test('CHATP-03 precio actual en la tarjeta; producto borrado: la conversación sigue y la tarjeta dice que ya no está', async ({ page }) => {
+  await open(page, '/comprar', 'buyer', true);
+  const slug = await seedP(page, 'Bici de montaña', '/demo-feed/p-bicimtb.jpg', 150000);
+  await open(page, `/p/${slug}`, 'buyer');
+  await page.getByTestId('ask-seller').click();
+  await page.getByTestId('chat-input').fill('¿Sigue disponible?');
+  await page.getByTestId('chat-send').click();
+  await delivered(page);
+  const url = page.url();
+  const patch = (f: string) => page.evaluate(([s0, f0]) => { const k = 'meteorito:demo:v1'; const st = JSON.parse(sessionStorage.getItem(k)!); (new Function('o', f0))(st.orders[s0]); sessionStorage.setItem(k, JSON.stringify(st)); }, [slug, f] as const);
+  await patch('o.price_crc = 120000');
+  await page.goto(url);
+  await expect(page.getByTestId('chat-item-card')).toContainText('120'); // precio de hoy, no el del mensaje
+  await expect(page.getByTestId('chat-item-card')).not.toContainText('150');
+  await patch("o.status = 'cancelado'");
+  await page.goto(url);
+  await expect(page.getByTestId('chat-item-gone')).toContainText('Este producto ya no está disponible');
+  await expect(page.getByTestId('chat-item-gone').getByRole('link')).toHaveCount(0);
+  await expect(page.getByTestId('chat-item-card')).toHaveCount(0);
+  await page.getByTestId('chat-input').fill('¿Lo vas a volver a publicar?');
+  await page.getByTestId('chat-send').click();
+  await delivered(page); // la conversación sigue
+  await shot(page, 'no-disponible');
 });

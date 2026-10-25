@@ -179,7 +179,7 @@ export default function ChatScreen() {
   }, [msgs, role]);
   // Datos de la tarjeta: los que manda el servidor, o (envío optimista) los del tema de la conversación.
   const productOf = (slug: string): ChatProduct | null => products[slug]
-    ?? (conv?.item?.slug === slug ? { slug, title: conv.subject ?? K.seeItem, photo: conv.item_photo, price_crc: conv.item.price_crc } : null);
+    ?? (conv?.item?.slug === slug ? { slug, title: conv.subject ?? K.seeItem, photo: conv.item_photo, price_crc: conv.item.price_crc, available: true } : null);
 
   if (error) return (
     <View style={st.screen}>
@@ -211,7 +211,12 @@ export default function ChatScreen() {
           </View> : <View style={[s.who, { gap: S.sm }]}><Skeleton w={36} h={36} r={18} /><Skeleton w={140} h={18} /></View>}
         </TopBar>
 
-        {conv && (conv.subject || conv.order) && ctxSlug ? (
+        {conv && conv.kind === 'store' && conv.item_gone ? (
+          <View style={s.ctx} testID="chat-context-gone" accessibilityRole="text">
+            <View style={[s.ctxImg, s.center0]}><Icon name="pricetag-outline" size={18} color={C.textDim} /></View>
+            <Text style={[T.footnote, { flex: 1 }]} numberOfLines={2}>{K.itemGone}</Text>
+          </View>
+        ) : conv && (conv.subject || conv.order) && ctxSlug ? (
           <Pressable accessibilityRole="link" accessibilityLabel={`${conv.kind === 'order' ? K.seeOrder : K.seeItem}: ${conv.subject ?? ''}`} testID="chat-context"
             onPress={() => { haptic.tap(); router.push({ pathname: '/p/[slug]', params: { slug: ctxSlug } }); }}
             style={({ pressed }) => [s.ctx, pressTransition, pressed && { opacity: 0.85 }]}>
@@ -230,6 +235,8 @@ export default function ChatScreen() {
           keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} testID="chat-messages"
           onContentSizeChange={() => { if (nearBottom.current) scroll.current?.scrollToEnd({ animated: false }); }}>
           {!conv ? <><Skeleton w="60%" h={40} r={18} /><Skeleton w="45%" h={40} r={18} style={{ alignSelf: 'flex-end' }} /></> : null}
+          {/* Antes de pagar, el aviso queda siempre a la vista en la conversación (no solo vacía o con un teléfono/link). */}
+          {conv && !conv.paid && msgs.length > 0 ? <PayInside pinned /> : null}
           {conv && state.has_more ? <PrimaryButton title={K.older} variant="ghost" icon="chevron-up" onPress={loadOlder} /> : null}
           {conv && msgs.length === 0 ? (
             <View style={s.empty} testID="chat-empty">
@@ -318,8 +325,8 @@ function Avatar({ name, url, size }: { name: string; url: string | null; size: n
     : <View style={[round, s.center0, { backgroundColor: C.lilac }]}><Text style={{ fontFamily: Fonts.black, fontSize: size / 2.3, color: C.purpleDark }}>{name.replace(/^Comprador · /, '').charAt(0).toUpperCase()}</Text></View>;
 }
 
-function PayInside() {
-  return <View style={s.notice} testID="chat-pay-inside"><Icon name="lock-closed" size={13} color={C.lilac} /><Text style={[T.footnote, { flexShrink: 1 }]}>{K.payInside}</Text></View>;
+function PayInside({ pinned }: { pinned?: boolean }) {
+  return <View style={[s.notice, pinned && { alignSelf: 'center', marginBottom: S.xs }]} testID={pinned ? 'chat-pay-pinned' : 'chat-pay-inside'}><Icon name="lock-closed" size={13} color={C.lilac} /><Text style={[T.footnote, { flexShrink: 1 }]}>{K.payInside}</Text></View>;
 }
 
 function Bubble({ m, mine, first, last, read, notice, onRetry }: { m: ChatMsg; mine: boolean; first: boolean; last: boolean; read: boolean; notice: boolean; onRetry: (m: ChatMsg) => void }) {
@@ -350,6 +357,12 @@ function Bubble({ m, mine, first, last, read, notice, onRetry }: { m: ChatMsg; m
 
 /** Tarjeta del producto en el hilo (estilo Messenger): foto, título y precio; tocar abre la ficha /p/<slug>. */
 function ItemCard({ p, slug, mine }: { p: ChatProduct | null; slug: string; mine: boolean }) {
+  if (p && p.available === false) return ( // borrado o archivado: la conversación sigue; la tarjeta lo dice, sin link
+    <View testID="chat-item-gone" accessibilityRole="text" style={[s.itemCard, { alignSelf: mine ? 'flex-end' : 'flex-start', borderColor: C.line }]}>
+      <View style={[s.itemImg, s.center0]}><Icon name="pricetag-outline" size={22} color={C.textDim} /></View>
+      <Text style={[T.callout, { flex: 1 }]} numberOfLines={2}>{K.itemGone}</Text>
+    </View>
+  );
   const title = p?.title ?? K.seeItem;
   const price = p?.price_crc != null ? formatCRC(p.price_crc) : null;
   return (

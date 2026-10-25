@@ -14,7 +14,7 @@ import type { BuyerIdentity } from './guest';
 import { isMissingTable, notifyOrder, vapid, type PushDeps, type PushMsg } from './push';
 import { canShowContact } from './contact';
 import {
-  blockLock, buyerLabel, chatPreview, CHAT_BLOCK_LOCKED, CHAT_MAX, CHAT_OPEN_PER_HOUR, CHAT_PRESENT_MS, CHAT_PUSH_COOLDOWN_MIN, CHAT_SEND_PER_MIN, CHAT_TYPING_MS,
+  blockLock, buyerLabel, chatPreview, CHAT_BLOCK_LOCKED, CHAT_BUYER_LIMITED, CHAT_BUYER_PER_HOUR, CHAT_MAX, CHAT_OPEN_PER_HOUR, CHAT_PRESENT_MS, CHAT_PUSH_COOLDOWN_MIN, CHAT_SEND_PER_MIN, CHAT_TYPING_MS,
   chatItemMarker, cleanChatText, isUnread, validChatToken, validClientId, validItemSlug, type ChatRole,
 } from './chatText';
 
@@ -142,7 +142,12 @@ export async function openChat(who: BuyerIdentity, b: { store_slug?: unknown; it
     if (item_slug && found.item_slug !== item_slug) await db().from(CONV).update({ item_slug, subject, item_photo }).eq('id', found.id);
     return { token: found.token, role };
   }
-  // Anti-spam: conversaciones nuevas por hora (identidad y, sin cuenta, IP).
+  // Anti-spam: conversaciones nuevas por hora (identidad y, sin cuenta, IP). También en la base: vale entre instancias.
+  {
+    const { data: recentOpen, error: eO } = await db().from(CONV).select('id').in('buyer_id', who.ids).gt('created_at', new Date(Date.now() - 3600e3).toISOString()).limit(CHAT_OPEN_PER_HOUR + 1);
+    if (eO) dbErr(eO);
+    if ((recentOpen ?? []).length >= CHAT_OPEN_PER_HOUR) throw Object.assign(new HttpError(429, 'Abriste muchas conversaciones seguidas. Espera un rato e intenta de nuevo.'), { code: 'chat_rate_limited' });
+  }
   if (chatRateLimited(`o:${who.ids[0]}`, CHAT_OPEN_PER_HOUR, 3600e3) || (ip && !who.cavos && chatRateLimited(`oip:${ip}`, CHAT_OPEN_PER_HOUR * 2, 3600e3)))
     throw Object.assign(new HttpError(429, 'Abriste muchas conversaciones seguidas. Espera un rato e intenta de nuevo.'), { code: 'chat_rate_limited' });
   const row = { token: newChatToken(), seller_user_id: seller, buyer_id: buyer, ctx, order_slug, item_slug, subject, item_photo, created_at: new Date().toISOString() };
@@ -155,14 +160,22 @@ export async function openChat(who: BuyerIdentity, b: { store_slug?: unknown; it
 export interface ChatMessageView { id: number; sender: ChatRole; body: string; client_id: string | null; created_at: string; item_slug: string | null }
 const view = (m: any): ChatMessageView => ({ id: Number(m.id), sender: m.sender, body: String(m.body ?? ''), client_id: m.client_id ?? null, created_at: m.created_at, item_slug: validItemSlug(m.item_slug) ? m.item_slug : null });
 
-export interface ChatProduct { slug: string; title: string; photo: string | null; price_crc: number | null }
-/** Datos públicos de los productos de las tarjetas (los mismos de la ficha): título, foto y precio. */
+export interface ChatProduct { slug: string; title: string | null; photo: string | null; price_crc: number | null; available: boolean }
+/** Producto sin fila, archivado (borrado por el vendedor) o cancelado: la tarjeta dice "ya no está disponible", sin link. */
+export const itemGone = (o: any) => !o || o.listing_status === 'archivada' || o.status === 'cancelado';
+/** Datos públicos y ACTUALES de los productos de las tarjetas (los mismos de la ficha): título, foto y precio de hoy. */
 async function productCards(slugs: string[]): Promise<Record<string, ChatProduct>> {
   const list = [...new Set(slugs.filter(validItemSlug))].slice(0, 20);
   if (!list.length) return {};
-  const { data, error } = await db().from('orders').select('slug, brand, model, photos, price_crc').in('slug', list);
+  let { data, error } = await db().from('orders').select('slug, brand, model, photos, price_crc, status, listing_status').in('slug', list);
+  if (error) ({ data, error } = await db().from('orders').select('slug, brand, model, photos, price_crc, status').in('slug', list)); // sin 012
   if (error) { console.warn('[chat] productos', error.message); return {}; }
-  return Object.fromEntries((data ?? []).map((o: any) => [o.slug, { slug: o.slug, title: titleOf(o), photo: Array.isArray(o.photos) ? o.photos[0] ?? null : null, price_crc: o.price_crc == null ? null : Number(o.price_crc) }]));
+  const bySlug = new Map<string, any>((data ?? []).map((o: any) => [o.slug, o]));
+  return Object.fromEntries(list.map((slug) => {
+    const o = bySlug.get(slug);
+    if (itemGone(o)) return [slug, { slug, title: null, photo: null, price_crc: null, available: false }];
+    return [slug, { slug, title: titleOf(o), photo: Array.isArray(o.photos) ? o.photos[0] ?? null : null, price_crc: o.price_crc == null ? null : Number(o.price_crc), available: true }];
+  }));
 }
 
 /** Nombre y foto de la otra parte (para la cabecera y la bandeja). El comprador nunca sale con datos personales. */
@@ -213,17 +226,19 @@ export async function readChat(who: BuyerIdentity, b: { token?: unknown; after?:
   // Cabecera: la otra parte, el tema (producto o pedido) y si ya se pagó (el aviso de "paga dentro" es solo antes de pagar).
   const cards = await sellerCards([c.seller_user_id]);
   const s = cards[c.seller_user_id];
-  let order: { slug: string; status: string; price_crc: number | null } | null = null, item: { slug: string; price_crc: number | null } | null = null;
+  let order: { slug: string; status: string; price_crc: number | null } | null = null, item: { slug: string; price_crc: number | null } | null = null, item_gone = false;
   const ref = c.order_slug ?? c.item_slug;
   if (ref) {
-    const { data: o } = await db().from('orders').select('slug, status, price_crc').eq('slug', ref).maybeSingle();
+    let { data: o, error: eO } = await db().from('orders').select('slug, status, price_crc, listing_status').eq('slug', ref).maybeSingle();
+    if (eO) ({ data: o } = await db().from('orders').select('slug, status, price_crc').eq('slug', ref).maybeSingle()); // sin 012
     if (o && c.order_slug) order = { slug: o.slug, status: o.status, price_crc: o.price_crc == null ? null : Number(o.price_crc) };
-    else if (o) item = { slug: o.slug, price_crc: o.price_crc == null ? null : Number(o.price_crc) };
+    else if (c.item_slug && itemGone(o)) item_gone = true; // borrado: la conversación sigue, la cabecera no enlaza
+    else if (o) item = { slug: o.slug, price_crc: o.price_crc == null ? null : Number(o.price_crc) }; // precio ACTUAL
   }
   return {
     ...state, messages, can_block, products,
     conversation: {
-      token: c.token, kind: c.order_slug ? 'order' as const : 'store' as const, subject: c.subject ?? null, item_photo: c.item_photo ?? null, item, order,
+      token: c.token, kind: c.order_slug ? 'order' as const : 'store' as const, subject: c.subject ?? null, item_photo: item_gone ? null : c.item_photo ?? null, item, item_gone, order,
       paid: !!order && canShowContact(order.status),
       other: role === 'buyer' ? { name: s?.name ?? 'Vendedor', store_slug: s?.store_slug ?? null, avatar_url: s?.avatar_url ?? null } : { name: buyerLabel(c.buyer_id), store_slug: null, avatar_url: null },
     },
@@ -252,6 +267,17 @@ export async function sendChat(who: BuyerIdentity, b: { token?: unknown; body?: 
   const { data: recent, error: eR } = await db().from(MSG).select('id').eq('conversation_id', c.id).eq('sender', role).gt('created_at', since).limit(CHAT_SEND_PER_MIN + 1);
   if (eR) dbErr(eR);
   if ((recent ?? []).length >= CHAT_SEND_PER_MIN) throw tooFast();
+  // Por comprador (su llave y/o su cuenta), sumando todas sus conversaciones en la última hora: que nadie llene de spam a
+  // los vendedores abriendo muchas conversaciones. Contado en la base (vale entre instancias). El vendedor responde libre.
+  if (role === 'buyer') {
+    const hour = new Date(now - 3600e3).toISOString();
+    const { data: mine, error: eC } = await db().from(CONV).select('id').in('buyer_id', who.ids).gt('last_message_at', hour).limit(CHAT_OPEN_PER_HOUR * 3);
+    if (eC) dbErr(eC);
+    const ids = [...new Set([c.id, ...(mine ?? []).map((x: any) => x.id)])];
+    const { data: sent, error: eS } = await db().from(MSG).select('id').in('conversation_id', ids).eq('sender', 'buyer').gt('created_at', hour).limit(CHAT_BUYER_PER_HOUR + 1);
+    if (eS) dbErr(eS);
+    if ((sent ?? []).length >= CHAT_BUYER_PER_HOUR) throw Object.assign(new HttpError(429, CHAT_BUYER_LIMITED), { code: 'chat_rate_limited' });
+  }
   const iso = new Date(now).toISOString();
   // Tarjeta del producto (030): el primer mensaje del comprador por el producto con el que abrió (o por uno nuevo).
   let item_slug: string | null = null;

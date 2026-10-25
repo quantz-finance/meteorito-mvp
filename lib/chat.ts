@@ -16,10 +16,10 @@ type Auth = Pick<MeteoritoAuth, 'getAuthToken'> & Partial<MeteoritoAuth>;
 export interface ChatMsg { id: number; sender: ChatRole; body: string; client_id: string | null; created_at: string; pending?: 'sending' | 'failed';
   /** Tarjeta del producto pegada a este mensaje (030). */ item_slug?: string | null }
 /** Datos públicos del producto de una tarjeta del hilo. */
-export interface ChatProduct { slug: string; title: string; photo: string | null; price_crc: number | null }
+export interface ChatProduct { slug: string; title: string | null; photo: string | null; price_crc: number | null; /** false: borrado o archivado (sin link). */ available?: boolean }
 export interface ChatConversation {
   token: string; kind: 'store' | 'order'; subject: string | null; item_photo: string | null;
-  item: { slug: string; price_crc: number | null } | null; order: { slug: string; status: string; price_crc: number | null } | null; paid: boolean;
+  item: { slug: string; price_crc: number | null } | null; /** El producto del tema ya no está (borrado/archivado). */ item_gone?: boolean; order: { slug: string; status: string; price_crc: number | null } | null; paid: boolean;
   other: { name: string; store_slug: string | null; avatar_url: string | null };
 }
 export interface ChatRead { role: ChatRole; blocked: boolean; other_read_at: string | null; other_typing: boolean; has_more: boolean; messages: ChatMsg[]; conversation?: ChatConversation;
