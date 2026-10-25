@@ -26,9 +26,11 @@ test.describe('Entrada', () => {
     expect(Math.max(...delays) + 280).toBeLessThanOrEqual(560); // todo visible en ~0,5 s
     const kf = await page.evaluate(() => { for (const sh of Array.from(document.styleSheets)) for (const r of Array.from(sh.cssRules)) if (r instanceof CSSKeyframesRule && r.name === 'm-ap-a') return r.cssText; return ''; });
     expect(kf).toMatch(/opacity: 0/); expect(kf).toMatch(/translate3d\(0px, 10px, 0px\)/);
-    await page.waitForTimeout(700);
-    const op = await page.evaluate(() => Array.from(document.querySelectorAll('[data-appear-sub]>*')).map((e) => getComputedStyle(e).opacity));
-    expect(op.every((o) => o === '1')).toBe(true);
+    // termina (sin depender del reloj del runner): no quedan entradas corriendo y los campos quedan opacos
+    await expect.poll(() => page.evaluate(() => document.getAnimations().filter((a) => /^m-ap-/.test((a as CSSAnimation).animationName) && a.playState === 'running').length), { timeout: 4000 }).toBe(0);
+    await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveCSS('opacity', '1');
+    const field = page.locator('[data-appear-sub]>*').filter({ has: page.getByPlaceholder('Ej. iPhone 13 de 128 GB') });
+    await expect(field).toHaveCSS('opacity', '1');
     // no bloquea: se puede escribir de inmediato
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici');
     await expect(page.getByPlaceholder('Ej. iPhone 13 de 128 GB')).toHaveValue('Bici');
