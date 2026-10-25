@@ -33,7 +33,11 @@ export const haptic = {
 
 /* ---------- Layout ---------- */
 /** Pantalla con título grande iOS, safe area superior y footer fijo opcional (zona del pulgar). */
-export function Screen({ title, subtitle, right, children, footer, footerBare, scroll = true, refreshControl, contentStyle, space = 'full', back, backTop, guestBack }: {
+export function Screen({ title, subtitle, right, children, footer, footerBare, scroll = true, fill, headerGap = S.lg, refreshControl, contentStyle, space = 'full', back, backTop, guestBack }: {
+  /** Con scroll: el contenido llena la pantalla (un hijo con flex: 1 toma el alto libre) y solo hace scroll si no cabe. */
+  fill?: boolean;
+  /** Aire entre el encabezado y el contenido (iPhone SE: menos). */
+  headerGap?: number;
   /** Footer sin barra de fondo: el botón queda directo sobre el universo (p. ej. "Generar link" en Vender). */
   footerBare?: boolean;
   /** Muestra el botón Volver arriba a la izquierda; el valor es a dónde ir si no hay historial. */
@@ -54,12 +58,12 @@ export function Screen({ title, subtitle, right, children, footer, footerBare, s
   const backBtn = back && (!title || backTop) ? <BackButton fallback={back} replace={backTop} /> : null;
   const header = title ? <ScreenHeader title={title} subtitle={subtitle} right={right} back={backTop ? undefined : back} guestBack={guestBack} /> : null;
   const body = scroll ? (
-    <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
+    <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, fill && { flexGrow: 1 }, contentStyle]}
       keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}
       onScroll={onScroll} scrollEventThrottle={16}>
-      <AppearBlock cycle={cycle} style={{ gap: S.lg }}>{backBtn}{header}{children}</AppearBlock>
+      <AppearBlock cycle={cycle} style={[{ gap: headerGap }, fill && { flexGrow: 1 }]}>{backBtn}{header}{children}</AppearBlock>
     </Reanimated.ScrollView>
-  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md, paddingBottom: S.sm }, contentStyle]}><AppearBlock cycle={cycle} style={{ flex: 1, gap: S.lg }}>{backBtn}{header}{children}</AppearBlock></View>;
+  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md, paddingBottom: S.sm }, contentStyle]}><AppearBlock cycle={cycle} style={{ flex: 1, gap: headerGap }}>{backBtn}{header}{children}</AppearBlock></View>;
   return (
     <AppearProvider value={cycle}><ScrollCtx.Provider value={scrollY}>
       <View style={st.screen}>

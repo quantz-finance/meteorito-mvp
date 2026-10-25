@@ -1,4 +1,5 @@
-// (48) Vender: el botón "Generar link" va directo sobre el universo (sin la barra morada del footer fijo).
+// (48) Vender: el botón "Generar link" va directo sobre el universo (sin la barra morada del footer fijo); ahora va en
+//      el flujo (su propio espacio), no en un footer.
 import type { T } from './setup';
 import { readFileSync } from 'node:fs';
 
@@ -12,6 +13,8 @@ export async function run(t: T) {
   t.check('ds: footerBare sin línea lila visible y mismo alto (borde transparente, no se quita)', /borderTopColor:\s*'transparent'/.test(bare) && !/borderTopWidth/.test(bare));
   t.check('ds: Screen pasa footerBare al StickyFooter', /footerBare\s*\?\s*:\s*boolean/.test(ds) && /<StickyFooter bare=\{footerBare\}>/.test(ds));
   const screens = [...vender.matchAll(/<Screen\b[^>]*footer=/g)].map((m) => m[0]);
-  t.check('Vender: todas las pantallas con footer usan footerBare (formulario y link listo)', screens.length >= 2 && screens.every((x) => /\bfooterBare\b/.test(x)), `${screens.length}`);
+  t.check('Vender: las pantallas con footer usan footerBare (link listo)', screens.length >= 1 && screens.every((x) => /\bfooterBare\b/.test(x)), `${screens.length}`);
+  // Formulario: "Generar link" ya no va en un footer fijo (se encimaba con los avisos): va en el flujo, en su propio espacio.
+  t.check('Vender: el formulario no tiene footer (el círculo va en el flujo)', !/<Screen title="Vender" subtitle[^>]*footer=/.test(vender) && /testID="launch-space"/.test(vender));
   t.check('Vender: "Generar link" es el círculo (LaunchButton), sin fondo morado propio', /<LaunchButton label="Generar link"/.test(vender) && !/title="Generar link"/.test(vender));
 }

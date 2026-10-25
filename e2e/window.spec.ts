@@ -1,7 +1,7 @@
 // Plazo acordado (demo): el vendedor elige cara a cara/envío y el plazo; el comprador lo ve antes de pagar.
 // Cara a cara: el comprador ve su código apenas paga y el vendedor lo ingresa desde 'fondeado'. Extensión de mutuo acuerdo.
 import { test, expect, type Page } from '@playwright/test';
-import { open, orderStatus, DEMO_PIN, takePhoto, expectNoScroll, openSellerRow, expectInputs16 } from './helpers';
+import { open, orderStatus, DEMO_PIN, takePhoto, expectNoScroll, openSellerRow, expectInputs16, expectVenderLayout } from './helpers';
 import { CUSTODY_NOTICE } from '../lib/rules';
 
 const SHOTS = process.env.WIN_SHOTS; // carpeta para capturas (opcional, p. ej. /workspace/out)
@@ -15,8 +15,7 @@ test('WIN-01 vender: elige cara a cara y 3 días; el link guarda el acuerdo; Ven
   await takePhoto(page);
   await expect(page.getByTestId('agreement-value')).toHaveText('Envío · 7 días'); // default
   await expectNoScroll(page);
-  const n = (await page.getByTestId('beta-notice').boundingBox())!, b = (await page.getByText('Generar link').boundingBox())!;
-  expect(n.y + n.height).toBeLessThanOrEqual(b.y); // la fila nueva no tapa el aviso de beta con el botón
+  await expectVenderLayout(page); // "Entrega y plazo" no empuja el círculo encima de los avisos
   await shot(page, 'vender');
   await page.getByLabel('Entrega y plazo').click();
   await page.getByLabel('Cara a cara', { exact: true }).click();
