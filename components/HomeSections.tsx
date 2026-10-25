@@ -34,11 +34,14 @@ const Row = memo(function Row({ title, price, photo, icon, pill, onPress, testID
       style={({ pressed }) => [s.row, tint ? s.rowInBox : s.rowCard, pill.todo && s.rowTodo, pressTransition, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
       {photo ? <Image source={{ uri: photo }} style={s.thumb} resizeMode="cover" accessibilityIgnoresInvertColors />
         : <View style={[s.thumb, s.noPhoto]}><Icon name={icon} size={20} color={C.lilac} /></View>}
+      {/* Título y precio arriba; la pastilla abajo con todo el ancho (cabe "Al recibir, dale tu código" en iPhone SE) */}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text style={s.title} numberOfLines={1}>{title}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+          <Text style={[s.title, { flex: 1 }]} numberOfLines={1}>{title}</Text>
+          <Text style={s.price}>{formatCRC(price)}</Text>
+        </View>
         <Chip key={pill.label} swap label={pill.label} tone={pill.tone} icon={pill.todo ? 'alert-circle' : undefined} />
       </View>
-      <Text style={s.price}>{formatCRC(price)}</Text>
     </Pressable>
   );
 });
@@ -86,7 +89,7 @@ export function HomeSummaryCard({ sum, rating }: { sum: HomeSummary; rating: { r
       </View>
       {extra.length ? <View style={s.extra}>
         {rating && rating.rating_count > 0 ? <Icon name="star" size={13} color={C.orange} /> : <Icon name="receipt-outline" size={13} color={C.lilac} />}
-        <Text style={T.footnote} numberOfLines={1}>{extra.join(' · ')}</Text>
+        <Text style={[T.footnote, { flex: 1 }]} numberOfLines={2}>{extra.join(' · ')}</Text>
       </View> : null}
     </View>
   );

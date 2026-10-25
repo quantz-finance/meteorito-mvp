@@ -3,6 +3,9 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { T } from './setup';
+import { installTestJwks, req, res, token } from './jwt';
+import { fakeDb } from './fakedb';
+import { __setDbForTests } from '../../api/_lib/db';
 import { allocateRows, buyNeedsYou, buyPill, HOME_COPY, homeSummary, salePill, saleNeedsYou, sortBuys, sortSales } from '../../lib/home';
 
 const read = (f: string) => readFileSync(f, 'utf8');
@@ -20,7 +23,7 @@ export async function run(t: T) {
   t.check('pastilla corta de venta: Disponible, Enviado, Pago liberado', salePill(s('a', 'creado')).label === 'Disponible' && salePill(s('a', 'enviado')).label === 'Enviado' && salePill(s('a', 'liberado')).label === 'Pago liberado');
   t.check('venta resuelta con reembolso: nunca "Pago liberado"', salePill(s('a', 'resuelto', { resolution: { buyerPct: 100 } })).label === 'Reembolsado');
   t.check('compra sin terminar de pagar -> "Termina el pago"', buyPill(b('a', 'escrow_creado')).label === 'Termina el pago' && buyNeedsYou(b('a', 'escrow_creado')));
-  t.check('compra enviada -> "Dale tu código" (te toca)', buyPill(b('a', 'enviado')).label === 'Dale tu código' && buyPill(b('a', 'enviado')).todo);
+  t.check('compra enviada -> "Al recibir, dale tu código" (te toca)', buyPill(b('a', 'enviado')).label === 'Al recibir, dale tu código' && buyPill(b('a', 'enviado')).todo);
   t.check('compra pagada con envío -> "Pagado" (esperas al vendedor)', buyPill(b('a', 'fondeado')).label === 'Pagado' && !buyNeedsYou(b('a', 'fondeado')));
   t.check('compra pagada cara a cara -> te toca dar tu código', buyNeedsYou(b('a', 'fondeado', { delivery_mode: 'cara_a_cara' })));
 
@@ -43,6 +46,7 @@ export async function run(t: T) {
   t.check('filas: sin compras, todo para ventas', allocateRows({ slots: 5, sales: 3, buys: 0 }).sales === 3 && !allocateRows({ slots: 5, sales: 3, buys: 0 }).moreSales);
   t.check('filas: cada lista con datos muestra al menos una aunque no quepa', JSON.stringify(allocateRows({ slots: 0, sales: 4, buys: 2 })) === JSON.stringify({ sales: 1, buys: 1, moreSales: true, moreBuys: true }));
 
+  t.check('lo cobrado dice que es de la beta, sin dinero real (no parece un saldo)', HOME_COPY.collected === 'cobrado en la beta (sin dinero real)');
   // Copy nuevo: tuteo, sin palabras prohibidas
   const copy = Object.values(HOME_COPY).map((v) => (typeof v === 'function' ? v(3) : v)).join(' | ');
   t.check('copy de Home sin palabras prohibidas ni voseo', !BANNED.test(copy) && !VOSEO.test(copy), copy);
@@ -58,4 +62,38 @@ export async function run(t: T) {
   t.check('Home: fotos de las ventas por /api/store orders (sin función nueva)', /photos/.test(read('api/store/index.ts').split("b.action === 'orders'")[1].split('return json')[0]));
   const fns = (d: string): string[] => readdirSync(d).flatMap((n) => { const p = join(d, n); return statSync(p).isDirectory() ? (n === '_lib' ? [] : fns(p)) : /\.ts$/.test(n) ? [p] : []; });
   t.check('sin funciones nuevas en /api (siguen 12)', fns('api').length === 12, String(fns('api').length));
+
+  // ---------- Ley 8968: los pedidos (y sus fotos) solo salen con la sesión del dueño; nunca en la tienda pública ----------
+  await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
+  const store = (await import('../../api/store/index')).default;
+  const db = fakeDb(); const tablesRead: string[] = [];
+  __setDbForTests({ ...db, from: (tb: string) => { tablesRead.push(tb); return db.from(tb); } } as any);
+  const PAID = 'https://cdn.test/orders/pagado-secreto.jpg', ITEM = 'https://cdn.test/orders/producto-en-venta.jpg';
+  db.tables.orders.push(
+    { id: '1', slug: 'pagado1', seller_user_id: 'dueno', seller_address: 'GA', buyer_user_id: 'guest:x', status: 'fondeado', brand: '', model: 'Bici vendida', price_crc: 150000, category: 'otro', identifier: '356938035643809', photos: [PAID], created_at: '2026-10-20T10:00:00Z' },
+    { id: '2', slug: 'venta01', seller_user_id: 'dueno', seller_address: 'GA', buyer_user_id: null, status: 'creado', brand: '', model: 'Bici en venta', price_crc: 90000, category: 'otro', photos: [ITEM], created_at: '2026-10-21T10:00:00Z', kind: 'listing', listing_slug: null, listing_status: 'activa' });
+  db.tables.public_stores = [{ store_slug: 'valeria', display_name: 'Valeria', rating_avg: null, rating_count: 0, avatar_url: null }];
+  db.tables.public_store_items = [{ store_slug: 'valeria', slug: 'venta01', title: 'Bici en venta', price_crc: 90000, photo: ITEM, created_at: '2026-10-21T10:00:00Z' }];
+  const pub = res(); await store({ method: 'GET', headers: {}, body: null, query: { store: 'valeria' } }, pub);
+  const pj = JSON.stringify(pub.body ?? {});
+  t.check('tienda pública (GET ?store=): responde sin sesión', pub.code === 200, String(pub.code));
+  t.check('tienda pública: solo lee las vistas públicas (nunca la tabla orders)', tablesRead.length > 0 && tablesRead.every((x) => x === 'public_stores' || x === 'public_store_items'), tablesRead.join());
+  t.check('tienda pública: sin pedidos ni sus datos (orders, estado, comprador, identificador, foto del pedido pagado)',
+    !('orders' in (pub.body ?? {})) && !/pagado1|pagado-secreto|Bici vendida|356938|buyer|status|identifier|guest:/.test(pj), pj.slice(0, 200));
+  t.check('tienda pública: campos exactos (tienda + productos en venta: slug, título, precio, foto del producto)',
+    Object.keys(pub.body ?? {}).sort().join() === 'avatar_url,display_name,items,rating_avg,rating_count,store_slug'
+    && (pub.body?.items ?? []).every((i: any) => Object.keys(i).sort().join() === 'photo,price_crc,slug,title'), pj.slice(0, 200));
+  const mig = readFileSync('supabase/migrations/012_listings_invite_photos.sql', 'utf8').split('create or replace view public.public_store_items')[1]?.split(';')[0] ?? '';
+  t.check('vista public_store_items: solo productos sin comprador (creado, sin pedido de comprador, activos)', /o\.status = 'creado'/.test(mig) && /o\.listing_slug is null/.test(mig) && !/buyer|identifier/.test(mig));
+  const anon = res(); await store(req(null, { action: 'orders' }), anon);
+  t.check('action orders sin sesión -> 401 y sin datos', anon.code === 401 && !JSON.stringify(anon.body ?? {}).includes('pagado'), String(anon.code));
+  const guest = res(); await store({ method: 'POST', headers: { 'x-guest-key': 'c'.repeat(64) }, body: { action: 'orders' }, query: {} }, guest);
+  t.check('action orders con llave de invitado (sin sesión Cavos) -> 401', guest.code === 401, String(guest.code));
+  const other = res(); await store(req(await token({ sub: 'otro' }), { action: 'orders' }), other);
+  t.check('action orders de otro usuario -> lista vacía, sin fotos ajenas', other.code === 200 && (other.body?.orders ?? []).length === 0 && !JSON.stringify(other.body).includes('pagado-secreto'), JSON.stringify(other.body).slice(0, 120));
+  const own = res(); await store(req(await token({ sub: 'dueno' }), { action: 'orders' }), own);
+  const mine = (own.body?.orders ?? []).find((o: any) => o.slug === 'pagado1');
+  t.check('action orders del dueño -> sus pedidos con la miniatura, sin el arreglo photos ni el identificador completo', own.code === 200 && mine?.photo === PAID && !('photos' in mine) && !JSON.stringify(own.body).includes('356938035643809'), JSON.stringify(mine ?? own.body).slice(0, 160));
+  t.check('action orders: no-store (nunca en caché pública)', /Cache-Control', 'no-store'\);\s*return json\(res, 200, \{ orders \}\)/.test(readFileSync('api/store/index.ts', 'utf8')));
+  __setDbForTests(null as any);
 }

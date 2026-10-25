@@ -18,6 +18,9 @@ async function seedHome(page: Page) {
     const c1 = await d.seed('enviado', { title: 'Audífonos', price_crc: 35000, photos: ['/demo-feed/p-audifonos.jpg'] });
     const c2 = await d.seed('fondeado', { title: 'Bici eléctrica', price_crc: 420000, photos: ['/demo-feed/p-biciel.jpg'] });
     const st = d.state();
+    d.setBuyer('B'); // una venta ya cobrada (para "cobrado en la beta"), sin adelantar el reloj de las demás
+    const cobrada = await d.seed('fondeado', { title: 'Cámara', price_crc: 60000, photos: ['/demo-feed/p-camara.jpg'] });
+    Object.assign(st.orders[cobrada], { status: 'liberado', released_at: new Date().toISOString() });
     for (const s of [c1, c2]) { st.orders[s].seller_address = otra; const l = st.orders[s].listing_slug; if (l) st.orders[l].seller_address = otra; }
     d.setBuyer('A'); // guarda el estado
     return { pagada, c1 };
@@ -44,7 +47,12 @@ test.describe('Home', () => {
     const firstBuy = page.locator('[data-testid^="home-buy-row"]').first();
     await expect(firstBuy).toHaveAttribute('data-testid', 'home-buy-row-todo');
     await expect(firstBuy).toContainText('Audífonos');
-    await expect(firstBuy).toContainText('Dale tu código');
+    await expect(firstBuy).toContainText('Al recibir, dale tu código');
+    // Lo cobrado nunca parece un saldo real (beta en testnet)
+    await expect(summary).toContainText('₡60 000 cobrado en la beta (sin dinero real)');
+    // La pastilla larga cabe completa (sin cortar) en la fila
+    const pillCut = await firstBuy.getByText('Al recibir, dale tu código', { exact: true }).evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    expect(pillCut).toBe(false);
     // Sin la UI del proceso en Home: ni línea de tiempo ni acciones
     await expect(page.getByLabel(/^Estado del pago:/)).toHaveCount(0);
     await expect(page.getByText('Ya lo envié', { exact: true })).toHaveCount(0);

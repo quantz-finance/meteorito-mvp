@@ -14,12 +14,12 @@ export const HOME_COPY = {
   sales: 'Tus ventas',
   buys: 'Tus compras',
   seeAll: (n: number) => `Ver todas · ${n}`,
-  collected: 'cobrado',
+  collected: 'cobrado en la beta (sin dinero real)', // beta en testnet: nunca parece un saldo real (revisión legal)
   salesEmpty: 'Todavía no vendes nada.',
   shipIt: 'Envíalo',
   handIt: 'Entrégalo',
   finishPay: 'Termina el pago',
-  giveCode: 'Dale tu código',
+  giveCode: 'Al recibir, dale tu código',
 } as const;
 
 export type PillTone = 'lilac' | 'success' | 'warn' | 'muted';
