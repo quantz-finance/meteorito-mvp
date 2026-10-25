@@ -159,8 +159,12 @@ const DEMO_CAPTURE_TTL = 5 * 60_000;
 /** JPEG mínimo (1x1) para los pedidos sembrados como enviados. */
 const DEMO_SHIP_PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
 
+/** Latencia simulada (ms) de cada llamada: 0 por defecto. Los tests y capturas la suben para ver el estado "cargando". */
+let demoLatency = 0;
+
 /** Reemplazo de los endpoints /api/*: misma forma de respuesta, sin red. */
 export async function demoApi(path: string, body: any = {}, token?: string | null): Promise<any> {
+  if (demoLatency > 0) await new Promise((r) => setTimeout(r, demoLatency));
   const st = S(); const p = path.split('?')[0];
   // Sesión vencida simulada: como producción, el token viejo ya no sirve y se pide volver a entrar (sin perder nada).
   if (st.session?.expired && token !== undefined) throw err(401, 'session_relogin_required', 'Tu sesión venció. Vuelve a entrar con la misma cuenta para continuar.');
@@ -561,6 +565,7 @@ if (DEMO_ENABLED && hasWindow()) {
     setBuyer: (b: string) => { S().buyer = b; emit(); }, advance: (ms: number) => { S().clock = (S().clock ?? 0) + ms; emit(); },
     cron: demoRunCron, resolve: demoResolve, state: () => S(), expireSession: demoExpireSession,
     api: demoApi, setAdmin: (v: boolean) => { S().admin = v; emit(); },
+    setLatency: (ms: number) => { demoLatency = Math.max(0, Math.min(10_000, Number(ms) || 0)); },
     /** Simula que llegó el pago con cripto del pedido (lo detecta el siguiente crypto_status). */
     cryptoPay: (slug: string, asset: 'USDC' | 'XLM' = 'USDC', amount = 1) => { const st = S(); st.cryptoPaid = { ...(st.cryptoPaid ?? {}), [slug]: { asset, amount } }; emit(); },
   };
