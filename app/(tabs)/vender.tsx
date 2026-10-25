@@ -19,7 +19,7 @@ import { ui } from '@/components/ui';
 import { BetaNotice, RulesHint } from '@/components/RulesLink';
 import { SELL_SUMMARY } from '@/lib/rules';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, SuccessCheck, type IconName } from '@/components/ds';
-import { Reveal } from '@/components/space';
+import { AppearSub } from '@/components/Appear';
 import { ShareLink } from '@/components/ShareLink';
 import { AdTemplateButton, AdTemplateSheet } from '@/components/AdTemplateSheet';
 import { LastSeenInvite } from '@/components/LastSeenInvite';
@@ -210,23 +210,23 @@ function VenderForm() {
         <View style={{ flex: 1 }}><PrimaryButton title="Otro link" icon="add" variant="secondary" onPress={() => { setCreated(null); setError(null); }} /></View>
         <View style={{ flex: 1 }}><PrimaryButton title="Mi tienda" icon="storefront-outline" variant="secondary" onPress={() => router.push('/mi-tienda')} /></View>
       </View>}>
-      <View style={{ flex: 1, gap: S.md, justifyContent: 'center' }}>
-        <Reveal i={0} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
+      <AppearSub style={{ flex: 1, gap: S.md, justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
           <SuccessCheck size={short ? 44 : 56} celebrate />
           <Text style={[T.title, { flex: 1 }]}>¡Tu link está listo!</Text>
-        </Reveal>
-        <Reveal i={1}><Card style={{ flexDirection: 'row', gap: S.md, alignItems: 'center', padding: S.sm + 4 }}>
+        </View>
+        <Card style={{ flexDirection: 'row', gap: S.md, alignItems: 'center', padding: S.sm + 4 }}>
           {created.photo ? <Image source={{ uri: created.photo }} style={s.thumb} /> : <View style={s.thumb}><Icon name="pricetag-outline" size={24} color={C.lilac} /></View>}
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={T.headline} numberOfLines={2}>{created.title}</Text>
             <Text style={[T.title, { fontVariant: ['tabular-nums'] }]}>{formatCRC(created.price)}</Text>
             <Text style={T.footnote} numberOfLines={2}>{created.agreement}</Text>
           </View>
-        </Card></Reveal>
-        <Reveal i={2}><ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} /></Reveal>
-        <Reveal i={3}><AdTemplateButton onPress={() => setAdOpen(true)} /></Reveal>
-        <Reveal i={4}><Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar.</Text></Reveal>
-      </View>
+        </Card>
+        <ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} />
+        <AdTemplateButton onPress={() => setAdOpen(true)} />
+        <Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar.</Text>
+      </AppearSub>
       <AdTemplateSheet visible={adOpen} onClose={() => setAdOpen(false)} ad={created.ad} />
       <LastSeenInvite trigger={created.slug} />
     </Screen>
@@ -239,7 +239,7 @@ function VenderForm() {
         <LaunchButton label="Generar link" ready={ready} busy={busy} short={short} onPress={() => submit()} />
         <View style={s.dockSide} />
       </View>}>
-      <View style={{ flex: 1, gap: tiny ? 6 : short ? S.sm : S.md }}>{/* iPhone SE: menos aire para que "Entrega y plazo" y el aviso de beta quepan sin scroll */}
+      <AppearSub style={{ flex: 1, gap: tiny ? 6 : short ? S.sm : S.md }}>{/* iPhone SE: menos aire para que "Entrega y plazo" y el aviso de beta quepan sin scroll */}
       {orphan ? <OrphanWalletCard compact={short} onRestored={(r) => { setOrphan(false); if (title.trim() && photos.length) submit(r); }} /> : null}
       {invite && <Card style={{ gap: 2, padding: S.sm + 4 }}><Text style={T.headline} numberOfLines={1}>Respondes a una invitación</Text><Text style={T.footnote} numberOfLines={2}>Te piden {`${invite.brand} ${invite.model}`.trim()} por {formatCRC(invite.price_crc)}. El link queda reservado para quien te invitó.</Text></Card>}
 
@@ -316,7 +316,7 @@ function VenderForm() {
       {tight ? null : <Text style={T.footnote}>De 1 a 4 fotos con la cámara, en este momento.</Text>}
       {tight ? null : <RulesHint text={SELL_SUMMARY} from="sell" /* iPhone SE o con aviso: "Ver reglas" va junto al círculo, abajo */ />}
       <BetaNotice from="sell" />
-      </View>
+      </AppearSub>
 
       <CameraCapture visible={camOpen} purpose="listing" refId="new" onClose={() => setCamOpen(false)} onDone={addCameraPhoto} />
       <Sheet visible={agreeOpen} onClose={() => setAgreeOpen(false)} title="Entrega y plazo"

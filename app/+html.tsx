@@ -1,5 +1,6 @@
 import { ScrollViewStyleReset } from 'expo-router/html';
 import { MOTION_CSS } from '@/constants/motion';
+import { APPEAR_TEST_JS } from '@/lib/appearCore';
 import type { ReactNode } from 'react';
 import { SPLASH_IMG } from '@/constants/splashImages';
 import { UNIVERSE_HTML, universeCss } from '@/constants/universe';
@@ -70,7 +71,7 @@ export default function Root({ children }: { children: ReactNode }) {
         {/* Splash inline: pinta en el primer frame (antes del JS) y la app lo desvanece al montar. */}
         <div id="u" aria-hidden="true" data-testid="universe" dangerouslySetInnerHTML={{ __html: UNIVERSE_HTML }} />
         <div id="boot-splash" aria-label="Cargando Meteorito" role="img" dangerouslySetInnerHTML={{ __html: SPLASH_HTML }} />
-        <script dangerouslySetInnerHTML={{ __html: VIS_JS }} />
+        <script dangerouslySetInnerHTML={{ __html: VIS_JS + APPEAR_TEST_JS }} />
         {children}
       </body>
     </html>

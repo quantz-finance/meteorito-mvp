@@ -2,6 +2,7 @@
 // Se activan con dataSet={{ anim: '<nombre>' }} (react-native-web lo pasa como data-anim). La celebración es la única > 350 ms.
 // prefers-reduced-motion: todo queda en 1 ms (sin movimiento), el contenido aparece igual.
 import { Platform } from 'react-native';
+import { appearCss } from '@/lib/appearCore';
 import { burstPoints, FLOATERS } from '@/lib/launchCore';
 
 export const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
@@ -30,11 +31,15 @@ const floaters = FLOATERS.map(([l, d, dx], i) => `[data-anim="floaters"]>div:nth
 // animaciones de entrada con opacidad en ninguna parte (mejor quieto que un aviso invisible). Neo (legal): no quitar.
 export const LEGAL_ANIMS = ['enter', 'fade', 'pop', 'check', 'swap', 'toast', 'msg'];
 const legalSel = (inner: string) => LEGAL_ANIMS.map((a) => `[data-anim="${a}"]${inner}`).join(',');
+// Lo mismo con la animación de entrada única (lib/appearCore): el bloque que entra y tiene un aviso dentro, no se anima.
+const APPEAR_SEL = ['[data-appear]>*', '[data-appear-sub]>*', '[data-appear-item]'];
+const appearLegal = (inner: string) => APPEAR_SEL.map((a) => `${a}${inner}`).join(',');
 export const LEGAL_CSS = '[data-legal]{animation:none!important}'
   + `${legalSel(':has([data-legal])')}{animation:none!important}`
-  + `@supports not selector(:has(*)){${legalSel('')}{animation:none!important}}`;
+  + `${appearLegal(':has([data-legal])')}{animation:none!important}`
+  + `@supports not selector(:has(*)){${legalSel('')},${appearLegal('')}{animation:none!important}}`;
 
-export const MOTION_CSS = `
+export const MOTION_CSS = `${appearCss()}
 @keyframes m-enter{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
 @keyframes m-fade{from{opacity:0}to{opacity:1}}
 @keyframes m-sheet{from{transform:translate3d(0,100%,0)}to{transform:none}}
@@ -44,7 +49,7 @@ export const MOTION_CSS = `
 @keyframes m-pulse{0%,100%{opacity:.45}50%{opacity:.9}}
 @keyframes m-toast{from{opacity:0;transform:translate3d(0,-16px,0) scale(.98)}to{opacity:1;transform:none}}
 @keyframes m-confetti{0%{opacity:1;transform:translate3d(0,0,0) rotate(0) scale(1)}100%{opacity:0;transform:translate3d(var(--x),var(--y),0) rotate(var(--r)) scale(.6)}}
-[data-anim="enter"]{animation:m-enter 240ms ${EASE_OUT} both}
+[data-anim="enter"]{animation:m-enter 280ms ${EASE_OUT} both}
 [data-anim="fade"]{animation:m-fade 200ms ease-out both}
 [data-anim="sheet"]{animation:m-sheet 320ms ${SPRING} both;will-change:transform}
 [data-anim="pop"]{animation:m-pop 300ms ${SPRING} both}

@@ -5,7 +5,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Fonts } from '@/constants/Colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Reveal } from '@/components/space';
 import { PayBox } from '@/components/PayBox';
 import { BackButton } from '@/components/BackButton';
 import { PrimaryButton, Screen } from '@/components/ds';
@@ -119,7 +118,7 @@ function LinkDeVentaReal() {
   return (
     <Screen back="/pedidos" title={title} subtitle={subtitle} space="calm" footer={<PayBox order={order} onChange={load} />}>
       {/* Tarjeta de producto */}
-      <Reveal i={0}><Card style={{ gap: S.sm }}>
+      <Card style={{ gap: S.sm }}>
         <View style={{ flexDirection: 'row', gap: S.sm, flexWrap: 'wrap' }}>
           {order.category && order.category !== 'otro' ? <Chip label={cat?.label ?? order.category} icon={categoryIcon(order.category)} /> : null}
           {order.condition?.trim() ? <Chip label={order.condition} tone="muted" /> : null}
@@ -139,7 +138,7 @@ function LinkDeVentaReal() {
         </View> : null}
         <TrustBlock order={order} />
         {order.description ? <Text style={T.callout}>{order.description}</Text> : null}
-      </Card></Reveal>
+      </Card>
       {/* Reglas en una línea, solo antes de pagar (Ver reglas -> /como-funciona). */}
       {unpaid ? <RulesHint text={PAY_SUMMARY} from="pay" /> : null}
 

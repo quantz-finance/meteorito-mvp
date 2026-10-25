@@ -5,6 +5,7 @@
 // producto o la compra, Reportar y (vendedor) Bloquear. Sin la migración 025 muestra un aviso amable.
 // Desde la ficha de un producto (?p=<slug>), estilo Messenger: el primer mensaje lleva la tarjeta del producto (foto,
 // título, precio; tocar abre /p/<slug>) y cada producto nuevo de la misma tienda agrega la suya (030; sin ella, la de arriba).
+import { AppearGroup } from '@/components/Appear';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
@@ -199,7 +200,7 @@ export default function ChatScreen() {
   return (
     <View style={st.screen}>
       <SpaceBackground mode="calm" />
-      <View style={[s.wrap, { paddingTop: insets.top + S.sm }]}>
+      <AppearGroup style={[s.wrap, { paddingTop: insets.top + S.sm }]}>
         <TopBar onBack={() => goBack(fallback)} right={conv ? <IconButton icon="ellipsis-horizontal" label={K.options} onPress={() => setMenu(true)} /> : null}>
           {conv && other ? <View style={s.who}>
             <Avatar name={other.name} url={other.avatar_url} size={36} />
@@ -284,7 +285,7 @@ export default function ChatScreen() {
             </Pressable>
           </>}
         </View>
-      </View>
+      </AppearGroup>
 
       <Sheet visible={menu} onClose={() => setMenu(false)} title={K.options}>
         {ctxSlug ? <ListRow icon={conv?.kind === 'order' ? 'bag-check-outline' : 'pricetag-outline'} title={conv?.kind === 'order' ? K.seeOrder : K.seeItem} onPress={() => { setMenu(false); router.push({ pathname: '/p/[slug]', params: { slug: ctxSlug } }); }} /> : null}

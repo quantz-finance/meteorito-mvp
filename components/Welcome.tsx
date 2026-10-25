@@ -1,6 +1,7 @@
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useStableWindow } from '@/lib/viewport';
-import { Glow, LivelyMascot, Reveal, SpaceBackground } from '@/components/space';
+import { Glow, LivelyMascot, SpaceBackground } from '@/components/space';
+import { Appear, AppearProvider, appearSub, useAppearCycle } from '@/components/Appear';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/lib/cavos';
 import { ErrorText, Icon, IconButton, PrimaryButton } from '@/components/ds';
@@ -28,8 +29,10 @@ export default function Welcome() {
   const insets = useSafeAreaInsets();
   const short = height < 720;
   const tiny = height < 640;
+  const cycle = useAppearCycle(); // entrada única de la app (components/Appear)
   const mascot = Math.round(Math.max(56, Math.min(128, height * 0.15 - (relogin || error ? 24 : 0))));
   return (
+    <AppearProvider value={cycle}>
     <View style={{ flex: 1, backgroundColor: Platform.OS === 'web' ? 'transparent' : C.bg }}>
       <SpaceBackground mode="full" />
       {bought ? <View style={{ position: 'absolute', zIndex: 2, top: insets.top + S.md, right: S.md }}>
@@ -39,14 +42,14 @@ export default function Welcome() {
         <View style={s.hero}>
           <View style={{ width: mascot, height: mascot, alignItems: 'center', justifyContent: 'center' }}>
             <Glow style={[s.glow, { width: mascot * 1.6, height: mascot * 1.6, borderRadius: mascot * 0.8, top: -mascot * 0.3, left: -mascot * 0.3 }]} color="rgba(108,43,217,0.45)" />
-            <Reveal i={0}><LivelyMascot size={mascot} parallax={0} /></Reveal>
+            <Appear i={0}><LivelyMascot size={mascot} parallax={0} /></Appear>
           </View>
-          <Reveal i={1} style={{ alignItems: 'center' }}>
+          <Appear i={1} style={{ alignItems: 'center' }}>
             <Text style={[s.title, short && { fontSize: 30, lineHeight: 36, marginTop: S.sm }]}>Meteorito</Text>
             <Text style={[s.subtitle, tiny && { fontSize: 15, lineHeight: 20 }]}>Crea un link de pago en segundos. El dinero queda en custodia hasta la entrega.</Text>
-          </Reveal>
+          </Appear>
         </View>
-        <View style={[s.ctas, tiny && { gap: S.sm }]}>
+        <View {...appearSub(cycle)} style={[s.ctas, tiny && { gap: S.sm }]}>
           {!configured && <ErrorText>Falta EXPO_PUBLIC_CAVOS_APP_ID en el .env</ErrorText>}
           {relogin ? (
             <View style={s.relogin} testID="relogin-card">
@@ -68,6 +71,7 @@ export default function Welcome() {
       </View>
       <LearnSheet visible={learn} onClose={() => setLearn(false)} />
     </View>
+    </AppearProvider>
   );
 }
 

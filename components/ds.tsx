@@ -17,6 +17,7 @@ import { anim, pressTransition } from '@/constants/motion';
 import { BackButton, useBack } from '@/components/BackButton';
 import type { Href } from 'expo-router';
 import { MeteorBurst, ScrollCtx, SpaceBackground, type SpaceMode } from '@/components/space';
+import { AppearBlock, AppearProvider, useAppearCycle } from '@/components/Appear';
 
 const WEB = Platform.OS === 'web';
 export type IconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -46,6 +47,7 @@ export function Screen({ title, subtitle, right, children, footer, footerBare, s
 }) {
   const insets = useSafeAreaInsets();
   const scrollY = useSharedValue(0);
+  const cycle = useAppearCycle(); // entrada única de la app: se repite cada vez que la pantalla toma el foco
   const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
   // Con título, Volver va a la derecha (icono): el título empieza SIEMPRE en el mismo punto (arriba/izquierda) en todas
   // las pantallas, con o sin botones, y nada salta al cambiar de pestaña. Sin título, Volver queda arriba a la izquierda.
@@ -55,17 +57,17 @@ export function Screen({ title, subtitle, right, children, footer, footerBare, s
     <Reanimated.ScrollView style={{ flex: 1 }} contentContainerStyle={[st.content, { paddingTop: insets.top + S.md }, contentStyle]}
       keyboardShouldPersistTaps="handled" refreshControl={refreshControl} showsVerticalScrollIndicator={false}
       onScroll={onScroll} scrollEventThrottle={16}>
-      <View {...anim('enter')} style={{ gap: S.lg }}>{backBtn}{header}{children}</View>
+      <AppearBlock cycle={cycle} style={{ gap: S.lg }}>{backBtn}{header}{children}</AppearBlock>
     </Reanimated.ScrollView>
-  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md, paddingBottom: S.sm }, contentStyle]}><View {...anim('enter')} style={{ flex: 1, gap: S.lg }}>{backBtn}{header}{children}</View></View>;
+  ) : <View style={[st.content, { flex: 1, paddingTop: insets.top + S.md, paddingBottom: S.sm }, contentStyle]}><AppearBlock cycle={cycle} style={{ flex: 1, gap: S.lg }}>{backBtn}{header}{children}</AppearBlock></View>;
   return (
-    <ScrollCtx.Provider value={scrollY}>
+    <AppearProvider value={cycle}><ScrollCtx.Provider value={scrollY}>
       <View style={st.screen}>
         <SpaceBackground mode={space} scrollY={scrollY} />
         {body}
         {footer ? <StickyFooter bare={footerBare}>{footer}</StickyFooter> : null}
       </View>
-    </ScrollCtx.Provider>
+    </ScrollCtx.Provider></AppearProvider>
   );
 }
 

@@ -1,6 +1,7 @@
 // Comprar › Mis compras (/comprar/compras; comprador, con o sin cuenta): las compras de ESTE dispositivo (registro local, PIN guardado, pedido propio
 // de cada producto) y, con llave de invitado o sesión, las del servidor (/api/store action 'buyer_orders': solo las de
 // esta llave o esta cuenta). Activas primero; cerradas detrás de un selector. Cada fila abre su seguimiento /p/<pedido>.
+import { AppearSub } from '@/components/Appear';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -65,7 +66,7 @@ export default function MisCompras() {
 
   return (
     <Screen back={guest ? GUEST_BACK : undefined} backTop title={MY_PURCHASES_TITLE} scroll={false} right={<ComprarNav active="compras" />}>
-      <View style={{ flex: 1, gap: S.sm }}>
+      <AppearSub style={{ flex: 1, gap: S.sm }}>
         <BuyerInboxRow />
         {rows === null ? <><SkeletonCard /><SkeletonCard /></>
           : active.length + closed.length === 0 ? (
@@ -80,7 +81,7 @@ export default function MisCompras() {
               : <GridPager items={list} keyOf={(r) => r.slug} minCellW={300} minCellH={short ? 92 : 100} maxCols={2} label="Página de compras"
                   renderItem={(r) => <PurchaseCard r={r} />} />}
           </>}
-      </View>
+      </AppearSub>
     </Screen>
   );
 }
