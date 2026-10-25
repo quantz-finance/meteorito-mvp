@@ -86,4 +86,21 @@ export async function run(t: T) {
   t.check('e2e "sin testnet/prueba": las excepciones son SOLO BETA_NOTICE y CUSTODY_NOTICE (documentadas)', /withoutBetaNotice = \(text: string\) => text\.split\(CUSTODY_NOTICE\)\.join\(''\)\.split\(BETA_NOTICE\)\.join\(''\)/.test(helpers)
     && ['e2e/layout.spec.ts', 'e2e/buyer-fb.spec.ts', 'e2e/prod/smoke.spec.ts'].every((f) => !/expect\(text\)\.not\.toMatch\(\/[^/]*testnet/.test(read(f))));
   t.check('e2e MCK-BETA-01 (iPhone SE): aviso visible antes del botón de pagar', /MCK-BETA-01/.test(read('e2e/mock-guest.spec.ts')));
+  // Animación de entrada (Neo): los avisos legales nunca arrancan en opacidad 0 ni dependen de que la animación termine.
+  const rl = read('components/RulesLink.tsx'), motion = read('constants/motion.ts'), html = read('app/+html.tsx');
+  t.check('avisos legales marcados data-legal (BetaNotice, RulesHint "Ver reglas", RulesLink "Cómo funciona")',
+    /legalMark: object = Platform\.OS === 'web' \? \{ dataSet: \{ legal: '1' \} \}/.test(rl)
+    && ['testID="beta-notice" {...legalMark}', 'testID="rules-hint" hitSlop={6} {...legalMark}', 'testID="rules-link" hitSlop={8} {...legalMark}'].every((x) => rl.includes(x)));
+  const anims = motion.match(/LEGAL_ANIMS = \[([^\]]+)\]/)?.[1] ?? '';
+  const fadeIns = [...motion.matchAll(/@keyframes (m-[\w-]+)\{(?:from|0%)\{opacity:0/g)].map((m) => m[1]);
+  const usedBy = (kf: string) => [...motion.matchAll(new RegExp(`\\[data-anim="([\\w-]+)"\\]\\{animation:${kf} `, 'g'))].map((m) => m[1]);
+  t.check('toda animación de entrada que arranca en opacidad 0 está en LEGAL_ANIMS (fuera si contiene un aviso)',
+    fadeIns.length >= 3 && fadeIns.flatMap(usedBy).filter((a) => !['confetti', 'burst', 'shock', 'shock2'].includes(a)).every((a) => anims.includes(`'${a}'`)));
+  t.check('LEGAL_CSS: el aviso y cualquier contenedor que lo tenga (:has) sin animación; sin :has, sin entradas con opacidad',
+    /'\[data-legal\]\{animation:none!important\}'/.test(motion) && /legalSel\(':has\(\[data-legal\]\)'\)\}\{animation:none!important\}/.test(motion)
+    && /@supports not selector\(:has\(\*\)\)\{\$\{legalSel\(''\)\}\{animation:none!important\}\}/.test(motion));
+  t.check('LEGAL_CSS va al final de MOTION_CSS, en el <style> del HTML estático (vale sin JS y desde el primer cuadro)',
+    /`\.replace\(\/\\n\/g, ''\) \+ LEGAL_CSS;/.test(motion) && /MOTION_CSS \+/.test(html) && !/useEffect[^]*MOTION_CSS/.test(html));
+  t.check('e2e con la animación ACTIVA: LEG-01/02/03 y MCK-BETA-01 miden aviso + ancestros sin animación de entrada',
+    /expectLegalVisible\(page, \['beta-notice', 'rules-hint'\]\)/.test(read('e2e/mock-guest.spec.ts')) && ['LEG-01', 'LEG-02', 'LEG-03'].every((x) => read('e2e/legal-visible.spec.ts').includes(x)));
 }

@@ -159,4 +159,54 @@ test.describe('Vendedor (demo)', () => {
     await expect(page.getByText('Modo prueba', { exact: false })).toHaveCount(0);
     if (info.project.name === 'webkit-iphone-se') { await page.screenshot({ path: 'test-results/import-2-vista-previa.png' }); }
   });
+  test('VEN-10 círculo "Generar link": grande, apagado hasta que todo está listo, tiembla si falta algo, onda y cargando al lanzar', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    const btn = page.getByRole('button', { name: 'Generar link' });
+    await expect(btn).toBeVisible();
+    await expect(btn).toBeInViewport({ ratio: 1 }); // alcanzable sin scroll
+    const b = (await btn.boundingBox())!;
+    expect(b.width).toBeGreaterThanOrEqual(96);
+    expect(Math.abs(b.width - b.height)).toBeLessThanOrEqual(1); // círculo
+    expect(await btn.evaluate((e) => getComputedStyle(e).borderRadius)).toMatch(/^(4[8-9]|[5-9]\d|\d{3})px$/);
+    await expect(btn).toHaveAttribute('data-state', 'idle'); // apagado: falta nombre, precio y foto
+    await expect(btn).toBeEnabled(); // pero se puede tocar: muestra qué falta
+    await btn.click();
+    await expect(page.getByText('Escribe qué vendes.')).toBeVisible();
+    await expect(page.getByText('¡Tu link está listo!')).toHaveCount(0);
+    await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
+    await page.getByPlaceholder('0').fill('150000');
+    await expect(btn).toHaveAttribute('data-state', 'idle'); // sin foto sigue apagado
+    await takePhoto(page);
+    await expect(btn).toHaveAttribute('data-state', 'ready');
+    await expectNoScroll(page);
+    await expectInputs16(page);
+    // Lanzar: se ve cargando (latencia simulada del demo) y luego el link
+    await page.evaluate(() => {
+      (window as any).__meteoritoDemo.setLatency(800);
+      const el = document.querySelector('[data-testid="launch-button"]')!; (window as any).__states = [];
+      new MutationObserver(() => (window as any).__states.push(el.getAttribute('data-state'))).observe(el, { attributes: true, attributeFilter: ['data-state'] });
+    });
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-busy', 'true');
+    await expect(page.locator('[data-anim="shock"]')).toHaveCount(1); // onda expansiva
+    await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__states)).toContain('busy');
+  });
+});
+
+test.describe('Vendedor (demo) con reducir movimiento', () => {
+  test.use({ reducedMotion: 'reduce' });
+  test('VEN-11 círculo quieto: sin partículas ni onda, órbitas sin bucle; sigue funcionando', async ({ page }) => {
+    await open(page, '/vender', 'seller', true);
+    await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');
+    await page.getByPlaceholder('0').fill('150000');
+    await takePhoto(page);
+    const btn = page.getByRole('button', { name: 'Generar link' });
+    await expect(btn).toHaveAttribute('data-state', 'ready');
+    await expect(page.locator('[data-anim="floaters"]')).toHaveCSS('display', 'none');
+    const orbit = await page.locator('[data-anim="orbit"]').evaluate((e) => getComputedStyle(e).animationIterationCount);
+    expect(orbit).toBe('1');
+    await btn.click();
+    await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
+  });
 });
