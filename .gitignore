@@ -54,4 +54,4 @@ test-results/
 playwright-report/
 dist-e2e/
 e2e-prod-orders.txt
-node_modules
+/node_modules
