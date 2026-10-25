@@ -277,6 +277,9 @@ function TrustBlock({ order }: { order: PublicOrder }) {
   const canFollow = !!seller && !seller.demo && !(order as any).demo && mineSlug !== undefined && !isOwnerView(auth, mineSlug, seller.store_slug);
   return (
     <View style={{ gap: S.sm }}>
+      {/* Preguntar al vendedor por este producto, siempre (también sin cuenta y mientras carga la tienda). Arriba del vendedor: en iPhone SE queda a la vista sin scroll, sobre el pie fijo. Después de pagar,
+          en el dispositivo del comprador, está el chat de su compra (OrderChatCard) en su lugar. */}
+      {!(canShowContact(order.status) && isBuyerDevice(order.slug)) ? <AskSellerButton storeSlug={seller === undefined ? undefined : seller?.store_slug ?? null} itemSlug={order.slug} /> : null}
       {name ? (
         <Pressable disabled={!seller} accessibilityRole={seller ? 'link' : undefined} accessibilityLabel={seller ? `${COPY.ficha.seeProfile}: ${name}` : undefined}
           onPress={() => { if (!seller) return; track('feed_item_clicked', { target: 'seller', from: 'ficha', verified: seller.verified }); router.push({ pathname: '/t/[store]', params: { store: seller.store_slug } }); }}
@@ -291,18 +294,18 @@ function TrustBlock({ order }: { order: PublicOrder }) {
               </View>
               {seller ? <StarsInline avg={seller.rating_avg} count={seller.rating_count} /> : null}
             </View>
-            {canFollow ? <FollowButton store={seller!} source="product" size="sm" /> : null}
             {seller ? <Icon name="chevron-forward" size={18} color={C.textDim} /> : null}
           </View>
-          {seller ? <SalesOutcomeLine sales={seller.sales} /> : null}
         </Pressable>
       ) : null}
+      {/* Seguir en su propia línea (junto a cómo salieron sus ventas): el nombre del vendedor no se recorta en iPhone SE. */}
+      {seller ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }} testID="ficha-seller-meta">
+        <View style={{ flex: 1 }}><SalesOutcomeLine sales={seller.sales} /></View>
+        {canFollow ? <FollowButton store={seller} source="product" size="sm" /> : null}
+      </View> : null}
       {order.identifier_masked ? <View style={{ flexDirection: 'row' }}>
         <Chip label="Identificador declarado por el vendedor" tone="muted" icon="information-circle-outline" />
       </View> : null}
-      {/* Preguntar al vendedor por este producto, siempre (también sin cuenta y mientras carga la tienda). Después de pagar,
-          en el dispositivo del comprador, está el chat de su compra (OrderChatCard) en su lugar. */}
-      {!(canShowContact(order.status) && isBuyerDevice(order.slug)) ? <AskSellerButton storeSlug={seller === undefined ? undefined : seller?.store_slug ?? null} itemSlug={order.slug} /> : null}
     </View>
   );
 }
