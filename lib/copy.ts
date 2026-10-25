@@ -43,8 +43,10 @@ export const COPY = {
     noReviews: 'Todavía no tiene reseñas. Solo quien compró y recibió (pago liberado) puede dejar una.',
   },
   ficha: { seeProfile: 'Ver perfil del vendedor', soldBy: (name: string) => `Vendido por ${name}` },
-  // Productos y tiendas de EJEMPLO del feed (api/_lib/demoProducts.ts, FEED_DEMO_PRODUCTS): ficticios, nunca se pagan.
+  // Productos y tiendas de EJEMPLO del feed (api/_lib/demoProducts.ts; interruptor "Datos de ejemplo"): ficticios, nunca se pagan.
   // Señal SUTIL: un iconito (i) discreto que abre un popup chico; nada de etiquetas "Ejemplo" ni avisos grandes.
+  // Interruptor del admin maestro (Mi cuenta): enciende o apaga los datos de ejemplo para todos (032). Único texto visible.
+  demoData: { label: 'Datos de ejemplo' },
   demoProducts: {
     cardLabel: (title: string, price: string) => `Ejemplo. ${title}, ${price}`, // solo lector de pantalla
     info: {

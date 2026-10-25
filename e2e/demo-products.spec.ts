@@ -1,4 +1,4 @@
-// Productos de EJEMPLO en Comprar (FEED_DEMO_PRODUCTS): señal SUTIL (un iconito discreto que abre un popup), sin
+// Productos de EJEMPLO en Comprar (interruptor "Datos de ejemplo"): señal SUTIL (un iconito discreto que abre un popup), sin
 // etiquetas "Ejemplo" ni avisos grandes; los dos filtros con contenido, buscar "iPhone", tienda de ejemplo /t/<demo> y
 // ficha /p/ej-… con el pago desactivado. Demo con ?ejemplos=1 (en producción los sirve el API). Rápido: solo iPhone SE.
 import { test, expect, type Page } from '@playwright/test';

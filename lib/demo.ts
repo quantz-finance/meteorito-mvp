@@ -41,7 +41,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; socials?: Socials; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[] }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; socials?: Socials; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[]; /** interruptor "Datos de ejemplo" del admin (demo: encendido por defecto) */ demoData?: boolean }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -354,7 +354,7 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
   if (p === '/api/escrow/dispute' && typeof body.action === 'string') { // panel admin + respuesta del vendedor: lib/demoAdmin.ts
     const { demoAdminApi, demoPayoutSeed } = await import('./demoAdmin');
     if (st.admin && !st.payouts) st.payouts = demoPayoutSeed();
-    return demoAdminApi({ payouts: st.payouts, admin: !!st.admin, role: st.role, orders: st.orders, audit: (st.audit ??= {}), responses: (st.responses ??= {}), caps: demoCaps, resolve: demoResolve, emit }, body);
+    return demoAdminApi({ demoData: { get: () => st.demoData !== false, set: (v: boolean) => { st.demoData = v; emit(); } }, payouts: st.payouts, admin: !!st.admin, role: st.role, orders: st.orders, audit: (st.audit ??= {}), responses: (st.responses ??= {}), caps: demoCaps, resolve: demoResolve, emit }, body);
   }
   if (p === '/api/escrow/dispute') {
     need('buyer'); const o = get(String(body.slug));
@@ -501,6 +501,8 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
 
 /** Usuario de la tienda del demo (para el feed y el perfil simulados). */
 export const demoStoreSlug = () => S().store?.slug ?? 'valeria';
+/** Demo: interruptor "Datos de ejemplo" (lo cambia el admin del demo con ?admin=1; encendido por defecto, como el demo de siempre). */
+export const demoDataLocal = () => { try { return S().demoData !== false; } catch { return true; } };
 /** Tienda pública simulada (misma forma que GET /api/store). */
 export function demoGetStore(slug: string, owner = false) {
   const st = S(); const store = st.store ?? { slug: 'valeria', name: 'Valeria' };

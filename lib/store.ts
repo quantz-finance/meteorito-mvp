@@ -1,6 +1,7 @@
 // Tienda personal del vendedor: pago.meteorito.app/t/<usuario>. API: /api/store (migración 010).
 import type { Socials } from '../api/_lib/socials';
 import type { Activity } from './activity';
+import type { SalePost } from '../api/_lib/demoSales';
 import { api, guestApi } from './api';
 import { DEMO_ENABLED, demoApi, demoGetStore } from './demo';
 import { PUBLIC_BASE_URL } from './orders';
@@ -98,7 +99,7 @@ export interface FeedItem { slug: string; title: string; price_crc: number; phot
   /** Producto de EJEMPLO (api/_lib/demoProducts.ts): iconito (i) discreto con popup, ficha sin pago. */ demo?: boolean }
 /** Producto del bloque Patrocinado (migración 024): un vendedor pagó para mostrarlo ahí. */
 export interface SponsoredItem { id: number; slug: string; title: string; price_crc: number; photo: string | null; seller: FeedSeller }
-export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[] }
+export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[]; /** Ventas de EJEMPLO (solo con "Datos de ejemplo" encendido, 1.ª página). */ sales?: SalePost[] }
 export interface Review { stars: number; comment: string | null; /** Nombre corto que eligió el comprador; null = "Compra verificada". */ buyer_name: string | null; created_at: string | null }
 /** Cómo salieron las ventas, sin montos. completed = no_issues + disputes_resolved. */
 export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
@@ -139,7 +140,23 @@ export async function getFeed(o: { q?: string; cursor?: string | null; verified:
     j = (await r.json().catch(() => null)) ?? {};
     if (!r.ok) throw new Error(r.status >= 500 ? FEED_ERROR : j.error ?? FEED_ERROR);
   }
-  return { items: Array.isArray(j?.items) ? j.items : [], next_cursor: j?.next_cursor ?? null, sponsored: Array.isArray(j?.sponsored) ? j.sponsored : [] };
+  return { items: Array.isArray(j?.items) ? j.items : [], next_cursor: j?.next_cursor ?? null, sponsored: Array.isArray(j?.sponsored) ? j.sponsored : [], sales: Array.isArray(j?.sales) ? j.sales : [] };
+}
+export type DemoSuggestedStore = ReturnType<typeof import('../api/_lib/demoProducts').demoSuggestedStores>[number];
+export type DemoProductView = NonNullable<ReturnType<typeof import('../api/_lib/demoProducts').demoProduct>>;
+/** Tiendas de EJEMPLO sugeridas (Siguiendo vacío). El servidor decide: con "Datos de ejemplo" apagado, []. Silencioso. */
+export async function getDemoSuggested(): Promise<DemoSuggestedStore[]> {
+  if (DEMO_ENABLED) { const { demoSuggested } = await import('./demoFeed'); return demoSuggested(); }
+  try { const r = await fetch('/api/store?demo=suggested'); const j: any = r.ok ? await r.json().catch(() => null) : null; return Array.isArray(j?.stores) ? j.stores : []; }
+  catch { return []; }
+}
+/** Ficha de un producto de EJEMPLO (/p/ej-…). null si no existe o "Datos de ejemplo" está apagado (el servidor responde 404). */
+export async function getDemoProduct(slug: string): Promise<DemoProductView | null> {
+  if (DEMO_ENABLED) { const { demoProductLocal } = await import('./demoFeed'); return demoProductLocal(slug); }
+  const r = await fetch(`/api/store?demo=product&slug=${encodeURIComponent(slug)}`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`Error ${r.status}`);
+  return (await r.json()) as DemoProductView;
 }
 /** Perfil público; null si no existe. */
 export async function getSellerProfile(slug: string): Promise<SellerProfile | null> {

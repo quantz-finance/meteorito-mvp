@@ -10,6 +10,7 @@ export interface DemoAdminCtx {
   caps: Map<string, { id: string; purpose: string; ref: string; exp: number; used: boolean }>;
   resolve: (slug: string, buyerPct: number) => void; emit: () => void;
   /** cola de pagos a Cuenta IBAN (029) */ payouts?: any[];
+  /** interruptor "Datos de ejemplo" (032) */ demoData?: { get: () => boolean; set: (v: boolean) => void };
 }
 const err = (status: number, code: string, msg: string) => Object.assign(new Error(msg), { status, code });
 const disputeOf = (o: any) => ({ reason: o.dispute?.reason ?? 'otro', description: o.dispute?.description ?? null, evidence: o.dispute?.evidence ?? [], opened_at: o.dispute?.at ?? o.disputed_at ?? null, state: o.status === 'resuelto' ? 'resolved' : 'open' });
@@ -41,6 +42,11 @@ export function demoAdminApi(c: DemoAdminCtx, body: any): any {
   if (a === 'admin_me') return { admin: true, email: 'admin@demo.meteorito.app' };
   if (a === 'admin_list') { const rows = disputed(c).map((o) => row(c, o)); return { disputes: rows, counts: counts(rows), flags: { autoResolve: false, ai: true }, capabilities: { responses: true, executeOnchain: true, auditTable: true, ai: false } }; }
   if (a === 'admin_socials_clear') return { cleared: 0 }; // demo: sin redes reportadas
+  if (a === 'admin_demo_data') { // interruptor "Datos de ejemplo" (misma forma que api/_lib/appSettings.ts)
+    if (body.enabled !== undefined && typeof body.enabled !== 'boolean') throw err(400, 'bad_value', 'Valor inválido.');
+    if (typeof body.enabled === 'boolean') c.demoData?.set(body.enabled);
+    return { enabled: c.demoData?.get() ?? true, killed: false, available: true };
+  }
   if (a === 'admin_ai') return { available: false, reason: 'no_credentials', result: null, cached: false };
   if (a === 'admin_get') {
     const o = get(String(body.slug)); const r = row(c, o); const ord = orderOf(o); const d = disputeOf(o);

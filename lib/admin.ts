@@ -76,3 +76,8 @@ export const shortDate = (iso: string | null | undefined) => (iso ? new Date(iso
 
 /** Borra las redes de una tienda (reportadas). Solo admin; el servidor lo vuelve a validar. */
 export const clearStoreSocials = (auth: MeteoritoAuth, store_slug: string) => api<{ cleared: number }>(auth, PATH, { action: 'admin_socials_clear', store_slug });
+
+/* ---------- Datos de ejemplo (032): interruptor global, solo admin (el servidor lo vuelve a validar) ---------- */
+export interface DemoDataState { enabled: boolean; /** FEED_DEMO_PRODUCTS=0 en el servidor: apagado pase lo que pase */ killed: boolean; available: boolean }
+export const getDemoData = (auth: MeteoritoAuth) => api<DemoDataState>(auth, PATH, { action: 'admin_demo_data' });
+export const setDemoData = (auth: MeteoritoAuth, enabled: boolean) => api<DemoDataState>(auth, PATH, { action: 'admin_demo_data', enabled });
