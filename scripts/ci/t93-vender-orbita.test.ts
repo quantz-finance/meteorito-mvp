@@ -1,4 +1,4 @@
-// (90) Vender rediseñado: "Generar link" es un círculo grande que se aprieta (órbitas, meteorito, halo, partículas,
+// (93) Vender rediseñado: "Generar link" es un círculo grande que se aprieta (órbitas, meteorito, halo, partículas,
 //      onda expansiva). Misma funcionalidad: valida igual, carga igual, mismo texto. Animaciones livianas (solo
 //      transform/opacity, CSS en web, driver nativo en el teléfono) y quietas con "Reducir movimiento".
 import type { T } from './setup';
