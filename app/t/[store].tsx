@@ -16,6 +16,7 @@ import { DemoInfo } from '@/components/DemoInfo';
 import { useAuth } from '@/lib/cavos';
 import { isOwnerView, shareLink } from '@/lib/storePage';
 import { Image, Linking, Platform, Pressable, Share, StyleSheet, Text, View } from 'react-native';
+const STORE_BANNER = require('../../assets/images/banner-tienda.jpg');
 import { haptic, Icon, IconButton, PrimaryButton, Screen, Skeleton, st, toast, type IconName } from '@/components/ds';
 import { BackButton } from '@/components/BackButton';
 import { StoreAvatar } from '@/components/StoreAvatar';
@@ -101,7 +102,8 @@ function Profile({ p, activity, owner, mine, onMine, onManage, tools }: { p: Sel
   return (
     <View style={{ gap: S.lg }}>
       <View style={s.hero} testID="profile-hero">
-        <View style={s.cover}><View style={s.orb1} /><View style={s.orb2} /></View>
+        {/* Portada fija, igual para todas las tiendas (nunca una foto subida ni de producto). */}
+        <View style={s.cover} testID="store-cover"><Image source={STORE_BANNER} style={s.coverImg} resizeMode="cover" accessibilityIgnoresInvertColors /><View style={s.coverShade} /></View>
         <View style={s.avatarRing}>{owner && mine ? <StoreAvatar store={mine} size={92} editable onChange={onMine} /> : <StoreAvatar store={p} size={92} />}</View>
         <View style={{ alignItems: 'center', gap: 2, paddingHorizontal: S.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
@@ -217,8 +219,8 @@ function Notice({ icon, title, text }: { icon: IconName; title: string; text: st
 const s = StyleSheet.create({
   hero: { backgroundColor: C.surface, borderRadius: R.lg, overflow: 'hidden', borderWidth: 0.5, borderColor: C.line, paddingBottom: S.md, gap: S.sm },
   cover: { height: 96, backgroundColor: C.purple, overflow: 'hidden' },
-  orb1: { position: 'absolute', width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(201,182,255,0.35)', top: -90, right: -30 },
-  orb2: { position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: 'rgba(255,138,61,0.30)', bottom: -70, left: 20 },
+  coverImg: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  coverShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 48, backgroundColor: 'rgba(8,4,24,0.35)' },
   avatarRing: { alignSelf: 'center', marginTop: -58, padding: 4, borderRadius: 60, backgroundColor: C.surface },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   unverified: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: S.xs, paddingHorizontal: 10, paddingVertical: 3, borderRadius: R.pill, backgroundColor: 'rgba(255,255,255,0.06)' },
