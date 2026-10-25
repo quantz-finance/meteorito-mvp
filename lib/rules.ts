@@ -66,6 +66,13 @@ export const SELL_SUMMARY = 'El pago se libera con el código de entrega o al te
  *  en la UI: los e2e que prohíben etiquetas de prueba quitan exactamente esta constante antes de revisar (e2e/helpers.ts). */
 export const BETA_NOTICE = 'Beta en testnet, sin dinero real. Meteorito no verifica el producto.';
 export const BETA_NOTICE_LINK = 'Ver cómo funciona';
+/** Cómo se libera el pago en custodia (texto aprobado por Neo, sin plazo prometido). Va en el pie del producto y, en pedazos,
+ *  en las hojas de pago y la nota de liberación. */
+export const CUSTODY_RELEASE = 'se libera con tu PIN de entrega, o por tiempo si no abres una disputa antes';
+/** Pie del producto antes de pagar (texto EXACTO aprobado por Neo): reemplaza "Protección: 7 días…" y al aviso de beta en
+ *  ese lugar, para que "Meteorito no verifica el producto" (aviso legal obligatorio) aparezca UNA sola vez. Como BETA_NOTICE,
+ *  es una excepción permitida a la regla "sin testnet" de los e2e (e2e/helpers.ts). */
+export const CUSTODY_NOTICE = `Pago en custodia (beta en testnet, sin dinero real): ${CUSTODY_RELEASE}. Meteorito no verifica el producto.`;
 
 /** Hook del tour guiado (PR siguiente). Apagado: la pantalla no muestra "Ver recorrido" hasta que exista. */
 export const TOUR: { enabled: boolean; start: (() => void) | null } = { enabled: false, start: null };

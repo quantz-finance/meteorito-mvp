@@ -512,7 +512,11 @@ test('MCK-BETA-01 aviso de beta visible en el viewport antes de "Pagar en custod
   await expect(page.getByTestId('order-photo')).toBeVisible();
   const notice = page.getByTestId('beta-notice');
   await expect(notice).toBeVisible();
-  await expect(notice).toContainText('Beta en testnet, sin dinero real. Meteorito no verifica el producto.');
+  await expect(notice).toContainText('Pago en custodia (beta en testnet, sin dinero real): se libera con tu PIN de entrega, o por tiempo si no abres una disputa antes. Meteorito no verifica el producto.');
+  // Aviso legal UNA sola vez en la página y sin "Protección" ni "7 días" (Neo).
+  const body = await page.locator('body').innerText();
+  expect(body.split('Meteorito no verifica el producto').length - 1).toBe(1);
+  expect(body).not.toMatch(/Protecci|7 días/);
   await expect(notice.getByText('Ver cómo funciona')).toBeVisible();
   const pay = page.getByText(/Pagar en custodia/).last();
   const vh = page.viewportSize()!.height;
@@ -526,10 +530,10 @@ test('MCK-BETA-01 aviso de beta visible en el viewport antes de "Pagar en custod
 
 // Plazo acordado (t57): el comprador ve el acuerdo antes de pagar; cara a cara ve su código apenas paga; responde una
 // extensión pedida por el vendedor. En este archivo (no en uno nuevo): los MCK de un mismo archivo corren en serie.
-test('MCK-WIN-01 cara a cara: "Entrega: Cara a cara · Protección: 24 h" antes de pagar y el código al pagar', async ({ page, request }) => {
+test('MCK-WIN-01 cara a cara: "Entrega: Cara a cara" antes de pagar y el código al pagar', async ({ page, request }) => {
   await reset(request, [{ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000, delivery_mode: 'cara_a_cara', protection_minutes: 1440 }]);
   await page.goto('/p/prod01');
-  await expect(page.getByText('Entrega: Cara a cara · Protección: 24 h')).toBeVisible();
+  await expect(page.getByText('Entrega: Cara a cara', { exact: true })).toBeVisible();
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page).toHaveURL(/\/p\/h[0-9a-f]{5}\?pay=1/);
   await page.getByText('Ya pagué', { exact: true }).click();
@@ -543,10 +547,10 @@ test('MCK-WIN-01 cara a cara: "Entrega: Cara a cara · Protección: 24 h" antes 
   await expect(page.getByText('Ya lo envié')).toHaveCount(0);
 });
 
-test('MCK-WIN-02 envío: "7 días desde el envío"; el comprador acepta 3 días más que pidió el vendedor', async ({ page, request }) => {
+test('MCK-WIN-02 envío: "Entrega: Envío" sin plazo prometido; el comprador acepta 3 días más que pidió el vendedor', async ({ page, request }) => {
   await reset(request, [{ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000 }]);
   await page.goto('/p/prod01');
-  await expect(page.getByText('Entrega: Envío · Protección: 7 días desde el envío')).toBeVisible(); // sin columnas: default
+  await expect(page.getByText('Entrega: Envío', { exact: true })).toBeVisible(); // sin columnas: default
   await page.getByText(/Pagar en custodia/).last().click();
   await page.getByText('Ya pagué', { exact: true }).click();
   // Esperar la respuesta de "Ya pagué" (guarda el código en este navegador = comprador). Si navegamos antes, la petición

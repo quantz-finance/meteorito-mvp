@@ -18,7 +18,8 @@ test('TOOLS-01 link listo: plantilla de anuncio con link, acuerdo y custodia; Wh
   await page.getByLabel('Plantilla de anuncio').click();
   const preview = page.getByTestId('ad-preview');
   await expect(preview).toContainText('Bici de montaña por ₡150 000.');
-  await expect(preview).toContainText('Entrega: Envío · Protección: 7 días desde el envío');
+  await expect(preview).toContainText('Entrega: Envío');
+  await expect(preview).not.toContainText('Protección');
   await expect(preview).toContainText('Pago en custodia con Meteorito');
   await expect(preview).toContainText(/Paga aquí, sin crear cuenta: https:\/\/pago\.meteorito\.app\/p\/demo\d+/);
   await expect(page.getByLabel('WhatsApp', { exact: true })).toHaveAttribute('aria-checked', 'true');
@@ -26,7 +27,8 @@ test('TOOLS-01 link listo: plantilla de anuncio con link, acuerdo y custodia; Wh
   await page.getByLabel('Facebook o Marketplace', { exact: true }).click();
   await expect(page.getByLabel('Facebook o Marketplace', { exact: true })).toHaveAttribute('aria-checked', 'true');
   await expect(preview).toContainText('Cómo es la compra:');
-  await expect(preview).toContainText('- Protección: 7 días desde el envío');
+  await expect(preview).toContainText('- Entrega: Envío');
+  await expect(preview).not.toContainText(/Protecci|7 días/);
   await shot(page, 'plantilla-marketplace');
   await page.getByText('Copiar anuncio', { exact: true }).click();
   await expect(page.getByText('Anuncio copiado')).toBeVisible();
@@ -38,7 +40,7 @@ test('TOOLS-02 Home: la hoja de un link sin pagar abre la plantilla con su acuer
   await open(page, '/pedidos', 'seller');
   await page.getByRole('button').filter({ hasText: 'Patineta eléctrica' }).first().click();
   await page.getByLabel('Plantilla de anuncio').click();
-  await expect(page.getByTestId('ad-preview')).toContainText('Entrega: Cara a cara · Protección: 24 h');
+  await expect(page.getByTestId('ad-preview')).toContainText('Entrega: Cara a cara');
   await expect(page.getByTestId('ad-preview')).toContainText('Patineta eléctrica por ₡90 000.');
   await shot(page, 'plantilla-desde-home');
 });

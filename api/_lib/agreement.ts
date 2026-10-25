@@ -23,7 +23,7 @@ export function protectionOf(o: { delivery_mode?: string | null; protection_minu
   return Number.isInteger(m) && m >= MIN_PROTECTION_MIN && m <= MAX_PROTECTION_MIN ? m : DEFAULT_PROTECTION_MIN[deliveryModeOf(o)];
 }
 
-export const PROTECTION_RANGE_ERROR = 'El plazo de protección debe ser de 24 h a 30 días.';
+export const PROTECTION_RANGE_ERROR = 'El plazo de liberación debe ser de 24 h a 30 días.';
 export function validateAgreement(b: { delivery_mode?: unknown; protection_minutes?: unknown }): { delivery_mode: DeliveryMode; protection_minutes: number } | { error: string } {
   const mode = b.delivery_mode == null || b.delivery_mode === '' ? 'envio' : b.delivery_mode;
   if (!DELIVERY_MODES.includes(mode as DeliveryMode)) return { error: 'Elige cara a cara o envío.' };
@@ -43,11 +43,14 @@ export function protectionLabel(min: number): string {
   const d = min / 1440; return d === 1 ? '24 h' : `${d} días`;
 }
 export const daysLabel = (n: number) => (n === 1 ? '1 día' : `${n} días`);
-/** "Entrega: Cara a cara · Protección: 24 h" / "Entrega: Envío · Protección: 7 días desde el envío". */
-export function agreementSummary(mode: DeliveryMode | string | null | undefined, minutes?: number | null): string {
-  const m = deliveryModeOf({ delivery_mode: mode as string });
-  const p = protectionLabel(protectionOf({ delivery_mode: m, protection_minutes: minutes }));
-  return m === 'cara_a_cara' ? `Entrega: Cara a cara · Protección: ${p}` : `Entrega: Envío · Protección: ${p} desde el envío`;
+/** "Entrega: Cara a cara" / "Entrega: Envío". Sin "Protección: N días" (Neo): cómo se libera el pago lo dice CUSTODY_NOTICE
+ *  (lib/rules.ts); el plazo elegido sigue en el servidor y en la cuenta regresiva tras el envío. */
+export function agreementSummary(mode: DeliveryMode | string | null | undefined, _minutes?: number | null): string {
+  return `Entrega: ${DELIVERY_LABEL[deliveryModeOf({ delivery_mode: mode as string })]}`;
+}
+/** "entrega por envío" / "entrega cara a cara" (hojas de pago: "Al pagar aceptas: …"). */
+export function deliveryPhrase(mode: DeliveryMode | string | null | undefined): string {
+  return deliveryModeOf({ delivery_mode: mode as string }) === 'cara_a_cara' ? 'entrega cara a cara' : 'entrega por envío';
 }
 
 export interface PendingExtension { by: 'buyer' | 'seller'; days: number; at: string }

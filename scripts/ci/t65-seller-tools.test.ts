@@ -16,15 +16,15 @@ export async function run(t: T) {
   const link = 'https://pago.meteorito.app/p/abc123';
   const base = { title: 'iPhone 13', price_crc: 250000, link, description: 'Batería 89 %. Con caja.' };
   const wF2F = adTemplate({ ...base, delivery_mode: 'cara_a_cara', protection_minutes: 1440 }, 'whatsapp');
-  t.check('WhatsApp: título, precio, acuerdo cara a cara, custodia y link', wF2F === ['iPhone 13 por ₡250 000.', 'Entrega: Cara a cara · Protección: 24 h', AD_CUSTODY, `Paga aquí, sin crear cuenta: ${link}`].join('\n'), wF2F);
+  t.check('WhatsApp: título, precio, acuerdo cara a cara, custodia y link', wF2F === ['iPhone 13 por ₡250 000.', 'Entrega: Cara a cara', AD_CUSTODY, `Paga aquí, sin crear cuenta: ${link}`].join('\n'), wF2F);
   t.check('copy aprobado exacto (Neo)', AD_TITLE === 'Plantilla de anuncio' && AD_COPY === 'Copiar anuncio' && AD_COPIED === 'Anuncio copiado' && HISTORY_TITLE === 'Historial de ventas'
     && AD_CUSTODY === 'Pago en custodia con Meteorito (beta en testnet, sin dinero real): el pago queda en un contrato de escrow en Stellar y se libera cuando quien compra da su PIN de entrega, o por tiempo si no abre una disputa antes. Meteorito no verifica el producto.'
     && Object.values(OUTCOME_LABEL).join() === 'Cobrado,Cobro parcial,Reembolsado,Sin venta,En curso');
   const mEnv = adTemplate({ ...base, delivery_mode: null, protection_minutes: null }, 'marketplace');
-  t.check('Marketplace: descripción, acuerdo por defecto (envío, 7 días desde el envío) en viñetas, custodia y link',
-    mEnv.includes('iPhone 13 · ₡250 000') && mEnv.includes('Batería 89 %. Con caja.') && mEnv.includes('- Entrega: Envío') && mEnv.includes('- Protección: 7 días desde el envío') && mEnv.includes(`- ${AD_CUSTODY}`) && mEnv.trim().endsWith(`Paga aquí, sin crear cuenta: ${link}`), mEnv);
+  t.check('Marketplace: descripción, acuerdo por defecto (envío) en viñetas, sin "Protección", custodia y link',
+    mEnv.includes('iPhone 13 · ₡250 000') && mEnv.includes('Batería 89 %. Con caja.') && mEnv.includes('- Entrega: Envío') && !/Protecci|7 días/.test(mEnv) && mEnv.includes(`- ${AD_CUSTODY}`) && mEnv.trim().endsWith(`Paga aquí, sin crear cuenta: ${link}`), mEnv);
   const m3 = adTemplate({ ...base, description: 'x'.repeat(900), delivery_mode: 'envio', protection_minutes: 3 * 1440 }, 'marketplace');
-  t.check('Marketplace: plazo elegido (3 días) y descripción recortada a 500', m3.includes('- Protección: 3 días desde el envío') && !m3.includes('x'.repeat(501)));
+  t.check('Marketplace: sin plazo prometido (aunque elija 3 días) y descripción recortada a 500', !/Protecci|3 días/.test(m3) && !m3.includes('x'.repeat(501)));
   t.check('sin descripción ni título: no deja huecos', !adTemplate({ ...base, title: ' ', description: null }, 'marketplace').includes('\n\n\n') && adTemplate({ ...base, title: '' }, 'whatsapp').startsWith('Artículo por'));
   t.check('formatos: WhatsApp y Facebook o Marketplace', AD_FORMATS.map((f) => f.label).join('|') === 'WhatsApp|Facebook o Marketplace');
 
@@ -54,7 +54,7 @@ export async function run(t: T) {
   const copy = [AD_TITLE, AD_HINT, AD_COPY, AD_COPIED, AD_CUSTODY, HISTORY_TITLE, HISTORY_EMPTY, ...Object.values(OUTCOME_LABEL), wF2F, mEnv, ...AD_FORMATS.map((f) => f.label)].join('\n');
   const files = ['lib/sellerTools.ts', 'components/AdTemplateSheet.tsx', 'app/ventas.tsx'];
   const literals = files.map(read).join('\n').split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
-  t.check('copy nuevo sin "seguro", "garantía", "empresa", "fintech", "banco", "billetera" ni "protegido"', !BANNED.test(copy.replace(/Protección/g, '')) && !BANNED.test(literals.replace(/Protección|protection_minutes|protectionOf/g, '')));
+  t.check('copy nuevo sin "seguro", "garantía", "empresa", "fintech", "banco", "billetera" ni "protegido"', !BANNED.test(copy) && !/Protecci/.test(copy) && !BANNED.test(literals.replace(/Protección|protection_minutes|protectionOf/g, '')));
   t.check('tuteo (sin voseo)', !VOSEO.test(copy) && !VOSEO.test(literals));
 
   // Cableado: sin funciones nuevas, datos por /api/store 'orders' con fallback, entradas en Vender, Home y Mi cuenta

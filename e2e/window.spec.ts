@@ -2,6 +2,7 @@
 // Cara a cara: el comprador ve su código apenas paga y el vendedor lo ingresa desde 'fondeado'. Extensión de mutuo acuerdo.
 import { test, expect, type Page } from '@playwright/test';
 import { open, orderStatus, DEMO_PIN, takePhoto, expectNoScroll, openSellerRow, expectInputs16 } from './helpers';
+import { CUSTODY_NOTICE } from '../lib/rules';
 
 const SHOTS = process.env.WIN_SHOTS; // carpeta para capturas (opcional, p. ej. /workspace/out)
 const shot = async (page: Page, name: string) => { if (SHOTS) { await page.waitForTimeout(400); await page.screenshot({ path: `${SHOTS}/window-${name}.png` }); } };
@@ -30,7 +31,8 @@ test('WIN-01 vender: elige cara a cara y 3 días; el link guarda el acuerdo; Ven
   await expect(page.getByTestId('agreement-value')).toHaveText('Cara a cara · 3 días');
   await page.getByText('Generar link').click();
   await expect(page.getByText('¡Tu link está listo!')).toBeVisible();
-  await expect(page.getByText('Entrega: Cara a cara · Protección: 3 días')).toBeVisible();
+  await expect(page.getByText('Entrega: Cara a cara', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Protecci/)).toHaveCount(0);
   const o = Object.values((await st(page)).orders)[0] as any;
   expect([o.delivery_mode, o.protection_minutes]).toEqual(['cara_a_cara', 4320]);
 });
@@ -39,10 +41,11 @@ test('WIN-02 cara a cara: acuerdo antes de pagar, código al pagar, PIN del vend
   await open(page, '/', 'seller', true);
   const prod = await page.evaluate(() => (window as any).__meteoritoDemo.seed('creado', { title: 'Bici de montaña', price_crc: 150000, delivery_mode: 'cara_a_cara' }));
   await open(page, `/p/${prod}?buyer=A`, 'buyer');
-  await expect(page.getByText('Entrega: Cara a cara · Protección: 24 h')).toBeVisible();
+  await expect(page.getByText('Entrega: Cara a cara', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('beta-notice')).toContainText(CUSTODY_NOTICE);
   await shot(page, 'comprador-antes-de-pagar');
   await page.getByText(/Pagar en custodia/).last().click();
-  await expect(page.getByText('Al pagar aceptas: Entrega: Cara a cara · Protección: 24 h.')).toBeVisible();
+  await expect(page.getByText('Al pagar aceptas: entrega cara a cara; el pago se libera con tu PIN de entrega, o por tiempo si no abres una disputa antes.')).toBeVisible();
   await page.getByText('Ya pagué', { exact: true }).click();
   const slug = page.url().match(/\/p\/(demo\d+)/)![1];
   await open(page, `/p/${slug}?buyer=A`, 'buyer');
