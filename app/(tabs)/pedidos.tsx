@@ -3,17 +3,17 @@ import { OrphanWalletCard } from '@/components/OrphanWallet';
 import { userMessage } from '@/lib/cavosSession';
 import { isSessionError } from '@/lib/authUx';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { GridPager } from '@/components/GridPager';
-import { Card, Chip, ErrorText, Icon, IconButton, MoneyTimeline, PrimaryButton, Screen, Sheet, SkeletonCard, statusTone } from '@/components/ds';
-import { OrderCard } from '@/components/OrderRow';
+import { Card, Chip, ErrorText, IconButton, MoneyTimeline, PrimaryButton, Screen, Sheet, statusTone } from '@/components/ds';
+import { BuysSection, BUYS_CHROME, BUYS_EMPTY_H, HomeSummaryCard, ROW_GAP, ROW_H, SALES_CHROME, SALES_EMPTY_H, SaleRow, SalesBox } from '@/components/HomeSections';
+import { Reveal } from '@/components/space';
 import { SellerActions } from '@/components/SellerActions';
 import { SellerOrderChat } from '@/components/OrderChat';
 import { SellerInboxButton } from '@/components/ChatInbox';
 import { AdminDisputesButton } from '@/components/AdminDisputesButton';
 import { SellerDisputeReply } from '@/components/SellerDisputeReply';
-import { C, S, T } from '@/constants/theme';
+import { S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
 import { formatCRC, getPublicOrder, getSellerOrders, type PublicOrder, orderLink, orderTitle, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
@@ -21,7 +21,10 @@ import { supabaseConfigured } from '@/lib/supabase';
 import { keepIfSame, needsPolling } from '@/lib/refresh';
 import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { Freshness } from '@/components/Freshness';
-import { SalesSummary } from '@/components/SalesSummary';
+import { allocateRows, HOME_COPY, homeSummary, isBuy, sortBuys, sortSales } from '@/lib/home';
+import { loadMyPurchases } from '@/lib/myPurchases';
+import type { PurchaseRow } from '@/lib/purchases';
+import { getMyStore } from '@/lib/store';
 import { AccountSheet } from '@/components/AccountSheet';
 import { AdTemplateButton, AdTemplateSheet } from '@/components/AdTemplateSheet';
 import type { AdInput } from '@/lib/sellerTools';
@@ -56,16 +59,24 @@ export default function Pedidos() {
   const [sessionError, setSessionError] = useState(false);
   const [openSlug, setOpenSlug] = useState<string | null>(null);
   const [account, setAccount] = useState(false);
+  const [allSales, setAllSales] = useState(false); // "Ver todas" de Tus ventas (hoja con la lista completa)
   const [ad, setAd] = useState<AdInput | null>(null); // plantilla de anuncio (se abre al cerrar la hoja del pedido)
-  const short = useStableWindow().height < 740;
+  const win = useStableWindow();
+  const short = win.height < 740;
   const stamp = useStamp(); // hora del último refresco: solo re-renderiza <Freshness>
+  // Compras de esta cuenta y de este dispositivo (mismo origen que Mis compras: lib/myPurchases, sin función nueva).
+  const [buys, setBuys] = useState<PurchaseRow[] | null>(null);
+  // Calificación de tu tienda (/api/store 'me'): solo se muestra si ya tienes reseñas.
+  const [rating, setRating] = useState<{ rating_avg: number | null; rating_count: number } | null>(null);
 
   const load = useCallback(async () => {
+    loadMyPurchases(auth).then((r) => setBuys(r.rows)).catch(() => setBuys((b) => b ?? []));
     if (!address || !supabaseConfigured) { setOrders([]); return; }
+    getMyStore(auth).then((st) => setRating({ rating_avg: st.rating_avg, rating_count: st.rating_count })).catch(() => {});
     setLoading(true); setError(null); setSessionError(false);
     try { const os = await getSellerOrders(auth); setOrders(os); stamp.set(Date.now()); ensureSellerWalletOnLoad(auth, os.length > 0).then((m) => m && setError(m)); } catch (e) { setError(userMessage((e as Error).message)); setSessionError(isSessionError(e)); setOrders((o) => o ?? []); }
     finally { setLoading(false); }
-  }, [address, auth.wallet.state]);
+  }, [address, auth.wallet.state, auth.isAuthenticated]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   // Refresco silencioso (sin spinner ni borrar errores): el vendedor ve 'Pago liberado' sin recargar.
@@ -74,6 +85,11 @@ export default function Pedidos() {
     try { const os = await getSellerOrders(auth); setOrders((prev) => keepIfSame(prev, os)); stamp.set(Date.now()); } catch { /* se reintenta en el siguiente ciclo */ }
   }, [address]);
   useOrdersRefresh(silentRefresh, orders);
+  // Compras: mismo polling mientras alguna siga en curso (enviada, pagada, en disputa).
+  const silentBuys = useCallback(async () => {
+    try { const r = await loadMyPurchases(auth); setBuys((prev) => keepIfSame(prev, r.rows)); } catch { /* siguiente ciclo */ }
+  }, [auth.isAuthenticated]);
+  useOrdersRefresh(silentBuys, buys ? buys.filter(isBuy).map((b) => ({ status: b.status ?? '' })) : null);
 
   // Datos públicos del pedido abierto (contrato, hashes, shipped_tx): la RPC seller_orders no los trae.
   const [detail, setDetail] = useState<PublicOrder | null>(null);
@@ -86,30 +102,44 @@ export default function Pedidos() {
   }, [openSlug, orders]);
   const open = orders?.find((o) => o.slug === openSlug) ?? null;
 
+  // Home = resumen + listas compactas (sin la línea de tiempo ni las acciones: viven en la hoja del pedido).
+  const sales = useMemo(() => sortSales(orders ?? []), [orders]);
+  const myBuys = useMemo(() => sortBuys(buys ?? []), [buys]);
+  const sum = homeSummary(orders, buys);
+  const loaded = orders !== null && buys !== null;
+  const hasData = sales.length + myBuys.length > 0;
+  // Filas que caben sin scroll en el alto medido (lib/home allocateRows); el resto, en "Ver todas".
+  const [listH, setListH] = useState(0);
+  const stride = ROW_H + ROW_GAP;
+  const fixed = (sales.length ? SALES_CHROME : SALES_EMPTY_H) + (myBuys.length ? BUYS_CHROME : BUYS_EMPTY_H) + S.sm;
+  const fit = allocateRows({ slots: listH ? (listH - fixed + ROW_GAP * 2) / stride : 2, sales: sales.length, buys: myBuys.length });
+
   return (
     <Screen title="Home" subtitle={short ? undefined : 'El estado de tu dinero, siempre a la vista.'} scroll={false}
-      right={<><AdminDisputesButton /><SellerInboxButton /><IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} /></>}>
-      {/* Sin botón "Actualizar" (era de pruebas): Home carga al enfocar, hace polling mientras haya pedidos no finales y
-          vuelve a pedir al regresar a la app/pestaña (useFocusEffect + useOrdersRefresh). */}
+      right={<><AdminDisputesButton /><SellerInboxButton /><IconButton icon="storefront-outline" label="Mi tienda" onPress={() => router.push('/mi-tienda')} /><IconButton icon="person" label="Mi cuenta" onPress={() => setAccount(true)} /></>}>
+      {/* Sin botón "Actualizar" (era de pruebas): Home carga al enfocar, hace polling mientras haya pedidos o compras no
+          finales y vuelve a pedir al regresar a la app/pestaña (useFocusEffect + useOrdersRefresh). */}
       <View style={{ flex: 1, gap: S.sm }}>
-      <SalesSummary orders={orders} compact={short} onHistory={() => router.push('/ventas')} />
-      <RulesLink from="home" />
       {!supabaseConfigured && <ErrorText>Falta configurar Supabase (.env)</ErrorText>}
       {error === DEVICE_NOT_AUTHORIZED || auth.wallet?.state === 'needs-approval' ? <OrphanWalletCard compact /> : error ? <ErrorText>{error}</ErrorText> : null}
-      {orders !== null && !sessionError && <Suspense fallback={null}><PushCard role="seller" compact={short} onSessionError={(m) => { setError(m); setSessionError(true); }} /></Suspense>}
-      {orders && orders.length > 0 && <Freshness stamp={stamp} live={needsPolling(orders)} />}
-      {orders === null ? <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
-        : orders.length === 0 ? (
-          <Card style={{ alignItems: 'center', paddingVertical: S.xl, gap: S.md }}>
-            <Icon name="cube-outline" size={40} color={C.lilac} />
-            <Text style={T.headline}>Sin pedidos todavía</Text>
-            <Text style={[T.callout, { textAlign: 'center' }]}>Crea un link de venta y compártelo por WhatsApp o Messenger.</Text>
-            <PrimaryButton title="Crear link de venta" icon="add" onPress={() => router.push('/vender')} />
-          </Card>
-        ) : <GridPager items={orders} keyOf={(o) => o.slug} minCellW={300} minCellH={short ? 66 : 118} maxCols={2} label="Página de pedidos"
-            renderItem={(o) => <OrderCard order={o} timeline={!short} fill onPress={() => setOpenSlug(o.slug)} />} />}
+      {loaded && hasData ? <Reveal i={0}><HomeSummaryCard sum={sum} rating={rating} /></Reveal> : null}
+      {orders !== null && !sessionError && <Suspense fallback={null}><PushCard role="seller" slim onSessionError={(m) => { setError(m); setSessionError(true); }} /></Suspense>}
+      <View style={{ flex: 1, gap: S.sm, overflow: 'hidden' }} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (Math.abs(h - listH) > 1) setListH(h); }}>
+        <Reveal i={1}><SalesBox rows={sales.slice(0, fit.sales)} total={sales.length} loading={orders === null} compact={short}
+          onOpen={setOpenSlug} onHistory={() => router.push('/ventas')} onSeeAll={() => setAllSales(true)} /></Reveal>
+        <Reveal i={2}><BuysSection rows={myBuys.slice(0, fit.buys)} total={myBuys.length} loading={buys === null} /></Reveal>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', columnGap: S.sm }}>
+        {orders && orders.length > 0 ? <Freshness stamp={stamp} live={needsPolling(orders)} align="center" /> : <View />}
+        <RulesLink from="home" />
+      </View>
       </View>
 
+      <Sheet visible={allSales} onClose={() => setAllSales(false)} title={HOME_COPY.sales}>
+        <View style={{ gap: ROW_GAP }}>
+          {sales.map((o) => <SaleRow key={o.slug} o={o} onPress={() => { setAllSales(false); setOpenSlug(o.slug); }} />)}
+        </View>
+      </Sheet>
       <AdTemplateSheet visible={!!ad} onClose={() => setAd(null)} ad={ad} />
       <AccountSheet visible={account} onClose={() => setAccount(false)} products={(orders ?? []).length} />
       <Sheet visible={!!open} onClose={() => setOpenSlug(null)} title={open ? orderTitle(open) : ''}

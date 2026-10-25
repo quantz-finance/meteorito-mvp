@@ -54,7 +54,7 @@ test('WIN-02 cara a cara: acuerdo antes de pagar, código al pagar, PIN del vend
   await shot(page, 'comprador-cara-a-cara');
 
   // Vendedor: sin "Ya lo envié"; pide 3 días más
-  await openSellerRow(page, 'Pagado · fondos apartados', /Confirmar PIN y cobrar/);
+  await openSellerRow(page, /Envíalo|Entrégalo/, /Confirmar PIN y cobrar/);
   await expect(page.getByText('Ya lo envié', { exact: true })).toHaveCount(0);
   // Línea de tiempo cara a cara: Pagado, Entregado con PIN (actual), Liberado; sin "Enviado".
   await expect(page.getByText('Entregado con PIN').last()).toBeVisible();
@@ -75,7 +75,7 @@ test('WIN-02 cara a cara: acuerdo antes de pagar, código al pagar, PIN del vend
   expect(Date.parse((await st(page)).orders[slug].auto_release_at) - due0).toBe(3 * 86_400_000);
 
   // Vendedor ingresa el PIN en 'fondeado': cobra al instante
-  await openSellerRow(page, 'Pagado · fondos apartados', /Confirmar PIN y cobrar/);
+  await openSellerRow(page, /Envíalo|Entrégalo/, /Confirmar PIN y cobrar/);
   await page.getByLabel('Código de entrega del comprador').fill(DEMO_PIN);
   await page.getByText('Confirmar PIN y cobrar', { exact: true }).click();
   await expect.poll(() => orderStatus(page, slug)).toBe('liberado');

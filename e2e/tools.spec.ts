@@ -59,7 +59,7 @@ test('TOOLS-03 historial de ventas: estado, resultado y total cobrado; sin scrol
   await shot(page, 'home-historial');
   await page.getByLabel('Ver historial de ventas').click();
   await expect(page.getByText('Historial de ventas').first()).toBeVisible();
-  await expect(page.getByText('₡220 000')).toBeVisible();
+  await expect(page.getByText('₡220 000', { exact: true })).toBeVisible(); // exact: Home (debajo) dice "₡220 000 cobrado" en su resumen
   await expect(page.getByText('Cobrado · 2 ventas cerradas · 1 en curso')).toBeVisible();
   await expect(page.getByText('Cobro parcial: ₡70 000')).toBeVisible();
   await expect(page.getByText('Cobrado', { exact: true }).last()).toBeVisible();

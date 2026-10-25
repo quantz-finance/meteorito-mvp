@@ -80,6 +80,8 @@ export interface SellerOrder {
   delivery_mode?: 'envio' | 'cara_a_cara' | null;
   /** Historial de ventas: cuándo se cerró y, si hubo disputa, qué porcentaje volvió al comprador. */
   released_at?: string | null; resolved_at?: string | null; resolution?: { buyerPct?: number | null } | null;
+  /** Primera foto (miniatura en Home). El demo trae `photos`. */
+  photo?: string | null; photos?: string[];
 }
 /** Pedidos del vendedor: por la API con su sesión (solo los suyos). La RPC pública seller_orders se revoca en la 013. */
 export async function getSellerOrders(auth: MeteoritoAuth): Promise<SellerOrder[]> {

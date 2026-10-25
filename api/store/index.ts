@@ -460,7 +460,7 @@ export default async function handler(req: any, res: any) {
     }
     if (b.action === 'orders') {
       // Pedidos del vendedor CON sesión (antes: RPC pública seller_orders con cualquier dirección -> fuga de datos).
-      const cols = 'slug, category, brand, model, price_crc, status, identifier, created_at, kind, listing_slug, listing_status';
+      const cols = 'slug, category, brand, model, price_crc, status, identifier, created_at, kind, listing_slug, listing_status, photos'; // photos: solo la 1.ª va a Home (miniatura)
       // delivery_mode (migración 017) para la línea de tiempo cara a cara; released_at/resolved_at/resolution (005-006) para el
       // historial de ventas (resultado y lo cobrado). Sin la 017 se pide sin delivery_mode; sin esas columnas, solo lo básico.
       const hist = 'released_at, resolved_at, resolution';
@@ -469,7 +469,7 @@ export default async function handler(req: any, res: any) {
       if (q.error && missingColumn(q.error)) q = await db().from('orders').select(cols).eq('seller_user_id', user.sub).order('created_at', { ascending: false }).limit(200);
       if (q.error && missingColumn(q.error)) q = await db().from('orders').select('slug, category, brand, model, price_crc, status, identifier, created_at').eq('seller_user_id', user.sub).order('created_at', { ascending: false }).limit(200);
       if (q.error) throw q.error;
-      const orders = (q.data ?? []).map(({ identifier, ...o }: any) => ({ ...o, price_crc: Number(o.price_crc), identifier_masked: identifier ? '••••' + String(identifier).slice(-4) : null }))
+      const orders = (q.data ?? []).map(({ identifier, photos, ...o }: any) => ({ ...o, price_crc: Number(o.price_crc), photo: Array.isArray(photos) ? photos[0] ?? null : null, identifier_masked: identifier ? '••••' + String(identifier).slice(-4) : null }))
         .filter((o: any) => !(o.listing_slug && o.status === 'creado'));
       res.setHeader?.('Cache-Control', 'no-store');
       return json(res, 200, { orders });
