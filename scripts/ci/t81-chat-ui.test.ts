@@ -22,10 +22,10 @@ export async function run(t: T) {
   const store = read('app/t/[store].tsx');
   t.check('/t/<usuario>: "Enviar mensaje" solo si no es el dueño, ligado a la tienda', /\{!owner(?: && !p\.demo)? \? <ChatButton as="buyer" target=\{\{ store_slug: p\.store_slug \}\} source="store"/.test(store));
   const ficha = read('app/p/[slug].tsx');
-  t.check('/p/<slug>: "Preguntar al vendedor" solo antes de pagar, con tienda + producto', /seller && \(order\.status === 'creado' \|\| order\.status === 'escrow_creado'\) \? <AskSellerButton storeSlug=\{seller\.store_slug\} itemSlug=\{order\.slug\}/.test(ficha));
+  t.check('/p/<slug>: "Preguntar al vendedor" siempre (salvo el comprador ya pagado: chat de su compra), con tienda + producto', /!\(canShowContact\(order\.status\) && isBuyerDevice\(order\.slug\)\) \? <AskSellerButton storeSlug=\{seller === undefined \? undefined : seller\?\.store_slug \?\? null\} itemSlug=\{order\.slug\}/.test(ficha)); // ver t90
   t.check('/p/<slug>: chat de la compra solo pagado + en el dispositivo del comprador', /canShowContact\(order\.status\) && isBuyerDevice\(order\.slug\) \? <OrderChatCard slug=\{order\.slug\}/.test(ficha));
   const btn = read('components/ChatButton.tsx');
-  t.check('el botón se oculta sin chat (025) y para el dueño', /if \(!available\) return null/.test(btn) && /isOwnerView\(auth, mineSlug, storeSlug\)\) return null/.test(btn));
+  t.check('el botón se oculta sin chat (025) y para el dueño', /if \(!available\) return null/.test(btn) && /isOwnerView\(auth, mineSlug, storeSlug\)\)\) return null/.test(btn));
   const home = read('app/(tabs)/pedidos.tsx');
   t.check('Home: chat del pedido para el vendedor (con comprador) y bandeja con insignia en el encabezado', /open\.status !== 'creado' \? <SellerOrderChat slug=\{open\.slug\} onOpen=/.test(home) && /<SellerInboxButton \/>/.test(home));
   t.check('Mis compras: fila "Tus mensajes" y punto en el icono de Mis compras', /<BuyerInboxRow \/>/.test(read('app/(tabs)/comprar/compras.tsx')) && /compras-unread/.test(read('components/ComprarNav.tsx')));

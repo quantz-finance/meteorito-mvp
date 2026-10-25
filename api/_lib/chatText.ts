@@ -7,6 +7,9 @@ export const CHAT_SEND_PER_MIN = 12;
 export const CHAT_SEND_IP_PER_MIN = 30;
 /** Conversaciones nuevas por hora por identidad (anti-spam a vendedores). */
 export const CHAT_OPEN_PER_HOUR = 20;
+/** Mensajes por hora de un comprador (su llave y/o su cuenta) sumando TODAS sus conversaciones; contado en la base. */
+export const CHAT_BUYER_PER_HOUR = 60;
+export const CHAT_BUYER_LIMITED = 'Enviaste muchos mensajes en poco tiempo. Espera un rato e intenta de nuevo.';
 /** Aviso push a la otra parte: como mucho uno cada CHAT_PUSH_COOLDOWN_MIN por conversación mientras no lea. */
 export const CHAT_PUSH_COOLDOWN_MIN = 10;
 /** Si la otra parte tuvo la conversación abierta hace menos de esto, no se le manda push (ya lo está viendo). */
@@ -78,4 +81,18 @@ export function blockLock(orders: readonly { status?: string | null; dispute_sta
   if (orders.some((o) => o.status === 'en_disputa' || o.dispute_state === 'open' || o.dispute_state === 'pending')) return 'dispute';
   if (orders.some((o) => !ORDER_FINAL.includes(String(o.status ?? '')))) return 'order';
   return null;
+}
+
+/* ---------- Producto en la conversación (migración 030: chat_messages.item_slug) ---------- */
+export const validItemSlug = (s: unknown): s is string => typeof s === 'string' && /^[a-z0-9]{6}$/.test(s);
+/** ¿Este mensaje lleva la tarjeta del producto? Solo el comprador, solo con el producto con el que abrió la conversación
+ *  (tema actual) y solo si la última tarjeta del hilo no es ya ese producto (primer mensaje, o volvió por otro producto). */
+export function chatItemMarker(o: { role: ChatRole; want: unknown; convItem: string | null; lastMarker: string | null; order?: boolean }): string | null {
+  if (o.role !== 'buyer' || o.order || !validItemSlug(o.want) || o.want !== o.convItem) return null;
+  return o.lastMarker === o.want ? null : o.want;
+}
+type CardMsg = { id: number; sender: ChatRole; client_id?: string | null; item_slug?: string | null };
+/** Filas del hilo: una tarjeta del producto justo antes de cada mensaje que la lleva, del lado de quien preguntó. */
+export function itemCardRows<M extends CardMsg>(msgs: M[]): ({ k: 'item'; slug: string; sender: ChatRole; key: string; m: M } | { k: 'msg'; m: M })[] {
+  return msgs.flatMap((m) => (m.item_slug ? [{ k: 'item' as const, slug: m.item_slug, sender: m.sender, key: `item-${m.item_slug}-${m.client_id ?? m.id}`, m }, { k: 'msg' as const, m }] : [{ k: 'msg' as const, m }]));
 }

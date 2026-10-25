@@ -10,7 +10,7 @@ import { COPY } from '@/lib/copy';
 import { getMyStore } from '@/lib/store';
 import { isOwnerView } from '@/lib/storePage';
 
-export type ChatTarget = { store_slug: string; item_slug?: string } | { order_slug: string };
+export type ChatTarget = { store_slug: string; item_slug?: string } | { item_slug: string } | { order_slug: string };
 
 export function useOpenChat() {
   const auth = useAuth();
@@ -21,7 +21,9 @@ export function useOpenChat() {
     try {
       const r = await openChat(auth, as, target);
       before?.(); // p. ej. cerrar la hoja del pedido para que no quede encima del chat
-      router.push(`${chatHref(r.token, r.role)}&src=${source}` as never);
+      // Desde un producto, ?p=<slug>: el primer mensaje lleva la tarjeta del producto (estilo Messenger).
+      const p = 'item_slug' in target && target.item_slug ? `&p=${target.item_slug}` : '';
+      router.push(`${chatHref(r.token, r.role)}&src=${source}${p}` as never);
     } catch (e: any) {
       track('chat_open_failed', { source, code: String(e?.code ?? 'error').slice(0, 40) });
       toast(e?.code === 'chat_unavailable' ? COPY.chat.unavailable : e?.status === 429 || e?.code === 'self_chat' ? e.message : COPY.chat.openError, 'info');
@@ -39,8 +41,9 @@ export function ChatButton({ as, target, source, title = COPY.chat.send, icon = 
   return <PrimaryButton testID={testID} title={title} icon={icon} variant={variant} loading={busy} accessibilityLabel={a11y ?? title} onPress={() => open(as, target, source, onOpen)} />;
 }
 
-/** "Preguntar al vendedor" en la ficha de un producto sin pagar. Se oculta si quien mira es el dueño de la tienda. */
-export function AskSellerButton({ storeSlug, itemSlug }: { storeSlug: string; itemSlug: string }) {
+/** "Preguntar al vendedor" en la ficha de un producto: siempre visible (sin cuenta, con la llave), sin esperar el perfil
+ *  de la tienda (sin storeSlug abre solo con el producto). Se oculta si quien mira es el dueño de la tienda. */
+export function AskSellerButton({ storeSlug, itemSlug }: { storeSlug: string | null | undefined; itemSlug: string }) {
   const auth = useAuth();
   const [mineSlug, setMineSlug] = useState<string | null | undefined>(auth.isAuthenticated ? undefined : null);
   useEffect(() => {
@@ -49,6 +52,8 @@ export function AskSellerButton({ storeSlug, itemSlug }: { storeSlug: string; it
     getMyStore(auth).then((x) => live && setMineSlug(x.store_slug)).catch(() => live && setMineSlug(null));
     return () => { live = false; };
   }, [auth.isAuthenticated, auth.address]);
-  if (mineSlug === undefined || isOwnerView(auth, mineSlug, storeSlug)) return null;
-  return <ChatButton as="buyer" target={{ store_slug: storeSlug, item_slug: itemSlug }} source="product" title={COPY.chat.askSeller} testID="ask-seller" />;
+  // Con sesión se espera a saber de quién es la tienda (undefined = cargando) para no mostrárselo un instante al dueño.
+  if (mineSlug === undefined || (auth.isAuthenticated && storeSlug === undefined) || (storeSlug && isOwnerView(auth, mineSlug, storeSlug))) return null;
+  const target: ChatTarget = storeSlug ? { store_slug: storeSlug, item_slug: itemSlug } : { item_slug: itemSlug };
+  return <ChatButton as="buyer" target={target} source="product" title={COPY.chat.askSeller} testID="ask-seller" />;
 }

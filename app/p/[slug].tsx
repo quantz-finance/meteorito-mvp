@@ -267,7 +267,7 @@ function RateCard({ slug }: { slug: string }) {
 
 function TrustBlock({ order }: { order: PublicOrder }) {
   // Vendedor de la ficha (perfil corto + cómo salieron sus ventas, sin montos). Si no carga, la ficha sigue igual.
-  const [seller, setSeller] = useState<OrderSeller | null>(null);
+  const [seller, setSeller] = useState<OrderSeller | null | undefined>(undefined); // undefined: cargando
   useEffect(() => { let on = true; getOrderSeller(order.slug).then((x) => { if (on) setSeller(x); }); return () => { on = false; }; }, [order.slug]);
   const name = seller?.display_name ?? order.seller_name ?? null;
   return (
@@ -294,8 +294,9 @@ function TrustBlock({ order }: { order: PublicOrder }) {
       {order.identifier_masked ? <View style={{ flexDirection: 'row' }}>
         <Chip label="Identificador declarado por el vendedor" tone="muted" icon="information-circle-outline" />
       </View> : null}
-      {/* Antes de pagar: preguntar al vendedor por este producto (chat ligado a la tienda + producto). */}
-      {seller && (order.status === 'creado' || order.status === 'escrow_creado') ? <AskSellerButton storeSlug={seller.store_slug} itemSlug={order.slug} /> : null}
+      {/* Preguntar al vendedor por este producto, siempre (también sin cuenta y mientras carga la tienda). Después de pagar,
+          en el dispositivo del comprador, está el chat de su compra (OrderChatCard) en su lugar. */}
+      {!(canShowContact(order.status) && isBuyerDevice(order.slug)) ? <AskSellerButton storeSlug={seller === undefined ? undefined : seller?.store_slug ?? null} itemSlug={order.slug} /> : null}
     </View>
   );
 }

@@ -54,6 +54,7 @@ export function fakeDb() {
       in: (c: string, vs: any[]) => { filters.push((r) => vs.includes(r[c])); return q; },
       lt: (c: string, v: any) => { filters.push((r) => r[c] != null && r[c] < v); return q; },
       ilike: (c: string, p: string) => { const re = new RegExp('^' + String(p).split('').map((ch) => (ch === '%' || ch === '*' ? '.*' : ch === '_' ? '.' : ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('') + '$', 'is'); filters.push((r) => re.test(String(r[c] ?? ''))); return q; },
+      not: (c: string, o: string, v: any) => { filters.push((r) => (o === 'is' ? (r[c] ?? null) !== v : r[c] !== v)); return q; },
       or: () => q,
       order: (c: string, o?: { ascending?: boolean }) => { sort = { c, asc: o?.ascending !== false }; return q; },
       limit: (n: number) => { cap = n; return q; },
