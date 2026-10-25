@@ -168,7 +168,7 @@ export function demoProfile(slug: string, now = Date.now()) {
   if (!s) return null;
   return {
     ...demoPublicSeller(s), bio: s.bio, location: s.location, sales_completed: s.sales, sales: outcome(s.sales),
-    followers: Math.round(s.sales * 2.5) + s.rating_count, member_since: s.since, whatsapp: null as string | null,
+    followers: Math.round(s.sales * 2.5) + s.rating_count, member_since: s.since, whatsapp: null as string | null, socials: {},
     items: DEMO_PRODUCTS.filter((x) => x.seller === s.store_slug).map((x) => ({ slug: x.slug, title: x.title, price_crc: x.price_crc, photo: x.photo, created_at: new Date(now - x.ago * H).toISOString(), demo: true as const })),
     reviews: s.reviews.map((rv) => ({ stars: rv.stars, comment: rv.comment, buyer_name: rv.buyer_name, created_at: new Date(now - rv.h * H).toISOString() })),
   };

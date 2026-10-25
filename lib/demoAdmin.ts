@@ -40,6 +40,7 @@ export function demoAdminApi(c: DemoAdminCtx, body: any): any {
   if (!c.admin) throw err(404, 'not_found', 'No encontramos esta página.');
   if (a === 'admin_me') return { admin: true, email: 'admin@demo.meteorito.app' };
   if (a === 'admin_list') { const rows = disputed(c).map((o) => row(c, o)); return { disputes: rows, counts: counts(rows), flags: { autoResolve: false, ai: true }, capabilities: { responses: true, executeOnchain: true, auditTable: true, ai: false } }; }
+  if (a === 'admin_socials_clear') return { cleared: 0 }; // demo: sin redes reportadas
   if (a === 'admin_ai') return { available: false, reason: 'no_credentials', result: null, cached: false };
   if (a === 'admin_get') {
     const o = get(String(body.slug)); const r = row(c, o); const ord = orderOf(o); const d = disputeOf(o);

@@ -73,3 +73,6 @@ export function deadlineLabel(iso: string | null | undefined, now = Date.now()):
   return ms >= 0 ? { text: `vence en ${fmt(ms)}`, late: false } : { text: `venció hace ${fmt(-ms)}`, late: true };
 }
 export const shortDate = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString('es-CR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—');
+
+/** Borra las redes de una tienda (reportadas). Solo admin; el servidor lo vuelve a validar. */
+export const clearStoreSocials = (auth: MeteoritoAuth, store_slug: string) => api<{ cleared: number }>(auth, PATH, { action: 'admin_socials_clear', store_slug });

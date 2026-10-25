@@ -16,6 +16,8 @@ import { COPY } from '@/lib/copy';
 import { track } from '@/lib/analytics';
 import { formatCRC, orderLink } from '@/lib/orders';
 import { HISTORY_TITLE, type AdInput } from '@/lib/sellerTools';
+import { SocialInputs } from '@/components/SocialLinks';
+import { SOCIAL_KEYS, type SocialKey } from '../api/_lib/socials';
 import { setListingStatus, updateMyStore, type Store, type StoreItem } from '@/lib/store';
 const PayoutEntry = lazy(() => import('@/components/Payout').then((m) => ({ default: m.PayoutEntry }))); // diferido
 
@@ -27,14 +29,16 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
   const [ad, setAd] = useState<AdInput | null>(null);
   const [promote, setPromote] = useState(false); // "Promocionar este producto": por ahora solo avisa (sin cobro)
   const [slug, setSlug] = useState(''); const [name, setName] = useState('');
+  const [socials, setSocials] = useState<Partial<Record<SocialKey, string>>>({});
   const [err, setErr] = useState<string | null>(null); const [saving, setSaving] = useState(false);
 
   async function save() {
     setErr(null); setSaving(true);
     try {
-      const patch: { store_slug?: string; display_name?: string } = {};
+      const patch: { store_slug?: string; display_name?: string; socials?: Partial<Record<SocialKey, string>> } = {};
       if (slug.trim().toLowerCase() !== store.store_slug) patch.store_slug = slug.trim().toLowerCase();
       if (name.trim() !== store.display_name) patch.display_name = name.trim();
+      if (SOCIAL_KEYS.some((k) => (socials[k] ?? '').trim() !== (store.socials?.[k] ?? ''))) patch.socials = socials;
       if (Object.keys(patch).length) {
         const next = await updateMyStore(auth, patch); onStore(next); toast('Tienda actualizada');
         if (next.store_slug !== store.store_slug) router.replace({ pathname: '/t/[store]', params: { store: next.store_slug } });
@@ -61,7 +65,7 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
       </View>
       <Text style={T.footnote}>{COPY.store.ownerHint}</Text>
       <ListRow icon="create-outline" title={COPY.store.edit} right={<Icon name="chevron-forward" size={18} color={C.lilac} />}
-        onPress={() => { setSlug(store.store_slug); setName(store.display_name); setErr(null); setEditing(true); }} />
+        onPress={() => { setSlug(store.store_slug); setName(store.display_name); setSocials({ ...store.socials }); setErr(null); setEditing(true); }} />
       <ListRow icon="person-circle-outline" title={COPY.store.account} subtitle={COPY.store.accountHint} right={<Icon name="chevron-forward" size={18} color={C.lilac} />}
         onPress={() => setAccount(true)} />
       <ListRow icon="receipt-outline" title={HISTORY_TITLE} right={<Icon name="chevron-forward" size={18} color={C.lilac} />} onPress={() => router.push('/ventas')} />
@@ -106,6 +110,7 @@ export function OwnerTools({ store, onStore, managing, onCloseManage }: {
             onChangeText={(v) => setSlug(v.toLowerCase().replace(/[^a-z0-9-]/g, ''))} maxLength={30} autoCapitalize="none" autoCorrect={false} accessibilityLabel="Nombre de usuario" />
         </View>
         <Text style={T.footnote}>De 3 a 30 letras, números o guiones. Si lo cambias, el link anterior deja de funcionar. Tu tienda muestra tu nombre, tu puntuación y tus productos; nunca tu correo ni tu teléfono.</Text>
+        <SocialInputs value={socials} onChange={setSocials} />
         {err ? <ErrorText>{err}</ErrorText> : null}
       </Sheet>
     </Card></View>

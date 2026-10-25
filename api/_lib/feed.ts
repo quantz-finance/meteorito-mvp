@@ -7,6 +7,7 @@
 // Búsqueda: sin mayúsculas ni acentos, por palabras (todas deben aparecer) en título, descripción y nombre del vendedor.
 // En la base: ILIKE con las vocales como comodín (encuentra "cámara" con "camara" sin necesitar unaccent) y el filtro
 // exacto después, con el mismo foldText. pg_trgm (020) solo acelera esos ILIKE.
+import { cleanSocials, type Socials } from './socials';
 import { db } from './db';
 import { HttpError } from './auth';
 import { missingColumn } from './listings';
@@ -196,6 +197,13 @@ async function reviewsOf(sub: string): Promise<{ data: any[] }> {
   return { data: error ? [] : data ?? [] };
 }
 /** Perfil público del vendedor: lo de la tienda + reseñas, ventas, seguidores (solo el número), miembro desde y WhatsApp (solo si eligió mostrarlo). */
+/** Redes del vendedor (migración 031), ya validadas. Sin la columna o ante cualquier error: {} (nunca rompe). */
+export async function socialsOf(sub: string): Promise<Socials> {
+  try {
+    const { data, error } = await db().from('seller_profiles').select('socials').eq('sub', sub).maybeSingle();
+    return error ? {} : cleanSocials((data as any)?.socials);
+  } catch { return {}; }
+}
 export async function sellerProfile(slug: string) {
   let row: any = null;
   // whatsapp_public (020): el vendedor elige mostrar su WhatsApp en el perfil. Hasta entonces el número solo lo ve el
@@ -207,12 +215,13 @@ export async function sellerProfile(slug: string) {
     row = data; break;
   }
   if (!row) return null;
-  const [{ data: st }, { data: items, error: e2 }, sales, { data: rv }, followers] = await Promise.all([
+  const [{ data: st }, { data: items, error: e2 }, sales, { data: rv }, followers, socials] = await Promise.all([
     db().from('public_stores').select('rating_avg, rating_count').eq('store_slug', slug).maybeSingle(),
     db().from('public_store_items').select('slug, title, price_crc, photo, created_at').eq('store_slug', slug).order('created_at', { ascending: false }).limit(60),
     salesOutcome(row.sub),
     reviewsOf(row.sub),
     followerCount(row.sub), // solo el número (migración 022); null sin la tabla: la app no lo muestra
+    socialsOf(row.sub), // redes (031); {} sin la columna
   ]);
   if (e2) storeDbErr(e2);
   const phone = row.whatsapp_public === true && typeof row.contact_phone === 'string' && row.contact_phone ? row.contact_phone : null;
@@ -222,7 +231,7 @@ export async function sellerProfile(slug: string) {
     rating_avg: st?.rating_avg == null ? null : Number(st.rating_avg), rating_count: Number(st?.rating_count ?? 0),
     sales_completed: sales.completed, sales, followers,
     member_since: row.created_at ?? null,
-    whatsapp: phone ? waLink(phone) : null,
+    whatsapp: phone ? waLink(phone) : null, socials,
     items: (items ?? []).map((i: any) => ({ slug: i.slug, title: i.title || 'Artículo', price_crc: Number(i.price_crc), photo: i.photo ?? null, created_at: i.created_at ?? null })),
     reviews: (rv ?? []).map((r: any) => ({ stars: Number(r.stars), comment: typeof r.comment === 'string' && r.comment ? r.comment : null,
       buyer_name: typeof r.buyer_name === 'string' && r.buyer_name ? r.buyer_name : null, created_at: r.created_at ?? null })),

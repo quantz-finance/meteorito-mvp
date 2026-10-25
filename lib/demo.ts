@@ -3,6 +3,7 @@
 // - Aunque la variable esté puesta, se desactiva sola en los dominios de producción.
 // - No hace ninguna llamada de red: el estado vive en memoria (+ sessionStorage de la pestaña) y todo es simulado.
 // Documentación: docs/demo.md
+import { normalizeSocials, socialError, type Socials } from '../api/_lib/socials';
 import { useSyncExternalStore } from 'react';
 import type { MeteoritoAuth } from './types';
 
@@ -40,7 +41,7 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[] }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; socials?: Socials; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[] }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -477,6 +478,11 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
         if (ph === 'invalid') throw err(400, 'bad_phone', 'Escribe un número de Costa Rica: 8 dígitos (ej. 8888 1234).');
         st.store.phone = ph; if (!ph) st.store.waPublic = false;
       }
+      if (body.socials !== undefined) { // mismas reglas que el API (api/_lib/socials.ts)
+        const r = normalizeSocials(body.socials);
+        if ('bad' in r) throw err(400, 'bad_social', socialError(r.bad));
+        st.store.socials = r.socials;
+      }
       if (body.show_last_seen !== undefined) {
         if (typeof body.show_last_seen !== 'boolean') throw err(400, 'bad_flag', 'Valor inválido.');
         if (!!st.store.seenOn !== body.show_last_seen) st.store.seenDecided = true; // = registro de consentimiento
@@ -501,7 +507,7 @@ export function demoGetStore(slug: string, owner = false) {
   if (slug !== store.slug) return null;
   const r = Object.values(st.ratings ?? {});
   return {
-    store_slug: store.slug, display_name: store.name, avatar_url: store.avatar ?? null, ...(owner ? { contact_phone: store.phone ?? null, whatsapp_public: !!store.phone && !!store.waPublic, show_last_seen: !!store.seenOn, last_seen_decided: !!store.seenDecided } : {}),
+    store_slug: store.slug, display_name: store.name, avatar_url: store.avatar ?? null, ...(owner ? { socials: store.socials ?? {}, contact_phone: store.phone ?? null, whatsapp_public: !!store.phone && !!store.waPublic, show_last_seen: !!store.seenOn, last_seen_decided: !!store.seenDecided } : {}),
     rating_avg: r.length ? Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100) / 100 : null, rating_count: r.length,
     // Igual que public_store_items: productos activos sin comprador (Mi tienda también ve los pausados).
     items: Object.values(st.orders).filter((o) => o.status === 'creado' && !o.listing_slug && !o.invite_code
