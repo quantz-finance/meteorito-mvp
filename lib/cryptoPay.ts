@@ -46,7 +46,7 @@ export function qrPath(m: { size: number; dark: Uint8Array }): string {
 
 /** Texto del estado para la persona (tuteo, sin jerga). */
 export function statusLine(s: CryptoStatusView | null, asset: CryptoAsset): { text: string; tone: 'wait' | 'warn' | 'ok' } {
-  if (!s || s.state === 'waiting') return { text: 'Esperando tu pago. Lo detectamos solo, no cierres esta pantalla.', tone: 'wait' };
+  if (!s || s.state === 'waiting') return { text: 'Esperando tu pago. Lo detectamos solo.', tone: 'wait' };
   if (s.state === 'processing') return { text: 'Recibimos tu pago. Lo estamos pasando a custodia…', tone: 'wait' };
   if (s.state === 'funded') return { text: '¡Pago recibido!', tone: 'ok' };
   if (s.state === 'underpaid' && s.missing) return { text: `Recibimos parte del pago. Faltan ${fmtAmount(s.missing.amount)} ${s.missing.asset}: envíalos con el mismo memo.`, tone: 'warn' };

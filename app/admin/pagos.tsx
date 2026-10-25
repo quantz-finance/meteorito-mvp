@@ -1,6 +1,5 @@
-// Cola de pagos a Cuenta IBAN (solo admin, migración 029). El escrow ya liberó el USDC a la wallet 'platform'; el equipo
-// transfiere al IBAN del vendedor por fuera y lo marca aquí como pagado con una nota (número de transferencia). Nada es
-// automático. Quien no es admin ve "No encontramos esta página" (el servidor responde 404 a cualquier acción admin).
+// Cola de Cuenta IBAN (solo admin, migración 029). Beta en testnet: el escrow liberó USDC de testnet a la wallet 'platform'
+// y NO hay pago al banco; el equipo lo marca aquí como revisado con una nota (dato: state 'pagado', evento payout_reviewed). Quien no es admin ve "No encontramos esta página" (el servidor responde 404 a cualquier acción admin).
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -17,7 +16,7 @@ import { formatCRC } from '@/lib/labels';
 import { ageLabel, listPayouts, markPayoutPaid, shortDate, useIsAdmin, type AdminPayoutRow } from '@/lib/admin';
 import { formatIban } from '@/lib/payout';
 
-export const PAYOUT_STATE_LABEL = { pendiente: 'Pendiente pagar al banco', pagado: 'Pagado' } as const;
+export const PAYOUT_STATE_LABEL = { pendiente: 'Beta: sin pago al banco', pagado: 'Revisado' } as const;
 type Tab = 'pendiente' | 'pagado';
 
 export default function AdminPagos() {
@@ -40,12 +39,12 @@ export default function AdminPagos() {
           return (
             <Pressable key={t} testID={`ptab-${t}`} accessibilityRole="tab" accessibilityState={{ selected: on }} onPress={() => { haptic.tap(); setTab(t); }}
               style={({ pressed }) => [s.tab, on && s.tabOn, pressTransition, pressed && { opacity: 0.8 }]}>
-              <Text style={[s.tabText, on && { color: C.purple }]}>{t === 'pendiente' ? 'Pendientes' : 'Pagados'}{n != null ? ` · ${n}` : ''}</Text>
+              <Text style={[s.tabText, on && { color: C.purple }]}>{t === 'pendiente' ? 'Pendientes' : 'Revisados'}{n != null ? ` · ${n}` : ''}</Text>
             </Pressable>
           );
         })}
       </View>
-      <Text style={T.footnote}>El USDC ya llegó a la wallet platform. Transfiere al IBAN y márcalo como pagado.</Text>
+      <Text style={T.footnote}>Beta en testnet: el USDC de testnet queda en la wallet platform y no hay pago al banco. Revisa cada venta y márcala como revisada.</Text>
       {err ? <ErrorText>{err}</ErrorText> : null}
       {data && !data.available ? <Card><Text testID="payouts-unavailable" style={T.callout}>Falta la migración 029: todavía no hay cola de pagos.</Text></Card>
         : admin === null || (!data && !err) ? <><SkeletonCard /><SkeletonCard /></>
@@ -61,7 +60,7 @@ function Row({ r, onDone }: { r: AdminPayoutRow; onDone: () => void }) {
   const pending = r.state === 'pendiente';
   async function paid() {
     setBusy(true); setErr(null);
-    try { await markPayoutPaid(auth, r.slug, note); haptic.success(); toast('Marcado como pagado'); onDone(); }
+    try { await markPayoutPaid(auth, r.slug, note); haptic.success(); toast('Marcado como revisado'); onDone(); }
     catch (e) { haptic.error(); setErr(userMessage((e as Error).message)); }
     finally { setBusy(false); }
   }
@@ -84,11 +83,11 @@ function Row({ r, onDone }: { r: AdminPayoutRow; onDone: () => void }) {
         <Icon name="copy-outline" size={18} color={C.lilac} />
       </Pressable>
       {pending ? <>
-        <TextInput testID={`payout-note-${r.slug}`} style={ui.input} value={note} onChangeText={setNote} maxLength={500} placeholder="Nota: número de transferencia"
-          placeholderTextColor={C.textDim} accessibilityLabel="Nota del pago" />
+        <TextInput testID={`payout-note-${r.slug}`} style={ui.input} value={note} onChangeText={setNote} maxLength={500} placeholder="Nota de la revisión"
+          placeholderTextColor={C.textDim} accessibilityLabel="Nota de la revisión" />
         {err ? <ErrorText>{err}</ErrorText> : null}
-        <PrimaryButton title="Marcar como pagado" icon="checkmark" loading={busy} disabled={note.trim().length < 3} onPress={paid} />
-      </> : <Text style={T.footnote}>Pagado {shortDate(r.paid_at)} por {r.paid_by ?? '—'}{r.note ? ` · ${r.note}` : ''}</Text>}
+        <PrimaryButton title="Marcar como revisado" icon="checkmark" loading={busy} disabled={note.trim().length < 3} onPress={paid} />
+      </> : <Text style={T.footnote}>Revisado {shortDate(r.paid_at)} por {r.paid_by ?? '—'}{r.note ? ` · ${r.note}` : ''}</Text>}
     </View>
   );
 }

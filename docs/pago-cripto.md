@@ -48,3 +48,11 @@ Estado: solo `order_events` (`crypto_quote`, `crypto_converted`, `crypto_refund`
 - `e2e/crypto.spec.ts` (demo, iPhone SE).
 - `scripts/crypto-testnet-e2e.ts` (manual, TESTNET real: USDC, path payment XLM y XLM convertido, cada uno fondeado y liberado).
 - Ojo: LOBSTR no abre links de testnet; para probar SEP-7 usa una wallet con testnet (p. ej. Freighter).
+
+## Solo testnet (revisión legal, Neo)
+- Fijo en el código (`api/_lib/crypto.ts`): passphrase `Networks.TESTNET`, Horizon `https://horizon-testnet.stellar.org`, USDC del
+  emisor de testnet `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5`, XLM nativo de testnet.
+- `testnetOnly()`: si `STELLAR_NETWORK` no es testnet o `USDC_ISSUER` es otro (p. ej. Circle en mainnet), el pago con cripto se apaga (503).
+- Un pago con USDC de otro emisor nunca cuenta ni fondea; nunca se sigue un link de paginación fuera de Horizon testnet.
+- La pantalla dice siempre que es testnet y que no es dinero real, con el aviso de beta visible sin scroll en iPhone SE.
+- Pruebas: `scripts/ci/t90-neo-testnet-privacy.test.ts` y `e2e/crypto.spec.ts` (CRI-01).
