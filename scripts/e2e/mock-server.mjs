@@ -165,9 +165,12 @@ async function api(req, path, q, b) {
     if (req.method === 'GET' && q.get('chat') === 'status') return { available: false }; // como producción sin la migración 025
     if (typeof b.action === 'string' && b.action.startsWith('chat_')) throw E(503, 'El chat todavía no está disponible.', 'chat_unavailable');
     // Feed de Comprar y perfil público (misma forma que GET /api/store?feed / ?profile): productos permanentes activos de Valeria (verificada).
-    if (req.method === 'GET' && q.get('feed')) {
-      const items = Object.values(S.orders).filter((o) => o.kind === 'listing' && o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa' && q.get('verified') !== 'false')
-        .filter((o) => !q.get('q') || String(o.model).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(q.get('q').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')))
+    // La búsqueda llega por POST { action:'feed', q } (el texto nunca va en la URL); sin texto, GET ?feed.
+    if ((req.method === 'GET' && q.get('feed')) || (req.method === 'POST' && b.action === 'feed' && b.view !== 'following')) {
+      const fq = req.method === 'POST' ? String(b.q ?? '') : (q.get('q') ?? ''); const fv = req.method === 'POST' ? String(b.verified ?? '') : q.get('verified');
+      const fold = (x) => String(x).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const items = Object.values(S.orders).filter((o) => o.kind === 'listing' && o.status === 'creado' && !o.listing_slug && o.listing_status === 'activa' && fv !== 'false')
+        .filter((o) => !fq || fold(o.model).includes(fold(fq)))
         .map((o) => ({ slug: o.slug, title: o.model, price_crc: o.price_crc, photo: null, created_at: o.created_at, seller: { store_slug: 'valeria', display_name: 'Valeria', avatar_url: null, verified: true, rating_avg: null, rating_count: 0 } }));
       return { items, next_cursor: null };
     }

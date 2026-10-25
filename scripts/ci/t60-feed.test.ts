@@ -135,5 +135,6 @@ export async function run(t: T) {
   t.check('feed, perfil y ficha sin palabras prohibidas en textos', bad.length === 0, bad.join(' | '));
   t.check('feed_search manda el número de resultados y NO el texto', /track\('feed_search', \{[^}]*results/.test(src) && !/track\('feed_search', \{[^}]*\b(q|query|text)\s*[:,}]/.test(src));
   t.check('debounce ~300 ms', /SEARCH_DEBOUNCE_MS = 3\d\d/.test(src));
-  t.check('input del buscador con fontSize >= 16', /searchInput: \{[^}]*fontSize: (1[6-9]|2\d)/.test(src));
+  const sheet = readFileSync('components/SearchSheet.tsx', 'utf8'); // el input vive en el modalcito de la lupa
+  t.check('input del buscador con fontSize >= 16', /input: \{[^}]*fontSize: (1[6-9]|2\d)/.test(sheet));
 }
