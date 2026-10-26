@@ -181,10 +181,12 @@ export async function approveAndRelease(order: any, reason: ApproveReason) {
     return g;
   };
   if (order.status === 'enviado' || f2fPaid) {
-    await assertOpen();
-    const ap = await chain().approveMilestone(order.contract_id, env.approverSecret());
-    await advance(order.id, order.status, { approved_tx: ap.hash, approval_reason: reason, delivered_at: new Date().toISOString(), status: 'entregado' });
-    await logEvent(order.id, 'approved', { hash: ap.hash, reason });
+    const g0 = await assertOpen();
+    // Idempotente: si el hito YA está aprobado on-chain (p. ej. un intento previo aprobó y luego falló la DB), no se
+    // vuelve a aprobar (TW responde 400 "already approved"): se registra y se sigue a la liberación. Bug 9781o4.
+    const approvedTx = g0.approved ? (order.approved_tx ?? 'onchain-preexisting') : (await chain().approveMilestone(order.contract_id, env.approverSecret())).hash;
+    await advance(order.id, order.status, { approved_tx: approvedTx, approval_reason: reason, delivered_at: new Date().toISOString(), status: 'entregado' });
+    await logEvent(order.id, 'approved', { hash: approvedTx, reason, ...(g0.approved ? { preexisting: true } : {}) });
   }
   const g = await assertOpen();
   if (!g.approved) throw new HttpError(409, 'hito no aprobado on-chain');

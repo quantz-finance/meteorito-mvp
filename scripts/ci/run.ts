@@ -92,6 +92,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '91', name: 'Buscador privado: el texto nunca va a analítica, logs ni URLs (POST, solo largo y resultados)', file: './t91-busqueda-privada.test.ts', onchain: false },
   { id: '94', name: 'Redes en la tienda (031): usuario o link -> link https canónico de cada red, rechaza otros esquemas/dominios/largos', file: './t94-redes-tienda.test.ts', onchain: false },
   { id: '95', name: 'Modo de la app: Testnet (default) = solo reales; Datos de ejemplo = con ejemplos (por pedido, sin estado global); Mainnet próximamente y desactivado', file: './t95-datos-de-ejemplo.test.ts', onchain: false },
+  { id: '96', name: 'Cara a cara + PIN: guard permite fondeado->entregado solo cara a cara (032); liberar con hito ya aprobado on-chain (PIN, Recibí, cron) sin re-aprobar', file: './t96-cara-a-cara-pin-libera.test.ts', onchain: false },
   { id: '92', name: 'Pie del producto: texto exacto de custodia (sin "Protección: 7 días"), aviso legal una vez, barrido de la UI', file: './t92-pie-custodia.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
