@@ -1,5 +1,6 @@
 // Web Push (VAPID). En iPhone solo funciona con la app instalada en la pantalla de inicio (iOS 16.4+).
 // El permiso se pide SOLO con un botón propio (tarjeta), nunca al abrir la app.
+import { Platform } from 'react-native';
 import { api, guestApi } from './api';
 import { DEMO_ENABLED } from './demo';
 import type { MeteoritoAuth } from './types';
@@ -15,7 +16,7 @@ export function isStandalone(): boolean {
   return typeof window !== 'undefined' && ((navigator as any).standalone === true || window.matchMedia?.('(display-mode: standalone)').matches);
 }
 export function pushStatus(role: PushRole): PushStatus {
-  if (typeof window === 'undefined') return 'unsupported';
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return 'unsupported'; // nativo: sin Web Push (la tarjeta no se muestra)
   if (DEMO_ENABLED) return ls.get(KEY(role)) ? 'enabled' : 'ask';
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   if (isIos() && !isStandalone()) return 'ios_install';
@@ -36,6 +37,7 @@ const unavailable = () => Object.assign(new Error('Las notificaciones todavía n
 /** Llamar DIRECTO desde el toque del botón (iOS exige el gesto para pedir permiso). */
 export async function enablePush(auth: Pick<MeteoritoAuth, 'getAuthToken'> & Partial<MeteoritoAuth>, role: PushRole): Promise<void> {
   if (DEMO_ENABLED) { ls.set(KEY(role), '1'); return; }
+  if (Platform.OS !== 'web' || typeof Notification === 'undefined') throw unavailable(); // nativo: aún sin notificaciones
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') throw Object.assign(new Error(perm === 'denied' ? 'Bloqueaste las notificaciones. Actívalas en los ajustes del navegador.' : 'No activaste las notificaciones.'), { code: 'push_denied' });
   const r = await fetch('/api/store?push=key').catch(() => null);
