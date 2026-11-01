@@ -28,7 +28,8 @@ export async function run(t: T, N: Testnet) {
   console.log(`    pass1 ${JSON.stringify(p1)} dispute=${o.dispute_tx} resolve=${o.resolved_tx}`);
   t.check('día 5 sin envío: el cron reembolsa solo (resuelto, 100% comprador)', p1.refunded?.includes('sr99b1') && o.status === 'resuelto' && o.resolution?.buyerPct === 100 && o.ship_cancel?.by === 'auto', JSON.stringify(p1));
   const g = await tw.releaseGuard(e.contractId);
-  t.check('on-chain: disputa registrada y resuelta', g.disputed && g.resolved, JSON.stringify({ disputed: g.disputed, resolved: g.resolved }));
+  // Al resolver, TW apaga la bandera `disputed` y deja `resolved`: la disputa queda probada por su tx (dispute_tx).
+  t.check('on-chain: disputa registrada (tx) y resuelta', !!o.dispute_tx && g.resolved, JSON.stringify({ dispute_tx: !!o.dispute_tx, disputed: g.disputed, resolved: g.resolved }));
   t.check('quien compra recibe todo su pago de vuelta (≥ 0,99 USDC)', (await usdc(buyer)) - b0 > 0.99);
   const p2: any = await shipRulePass({ ...opts, now: now + D });
   t.check('segunda pasada: idempotente (sin otra tx)', !p2.refunded?.length && !p2.errors?.length, JSON.stringify(p2));
