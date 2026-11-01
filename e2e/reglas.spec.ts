@@ -102,10 +102,21 @@ async function seedClaimV3(page: Page, agoMs: number) {
   return slug;
 }
 
+/** Abre la venta liberada (sin "Ver todas": la fila del pedido liberado puede aparecer después de la del producto). */
+async function openReleasedSale(page: Page) {
+  await expect(async () => {
+    await open(page, '/pedidos', 'seller');
+    const row = page.locator('[data-testid^="home-sale-row"]').filter({ hasText: /Pago liberado/ }).first();
+    await expect(row).toBeVisible({ timeout: 8000 });
+    await row.click({ timeout: 5000 });
+    await expect(page.getByText('Reporte de quien compró').last()).toBeVisible({ timeout: 6000 });
+  }).toPass({ timeout: 45000 });
+}
+
 test('RGL-06 reporte después de liberar (v3): quien vende lo ve y responde antes de que cuente en su historial', async ({ page }) => {
   await open(page, '/', 'seller', true);
   const slug = await seedClaimV3(page, 3_600_000);
-  await openSellerRow(page, /liberado|Cobrado/i, /Reporte de quien compró/);
+  await openReleasedSale(page);
   await expect(page.getByTestId('seller-claim')).toContainText('Los frenos no agarran bien');
   await expect(page.getByTestId('seller-claim-countdown')).toContainText(/Responde antes del .+ así el reporte entra a tu historial ya respondido\./);
   await expect(page.getByTestId('seller-claim')).toContainText('En tu historial público solo se ve el estado del reporte, no el texto.');
@@ -122,7 +133,7 @@ test('RGL-06 reporte después de liberar (v3): quien vende lo ve y responde ante
 test('RGL-07 reporte sin respuesta después de 48 h: ya cuenta como abierto (quien vende todavía puede responder)', async ({ page }) => {
   await open(page, '/', 'seller', true);
   await seedClaimV3(page, 49 * 3_600_000);
-  await openSellerRow(page, /liberado|Cobrado/i, /Reporte de quien compró/);
+  await openReleasedSale(page);
   await expect(page.getByTestId('seller-claim-countdown')).toContainText('El reporte ya está en tu historial como abierto.');
   await expect(page.getByTestId('seller-claim-send')).toBeVisible();
 });
