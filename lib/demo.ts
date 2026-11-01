@@ -25,7 +25,7 @@ import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/
 import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
 import { cleanReviewComment } from '../api/_lib/reviewText'; // pura
 import { daysLabel, EXTENSION_DAYS, MAX_TOTAL_FROM_PAYMENT_MIN, pendingExtension, protectionOf, validateAgreement } from '../api/_lib/agreement'; // pura
-import { BUYER_VERSION_MIN, SELLER_REPLY_RULE_HOURS, replyPhase, replyRuleApplies, shipDeadline, stampVersion } from '../api/_lib/orderRules'; // pura
+import { BUYER_VERSION_MIN, CLAIM_GRACE_HOURS, CLAIM_TEXT_MIN, SELLER_REPLY_RULE_HOURS, claimCounts, claimRuleApplies, claimStatusOf, claimWindow, replyPhase, replyRuleApplies, shipDeadline, stampVersion } from '../api/_lib/orderRules'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
 
@@ -46,7 +46,9 @@ export interface DemoOrder {
   dispute_reply_due_at?: string | null; dispute_replied_at?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
-interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; socials?: Socials; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[] }
+interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; socials?: Socials; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[];
+  /** reportes después de liberar (regla v3) */ claims?: Record<string, DemoClaim> }
+interface DemoClaim { reason: string; description: string; status: 'abierto' | 'respondido' | 'resuelto'; opened_at: string; counts_at: string; seller_response: string | null; responded_at: string | null; resolved_at: string | null }
 
 export const DEMO_PIN = '482915';
 /** Igual que producción (/api/health -> autoReleaseMinutes): 7 días después de "Ya lo envié" (el reloj del demo se adelanta con advance()). */
@@ -362,6 +364,30 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
       if (String(body.pin) !== o.pin) { o.pin_attempts = (o.pin_attempts ?? 0) + 1; emit(); throw err(401, 'bad_pin', 'PIN incorrecto'); }
     } else { need('buyer'); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'no eres el comprador'); }
     o.delivered_at = now(); o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = now(); emit(); return { released: true, releasedTx: o.released_tx };
+  }
+  if (p === '/api/escrow/dispute' && typeof body.action === 'string' && String(body.action).startsWith('claim_')) { // regla v3 (como api/_lib/claims.ts)
+    const o = get(String(body.slug)); const claims = (st.claims ??= {}); const c = claims[o.slug] ?? null;
+    const view = (x: DemoClaim | null) => x ? { ...x, status: claimStatusOf(x), counts: claimCounts(x, nowMs()) } : null;
+    if (body.action === 'claim_get' || body.action === 'claim_open') {
+      need('buyer'); if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo quien compró puede reportar un problema.');
+      const w = claimWindow(o, nowMs());
+      if (body.action === 'claim_get') return { available: true, applies: claimRuleApplies(o), window: w, claim: view(c) };
+      if (!claimRuleApplies(o)) throw err(409, 'claim_not_applicable', 'Esta compra no tiene período de reclamo.');
+      if (c) return { already: true, claim: view(c) };
+      if (w.phase !== 'open') throw err(409, 'claim_window_closed', 'Pasaron los 30 días para reportar un problema con esta compra.');
+      if (!body.reason) throw err(400, 'bad_reason', 'Elige qué pasó.');
+      if (String(body.description ?? '').trim().length < CLAIM_TEXT_MIN) throw err(400, 'claim_text_required', 'Cuéntanos qué pasó (mínimo 10 caracteres).');
+      claims[o.slug] = { reason: body.reason, description: String(body.description).trim(), status: 'abierto', opened_at: now(), counts_at: new Date(nowMs() + CLAIM_GRACE_HOURS * 3600_000).toISOString(), seller_response: null, responded_at: null, resolved_at: null };
+      emit(); return { opened: true, claim: view(claims[o.slug]) };
+    }
+    need('seller');
+    if (body.action === 'claim_seller_get') return { available: true, claim: view(c), can_respond: !!c && c.status !== 'resuelto' };
+    if (body.action === 'claim_respond') {
+      if (!c) throw err(404, 'claim_not_found', 'Esta compra no tiene un reporte.');
+      const b = String(body.body ?? '').trim(); if (!b) throw err(400, 'claim_reply_required', 'Escribe tu respuesta (hasta 1000 caracteres).');
+      Object.assign(c, { seller_response: b, responded_at: c.responded_at ?? now(), status: 'respondido' }); emit(); return { responded: true, claim: view(c) };
+    }
+    throw err(400, 'bad_action', 'acción inválida');
   }
   if (p === '/api/escrow/dispute' && typeof body.action === 'string') { // panel admin + respuesta del vendedor: lib/demoAdmin.ts
     const { demoAdminApi, demoPayoutSeed } = await import('./demoAdmin');

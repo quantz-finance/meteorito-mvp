@@ -45,7 +45,8 @@ import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { DEMO_ENABLED } from '@/lib/demo';
 import { RulesHint } from '@/components/RulesLink';
 import { PAY_SUMMARY } from '@/lib/rules';
-import { replyPhase, replyRuleApplies, shipDeadline } from '../../api/_lib/orderRules';
+import { replyPhase, replyRuleApplies, shipDeadline, claimRuleApplies } from '../../api/_lib/orderRules';
+import { ClaimCard } from '@/components/ClaimCard';
 import { looksLikeDemoProduct } from '../../api/_lib/demoFlag';
 import { DemoProductPage } from '@/components/DemoProduct';
 
@@ -187,6 +188,8 @@ function LinkDeVentaReal() {
       {canShowContact(order.status) && isBuyerDevice(order.slug) ? <OrderChatCard slug={order.slug} /> : null}
       {canShowContact(order.status) && isBuyerDevice(order.slug) ? <SellerContact slug={order.slug} /> : null}
       {RATABLE.includes(order.status) && isBuyerDevice(order.slug) ? <RateCard slug={order.slug} /> : null}
+      {/* Regla v3: 30 días después de liberado para reportar un problema (no congela ni devuelve el pago). */}
+      {order.status === 'liberado' && claimRuleApplies(order) && isBuyerDevice(order.slug) ? <ClaimCard slug={order.slug} /> : null}
       {['fondeado', 'enviado', 'en_disputa'].includes(order.status) && isBuyerDevice(order.slug)
         ? <Suspense fallback={null}><PushCard role="buyer" /></Suspense> : null}
 

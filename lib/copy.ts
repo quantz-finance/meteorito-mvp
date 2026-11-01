@@ -38,6 +38,13 @@ export const COPY = {
     disputesResolved: (n: number) => `${n} con disputa resuelta`,
     disputesOpen: (n: number) => `${n} en disputa`,
     noSalesYet: 'Todavía no tiene ventas completadas.',
+    /** Historial de reportes después de liberar (regla v3): solo el conteo por estado, nunca el texto de quien compra. */
+    claimsTitle: 'Reportes después de liberar',
+    claimsCount: (h: { abierto: number; respondido: number; resuelto: number } | null | undefined) => [
+      h?.abierto ? `${h.abierto} abierto${h.abierto === 1 ? '' : 's'}` : '',
+      h?.respondido ? `${h.respondido} respondido${h.respondido === 1 ? '' : 's'}` : '',
+      h?.resuelto ? `${h.resuelto} resuelto${h.resuelto === 1 ? '' : 's'}` : '',
+    ].filter(Boolean).join(' · '),
     reviewsCount: (n: number) => `${n} reseña${n === 1 ? '' : 's'} de compras liberadas`,
     reviewBy: (name: string | null) => (name ? `${name} · compra liberada` : 'Compra liberada'),
     noReviews: 'Todavía no tiene reseñas. Solo quien compró y recibió (pago liberado) puede dejar una.',

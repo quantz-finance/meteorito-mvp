@@ -5,7 +5,7 @@
 // acuerdo de la beta en Vender (antes de publicar). Texto EXACTO fijado por scripts/ci/t98-reglas-texto.test.ts.
 import type { IconName } from '@/components/ds';
 import { startTour } from './tour';
-import { CURRENT_RULES_VERSION, RULE_VERSION, SELLER_REPLY_RULE_HOURS, SHIP_AUTO_REFUND_EXTRA_DAYS, SHIP_DAYS, rulesVersionOf } from '../api/_lib/orderRules';
+import { CLAIM_DAYS, CURRENT_RULES_VERSION, RULE_VERSION, SELLER_REPLY_RULE_HOURS, SHIP_AUTO_REFUND_EXTRA_DAYS, SHIP_DAYS, rulesVersionOf } from '../api/_lib/orderRules';
 
 export const RULES_CONFIG = {
   /** Días tras el envío para liberar el pago si el comprador no da el código ni reporta un problema. */
@@ -24,7 +24,7 @@ export const RULES_CONFIG = {
   /** Horas que tiene el vendedor para responder una disputa con pruebas. */
   sellerReplyHours: SELLER_REPLY_RULE_HOURS,
   /** Días después de la liberación en los que el comprador todavía puede reportar un problema. */
-  claimDays: 30,
+  claimDays: CLAIM_DAYS,
 } as const;
 const C = RULES_CONFIG;
 
@@ -33,7 +33,7 @@ export const RULES_TITLE = 'Cómo funciona Meteorito';
 export const RULES_INTRO = 'Son las mismas reglas para quien compra y para quien vende. Léelas una vez y compra o vende con calma.';
 
 /* ---------- Reglas con texto legal aprobado (EXACTO: no editar sin revisión legal) ---------- */
-export type LegalRuleId = 'reembolso_sin_envio' | 'respuesta_48h';
+export type LegalRuleId = 'reembolso_sin_envio' | 'respuesta_48h' | 'reclamo_30_dias';
 export interface LegalRule { id: LegalRuleId; version: number; icon: IconName; title: string; text: string;
   /** Solo pedidos con envío (cara a cara no tiene paso de envío). */
   shippingOnly?: boolean }
@@ -41,9 +41,12 @@ export interface LegalRule { id: LegalRuleId; version: number; icon: IconName; t
 export const SHIP_REFUND_RULE = "Si quien vende no marca 'Ya lo envié' en 3 días, puedes cancelar y recibes todo tu pago de vuelta desde la custodia. Si no cancelas y pasan 2 días más sin envío, el reembolso se hace solo.";
 /** Respuesta del vendedor en 48 h (v2). */
 export const DISPUTE_REPLY_RULE = 'Si abres una disputa, quien vende tiene 48 h para responder. Mientras tanto, el pago sigue en custodia. Si no responde, se te reembolsa desde la custodia. Si responde, una persona del equipo revisa las dos versiones y decide.';
+/** Período de reclamo de 30 días (v3). */
+export const CLAIM_RULE = 'Después de liberado el pago tienes 30 días para reportar un problema con la compra. Quien vende puede responder y el reporte queda en su historial. En esta etapa Meteorito no devuelve el pago, y tus derechos frente a quien vende se mantienen.';
 export const LEGAL_RULES: LegalRule[] = [
   { id: 'reembolso_sin_envio', version: RULE_VERSION.shipRefund, icon: 'arrow-undo-outline', title: 'Reembolso si no se envía', text: SHIP_REFUND_RULE, shippingOnly: true },
   { id: 'respuesta_48h', version: RULE_VERSION.sellerReply, icon: 'chatbubbles-outline', title: 'Respuesta de quien vende en 48 h', text: DISPUTE_REPLY_RULE },
+  { id: 'reclamo_30_dias', version: RULE_VERSION.claims, icon: 'flag-outline', title: 'Reportes hasta 30 días después', text: CLAIM_RULE },
 ];
 export const legalRule = (id: LegalRuleId) => LEGAL_RULES.find((r) => r.id === id)!;
 /** Reglas vigentes al publicar (acuerdo de la beta en Vender): las de la versión actual. */
@@ -85,8 +88,7 @@ export const RULES: Rule[] = [
       'Si las versiones son distintas, el equipo revisa el caso con ayuda de IA y una persona decide.',
     ] },
   ...LEGAL_RULES.filter((r) => r.id === 'respuesta_48h').map((r) => ({ id: r.id, icon: r.icon, title: r.title, text: r.text })),
-  { id: 'reclamos', icon: 'ribbon-outline', title: `Reclamos hasta ${C.claimDays} días después`,
-    text: `Hasta ${C.claimDays} días después de la liberación, el comprador puede reportar un problema. El vendedor recibe el aviso y el caso cuenta en su calificación. El dinero ya no se congela.` },
+  ...LEGAL_RULES.filter((r) => r.id === 'reclamo_30_dias').map((r) => ({ id: r.id, icon: r.icon, title: r.title, text: r.text })),
   { id: 'contacto', icon: 'logo-whatsapp', title: 'Contacto',
     text: 'Después de pagar, el comprador puede escribirle al vendedor por WhatsApp para coordinar el envío o la entrega.' },
 ];

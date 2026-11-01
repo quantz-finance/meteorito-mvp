@@ -12,9 +12,11 @@ export const RULE_VERSION = {
   shipRefund: 1,
   /** v2: quien vende tiene 48 h para responder una disputa; sin respuesta, se reembolsa desde la custodia. */
   sellerReply: 2,
+  /** v3: después de liberado el pago, quien compra tiene 30 días para reportar un problema (sin congelar ni devolver el pago). */
+  claims: 3,
 } as const;
 /** Versión vigente: la que se guarda en los pedidos nuevos (si quien vende vio las reglas al publicar). */
-export const CURRENT_RULES_VERSION = 2;
+export const CURRENT_RULES_VERSION = 3;
 
 const H = 3_600_000, D = 24 * H;
 /** Días desde el pago para marcar "Ya lo envié" (plazo fijo; no tiene que ver con el plazo acordado de liberación). */
@@ -85,4 +87,46 @@ export function replyPhase(o: ReplyRuleOrder | null | undefined, now = Date.now(
   if (x.replied || o.dispute_replied_at) return { phase: 'replied', dueAt };
   if (!dueAt) return { phase: 'na', dueAt: null };
   return { phase: now >= Date.parse(dueAt) ? 'due' : 'waiting', dueAt };
+}
+
+/* ---------- v3: período de reclamo de 30 días (después de liberado el pago) ---------- */
+/** Días desde la liberación en los que quien compra puede reportar un problema. */
+export const CLAIM_DAYS = 30;
+/** Horas que tiene quien vende para responder ANTES de que el reporte cuente en su historial. */
+export const CLAIM_GRACE_HOURS = 48;
+/** Largo mínimo del reporte de quien compra. */
+export const CLAIM_TEXT_MIN = 10;
+export type ClaimStatus = 'abierto' | 'respondido' | 'resuelto';
+export interface ClaimRuleOrder { status?: string | null; rules_version?: number | null; released_at?: string | null; released_tx?: string | null }
+/** ¿La regla de los 30 días rige para este pedido? v3+ (nada retroactivo). */
+export const claimRuleApplies = (o: ClaimRuleOrder | null | undefined) => !!o && rulesVersionOf(o) >= RULE_VERSION.claims;
+/** Ventana para reportar: 30 días desde la liberación. 'na' si no aplica o el pago no está liberado (o no se sabe cuándo). */
+export function claimWindow(o: ClaimRuleOrder | null | undefined, now = Date.now()): { phase: 'na' | 'open' | 'closed'; until: string | null } {
+  if (!o || !claimRuleApplies(o) || o.status !== 'liberado') return { phase: 'na', until: null };
+  const rel = Date.parse(o.released_at ?? '');
+  if (!Number.isFinite(rel)) return { phase: 'na', until: null };
+  const until = rel + CLAIM_DAYS * D;
+  return { phase: now < until ? 'open' : 'closed', until: new Date(until).toISOString() };
+}
+export interface ClaimLike { status?: string | null; opened_at?: string | null; counts_at?: string | null; responded_at?: string | null }
+/** Hasta cuándo puede responder quien vende antes de que el reporte cuente (48 h desde el aviso). */
+export function claimCountsAt(c: ClaimLike): string | null {
+  if (c.counts_at) return c.counts_at;
+  const t = Date.parse(c.opened_at ?? '');
+  return Number.isFinite(t) ? new Date(t + CLAIM_GRACE_HOURS * H).toISOString() : null;
+}
+/** ¿El reporte ya cuenta en el historial de quien vende? Sí si respondió, si se resolvió o si pasaron las 48 h. */
+export function claimCounts(c: ClaimLike, now = Date.now()): boolean {
+  if (c.status === 'respondido' || c.status === 'resuelto' || c.responded_at) return true;
+  const at = Date.parse(claimCountsAt(c) ?? '');
+  return Number.isFinite(at) && now >= at;
+}
+/** Estado agregado que se muestra en el historial de quien vende (nunca el texto de quien compra). */
+export const claimStatusOf = (c: ClaimLike): ClaimStatus => (c.status === 'resuelto' ? 'resuelto' : c.status === 'respondido' || c.responded_at ? 'respondido' : 'abierto');
+export interface ClaimHistory { abierto: number; respondido: number; resuelto: number }
+/** Conteo del historial: solo los reportes que ya cuentan (después de que quien vende pudo responder). */
+export function claimHistory(claims: ClaimLike[], now = Date.now()): ClaimHistory {
+  const h: ClaimHistory = { abierto: 0, respondido: 0, resuelto: 0 };
+  for (const c of claims) if (claimCounts(c, now)) h[claimStatusOf(c)]++;
+  return h;
 }

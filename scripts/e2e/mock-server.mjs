@@ -15,7 +15,7 @@ const VAPID = Buffer.concat([Buffer.from([4]), Buffer.alloc(64, 7)]).toString('b
 
 let S;
 // contactsOn: como producción CON la migración 028 (avisos del comprador). Sin ella: available:false (default, como hoy).
-const fresh = (orders = [], card = false, cardMode = 'inapp', contactsOn = false) => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], ph: [], subs: [], ratings: {}, fail: [], seq: 0, card, cardMode, lendara: {}, contactsOn, contacts: {}, links: [], access: {}, grants: {} });
+const fresh = (orders = [], card = false, cardMode = 'inapp', contactsOn = false) => ({ orders: Object.fromEntries(orders.map((o) => [o.slug, base(o)])), calls: [], ph: [], subs: [], ratings: {}, fail: [], seq: 0, card, cardMode, lendara: {}, contactsOn, contacts: {}, links: [], access: {}, grants: {}, claims: {}, claimsOn: true });
 const base = (o) => ({ kind: 'single', listing_slug: null, listing_status: 'activa', status: 'creado', category: 'otro', brand: '', model: 'Bici de montaña', condition: '', price_crc: 150000,
   description: null, photos: [], identifier_masked: null, checks_summary: [], created_at: new Date().toISOString(), amount_usdc: null, contract_id: null, funded_tx: null, shipped_tx: null,
   released_tx: null, approval_reason: null, auto_release_at: null, disputed_at: null, dispute_tx: null, resolved_tx: null, resolution: null, buyer: null, pin_attempts: 0, ...o });
@@ -160,7 +160,23 @@ async function api(req, path, q, b) {
       shipRefund(o, 'buyer'); return { refunded: true };
     }
     if (!running) throw E(409, 'Este pedido no está enviado.', 'bad_state');
-    Object.assign(o, { status: 'liberado', released_tx: 'r'.repeat(64), approval_reason: 'buyer_confirm' }); return { released: true, releasedTx: o.released_tx };
+    Object.assign(o, { status: 'liberado', released_tx: 'r'.repeat(64), released_at: new Date().toISOString(), approval_reason: 'buyer_confirm' }); return { released: true, releasedTx: o.released_tx };
+  }
+  if (path === '/api/escrow/dispute' && (b.action === 'claim_get' || b.action === 'claim_open')) { // regla v3 (como api/_lib/claims.ts, lado comprador)
+    needGuest(); const o = get(String(b.slug));
+    if (!isBuyer(o)) throw E(403, 'Solo quien compró puede reportar un problema.', 'not_buyer');
+    const applies = (o.rules_version ?? 0) >= 3, rel = Date.parse(o.released_at ?? '');
+    const until = o.status === 'liberado' && applies && Number.isFinite(rel) ? rel + 30 * 86_400_000 : null;
+    const window = { phase: until == null ? 'na' : Date.now() < until ? 'open' : 'closed', until: until == null ? null : new Date(until).toISOString() };
+    const c = S.claims[o.slug] ?? null;
+    if (!S.claimsOn) { if (b.action === 'claim_open') throw E(503, 'Por ahora no se pueden reportar problemas. Intenta más tarde.', 'claims_unavailable'); return { available: false, applies, window, claim: null }; }
+    if (b.action === 'claim_get') return { available: true, applies, window, claim: c };
+    if (!applies) throw E(409, 'Esta compra no tiene período de reclamo.', 'claim_not_applicable');
+    if (c) return { already: true, claim: c };
+    if (window.phase !== 'open') throw E(409, 'Pasaron los 30 días para reportar un problema con esta compra.', 'claim_window_closed');
+    if (String(b.description ?? '').trim().length < 10) throw E(400, 'Cuéntanos qué pasó (mínimo 10 caracteres).', 'claim_text_required');
+    S.claims[o.slug] = { status: 'abierto', reason: b.reason, description: String(b.description).trim(), opened_at: new Date().toISOString(), counts_at: new Date(Date.now() + 48 * 3_600_000).toISOString(), counts: false, seller_response: null, responded_at: null, resolved_at: null };
+    return { opened: true, claim: S.claims[o.slug] };
   }
   if (path === '/api/escrow/dispute') {
     needGuest(); const o = get(String(b.slug));
@@ -274,12 +290,13 @@ createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   if (u.pathname.startsWith('/__mock/')) {
     const b = await body(req);
-    if (u.pathname === '/__mock/reset') { S = fresh(b.orders ?? [], !!b.card, b.cardMode ?? 'inapp', !!b.contacts); return send(res, 200, { ok: true }); }
+    if (u.pathname === '/__mock/reset') { S = fresh(b.orders ?? [], !!b.card, b.cardMode ?? 'inapp', !!b.contacts); if (b.claims === false) S.claimsOn = false; return send(res, 200, { ok: true }); }
     if (u.pathname === '/__mock/access') { const tok = 'acc-' + b.slug + '-' + (++S.seq); S.access[tok] = b.slug; return send(res, 200, { token: tok }); } // = link del correo
     const lw = u.pathname.match(/^\/__mock\/lendara\/widget\/([\w-]+)$/);
     if (lw) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(lendaraWidget(lw[1])); }
     const ls = u.pathname.match(/^\/__mock\/lendara\/([\w-]+)\/(completed|kyc_rejected|expired|pending_anchor)$/);
     if (ls && S.lendara[ls[1]]) { S.lendara[ls[1]].status = ls[2]; return send(res, 200, { ok: true }); }
+    if (u.pathname === '/__mock/claims') { S.claimsOn = b.on !== false; return send(res, 200, { ok: true }); } // sin/con la migración 035
     if (u.pathname === '/__mock/state') return send(res, 200, S);
     if (u.pathname === '/__mock/patch') { Object.assign(S.orders[b.slug], b.set); return send(res, 200, S.orders[b.slug]); }
     if (u.pathname === '/__mock/fail') { S.fail.push(b); return send(res, 200, { ok: true }); }

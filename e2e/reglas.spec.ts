@@ -3,7 +3,7 @@
 // Capturas: REGLAS_SHOTS=/workspace/out -> reglas-*.png (solo iPhone SE).
 import { test, expect, type Page } from '@playwright/test';
 import { open, seed, takePhoto, openSellerRow, BANNED } from './helpers';
-import { SHIP_REFUND_RULE } from '../lib/rules';
+import { CLAIM_RULE, DISPUTE_REPLY_RULE, SHIP_REFUND_RULE } from '../lib/rules';
 import { CURRENT_RULES_VERSION } from '../api/_lib/orderRules';
 
 const SHOTS = process.env.REGLAS_SHOTS;
@@ -34,6 +34,8 @@ test('RGL-01 primera publicación: "Antes de publicar" con la regla exacta; al a
   await expect(page.getByText('Antes de publicar')).toBeVisible();
   const rule = page.getByTestId('legal-rule-reembolso_sin_envio');
   await expect(rule.getByText(SHIP_REFUND_RULE, { exact: true })).toBeVisible();
+  await expect(page.getByTestId('legal-rule-respuesta_48h').getByText(DISPUTE_REPLY_RULE, { exact: true })).toBeVisible();
+  await expect(page.getByTestId('legal-rule-reclamo_30_dias').getByText(CLAIM_RULE, { exact: true })).toBeVisible();
   await expect(page.getByText('¡Tu link está listo!')).toHaveCount(0); // no publica sin aceptar
   expect(BANNED.test(await rule.innerText())).toBe(false);
   await shot(page, 'vendedor-acuerdo');
@@ -88,4 +90,39 @@ test('RGL-05 disputa v2 vencida sin respuesta: quien vende ya no puede responder
   await seedDisputeV2(page, 49 * 3_600_000);
   await openSellerRow(page, /disputa|Reembolsado|Resuelto/i, /Pasaron las 48 h|Reembolsado|Resuelto/);
   await expect(page.getByTestId('seller-reply')).toHaveCount(0);
+});
+
+/** Pedido v3 liberado con un reporte de quien compró (como lo deja claim_open) hace `agoMs`. */
+async function seedClaimV3(page: Page, agoMs: number) {
+  const slug: string = await page.evaluate(() => (window as any).__meteoritoDemo.seed('enviado', { title: 'Bici de montaña', price_crc: 150000, rules: 3 }));
+  await page.evaluate(([k, s, ago]) => { const st = JSON.parse(sessionStorage.getItem(k as string) || '{}'); const o = st.orders[s as string]; const at = Date.now() - (ago as number);
+    Object.assign(o, { status: 'liberado', released_tx: 'r'.repeat(64), released_at: new Date(at - 86_400_000).toISOString() });
+    st.claims = { ...(st.claims ?? {}), [s as string]: { reason: 'no_funciona', description: 'Los frenos no agarran bien', status: 'abierto', opened_at: new Date(at).toISOString(), counts_at: new Date(at + 48 * 3_600_000).toISOString(), seller_response: null, responded_at: null, resolved_at: null } };
+    sessionStorage.setItem(k as string, JSON.stringify(st)); }, [KEY, slug, agoMs] as const);
+  return slug;
+}
+
+test('RGL-06 reporte después de liberar (v3): quien vende lo ve y responde antes de que cuente en su historial', async ({ page }) => {
+  await open(page, '/', 'seller', true);
+  const slug = await seedClaimV3(page, 3_600_000);
+  await openSellerRow(page, /liberado|Cobrado/i, /Reporte de quien compró/);
+  await expect(page.getByTestId('seller-claim')).toContainText('Los frenos no agarran bien');
+  await expect(page.getByTestId('seller-claim-countdown')).toContainText(/Responde antes del .+ así el reporte entra a tu historial ya respondido\./);
+  await expect(page.getByTestId('seller-claim')).toContainText('En tu historial público solo se ve el estado del reporte, no el texto.');
+  await page.getByTestId('seller-claim-text').fill('Los ajusté antes de enviarla; te explico cómo regularlos.');
+  await shot(page, '3-vendedor-reporte');
+  await page.getByTestId('seller-claim-send').click();
+  await expect(page.getByTestId('seller-claim-done')).toContainText('te explico cómo regularlos');
+  await expect(page.getByTestId('seller-claim-status')).toHaveText('Respondido');
+  const st = await page.evaluate((k) => JSON.parse(sessionStorage.getItem(k) || '{}'), KEY);
+  expect(st.claims[slug].status).toBe('respondido');
+  expect(st.orders[slug].status).toBe('liberado'); // no mueve fondos
+});
+
+test('RGL-07 reporte sin respuesta después de 48 h: ya cuenta como abierto (quien vende todavía puede responder)', async ({ page }) => {
+  await open(page, '/', 'seller', true);
+  await seedClaimV3(page, 49 * 3_600_000);
+  await openSellerRow(page, /liberado|Cobrado/i, /Reporte de quien compró/);
+  await expect(page.getByTestId('seller-claim-countdown')).toContainText('El reporte ya está en tu historial como abierto.');
+  await expect(page.getByTestId('seller-claim-send')).toBeVisible();
 });

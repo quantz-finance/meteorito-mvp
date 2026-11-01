@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken } from './mock';
 import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle, expectLegalVisible } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { DISPUTE_REPLY_RULE, SHIP_REFUND_RULE } from '../lib/rules';
+import { CLAIM_RULE, DISPUTE_REPLY_RULE, SHIP_REFUND_RULE } from '../lib/rules';
 import { resolve } from 'node:path';
 
 test.describe.configure({ mode: 'serial' });
@@ -1018,4 +1018,74 @@ test('MCK-REG-05 disputa en un pedido v1 (anterior a la regla de 48 h): como ant
   await expect.poll(async () => (await state(request)).orders[slug].status).toBe('en_disputa');
   expect((await state(request)).orders[slug].dispute_reply_due_at ?? null).toBeNull();
   await expect(page.getByTestId('reply-countdown')).toHaveCount(0);
+});
+
+/* ---------- Regla v3 "Período de reclamo de 30 días", lado de quien compra ----------
+   La ve antes de pagar ("Reglas de esta compra") y, después de liberado, puede reportar durante 30 días. No congela ni
+   devuelve el pago. Pedidos anteriores (v2) y sin la migración 035: no se ofrece. */
+async function releasedV3(page: Page, request: any, rules = 3, releasedAgo = DAY) {
+  await reset(request, [rulesListing(rules)]);
+  await page.goto('/p/prod01');
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  const rule = page.getByTestId('legal-rule-reclamo_30_dias');
+  if (rules >= 3) {
+    await rule.scrollIntoViewIfNeeded();
+    await expect(rule.getByText(CLAIM_RULE, { exact: true })).toBeVisible();
+    await expect(page.getByText('Ya pagué', { exact: true })).toBeVisible();
+    await rulesShot(page, '3-pago-al-pagar-aceptas-v3');
+  } else await expect(rule).toHaveCount(0);
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
+  await patch(request, slug, { status: 'liberado', shipped_tx: 's'.repeat(64), released_tx: 'r'.repeat(64), released_at: ago(releasedAgo), approval_reason: 'buyer_confirm' });
+  await page.reload();
+  return slug;
+}
+
+test('MCK-REG-06 v3: la regla antes de pagar; después de liberado reporta un problema (30 días) sin mover el pago', async ({ page, request }) => {
+  const slug = await releasedV3(page, request);
+  const card = page.getByTestId('claim-card');
+  await expect(card).toBeVisible();
+  await expect(card.getByText(CLAIM_RULE, { exact: true })).toBeVisible();
+  await expect(page.getByTestId('claim-until')).toContainText(/Puedes reportar hasta el .+\./);
+  expect(BANNED.test(await card.innerText())).toBe(false);
+  await card.scrollIntoViewIfNeeded();
+  await rulesShot(page, '3-comprador-reportar');
+  await page.getByTestId('claim-open').click();
+  await page.getByTestId('claim-reason-no_funciona').click();
+  await page.getByTestId('claim-text').fill('mal');
+  await page.getByTestId('claim-send').click();
+  await expect(page.getByText('Cuéntanos qué pasó (mínimo 10 caracteres).')).toBeVisible();
+  await page.getByTestId('claim-text').fill('Los frenos no agarran bien');
+  await rulesShot(page, '3-comprador-reporte-hoja');
+  await page.getByTestId('claim-send').click();
+  const status = page.getByTestId('claim-status');
+  await expect(status).toContainText('Tu reporte: abierto');
+  await expect(status).toContainText('En esta etapa Meteorito no devuelve el pago, y tus derechos frente a quien vende se mantienen.');
+  await status.scrollIntoViewIfNeeded();
+  await rulesShot(page, '3-comprador-reporte-enviado');
+  const st = await state(request);
+  expect(st.claims[slug].description).toBe('Los frenos no agarran bien');
+  expect(st.orders[slug].status).toBe('liberado'); // no congela ni devuelve
+  await page.reload();
+  await expect(page.getByTestId('claim-status')).toBeVisible(); // una vez por pedido
+  await expect(page.getByTestId('claim-open')).toHaveCount(0);
+});
+
+test('MCK-REG-07 sin período de reclamo: pedido v2 (anterior), pasados los 30 días o sin la migración 035', async ({ page, request }) => {
+  await releasedV3(page, request, 2);
+  await page.waitForTimeout(600);
+  await expect(page.getByTestId('claim-card')).toHaveCount(0);
+  const slug = await releasedV3(page, request, 3, 30 * DAY + 60_000);
+  await page.waitForTimeout(600);
+  await expect(page.getByTestId('claim-card')).toHaveCount(0);
+  await patch(request, slug, { released_at: ago(DAY) });
+  await request.post(`${MOCK}/__mock/claims`, { data: { on: false } });
+  await page.reload();
+  await page.waitForTimeout(600);
+  await expect(page.getByTestId('claim-card')).toHaveCount(0);
+  await request.post(`${MOCK}/__mock/claims`, { data: { on: true } });
+  await page.reload();
+  await expect(page.getByTestId('claim-card')).toBeVisible();
 });

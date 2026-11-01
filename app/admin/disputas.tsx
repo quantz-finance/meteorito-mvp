@@ -14,6 +14,7 @@ import { formatCRC } from '@/lib/labels';
 import { ageLabel, deadlineLabel, listDisputes, useIsAdmin, type AdminDisputeRow, type AdminList, type DisputeTab } from '@/lib/admin';
 import { OUTCOME_LABEL } from '@/api/_lib/disputeRules';
 import { AdminNotFound } from '@/components/AdminNotFound';
+import { AdminClaims } from '@/components/AdminClaims';
 
 const TABS: { id: DisputeTab; label: string }[] = [{ id: 'nuevas', label: 'Nuevas' }, { id: 'decidir', label: 'Necesitan decisión' }, { id: 'resueltas', label: 'Resueltas' }];
 
@@ -69,6 +70,7 @@ export default function AdminDisputas() {
       {admin === null || (!data && !err) ? <><SkeletonCard /><SkeletonCard /></>
         : rows.length === 0 ? <Card style={{ alignItems: 'center', paddingVertical: S.lg }}><Text testID="admin-empty" style={T.callout}>No hay disputas aquí.</Text></Card>
         : <View style={{ gap: S.sm }} testID="admin-list">{rows.map((r) => <Row key={r.slug} r={r} />)}</View>}
+      {admin === true ? <AdminClaims /> : null}
     </Screen>
   );
 }

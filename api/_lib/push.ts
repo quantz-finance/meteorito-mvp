@@ -2,7 +2,7 @@
 // Sin VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT, o sin la tabla push_subscriptions (migración 011), no hace nada.
 import { db } from './db';
 import { daysLabel, extensionRequestText, isFaceToFace } from './agreement';
-import { SELLER_REPLY_RULE_HOURS, SHIP_REMINDER_TEXT } from './orderRules';
+import { CLAIM_GRACE_HOURS, SELLER_REPLY_RULE_HOURS, SHIP_REMINDER_TEXT } from './orderRules';
 
 export interface PushOrder { slug: string; status: string; delivery_mode?: string | null; seller_user_id?: string | null; buyer_user_id?: string | null; brand?: string | null; model?: string | null }
 export interface PushMsg { to: string; role: 'seller' | 'buyer'; title: string; body: string; url: string; tag: string }
@@ -78,6 +78,19 @@ export function replyRuleMessages(o: PushOrder, kind: 'opened' | 'replied' | 're
     add('buyer', 'Reembolso de tu disputa', `Quien vende no respondió en ${SELLER_REPLY_RULE_HOURS} h: te devolvemos tu pago de ${it} desde la custodia.`);
     add('seller', 'Disputa cerrada', `No respondiste en ${SELLER_REPLY_RULE_HOURS} h: el pago de ${it} vuelve a quien compró.`);
   }
+  return out;
+}
+
+/** Avisos de la regla v3 "Período de reclamo de 30 días" (api/_lib/claims.ts). Sin congelar ni devolver el pago. */
+export function claimMessages(o: PushOrder, kind: 'opened' | 'replied' | 'resolved'): PushMsg[] {
+  const it = itemName(o), url = `/p/${o.slug}`, out: PushMsg[] = [];
+  const add = (role: 'seller' | 'buyer', title: string, body: string) => {
+    const to = role === 'seller' ? o.seller_user_id : o.buyer_user_id;
+    if (to && !(role === 'buyer' && to === o.seller_user_id)) out.push({ to, role, title, body, url, tag: `${o.slug}:claim_${kind}` });
+  };
+  if (kind === 'opened') add('seller', 'Reporte de una compra', `Quien compró ${it} reportó un problema. Puedes responder en las próximas ${CLAIM_GRACE_HOURS} h, antes de que el reporte cuente en tu historial.`);
+  else if (kind === 'replied') add('buyer', 'Quien vende respondió', `Hay una respuesta a tu reporte de ${it}.`);
+  else { add('buyer', 'Reporte resuelto', `El equipo marcó como resuelto tu reporte de ${it}.`); add('seller', 'Reporte resuelto', `El equipo marcó como resuelto el reporte de ${it}.`); }
   return out;
 }
 

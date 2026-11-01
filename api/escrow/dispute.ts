@@ -21,6 +21,12 @@
 //   { action:'seller_response_get', slug }         -> { available, open, response, deadline, can_respond }
 //   { action:'seller_respond', slug, body?, tracking?, photo?, capture? } -> su versión: foto de la cámara (token 'dispute'
 //                                                  propio), guía de envío o texto (al menos uno). v2: solo dentro de las 48 h.
+// Regla v3 "Período de reclamo de 30 días" (api/_lib/claims.ts, migración 035; sin ella available:false). No congela fondos:
+//  Comprador (X-Guest-Key o Bearer): { action:'claim_get', slug } -> { available, applies, window:{phase,until}, claim }
+//                                    { action:'claim_open', slug, reason, description } -> reporte (una vez, dentro de 30 días)
+//  Vendedor del pedido (Bearer):     { action:'claim_seller_get', slug } -> { available, claim, can_respond }
+//                                    { action:'claim_respond', slug, body } -> su respuesta (antes de 48 h: cuenta respondido)
+//  Admin:                            { action:'admin_claims' } / { action:'admin_claim_resolve', slug, note }
 import { json, fail, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { requireBuyerIdentity } from '../_lib/guest';
@@ -34,6 +40,7 @@ import { adminPayouts, markPayoutPaid } from '../_lib/payoutChoice';
 import { startReplyWindow, validateBuyerVersion } from '../_lib/replyRule';
 import { replyRuleApplies } from '../_lib/orderRules';
 import { adminClearSocials } from '../_lib/socialsAdmin';
+import { adminClaims, claimForBuyer, claimForSeller, openClaim, resolveClaim, respondClaim } from '../_lib/claims';
 
 async function action(req: any, res: any, a: string) {
   res.setHeader?.('Cache-Control', 'no-store');
@@ -42,6 +49,16 @@ async function action(req: any, res: any, a: string) {
     const u = await requireCavosUser(req);
     const order = await orderBySlug(b.slug);
     return json(res, 200, a === 'seller_respond' ? await sellerRespond(order, u.sub, b) : await sellerResponseGet(order, u.sub));
+  }
+  if (a === 'claim_get' || a === 'claim_open') {
+    const who = await requireBuyerIdentity(req);
+    const order = await orderBySlug(b.slug);
+    return json(res, 200, a === 'claim_open' ? await openClaim(order, who, b) : await claimForBuyer(order, who));
+  }
+  if (a === 'claim_seller_get' || a === 'claim_respond') {
+    const u = await requireCavosUser(req);
+    const order = await orderBySlug(b.slug);
+    return json(res, 200, a === 'claim_respond' ? await respondClaim(order, u.sub, b) : await claimForSeller(order, u.sub));
   }
   if (!a.startsWith('admin_')) throw new HttpError(400, 'acción inválida');
   const admin = await requireAdmin(req);
@@ -54,6 +71,8 @@ async function action(req: any, res: any, a: string) {
     const order = await orderBySlug(b.slug);
     return json(res, 200, await decideDispute(order, { sub: admin.sub, email: admin.email, source: 'admin' }, input));
   }
+  if (a === 'admin_claims') return json(res, 200, await adminClaims());
+  if (a === 'admin_claim_resolve') return json(res, 200, await resolveClaim(await orderBySlug(b.slug), admin, b.note));
   if (a === 'admin_guest_refund') return json(res, 200, await markGuestRefunded(await orderBySlug(b.slug), admin, b.note));
   // Cola manual de pagos a Cuenta IBAN (029): el escrow liberó a 'platform'; el equipo transfiere y la marca como pagada.
   if (a === 'admin_payouts') return json(res, 200, await adminPayouts());

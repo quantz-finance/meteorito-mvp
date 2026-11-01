@@ -13,7 +13,8 @@ import { SellerOrderChat } from '@/components/OrderChat';
 import { SellerInboxButton } from '@/components/ChatInbox';
 import { AdminDisputesButton } from '@/components/AdminDisputesButton';
 import { SellerDisputeReply } from '@/components/SellerDisputeReply';
-import { replyRuleApplies } from '../../api/_lib/orderRules';
+import { claimRuleApplies, replyRuleApplies } from '../../api/_lib/orderRules';
+import { SellerClaimReply } from '@/components/SellerClaimReply';
 import { S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
@@ -158,6 +159,7 @@ export default function Pedidos() {
           </Card>
           <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />
           {open.status === 'en_disputa' ? <SellerDisputeReply slug={open.slug} /> : null}
+          {open.status === 'liberado' && (detail?.slug !== open.slug || claimRuleApplies(detail)) ? <SellerClaimReply slug={open.slug} /> : null}
           {open.status !== 'creado' ? <SellerOrderChat slug={open.slug} onOpen={() => setOpenSlug(null)} /> : null}
           {open.status === 'creado' ? <AdTemplateButton onPress={() => {
             const d = detail?.slug === open.slug ? detail : null;
