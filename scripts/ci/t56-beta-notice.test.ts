@@ -1,5 +1,5 @@
 // (56) Aviso de beta "línea discreta donde importa": texto EXACTO en una sola constante, presente en el pago (antes del
-//      botón de pagar), Vender, la hoja del PIN y la de disputa; footnote + icono de información, contraste AA; y la regla
+//      botón de pagar), el pago con tarjeta (antes de "Pagar ₡…") y con cripto, Vender, la hoja del PIN y la de disputa; footnote + icono de información, contraste AA; y la regla
 //      "sin etiquetas de prueba" de los e2e solo exceptúa esta constante. El e2e MCK-BETA-01 (iPhone SE) mide el viewport.
 //      Guardia de legibilidad: falla si la letra del aviso baja de 12 px o si algún color del aviso queda < 4.5:1 (WCAG AA)
 //      contra cualquier fondo donde aparece, en TODOS los temas (tokens reales de constants/theme.ts y constants/Colors.ts).
@@ -52,7 +52,7 @@ function themes() {
 
 export async function run(t: T) {
   t.check('texto exacto en una sola constante', BETA_NOTICE === 'Beta en testnet, sin dinero real. Meteorito no verifica el producto.' && BETA_NOTICE_LINK === 'Ver cómo funciona');
-  const files = ['components/PayBox.tsx', 'components/DisputeSheet.tsx', 'app/(tabs)/vender.tsx', 'components/RulesLink.tsx', 'app/p/[slug].tsx'];
+  const files = ['components/PayBox.tsx', 'components/DisputeSheet.tsx', 'app/(tabs)/vender.tsx', 'components/RulesLink.tsx', 'app/p/[slug].tsx', 'components/CardSheet.tsx', 'components/CryptoSheet.tsx'];
   t.check('nadie copia el texto a mano (solo lib/rules.ts)', files.every((f) => !read(f).includes('Beta en testnet')));
   const pay = read('components/PayBox.tsx');
   const payFooter = pay.slice(pay.indexOf("if (order.status === 'creado'"), pay.indexOf('} else if (sinpe'));
@@ -60,6 +60,11 @@ export async function run(t: T) {
   const pinSheet = pay.slice(pay.indexOf("sheet === 'paid'"), pay.indexOf("sheet === 'photo'"));
   t.check('hoja tras pagar (antes del PIN): aviso (y cierra la hoja al ir a las reglas)', /<BetaNotice from="pin"[^>]*onNavigate/.test(pinSheet));
   t.check('hoja de disputa: aviso', /<BetaNotice from="dispute" onNavigate=\{onClose\}/.test(read('components/DisputeSheet.tsx')));
+  const card = read('components/CardSheet.tsx');
+  const cardFooter = card.slice(card.indexOf('title="Pagar con tarjeta"'), card.indexOf('</>}>', card.indexOf('title="Pagar con tarjeta"')));
+  t.check('pago con tarjeta: <BetaNotice from="card"> en el pie fijo ANTES del botón "Pagar ₡…" (y cierra la hoja al ir a las reglas)',
+    /<BetaNotice from="card" onNavigate=\{onClose\} \/>/.test(cardFooter) && cardFooter.indexOf('<BetaNotice') < cardFooter.indexOf('testID="card-pay"'));
+  t.check('pago con cripto: <BetaNotice from="crypto"> (y cierra la hoja al ir a las reglas)', /<BetaNotice from="crypto" onNavigate=\{onClose\} \/>/.test(read('components/CryptoSheet.tsx')));
   t.check('Vender: aviso', /<BetaNotice from="sell"/.test(read('app/(tabs)/vender.tsx')));
   const comp = read('components/RulesLink.tsx');
   const body = comp.slice(comp.indexOf('export function BetaNotice'));
@@ -75,8 +80,13 @@ export async function run(t: T) {
   t.check('letra del aviso ≥ 12 px (T.footnote y cualquier fontSize propio)', sizes.every((n) => n >= 12), sizes.join(', '));
   const fnBody = body.slice(0, body.indexOf('\n}'));
   const fgTokens = [...new Set([...fnBody.matchAll(/color[=:]\s*\{?\s*C\.(\w+)/g)].map((m) => m[1]).concat(foot.match(/color:\s*C\.(\w+)/)![1]))];
-  // Fondos donde se muestra: pantalla (C.bg: pago, Vender), hojas y tarjetas (C.surface: PIN, disputa) y el fondo de cada tema.
+  // Fondos donde se muestra: pantalla y pie fijo de las hojas (C.bg: pago, Vender, tarjeta), hojas y tarjetas (C.surface: PIN,
+  // disputa, cripto) y el fondo de cada tema. Si el pie fijo o la hoja cambian de fondo, se mide el nuevo.
   const bgs: Record<string, string> = { 'C.bg': C.bg, 'C.surface': C.surface };
+  const ds = read('components/ds.tsx');
+  const sheetBgs = ['footer', 'sheet'].map((k) => ds.match(new RegExp(`\\n\\s*${k}: \\{[^}]*backgroundColor: C\\.(\\w+)`))?.[1]);
+  t.check('guardia: fondos reales de la hoja y su pie fijo (components/ds.tsx) leídos y con color', sheetBgs.every((k) => !!k && !!C[k!]), sheetBgs.join(', '));
+  sheetBgs.forEach((k, i) => { if (k && C[k]) bgs[`C.${k} (${i ? 'hoja' : 'pie fijo'})`] = C[k]; });
   for (const [name, th] of Object.entries(named)) if (th.background) bgs[`tema ${name}`] = th.background;
   const rows = fgTokens.flatMap((f) => Object.entries(bgs).map(([b, v]) => ({ f, b, r: contrast(C[f], v, C.bg) })));
   const worst = rows.reduce((a, x) => (x.r < a.r ? x : a));
@@ -86,6 +96,7 @@ export async function run(t: T) {
   t.check('e2e "sin testnet/prueba": las excepciones son SOLO BETA_NOTICE y CUSTODY_NOTICE (documentadas)', /withoutBetaNotice = \(text: string\) => text\.split\(CUSTODY_NOTICE\)\.join\(''\)\.split\(BETA_NOTICE\)\.join\(''\)/.test(helpers)
     && ['e2e/layout.spec.ts', 'e2e/buyer-fb.spec.ts', 'e2e/prod/smoke.spec.ts'].every((f) => !/expect\(text\)\.not\.toMatch\(\/[^/]*testnet/.test(read(f))));
   t.check('e2e MCK-BETA-01 (iPhone SE): aviso visible antes del botón de pagar', /MCK-BETA-01/.test(read('e2e/mock-guest.spec.ts')));
+  t.check('e2e MCK-BETA-03 (iPhone SE): aviso en la hoja de tarjeta, en el viewport y antes de "Pagar ₡…"', /MCK-BETA-03[^]*card-pay/.test(read('e2e/mock-guest.spec.ts')));
   // Animación de entrada (Neo): los avisos legales nunca arrancan en opacidad 0 ni dependen de que la animación termine.
   const rl = read('components/RulesLink.tsx'), motion = read('constants/motion.ts'), html = read('app/+html.tsx');
   t.check('avisos legales marcados data-legal (BetaNotice, RulesHint "Ver reglas", RulesLink "Cómo funciona")',

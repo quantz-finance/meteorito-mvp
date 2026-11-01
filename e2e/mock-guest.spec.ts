@@ -884,3 +884,26 @@ test('MCK-SRCH-01 sin cuenta: la lupa abre el buscador y filtra el feed (sin bar
   await expect(page.getByTestId('feed-card').first()).toContainText('Bici de montaña');
   expect(urls.filter((u) => /[?&]q=|bici%20de|monta/i.test(u)), 'el texto buscado nunca va en una URL (logs, analítica)').toEqual([]);
 });
+
+test('MCK-BETA-03 hoja de tarjeta: aviso de beta en el viewport (iPhone SE) y antes de "Pagar ₡…"; "Ver cómo funciona" cierra la hoja', async ({ page, request }) => {
+  await reset(request, [listing], true);
+  await openMethods(page);
+  await openCardForm(page);
+  // El aviso del pie de la hoja (texto BETA_NOTICE); el de custodia de la página queda debajo del modal.
+  const notice = page.getByTestId('beta-notice').filter({ hasText: /Beta en testnet, sin dinero real\. Meteorito no verifica el producto\./ });
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toBeVisible();
+  const pay = page.getByTestId('card-pay');
+  await settle(page);
+  await expect(notice).toBeInViewport({ ratio: 1 }); // la hoja ya terminó de subir: el aviso entero, sin scroll
+  await expect(pay).toBeInViewport({ ratio: 1 });
+  const vh = page.viewportSize()!.height;
+  const n = (await notice.boundingBox())!, b = (await pay.boundingBox())!;
+  expect(n.y).toBeGreaterThanOrEqual(0);
+  expect(n.y + n.height).toBeLessThanOrEqual(vh); // sin scroll
+  expect(n.y + n.height).toBeLessThanOrEqual(b.y); // antes del botón de pagar
+  if (process.env.T56_SHOT) await page.screenshot({ path: process.env.T56_SHOT });
+  await notice.getByText('Ver cómo funciona').click();
+  await expect(page).toHaveURL(/\/como-funciona/);
+  await expect(page.getByTestId('card-number')).toHaveCount(0);
+});

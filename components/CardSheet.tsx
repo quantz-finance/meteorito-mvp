@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { ErrorText, Icon, PrimaryButton, Sheet } from '@/components/ds';
+import { BetaNotice } from '@/components/RulesLink';
 import { LivelyMascot } from '@/components/space';
 import { Fonts } from '@/constants/Colors';
 import { C, R, S, T, TOUCH } from '@/constants/theme';
@@ -68,6 +69,8 @@ export function CardSheet({ visible, amountCrc, onClose, onPay, onSinpe }: {
     <Sheet visible={visible} onClose={onClose} title="Pagar con tarjeta"
       footer={<>
         {msg && <ErrorText>{msg}</ErrorText>}
+        {/* Aviso legal de beta (t56): en el pie fijo, antes del botón de pagar -> visible sin scroll (iPhone SE). */}
+        <BetaNotice from="card" onNavigate={onClose} />
         <PrimaryButton title={`Pagar ${formatCRC(amountCrc)}`} icon="lock-closed" onPress={submit} testID="card-pay" />
         <PrimaryButton title="Pagar por SINPE Móvil" icon="phone-portrait-outline" variant="ghost" onPress={onSinpe} />
       </>}>
