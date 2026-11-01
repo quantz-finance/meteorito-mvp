@@ -106,7 +106,8 @@ export interface SponsoredItem { id: number; slug: string; title: string; price_
 export interface FeedPage { items: FeedItem[]; next_cursor: string | null; /** Solo en la 1.ª página; [] o ausente = sin bloque. */ sponsored?: SponsoredItem[]; /** Ventas de EJEMPLO (solo en el modo "Datos de ejemplo", 1.ª página). */ sales?: SalePost[] }
 export interface Review { stars: number; comment: string | null; /** Nombre corto que eligió el comprador; null = "Compra verificada". */ buyer_name: string | null; created_at: string | null }
 /** Cómo salieron las ventas, sin montos. completed = no_issues + disputes_resolved. */
-export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
+export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number;
+  /** Reportes después de liberar (regla v3, 035): solo el conteo por estado. null/ausente = no disponible. */ claims?: { abierto: number; respondido: number; resuelto: number } | null }
 export interface SellerProfile extends FeedSeller {
   bio: string | null; location: string | null; sales_completed: number; sales?: SalesOutcome; member_since: string | null;
   /** Número de seguidores (migración 022). Nunca quiénes. null/ausente = no disponible: no se muestra. */ followers?: number | null;

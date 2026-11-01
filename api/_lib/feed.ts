@@ -15,6 +15,8 @@ import { storeDbErr } from './store';
 import { waLink } from './contact';
 import { decodeRankCursor, encodeRankCursor, FEED_RANK, rankFeed } from './feedRank';
 import { followerCount } from './follows';
+import { claimSummary } from './claims';
+import type { ClaimHistory } from './orderRules';
 
 import { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, parseVerified, searchTokens, FEED_DEFAULT, FEED_MAX, type VerifiedFilter } from './feedText';
 export { decodeCursor, encodeCursor, foldText, ilikePattern, matchesTokens, parseVerified, searchTokens };
@@ -171,13 +173,18 @@ async function lastSeenBySeller(subs: string[]): Promise<Map<string, string | 'h
 }
 
 /** Cómo salieron las ventas del vendedor, SIN montos: completadas = liberadas + disputas resueltas. */
-export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number }
+export interface SalesOutcome { completed: number; no_issues: number; disputes_resolved: number; disputes_open: number;
+  /** Reportes después de liberar (regla v3, 035): SOLO el conteo por estado, nunca el texto. null sin 035. */
+  claims?: ClaimHistory | null }
 export async function salesOutcome(sub: string): Promise<SalesOutcome> {
-  const { data, error } = await db().from('orders').select('status').eq('seller_user_id', sub).in('status', ['liberado', 'resuelto', 'en_disputa']).limit(5000);
+  const [{ data, error }, claims] = await Promise.all([
+    db().from('orders').select('status').eq('seller_user_id', sub).in('status', ['liberado', 'resuelto', 'en_disputa']).limit(5000),
+    claimSummary(sub),
+  ]);
   if (error) storeDbErr(error);
   const n = (st: string) => (data ?? []).filter((o: any) => o.status === st).length;
   const no_issues = n('liberado'), disputes_resolved = n('resuelto');
-  return { completed: no_issues + disputes_resolved, no_issues, disputes_resolved, disputes_open: n('en_disputa') };
+  return { completed: no_issues + disputes_resolved, no_issues, disputes_resolved, disputes_open: n('en_disputa'), claims };
 }
 /** Vendedor de un pedido o link (para la ficha /p/<slug>): perfil corto + cómo salieron sus ventas. Sin datos privados. */
 export async function sellerOfOrder(orderSlug: string) {

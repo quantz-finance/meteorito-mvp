@@ -63,7 +63,7 @@ export async function run(t: T) {
   const warn = console.warn, err = console.error; console.warn = () => {}; console.error = () => {};
   try {
     /* ---------- 1) Plazos ---------- */
-    t.check('versión vigente 2; regla en v2; sello acotado', CURRENT_RULES_VERSION === 2 && RULE_VERSION.sellerReply === 2 && stampVersion(2) === 2 && stampVersion(1) === 1 && stampVersion(9) === 2);
+    t.check('regla en v2 (vigente >= 2); sello acotado', CURRENT_RULES_VERSION >= 2 && RULE_VERSION.sellerReply === 2 && stampVersion(2) === 2 && stampVersion(1) === 1 && stampVersion(9) === CURRENT_RULES_VERSION);
     const o: any = { status: 'en_disputa', rules_version: 2, disputed_at: new Date(T0).toISOString(), dispute_reply_due_at: new Date(T0 + 48 * H).toISOString() };
     t.check('48 h - 1 ms: corre el plazo', replyPhase(o, T0 + 48 * H - 1).phase === 'waiting');
     t.check('48 h exactas: vence', replyPhase(o, T0 + 48 * H).phase === 'due');

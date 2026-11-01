@@ -39,12 +39,18 @@ export function SalesOutcomeLine({ sales, center }: { sales?: SalesOutcome | nul
     ...(sales.disputes_resolved ? [{ icon: 'scale-outline' as IconName, text: COPY.profile.disputesResolved(sales.disputes_resolved), color: C.lilac }] : []),
     ...(sales.disputes_open ? [{ icon: 'alert-circle-outline' as IconName, text: COPY.profile.disputesOpen(sales.disputes_open), color: C.orange }] : []),
   ];
-  return (
+  const h = sales.claims, nClaims = h ? h.abierto + h.respondido + h.resuelto : 0;
+  const claimsLine = h && nClaims ? <View testID="claims-history" accessible accessibilityLabel={`${COPY.profile.claimsTitle}: ${COPY.profile.claimsCount(h)}`}
+    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: center ? 'center' : 'flex-start' }}>
+    <Icon name="flag-outline" size={14} color={C.lilac} /><Text style={T.footnote}>{`${COPY.profile.claimsTitle}: ${COPY.profile.claimsCount(h)}`}</Text>
+  </View> : null;
+  return (<View style={{ gap: 6 }}>
     <View testID="sales-outcome" accessible accessibilityLabel={`${COPY.profile.outcomesTitle}: ${parts.map((x) => x.text).join(', ')}`}
       style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: center ? 'center' : 'flex-start' }}>
       {parts.map((x) => <View key={x.text} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><Icon name={x.icon} size={14} color={x.color} /><Text style={T.footnote}>{x.text}</Text></View>)}
     </View>
-  );
+    {claimsLine}
+  </View>);
 }
 
 /** Última conexión del vendedor (rango grueso del API, nunca la hora exacta). En línea: punto verde (ícono). */
