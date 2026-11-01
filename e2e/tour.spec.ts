@@ -28,6 +28,11 @@ test('TOUR-01 vendedor: arranca solo en Vender (resalta Generar link), una sola 
   await page.getByTestId('tour-next').click(); await page.getByTestId('tour-next').click(); await page.getByTestId('tour-next').click();
   await expect(page.getByTestId('tour-title')).toHaveText(TOUR_STEPS[3].title);
   await expect.poll(() => tour.getAttribute('data-tour-target')).toBe('tab-pedidos');
+  // Paso 4 (el texto más largo): la tarjeta entera y sus botones caben en la pantalla (iPhone SE)
+  const box = (await tour.boundingBox())!, vp = page.viewportSize()!;
+  expect(box.y).toBeGreaterThanOrEqual(0); expect(box.y + box.height).toBeLessThanOrEqual(vp.height + 1);
+  await expect(page.getByTestId('tour-next')).toBeInViewport();
+  await expect(page.getByTestId('tour-skip')).toBeInViewport();
   await page.getByTestId('tour-next').click();
   await expect.poll(() => tour.getAttribute('data-tour-target')).toBe('rules-link');
   await page.getByTestId('tour-next').click(); // Listo

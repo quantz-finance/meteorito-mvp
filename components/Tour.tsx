@@ -4,7 +4,7 @@
 // Resaltado (solo web): busca el primer elemento visible del paso (data-tour="…" o data-testid="…") y oscurece el resto.
 // Si no hay ninguno (sin pedidos/productos, invitado, nativo), el paso se muestra centrado: nunca se traba ni falla.
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Modal, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSegments } from 'expo-router';
 import { PrimaryButton } from '@/components/ds';
 import { C, R, S, T, TOUCH, shadow } from '@/constants/theme';
@@ -78,11 +78,14 @@ export function TourHost() {
   const r = spot?.rect ? { x: spot.rect.x - PAD, y: spot.rect.y - PAD, w: spot.rect.w + PAD * 2, h: spot.rect.h + PAD * 2 } : null;
   const cardW = Math.min(360, vw - S.md * 2);
   // Tarjeta: debajo del destino si cabe, si no arriba; centrada si no hay destino.
+  // Nunca más alta que el espacio disponible: el texto hace scroll dentro de la tarjeta y los botones siempre se ven (iPhone SE).
   let pos: object = { alignSelf: 'center' };
+  let maxH = vh - S.md * 2;
   if (r) {
     const left = Math.max(S.md, Math.min(r.x + r.w / 2 - cardW / 2, vw - cardW - S.md));
     const below = vh - (r.y + r.h), above = r.y;
-    pos = below >= above ? { position: 'absolute', left, top: Math.min(r.y + r.h + S.sm, vh - 200) } : { position: 'absolute', left, bottom: Math.min(vh - r.y + S.sm, vh - 200) };
+    if (below >= above) { const top = Math.min(r.y + r.h + S.sm, vh - 200); pos = { position: 'absolute', left, top }; maxH = vh - top - S.md; }
+    else { const bottom = Math.min(vh - r.y + S.sm, vh - 200); pos = { position: 'absolute', left, bottom }; maxH = vh - bottom - S.md; }
   }
   return (
     <Modal visible transparent animationType="none" onRequestClose={() => finish(false)} statusBarTranslucent>
@@ -96,10 +99,12 @@ export function TourHost() {
         </> : <View style={[StyleSheet.absoluteFill, s.dim]} />}
         <View testID="tour" accessibilityViewIsModal accessibilityLabel={TOUR_COPY.label} aria-modal
           {...(WEB ? { dataSet: { tourStep: step.id, tourTarget: spot?.id ?? 'none' } } : {})}
-          style={[s.card, { width: cardW }, pos]}>
-          <Text style={T.caption} testID="tour-count">{TOUR_COPY.count(tour.index + 1, TOUR_STEPS.length)}</Text>
-          <Text style={T.title} accessibilityRole="header" testID="tour-title">{step.title}</Text>
-          <Text style={[T.body, { color: '#DCD2F5' }]} testID="tour-text">{step.text}</Text>
+          style={[s.card, { width: cardW, maxHeight: Math.max(200, maxH) }, pos]}>
+          <ScrollView testID="tour-scroll" style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ gap: S.sm }} showsVerticalScrollIndicator={false}>
+            <Text style={T.caption} testID="tour-count">{TOUR_COPY.count(tour.index + 1, TOUR_STEPS.length)}</Text>
+            <Text style={T.title} accessibilityRole="header" testID="tour-title">{step.title}</Text>
+            <Text style={[T.body, { color: '#DCD2F5' }]} testID="tour-text">{step.text}</Text>
+          </ScrollView>
           <View style={s.dots}>
             {TOUR_STEPS.map((x, i) => <View key={x.id} style={[s.dot, i === tour.index && s.dotOn]} />)}
           </View>

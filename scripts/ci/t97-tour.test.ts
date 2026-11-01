@@ -33,9 +33,12 @@ export async function run(t: T) {
     const all = [...TOUR_STEPS.flatMap((s) => [s.title, s.text]), ...Object.values(TOUR_COPY).filter((v) => typeof v === 'string'), TOUR_COPY.count(1, 5)].join(' | ');
     t.check('sin palabras prohibidas (seguro, garantía, verificado, proteg*, empresa, fintech, banco, billetera)', !BANNED.test(all), all.match(BANNED)?.[0]);
     t.check('copy en tuteo, sin voseo', !VOSEO.test(all), all.match(VOSEO)?.[0]);
-    t.check('copy corto: título ≤ 32 y texto ≤ 150 caracteres', TOUR_STEPS.every((s) => s.title.length <= 32 && s.text.length <= 150),
+    t.check('copy corto: título ≤ 32 y texto ≤ 220 caracteres', TOUR_STEPS.every((s) => s.title.length <= 32 && s.text.length <= 220),
       TOUR_STEPS.map((s) => `${s.id}:${s.title.length}/${s.text.length}`).join(' '));
     const by = Object.fromEntries(TOUR_STEPS.map((s) => [s.id, s.text]));
+    // Textos EXACTOS aprobados por legal (pasos 3 y 4): no cambiar sin revisión legal.
+    t.check('paso 3 (custodia): texto exacto aprobado por legal', by.custodia === 'Cuando alguien paga, el dinero queda apartado en custodia. Solo se libera según las reglas: con el código de entrega, al vencer el plazo o al resolverse una disputa.');
+    t.check('paso 4 (envío o entrega): texto exacto aprobado por legal', by.entrega === 'Con envío, quien vende toca "Ya lo envié". Cara a cara, se entrega en persona. Quien compra da su código de entrega y el pago se libera. Si no hay código ni disputa, se libera solo al vencer el plazo acordado.');
     t.check('explica: crear link de pago, custodia, envío/entrega con código, reglas; beta en testnet sin dinero real',
       /link/.test(by.link) && /custodia/.test(by.custodia) && /envío/i.test(by.entrega) && /código de entrega/.test(by.entrega) && /reglas/.test(by.reglas)
       && /testnet, sin dinero real/.test(by.hola));
@@ -97,6 +100,7 @@ export async function run(t: T) {
   t.check('Cómo funciona: "Ver recorrido" arriba, antes de las reglas', /<TourButton from="rules" \/>/.test(rules) && rules.indexOf('<TourButton') < rules.indexOf('RULES.map'));
   t.check('overlay propio: Modal + react-native (sin dependencias de tour)', /from 'react-native'/.test(tour) && /<Modal/.test(tour)
     && !/joyride|react-native-copilot|spotlight-tour|intro\.js|shepherd/i.test(read('package.json')));
+  t.check('tarjeta con alto máximo y texto con scroll (iPhone SE): los botones siempre se ven', /maxHeight: Math\.max\(200, maxH\)/.test(tour) && /<ScrollView testID="tour-scroll"/.test(tour));
   t.check('nativo: DOM solo detrás de WEB y typeof document; paso sin destino = centrado (data-tour-target="none")',
     /if \(!WEB \|\| typeof document === 'undefined'\) return null;/.test(tour) && /tourTarget: spot\?\.id \?\? 'none'/.test(tour) && /!r && s\.center/.test(tour));
   t.check('destinos marcados: pestañas (tab-*) e iconos de Comprar (comprar-*)', /tourMark\(`tab-\$\{route\.name\}`\)/.test(read('components/TabBar.tsx')) && /tourMark\(`comprar-\$\{v\.key\}`\)/.test(read('components/ComprarNav.tsx')));
