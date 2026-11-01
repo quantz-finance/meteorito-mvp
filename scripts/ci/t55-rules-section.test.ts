@@ -22,12 +22,12 @@ export async function run(t: T) {
   t.check('copy en tuteo, sin voseo', !VOSEO.test(all), all.match(VOSEO)?.[0]);
   t.check('sin palabras prohibidas por la regla legal (seguro/protegido/garantía)', !BANNED.test(all), all.match(BANNED)?.[0]);
   t.check('resúmenes de una línea', PAY_SUMMARY === 'Tu dinero queda en custodia hasta que recibas tu compra.' && SELL_SUMMARY === 'El pago se libera con el código de entrega o al terminar el plazo que elijas.');
-  t.check('tour guiado: solo un hook apagado', TOUR.enabled === false);
+  t.check('tour guiado activo (lib/tour.ts; detalle en t97)', TOUR.enabled === true && typeof TOUR.start === 'function');
 
   t.check('pantalla /como-funciona existe y lee lib/rules', RULES_ROUTE === '/como-funciona' && existsSync('app/como-funciona.tsx') && /from '@\/lib\/rules'/.test(read('app/como-funciona.tsx')));
   const screen = read('app/como-funciona.tsx');
   t.check('funciona sin cuenta (no usa sesión ni API) y es ruta pública', !/useAuth|requireCavos|api\(|guestApi|fetch\(/.test(screen) && isPublicRoute(['como-funciona']));
-  t.check('botón "Ver recorrido" detrás de TOUR.enabled', /TOUR\.enabled/.test(screen) && /Ver recorrido/.test(screen));
+  t.check('botón "Ver recorrido" (TourButton) detrás de TOUR.enabled', /TOUR\.enabled \? <TourButton/.test(screen));
   const pay = read('app/p/[slug].tsx'), sell = read('app/(tabs)/vender.tsx'), home = read('app/(tabs)/pedidos.tsx'), acct = read('components/AccountSheet.tsx');
   t.check('pago: resumen + "Ver reglas" solo antes de pagar', /unpaid\s*\?\s*<RulesHint[^>]*text=\{PAY_SUMMARY\}/.test(pay));
   t.check('Vender: resumen + "Ver reglas" al crear el link', /<RulesHint[^>]*SELL_SUMMARY/.test(sell));

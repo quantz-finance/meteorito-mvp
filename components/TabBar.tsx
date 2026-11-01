@@ -11,6 +11,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 import { haptic } from '@/components/ds';
 import { Fonts } from '@/constants/Colors';
 import { C, TOUCH } from '@/constants/theme';
+import { tourMark } from '@/components/Tour';
 
 const GREEN = '#3DDC97';
 type IconP = { color: string; fill: string };
@@ -51,7 +52,7 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             if (!focused && !ev.defaultPrevented) { haptic.tap(); navigation.navigate(route.name, route.params); }
           };
           return (
-            <Pressable key={route.key} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: focused }} aria-selected={focused} accessibilityLabel={label}
+            <Pressable key={route.key} onPress={onPress} accessibilityRole="tab" accessibilityState={{ selected: focused }} aria-selected={focused} accessibilityLabel={label} {...tourMark(`tab-${route.name}`)}
               onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })} style={s.tab} hitSlop={4}>
               <TabIcon focused={focused} reduce={reduce}>{Ico?.({ color: focused ? C.white : C.textDim, fill: focused ? 'rgba(201,182,255,0.28)' : 'none' })}</TabIcon>
               <Text style={[s.label, { color: focused ? C.white : C.textDim }]} numberOfLines={1}>{label}</Text>

@@ -9,6 +9,7 @@ import { C } from '@/constants/theme';
 import { COMPRAR_VIEWS, type ComprarView } from '@/lib/comprarViews';
 import { Dot, useBuyerUnread } from '@/components/ChatInbox';
 import { openSearch, SEARCH_COPY, useFeedSearch } from '@/lib/feedSearch';
+import { tourMark } from '@/components/Tour';
 
 export type { ComprarView } from '@/lib/comprarViews';
 
@@ -25,7 +26,7 @@ export function ComprarNav({ active }: { active: ComprarView }) {
         {COMPRAR_VIEWS.map((v) => {
           const on = v.key === active;
           return (
-            <Pressable key={v.key} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} accessibilityLabel={v.label} hitSlop={4}
+            <Pressable key={v.key} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} accessibilityLabel={v.label} hitSlop={4} {...tourMark(`comprar-${v.key}`)}
               onPress={() => { if (on) return; haptic.tap(); router.replace(v.href); }}
               style={({ pressed }) => [s.btn, on && s.on, pressed && !on && { opacity: 0.7 }]}>
               <Icon name={v.icon} size={22} color={on ? C.purpleDark : C.lilac} />
