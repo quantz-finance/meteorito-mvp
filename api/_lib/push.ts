@@ -2,7 +2,7 @@
 // Sin VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT, o sin la tabla push_subscriptions (migración 011), no hace nada.
 import { db } from './db';
 import { daysLabel, extensionRequestText, isFaceToFace } from './agreement';
-import { SHIP_REMINDER_TEXT } from './orderRules';
+import { SELLER_REPLY_RULE_HOURS, SHIP_REMINDER_TEXT } from './orderRules';
 
 export interface PushOrder { slug: string; status: string; delivery_mode?: string | null; seller_user_id?: string | null; buyer_user_id?: string | null; brand?: string | null; model?: string | null }
 export interface PushMsg { to: string; role: 'seller' | 'buyer'; title: string; body: string; url: string; tag: string }
@@ -58,6 +58,25 @@ export function shipRuleMessages(o: PushOrder, kind: 'reminder' | 'cancel_buyer'
   } else {
     add('buyer', 'Reembolso automático', `Pasaron 5 días sin envío: te devolvemos todo tu pago de ${it} desde la custodia.`);
     add('seller', 'Compra cancelada', `Pasaron 5 días sin "Ya lo envié": el pago de ${it} vuelve a quien compró.`);
+  }
+  return out;
+}
+
+/** Avisos de la regla v2 "Respuesta del vendedor en 48 h" (api/_lib/replyRule.ts). */
+export function replyRuleMessages(o: PushOrder, kind: 'opened' | 'replied' | 'refund'): PushMsg[] {
+  const it = itemName(o), url = `/p/${o.slug}`, out: PushMsg[] = [];
+  const add = (role: 'seller' | 'buyer', title: string, body: string) => {
+    const to = role === 'seller' ? o.seller_user_id : o.buyer_user_id;
+    if (to && !(role === 'buyer' && to === o.seller_user_id)) out.push({ to, role, title, body, url, tag: `${o.slug}:reply_${kind}` });
+  };
+  if (kind === 'opened') {
+    add('seller', 'Disputa abierta', `Quien compró ${it} reportó un problema. Tienes ${SELLER_REPLY_RULE_HOURS} h para responder con una foto, la guía de envío o un texto.`);
+    add('buyer', 'Disputa abierta', `Quien vende tiene ${SELLER_REPLY_RULE_HOURS} h para responder. Mientras tanto, el pago sigue en custodia.`);
+  } else if (kind === 'replied') {
+    add('buyer', 'Quien vende respondió', `Una persona del equipo revisa las dos versiones de ${it} y decide.`);
+  } else {
+    add('buyer', 'Reembolso de tu disputa', `Quien vende no respondió en ${SELLER_REPLY_RULE_HOURS} h: te devolvemos tu pago de ${it} desde la custodia.`);
+    add('seller', 'Disputa cerrada', `No respondiste en ${SELLER_REPLY_RULE_HOURS} h: el pago de ${it} vuelve a quien compró.`);
   }
   return out;
 }

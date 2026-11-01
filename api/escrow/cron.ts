@@ -6,6 +6,8 @@
 // se corrige en la fila y no se libera. Disputa y PIN bloqueado congelan la liberación (approveAndRelease).
 // Cripto: pedidos con cotización de las últimas 24 h -> cryptoStatus (api/_lib/crypto.ts).
 // Disputas: con el flag disputes_auto_resolve encendido (apagado por defecto) resuelve las que una regla decide (api/_lib/disputeAdmin.ts).
+// Regla "respuesta del vendedor en 48 h" (v2, migración 034; api/_lib/replyRule.ts): sin respuesta en 48 h desde el
+// aviso, reembolso 100% desde la custodia (también con ?slug). Si respondió, decide una persona en el panel.
 // Regla "reembolso si no se envía" (v1, migración 033; api/_lib/shipRefund.ts): aviso del día 2 a quien vende y reembolso
 // automático del día 5. También con ?slug (la página del pedido lo pide cuando vence). Disparo: pg_cron (033) + Vercel Cron
 // diario de respaldo (vercel.json; Vercel manda el mismo Bearer CRON_SECRET).
@@ -19,7 +21,8 @@ import { notifyDueSoon } from '../_lib/buyerContact';
 import { autoResolvePass } from '../_lib/disputeAdmin';
 import { cryptoCronPass } from '../_lib/crypto';
 import { refundUnshipped, remindSeller, shipRulePass } from '../_lib/shipRefund';
-import { shipDeadline } from '../_lib/orderRules';
+import { replyRuleApplies, shipDeadline } from '../_lib/orderRules';
+import { refundNoReply, replyRulePass } from '../_lib/replyRule';
 
 async function claim(id: string): Promise<boolean> {
   const now = new Date();
@@ -61,6 +64,11 @@ export default async function handler(req: any, res: any) {
         try { return json(res, 200, { slug, ...(await refundUnshipped(f, f.ship_cancel?.by === 'buyer' ? 'buyer' : 'auto')) }); }
         catch (e: any) { return json(res, 200, { slug, error: String(e?.message ?? e).slice(0, 120) }); }
       }
+      // Regla v2: 48 h sin respuesta de quien vende -> reembolso (refundNoReply revisa el plazo y la respuesta).
+      if (f && f.status === 'en_disputa' && replyRuleApplies(f)) {
+        try { return json(res, 200, { slug, ...(await refundNoReply(f)) }); }
+        catch (e: any) { return json(res, 200, { slug, error: String(e?.message ?? e).slice(0, 120) }); }
+      }
       return json(res, 200, { slug, due: false });
     }
     if (req.headers.authorization !== `Bearer ${env.cronSecret()}`) return json(res, 401, { error: 'unauthorized' });
@@ -77,8 +85,9 @@ export default async function handler(req: any, res: any) {
     const disputes = await autoResolvePass().catch((e: any) => ({ skipped: 'error', resolved: [], errors: [String(e?.message ?? e).slice(0, 120)] }));
     // Regla de envío (v1): aviso del día 2 y reembolso automático del día 5. Nunca tumba el cron.
     const ship = await shipRulePass().catch((e: any) => ({ errors: [String(e?.message ?? e).slice(0, 120)] }));
+    const reply = await replyRulePass().catch((e: any) => ({ errors: [String(e?.message ?? e).slice(0, 120)] }));
     // Pagos con cripto: fondea los pedidos cuyo pago ya llegó aunque el comprador haya cerrado la pantalla. Nunca tumba el cron.
     const crypto = await cryptoCronPass().catch((e: any) => [{ slug: '', error: String(e?.message ?? e).slice(0, 120) }]);
-    return json(res, 200, { processed: out, disputes, due_soon_notices: dueSoon, ship_rule: ship, ...(crypto.length ? { crypto } : {}) });
+    return json(res, 200, { processed: out, disputes, due_soon_notices: dueSoon, ship_rule: ship, reply_rule: reply, ...(crypto.length ? { crypto } : {}) });
   } catch (e) { return fail(res, e); }
 }

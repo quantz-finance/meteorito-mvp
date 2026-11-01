@@ -9,12 +9,14 @@ import { readFileSync } from 'node:fs';
 import type { T } from './setup';
 import { CURRENT_RULES_VERSION, LEGAL_RULES, PAY_RULES_HEADING, RULES, SELLER_AGREEMENT_ACCEPT, SELLER_AGREEMENT_INTRO, SELLER_AGREEMENT_TITLE, currentLegalRules, legalRulesFor } from '../../lib/rules';
 import { SHIP_REMINDER_TEXT } from '../../api/_lib/orderRules';
-import { shipRuleMessages } from '../../api/_lib/push';
+import { replyRuleMessages, shipRuleMessages } from '../../api/_lib/push';
 
 /** Texto aprobado. EXACTO. */
 export const APPROVED: Record<string, { version: number; title: string; text: string }> = {
   reembolso_sin_envio: { version: 1, title: 'Reembolso si no se envía',
     text: "Si quien vende no marca 'Ya lo envié' en 3 días, puedes cancelar y recibes todo tu pago de vuelta desde la custodia. Si no cancelas y pasan 2 días más sin envío, el reembolso se hace solo." },
+  respuesta_48h: { version: 2, title: 'Respuesta de quien vende en 48 h',
+    text: 'Si abres una disputa, quien vende tiene 48 h para responder. Mientras tanto, el pago sigue en custodia. Si no responde, se te reembolsa desde la custodia. Si responde, una persona del equipo revisa las dos versiones y decide.' },
 };
 export const BANNED = /(?<!\p{L})(segur[oa]s?|garant\p{L}*|verificad[oa]s?|proteg\p{L}*|protecci\p{L}*|empresas?|fintech|bancos?|bancari\p{L}*|billeteras?)(?!\p{L})/iu;
 const VOSEO = /(?<!\p{L})(pod|ten|quer|sab|pued|recib)(és|ás|ís)(?!\p{L})|(?<!\p{L})vos(?!\p{L})/iu;
@@ -38,21 +40,23 @@ export async function run(t: T) {
   t.check('versión vigente cubre todas las reglas legales', LEGAL_RULES.every((r) => r.version <= CURRENT_RULES_VERSION));
 
   /* ---------- Banned words + tuteo ---------- */
-  const push = (['reminder', 'cancel_buyer', 'cancel_auto'] as const).flatMap((k) => shipRuleMessages({ seller_user_id: 's', buyer_user_id: 'b', title: 'Bici', slug: 'x' } as any, k)).flatMap((m) => [m.title, m.body]);
+  const po = { seller_user_id: 's', buyer_user_id: 'b', title: 'Bici', slug: 'x' } as any;
+  const push = [...(['reminder', 'cancel_buyer', 'cancel_auto'] as const).flatMap((k) => shipRuleMessages(po, k)), ...(['opened', 'replied', 'refund'] as const).flatMap((k) => replyRuleMessages(po, k))].flatMap((m) => [m.title, m.body]);
   const ruleCopy = [...LEGAL_RULES.flatMap((r) => [r.title, r.text]), SELLER_AGREEMENT_TITLE, SELLER_AGREEMENT_INTRO, SELLER_AGREEMENT_ACCEPT, PAY_RULES_HEADING, SHIP_REMINDER_TEXT, ...push];
   const hit = ruleCopy.find((s) => BANNED.test(s));
   t.check('reglas, acuerdo y avisos: sin palabras prohibidas', !hit, hit);
   const vos = ruleCopy.find((s) => VOSEO.test(s));
   t.check('reglas, acuerdo y avisos: tuteo', !vos, vos);
   t.check('detector de palabras prohibidas (control)', ['pago seguro', 'Garantía', 'vendedor verificado', 'protegido', 'Protección', 'la empresa', 'una fintech', 'tu banco', 'billetera'].every((s) => BANNED.test(s)) && !BANNED.test('custodia') && !BANNED.test('Meteorito no verifica el producto'));
-  const UI = ['components/LegalRules.tsx', 'components/PayBox.tsx', 'components/SellerActions.tsx', 'lib/ruleTimes.ts', 'lib/rulesAck.ts', 'api/_lib/shipRefund.ts', 'api/_lib/orderRules.ts'];
+  const UI = ['components/LegalRules.tsx', 'components/PayBox.tsx', 'components/SellerActions.tsx', 'components/DisputeSheet.tsx', 'components/SellerDisputeReply.tsx', 'lib/ruleTimes.ts', 'lib/rulesAck.ts',
+    'api/_lib/shipRefund.ts', 'api/_lib/replyRule.ts', 'api/_lib/orderRules.ts'];
   for (const f of UI) {
     const bad = literals(read(f)).find((s) => BANNED.test(s));
     t.check(`${f}: copy sin palabras prohibidas`, !bad, bad);
   }
 
   /* ---------- Un solo lugar + dónde se renderiza ---------- */
-  const files = ['app/como-funciona.tsx', 'app/p/[slug].tsx', 'app/(tabs)/vender.tsx', 'app/(tabs)/pedidos.tsx', 'components/PayBox.tsx', 'components/SellerActions.tsx', 'components/LegalRules.tsx', 'lib/demo.ts', 'lib/legal.ts', 'api/_lib/push.ts', 'api/_lib/shipRefund.ts'];
+  const files = ['app/como-funciona.tsx', 'app/p/[slug].tsx', 'app/(tabs)/vender.tsx', 'app/(tabs)/pedidos.tsx', 'components/PayBox.tsx', 'components/SellerActions.tsx', 'components/LegalRules.tsx', 'lib/demo.ts', 'lib/demoAdmin.ts', 'lib/legal.ts', 'components/DisputeSheet.tsx', 'components/SellerDisputeReply.tsx', 'api/_lib/push.ts', 'api/_lib/shipRefund.ts', 'api/_lib/replyRule.ts', 'api/_lib/disputeAdmin.ts'];
   for (const r of LEGAL_RULES) {
     const copies = files.filter((f) => read(f).includes(r.text.slice(0, 40)));
     t.check(`"${r.title}": el texto vive solo en lib/rules.ts (no copiado a mano)`, !copies.length, copies.join(', '));
@@ -70,8 +74,14 @@ export async function run(t: T) {
   t.check('Vender manda la versión aceptada (rules_ack) al crear', /rules_ack/.test(vend));
   t.check('acuerdo de la beta: reglas vigentes; cara a cara sin la regla de envío', currentLegalRules('envio').some((r) => r.id === 'reembolso_sin_envio') && !currentLegalRules('cara_a_cara').some((r) => r.id === 'reembolso_sin_envio'));
 
+  const ds = read('components/DisputeSheet.tsx'), sr = read('components/SellerDisputeReply.tsx');
+  t.check("al abrir una disputa (v2): la regla de 48 h a la vista desde lib/rules.ts", /legalRule\('respuesta_48h'\)/.test(ds) && /LegalRuleRows/.test(ds));
+  t.check("quien vende al responder (v2): cuenta regresiva de las 48 h", /seller-reply-countdown/.test(sr) && /leftLabel\(st\.deadline/.test(sr));
+
   /* ---------- Versión por pedido ---------- */
   t.check('pedido anterior (rules_version 0/ausente): no ve reglas nuevas', !legalRulesFor({ rules_version: 0 }).length && !legalRulesFor({}).length && !legalRulesFor(null).length);
-  t.check('pedido v1 con envío: ve "Reembolso si no se envía"', legalRulesFor({ rules_version: 1, delivery_mode: 'envio' }).map((r) => r.id).join() === 'reembolso_sin_envio');
-  t.check('pedido v1 cara a cara: no la ve', !legalRulesFor({ rules_version: 1, delivery_mode: 'cara_a_cara' }).length);
+  t.check('pedido v1 con envío: ve solo "Reembolso si no se envía"', legalRulesFor({ rules_version: 1, delivery_mode: 'envio' }).map((r) => r.id).join() === 'reembolso_sin_envio');
+  t.check('pedido v1 cara a cara: ninguna', !legalRulesFor({ rules_version: 1, delivery_mode: 'cara_a_cara' }).length);
+  t.check('pedido v2 con envío: las dos', legalRulesFor({ rules_version: 2, delivery_mode: 'envio' }).map((r) => r.id).join() === 'reembolso_sin_envio,respuesta_48h');
+  t.check('pedido v2 cara a cara: solo la de 48 h', legalRulesFor({ rules_version: 2, delivery_mode: 'cara_a_cara' }).map((r) => r.id).join() === 'respuesta_48h');
 }

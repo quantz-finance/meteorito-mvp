@@ -2,6 +2,7 @@
 // El "admin" del demo se activa SOLO con ?admin=1 en el build de demo (nunca en producción: el demo no corre en los
 // dominios de producción y el panel real lo decide el servidor con ADMIN_EMAILS). Sin IA en el demo: "no disponible".
 import { pctOf } from '../api/_lib/disputeRules';
+import { replyPhase, replyRuleApplies } from '../api/_lib/orderRules';
 import { buildRow, counts, EVENT_LABEL, linksOf, responseDeadlineOf, toDecisionView, type AdminDisputeDetail } from '../api/_lib/disputeView';
 
 export interface DemoAdminCtx {
@@ -28,13 +29,21 @@ export function demoAdminApi(c: DemoAdminCtx, body: any): any {
     if (c.role !== 'seller') throw err(403, 'not_seller', 'Solo el vendedor de este pedido puede responder.');
     const o = get(String(body.slug));
     const resp = c.responses[o.slug] ?? null;
-    if (a === 'seller_response_get') return { available: true, open: o.status === 'en_disputa', response: resp, deadline: responseDeadlineOf(o, disputeOf(o)), can_respond: o.status === 'en_disputa' };
+    const v2 = replyRuleApplies(o as any); // regla v2: 48 h desde el aviso; vencido sin respuesta ya no se responde
+    const expired = v2 && !resp && replyPhase(o as any, Date.now()).phase === 'due';
+    if (a === 'seller_response_get') return { available: true, open: o.status === 'en_disputa', response: resp, deadline: responseDeadlineOf(o, disputeOf(o)),
+      rule: v2 ? 'respuesta_48h' : null, expired, can_respond: o.status === 'en_disputa' && !expired };
     if (o.status !== 'en_disputa') throw err(409, 'not_open', 'Esta disputa ya no está abierta.');
-    const text = typeof body.body === 'string' ? body.body.trim() : '';
-    if (text.length < 3) throw err(400, 'body_required', 'Cuéntanos tu versión (mínimo 3 caracteres).');
+    if (expired) throw err(409, 'reply_expired', 'Pasaron las 48 h para responder: el pago se le devuelve a quien compró.');
+    const raw = typeof body.body === 'string' ? body.body.trim() : '';
+    const tracking = typeof body.tracking === 'string' ? body.tracking.trim() : '';
+    if (raw.length < 3 && !tracking && !body.photo) throw err(400, 'body_required', 'Responde con una foto, la guía de envío o un texto (mínimo 3 caracteres).');
+    const text = [raw.length >= 3 ? raw : '', tracking ? `Guía de envío: ${tracking}` : ''].filter(Boolean).join('\n') || 'Respondió con una foto.';
     let photo: string | null = null;
     if (body.photo) { const cap = c.caps.get(String(body.capture ?? '')); if (!cap || cap.purpose !== 'dispute' || cap.ref !== o.slug || !cap.used) throw err(400, 'camera_required', 'Toma la foto con la cámara de Meteorito.'); photo = String(body.photo); }
-    c.responses[o.slug] = { body: text.slice(0, 1000), photo, created_at: new Date().toISOString() }; c.emit();
+    c.responses[o.slug] = { body: text.slice(0, 1000), photo, created_at: new Date().toISOString() };
+    if (v2 && !(o as any).dispute_replied_at) (o as any).dispute_replied_at = c.responses[o.slug].created_at;
+    c.emit();
     return { saved: true, response: c.responses[o.slug] };
   }
   if (!c.admin) throw err(404, 'not_found', 'No encontramos esta página.');

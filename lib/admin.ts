@@ -50,10 +50,12 @@ export const listPayouts = (auth: MeteoritoAuth) => api<{ available: boolean; pa
 export const markPayoutPaid = (auth: MeteoritoAuth, slug: string, note: string) => api<{ done: boolean; already: boolean; paid_at: string }>(auth, PATH, { action: 'admin_payout_reviewed', slug, note });
 
 /* ---------- Vendedor: su versión de la disputa ---------- */
-export interface SellerResponseState { available: boolean; open: boolean; response: { body: string; photo: string | null; created_at: string } | null; deadline: string | null; can_respond: boolean }
+export interface SellerResponseState { available: boolean; open: boolean; response: { body: string; photo: string | null; created_at: string } | null; deadline: string | null; can_respond: boolean;
+  /** Regla v2 "Respuesta de quien vende en 48 h": 'respuesta_48h' y si ya venció sin respuesta. */
+  rule?: 'respuesta_48h' | null; expired?: boolean }
 export const getSellerResponse = (auth: MeteoritoAuth, slug: string) => api<SellerResponseState>(auth, PATH, { action: 'seller_response_get', slug });
-export const sendSellerResponse = (auth: MeteoritoAuth, slug: string, body: string, photo?: { url: string; token: string } | null) =>
-  api<{ saved: boolean; response: SellerResponseState['response'] }>(auth, PATH, { action: 'seller_respond', slug, body, ...(photo ? { photo: photo.url, capture: photo.token } : {}) });
+export const sendSellerResponse = (auth: MeteoritoAuth, slug: string, body: string, photo?: { url: string; token: string } | null, tracking?: string) =>
+  api<{ saved: boolean; response: SellerResponseState['response'] }>(auth, PATH, { action: 'seller_respond', slug, body, ...(tracking ? { tracking } : {}), ...(photo ? { photo: photo.url, capture: photo.token } : {}) });
 
 /* ---------- Formato ---------- */
 const H = 3_600_000;

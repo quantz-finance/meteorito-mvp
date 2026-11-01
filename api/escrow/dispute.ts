@@ -2,6 +2,8 @@
 //  { slug, reason: 'no_llego'|'no_funciona'|'no_es_lo_descrito'|'otro', description?, evidence?: string[], captures?: string[] }
 //  evidence: fotos tomadas con la cámara de la app (una por token de captura 'dispute' de este pedido, en `captures`, mismo orden).
 // Solo el comprador y solo antes de liberar. Idempotente. Bloquea liberación (DB + on-chain).
+// Regla v2 (rules_version >= 2, api/_lib/replyRule.ts): description = versión de quien compra (obligatoria, ≥ 10) y al
+// menos una foto salvo 'no_llego'; se avisa a quien vende y corren sus 48 h (respuesta: reply_due_at).
 //
 // Panel de disputas (misma función: el proyecto tiene un tope de 12 funciones de Vercel). Con `action`:
 //  Admin (Bearer Cavos de un correo de ADMIN_EMAILS; si no, 404; sin sesión, 401). Ver api/_lib/admin.ts:
@@ -17,7 +19,8 @@
 //   { action:'admin_payouts' } / { action:'admin_payout_reviewed', slug, note } (alias viejo: admin_payout_paid) -> cola de pagos a Cuenta IBAN (029; sin ella available:false)
 //  Vendedor del pedido (Bearer Cavos):
 //   { action:'seller_response_get', slug }         -> { available, open, response, deadline, can_respond }
-//   { action:'seller_respond', slug, body, photo?, capture? } -> su versión (texto + foto de la cámara, token 'dispute' propio)
+//   { action:'seller_respond', slug, body?, tracking?, photo?, capture? } -> su versión: foto de la cámara (token 'dispute'
+//                                                  propio), guía de envío o texto (al menos uno). v2: solo dentro de las 48 h.
 import { json, fail, orderBySlug } from '../_lib/db';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { requireBuyerIdentity } from '../_lib/guest';
@@ -28,6 +31,8 @@ import { requireAdmin } from '../_lib/admin';
 import { adminAi, adminDetail, adminList, sellerRespond, sellerResponseGet } from '../_lib/disputeAdmin';
 import { decideDispute, markGuestRefunded, validateDecision } from '../_lib/disputeResolve';
 import { adminPayouts, markPayoutPaid } from '../_lib/payoutChoice';
+import { startReplyWindow, validateBuyerVersion } from '../_lib/replyRule';
+import { replyRuleApplies } from '../_lib/orderRules';
 import { adminClearSocials } from '../_lib/socialsAdmin';
 
 async function action(req: any, res: any, a: string) {
@@ -79,7 +84,11 @@ export default async function handler(req: any, res: any) {
     if (reason === 'otro' && !description?.trim()) throw new HttpError(400, 'cuéntanos qué pasó');
     const order = await orderBySlug(slug);
     const buyerSub = who.ids.find((i) => i === order.buyer_user_id) ?? sub;
-    const r = await openDispute(order, buyerSub, { reason: reason as DisputeReason, description: description?.trim() || null, evidence: ev });
-    return json(res, 200, r);
+    // Regla v2 (pedidos con rules_version >= 2): versión de quien compra obligatoria + aviso a quien vende con 48 h.
+    validateBuyerVersion(order, { reason, description, evidence: ev });
+    const v2 = replyRuleApplies(order);
+    const r = await openDispute(order, buyerSub, { reason: reason as DisputeReason, description: description?.trim() || null, evidence: ev }, { notify: !v2 });
+    const win = v2 && !r.already ? await startReplyWindow(order) : null;
+    return json(res, 200, { ...r, ...(win ? { reply_due_at: win.dueAt } : {}) });
   } catch (e) { return fail(res, e); }
 }

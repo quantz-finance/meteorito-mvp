@@ -65,6 +65,8 @@ export interface PublicOrder {
   release_ext?: { by: 'buyer' | 'seller'; days: number; at: string } | null; release_ext_minutes?: number | null;
   /** Migración 033: fecha del pago, versión de reglas del pedido (0 = sin reglas nuevas) y cancelación por falta de envío. */
   funded_at?: string | null; rules_version?: number | null; ship_cancel?: { by: 'buyer' | 'auto'; at: string } | null;
+  /** Migración 034 (regla v2): vencimiento de las 48 h de quien vende y si ya respondió. */
+  dispute_reply_due_at?: string | null; dispute_replied_at?: string | null;
   /** Opcionales: solo se muestran si el backend los expone (todavía no en public_orders). */
   seller_name?: string | null; seller_phone_verified?: boolean | null;
   /** true solo si Meteorito verificó el IMEI (no la declaración del vendedor). */
