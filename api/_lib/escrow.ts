@@ -250,9 +250,13 @@ export async function disputeOnChain(contractId: string): Promise<string> {
   const inner = signWith(tightenTimebounds(x.unsignedTransaction), env.approverSecret());
   validateEscrowTx(inner.toXDR(), { contractId, fns: ['dispute_escrow'], source: Keypair.fromSecret(env.approverSecret()).publicKey() });
   const { hash } = await feeBumpAndSend(inner);
-  const g = await tw.releaseGuard(contractId);
-  if (!g.disputed) throw new Error('la disputa no quedó registrada on-chain');
-  return hash;
+  // El indexador de TW puede tardar unos segundos en reflejar la disputa: reintenta la lectura antes de fallar.
+  for (let i = 0; ; i++) {
+    const g = await tw.releaseGuard(contractId);
+    if (g.disputed) return hash;
+    if (i >= 5) throw new Error('la disputa no quedó registrada on-chain');
+    await new Promise((r) => setTimeout(r, 1500));
+  }
 }
 function signWith(tx: Transaction, secret: string) { tx.sign(Keypair.fromSecret(secret)); return tx; }
 
