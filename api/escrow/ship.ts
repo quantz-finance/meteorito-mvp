@@ -19,6 +19,8 @@ export default async function handler(req: any, res: any) {
     const order = await orderBySlug(slug);
     if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no eres el vendedor');
     if (order.status !== 'fondeado') throw new HttpError(409, `status ${order.status}`);
+    // Cancelación sin envío en curso (api/_lib/shipRefund.ts toma el lock de la fila): no se mezcla con "Ya lo envié".
+    if (Date.parse(order.release_lock_until ?? '') > Date.now()) throw Object.assign(new HttpError(409, 'Estamos actualizando este pedido. Intenta de nuevo en un minuto.'), { code: 'order_locked' });
     if (isFaceToFace(order)) throw Object.assign(new HttpError(409, 'La entrega es cara a cara: no hay envío. Pide el código al comprador.'), { code: 'face_to_face' });
     const evidence = shipEvidence(req.body?.evidence, user.sub, order.slug);
     if (!(await captureUploaded(db().storage, { p: 'ship', id: evidence.token_id, sub: user.sub })))

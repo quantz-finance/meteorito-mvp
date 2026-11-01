@@ -10,12 +10,14 @@ import * as tw from './tw';
 import { assertReceiverReady, SELLER_NOT_READY } from './wallet';
 import { tightenTimebounds } from './timebounds';
 import { enqueueIbanPayout, netUsdc, receiverFor, savePayoutRoute } from './payoutChoice';
+import { rulesVersionOf } from './orderRules';
 
 /** Llamadas on-chain que usan el envío y la liberación. Los tests las reemplazan (sin red). */
-type Chain = Pick<typeof tw, 'releaseGuard' | 'approveMilestone' | 'getBalance' | 'releaseFunds' | 'changeMilestoneStatus' | 'changeMilestoneStatusXdr' | 'resolveDispute'>;
+type Chain = Pick<typeof tw, 'releaseGuard' | 'approveMilestone' | 'getBalance' | 'releaseFunds' | 'changeMilestoneStatus' | 'changeMilestoneStatusXdr' | 'resolveDispute'>
+  & { /** dispute-escrow firmado por el approver (fee-bump). Los tests lo reemplazan. */ disputeOnChain: (contractId: string) => Promise<string> };
 let testChain: Partial<Chain> | null = null;
 export const __setChainForTests = (c: Partial<Chain> | null) => { testChain = c; };
-export const chain = (): Chain => (testChain ? { ...tw, ...testChain } : tw) as Chain;
+export const chain = (): Chain => ({ ...tw, disputeOnChain, ...(testChain ?? {}) }) as Chain;
 
 export interface ShipEvidence { at: string; photo: string; captured_at: string; token_id: string; purpose: 'ship'; note?: string }
 /** Evidencia de "Ya lo envié": la FOTO ES OBLIGATORIA y solo de la cámara de la app (token de captura 'ship' de ESTE pedido y
@@ -150,7 +152,7 @@ export function fundedAgreement(order: any, at = Date.now()) {
 }
 /** Al pagar el comprador acepta el acuerdo que vio antes de pagar: queda en order_events. */
 export async function logAgreement(order: any) {
-  await logEvent(order.id, 'agreement_accepted', { delivery_mode: deliveryModeOf(order), protection_minutes: protectionOf(order) });
+  await logEvent(order.id, 'agreement_accepted', { delivery_mode: deliveryModeOf(order), protection_minutes: protectionOf(order), rules_version: rulesVersionOf(order) });
 }
 
 export const pinHash = (orderId: string, pin: string) => createHash('sha256').update(`${env.pinPepper()}:${orderId}:${pin}`).digest('hex');
@@ -212,7 +214,9 @@ const DISPUTABLE = ['fondeado', 'enviado', 'entregado'];
  * si ya está abierta devuelve la existente. On-chain: dispute-escrow firmado por el approver
  * (rol del lado comprador) y enviado con fee-bump de la wallet platform.
  */
-export async function openDispute(order: any, buyerSub: string, input: { reason: DisputeReason; description: string | null; evidence: string[] }) {
+/** opts.patch: columnas extra del pedido al abrirla (p. ej. ship_cancel); opts.notify=false: sin el push genérico. */
+export async function openDispute(order: any, buyerSub: string, input: { reason: DisputeReason; description: string | null; evidence: string[] },
+  opts: { patch?: Record<string, unknown>; notify?: boolean } = {}) {
   if (order.buyer_user_id !== buyerSub) throw new HttpError(403, 'solo el comprador puede abrir una disputa');
   const { data: existing } = await db().from('disputes').select('*').eq('order_id', order.id).maybeSingle();
   if (order.status === 'en_disputa' || existing?.state === 'open') return { disputeTx: order.dispute_tx ?? existing?.dispute_tx, already: true };
@@ -227,9 +231,9 @@ export async function openDispute(order: any, buyerSub: string, input: { reason:
     let g = await chain().releaseGuard(order.contract_id); // chain(): los tests la reemplazan (sin red)
     if (g.released || g.resolved) throw new HttpError(409, 'el pago ya fue liberado');
     let hash: string | null = null;
-    if (!g.disputed) hash = await disputeOnChain(order.contract_id);
+    if (!g.disputed) hash = await chain().disputeOnChain(order.contract_id);
     const now = new Date().toISOString();
-    await advance(order.id, order.status, { dispute_tx: hash ?? 'onchain-preexisting', disputed_at: now, status: 'en_disputa' });
+    await advance(order.id, order.status, { dispute_tx: hash ?? 'onchain-preexisting', disputed_at: now, status: 'en_disputa', ...(opts.patch ?? {}) }, { notify: opts.notify });
     await db().from('disputes').update({ state: 'open', dispute_tx: hash }).eq('order_id', order.id);
     await logEvent(order.id, 'dispute_opened', { hash, reason: input.reason, feeBump: true });
     return { disputeTx: hash, already: false };

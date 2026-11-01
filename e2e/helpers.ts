@@ -25,13 +25,14 @@ const quietPages = new WeakSet<Page>();
 /** Abre una ruta del demo con el rol dado (badge oculto para medir layout real).
  *  La invitación a mostrar la última conexión (hoja después del primer link) se da por vista, salvo seenInvite: true
  *  (solo activity.spec la prueba; así no tapa la pantalla de "link listo" en los demás tests). */
-export async function open(page: Page, path: string, role: Role, reset = false, o: { seenInvite?: boolean } = {}) {
-  if (!o.seenInvite && !quietPages.has(page)) {
+/** Acuerdo de la beta en Vender (lib/rulesAck.ts): se da por aceptado salvo rulesAck: false (e2e de la hoja "Antes de publicar"). */
+export async function open(page: Page, path: string, role: Role, reset = false, o: { seenInvite?: boolean; rulesAck?: boolean } = {}) {
+  if ((!o.seenInvite || o.rulesAck !== false) && !quietPages.has(page)) {
     quietPages.add(page);
-    await page.addInitScript(() => {
+    await page.addInitScript(([invite, ack]) => {
       const get = Storage.prototype.getItem;
-      Storage.prototype.getItem = function (k: string) { return k.startsWith('meteorito:last-seen-invite:') ? '1' : get.call(this, k); };
-    });
+      Storage.prototype.getItem = function (k: string) { return invite && k.startsWith('meteorito:last-seen-invite:') ? '1' : ack && k === 'meteorito:reglas-vendedor' ? '100' : get.call(this, k); };
+    }, [!o.seenInvite, o.rulesAck !== false] as const);
   }
   const sep = path.includes('?') ? '&' : '?';
   await page.goto(`${path}${sep}role=${role}&badge=0${reset ? '&demo_reset=1' : ''}`);

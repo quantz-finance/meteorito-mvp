@@ -13,7 +13,7 @@ export async function run(t: T) {
   t.check('valores en un solo lugar: 7 días, 3 días, 48 h, 30 días',
     RULES_CONFIG.autoReleaseDays === 7 && RULES_CONFIG.sellerShipDays === 3 && RULES_CONFIG.sellerReplyHours === 48 && RULES_CONFIG.claimDays === 30);
   const ids = RULES.map((r) => r.id).join();
-  t.check('7 reglas en orden', ids === 'custodia,envio,codigo,liberacion,problemas,reclamos,contacto', ids);
+  t.check('8 reglas en orden (reembolso si no se envía con texto legal, t98)', ids === 'custodia,envio,codigo,liberacion,reembolso_sin_envio,problemas,reclamos,contacto', ids);
   t.check('cada regla con icono, título y texto', RULES.every((r) => r.icon && r.title.length > 3 && r.text.length > 20));
   const all = [PAY_SUMMARY, SELL_SUMMARY, ...RULES.flatMap((r) => [r.title, r.text, ...(r.points ?? [])])].join(' | ');
   t.check('los textos usan las constantes (7 días, 3 días, 48 h, 30 días)', /por defecto, 7 días/.test(all) && /3 días/.test(all) && /48 h/.test(all) && /30 días/.test(all));

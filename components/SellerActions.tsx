@@ -15,13 +15,15 @@ import { Fonts } from '@/constants/Colors';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/cavos';
 import { ExtensionBox } from '@/components/ExtensionBox';
+import { shipDeadline, SHIP_REMINDER_TEXT } from '../api/_lib/orderRules';
+import { leftLabel, useNow, whenLabel } from '@/lib/ruleTimes';
 
 /** "Ya lo envié" solo se puede tocar con la foto de la cámara ya subida. */
 export const canShip = (photo: CapturedPhoto | null) => !!photo?.url && !!photo.token;
 
 export function SellerActions({ slug, status, order, onChange }: { slug: string; status: string; onChange: () => void;
   /** Pedido público (acuerdo de entrega y extensión pendiente). Sin él: envío. */
-  order?: { status: string; delivery_mode?: string | null; release_ext?: any } | null }) {
+  order?: { status: string; delivery_mode?: string | null; release_ext?: any; funded_at?: string | null; rules_version?: number | null; shipped_tx?: string | null } | null }) {
   const f2f = order?.delivery_mode === 'cara_a_cara';
   const auth = useAuth();
   const [note, setNote] = useState('');
@@ -32,6 +34,17 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // Regla v1 "Reembolso si no se envía": 3 días desde el pago para "Ya lo envié" (aviso el día 2).
+  const now = useNow();
+  const sd = shipDeadline(order && order.status === status ? order : null, now);
+  const shipRule = sd.phase === 'na' ? null : <View testID="ship-rule-seller" style={[st.rule, sd.phase !== 'waiting' && { borderColor: C.orange }]}>
+    <Icon name="time-outline" size={18} color={sd.phase === 'waiting' ? C.lilac : C.orange} />
+    <Text style={[T.footnote, { flex: 1, color: C.text }]}>
+      {sd.phase === 'waiting' ? `Tienes hasta el ${whenLabel(sd.cancelAt)} (${leftLabel(sd.cancelAt, now)}) para marcar 'Ya lo envié'.`
+        : sd.phase === 'reminder' ? `${SHIP_REMINDER_TEXT} (hasta el ${whenLabel(sd.cancelAt)}).`
+        : `Pasaron 3 días sin 'Ya lo envié': quien compra puede cancelar y recibir su pago de vuelta. El ${whenLabel(sd.autoAt)} el reembolso se hace solo.`}
+    </Text>
+  </View>;
   const run = async (f: () => Promise<void>, ok: string) => { setBusy(true); setErr(null); try { await f(); setDone(ok); onChange(); } catch (e) { setErr(userMessage((e as Error).message)); } finally { setBusy(false); } };
 
   if (done) return <View style={{ gap: S.md, alignItems: 'center', paddingVertical: S.md }}>
@@ -55,6 +68,7 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
   if (status === 'fondeado' && f2f) return pinForm('Cara a cara: cuando el comprador revise el producto, pídele su código.');
 
   if (status === 'fondeado') return <View style={{ gap: S.sm }}>
+    {shipRule}
     {photo ? <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
       <Image testID="ship-photo-preview" source={{ uri: photo.uri }} style={st.thumb} resizeMode="cover" accessibilityLabel="Foto del envío" />
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -98,4 +112,5 @@ const st = StyleSheet.create({
   thumb: { width: 52, height: 52, borderRadius: 10, backgroundColor: C.lilacBg },
   take: { flexDirection: 'row', alignItems: 'center', gap: S.sm, minHeight: 56, paddingHorizontal: S.md, paddingVertical: S.sm, borderRadius: R.md, borderWidth: 1, borderStyle: 'dashed', borderColor: C.lilac, backgroundColor: C.lilacBg },
   link: { flexDirection: 'row', alignItems: 'center', gap: S.xs + 2, minHeight: 44, flexShrink: 1 },
+  rule: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, padding: S.sm, borderRadius: R.md, borderWidth: 1, borderColor: C.lilacBg },
 });

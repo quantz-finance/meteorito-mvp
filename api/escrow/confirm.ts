@@ -5,6 +5,8 @@
 //  { slug, reason: 'extend', days: 1|3|7 }     -> comprador o vendedor pide más plazo (la otra parte acepta o rechaza)
 //  { slug, reason: 'extend_answer', accept }   -> la otra parte responde; aceptar mueve auto_release_at
 //     Tope: 30 días desde el pago. Pendiente congela el auto-release hasta la respuesta o 24 h (ver releaseBlockedUntil).
+//  { slug, reason: 'cancel_unshipped' }        -> comprador: "Cancelar y recibir reembolso" (envío, regla v1: 3 días sin
+//     "Ya lo envié"). Reembolso 100% desde la custodia por el camino de las disputas (api/_lib/shipRefund.ts). Idempotente.
 // El backend approver aprueba el hito y el release signer libera (verificación on-chain previa).
 import { json, fail, orderBySlug, db, logEvent } from '../_lib/db';
 import { requireCavosUser, HttpError } from '../_lib/auth';
@@ -15,6 +17,7 @@ import { releaseDueAt } from '../_lib/env';
 import { EXTENSION_DAYS, MAX_TOTAL_FROM_PAYMENT_MIN, daysLabel, extendedOf, isFaceToFace, pendingExtension } from '../_lib/agreement';
 import { missingColumn } from '../_lib/listings';
 import { extensionMessages, notifyOrder } from '../_lib/push';
+import { refundUnshipped } from '../_lib/shipRefund';
 
 /** Extensión de mutuo acuerdo. Solo comprador y vendedor; solo con el plazo corriendo y sin disputa. */
 async function extension(req: any, order: any, reason: 'extend' | 'extend_answer') {
@@ -63,6 +66,10 @@ export default async function handler(req: any, res: any) {
     const { slug, reason, pin } = req.body ?? {};
     const order = await orderBySlug(slug);
     if (reason === 'extend' || reason === 'extend_answer') return json(res, 200, await extension(req, order, reason));
+    if (reason === 'cancel_unshipped') {
+      if (!isBuyerOf(order, await requireBuyerIdentity(req))) throw new HttpError(403, 'Solo quien compró puede cancelar.');
+      return json(res, 200, await refundUnshipped(order, 'buyer'));
+    }
     if (reason === 'buyer_confirm') {
       if (!isBuyerOf(order, await requireBuyerIdentity(req))) throw new HttpError(403, 'no eres el comprador');
     } else if (reason === 'pin') {

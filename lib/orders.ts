@@ -38,6 +38,8 @@ export interface NewOrder {
   invite?: string;
   /** Acuerdo de entrega (migración 017; el servidor valida 24 h a 30 días). */
   delivery_mode?: 'envio' | 'cara_a_cara'; protection_minutes?: number;
+  /** Versión de reglas que quien vende aceptó antes de publicar (lib/rulesAck.ts; el servidor la guarda en el pedido). */
+  rules_ack?: number;
   /** Link del anuncio importado: permite usar las fotos que el servidor guardó al importarlo y, con la migración 019,
    *  queda guardado con el proveedor (source_provider). */
   source_url?: string; source_provider?: string;
@@ -61,6 +63,8 @@ export interface PublicOrder {
   /** Migración 017: acuerdo de entrega y extensión de mutuo acuerdo. Sin ella: envío, 7 días (defaults). */
   delivery_mode?: 'envio' | 'cara_a_cara' | null; protection_minutes?: number | null;
   release_ext?: { by: 'buyer' | 'seller'; days: number; at: string } | null; release_ext_minutes?: number | null;
+  /** Migración 033: fecha del pago, versión de reglas del pedido (0 = sin reglas nuevas) y cancelación por falta de envío. */
+  funded_at?: string | null; rules_version?: number | null; ship_cancel?: { by: 'buyer' | 'auto'; at: string } | null;
   /** Opcionales: solo se muestran si el backend los expone (todavía no en public_orders). */
   seller_name?: string | null; seller_phone_verified?: boolean | null;
   /** true solo si Meteorito verificó el IMEI (no la declaración del vendedor). */
@@ -80,6 +84,8 @@ export interface SellerOrder {
   delivery_mode?: 'envio' | 'cara_a_cara' | null;
   /** Historial de ventas: cuándo se cerró y, si hubo disputa, qué porcentaje volvió al comprador. */
   released_at?: string | null; resolved_at?: string | null; resolution?: { buyerPct?: number | null } | null;
+  /** Migración 033 (vía /api/store): fecha del pago y versión de reglas. */
+  funded_at?: string | null; rules_version?: number | null;
   /** Primera foto (miniatura en Home). El demo trae `photos`. */
   photo?: string | null; photos?: string[];
 }

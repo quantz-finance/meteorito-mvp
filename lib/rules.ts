@@ -1,9 +1,11 @@
 // "Cómo funciona Meteorito": las reglas en UN solo lugar. La pantalla /como-funciona, los resúmenes de una línea
 // (pago y Vender) y el tour guiado (lib/tour.ts) leen de aquí. Lenguaje simple, en tuteo.
-// Algunas capas (cancelar a los 3 días, 48 h para responder, reclamos a 30 días) llegan en PRs siguientes:
-// sus valores viven en RULES_CONFIG para cambiarlos en un solo lugar.
+// Reglas con texto legal APROBADO (LEGAL_RULES): rigen solo para pedidos creados con su versión (orders.rules_version,
+// api/_lib/orderRules.ts) y se muestran desde aquí en /como-funciona, la hoja "Al pagar aceptas" (antes de pagar) y el
+// acuerdo de la beta en Vender (antes de publicar). Texto EXACTO fijado por scripts/ci/t98-reglas-texto.test.ts.
 import type { IconName } from '@/components/ds';
 import { startTour } from './tour';
+import { CURRENT_RULES_VERSION, RULE_VERSION, SHIP_AUTO_REFUND_EXTRA_DAYS, SHIP_DAYS, rulesVersionOf } from '../api/_lib/orderRules';
 
 export const RULES_CONFIG = {
   /** Días tras el envío para liberar el pago si el comprador no da el código ni reporta un problema. */
@@ -16,7 +18,9 @@ export const RULES_CONFIG = {
   /** Extensión de mutuo acuerdo: días que se pueden pedir; el total desde el pago nunca pasa de maxWindowDays. */
   extensionDays: [1, 3, 7],
   /** Días que tiene el vendedor para enviar antes de que el comprador pueda cancelar y recibir su reembolso. */
-  sellerShipDays: 3,
+  sellerShipDays: SHIP_DAYS,
+  /** Días extra sin envío ni cancelación para que el reembolso se haga solo. */
+  autoRefundExtraDays: SHIP_AUTO_REFUND_EXTRA_DAYS,
   /** Horas que tiene el vendedor para responder una disputa con pruebas. */
   sellerReplyHours: 48,
   /** Días después de la liberación en los que el comprador todavía puede reportar un problema. */
@@ -27,6 +31,29 @@ const C = RULES_CONFIG;
 export const RULES_ROUTE = '/como-funciona' as const;
 export const RULES_TITLE = 'Cómo funciona Meteorito';
 export const RULES_INTRO = 'Son las mismas reglas para quien compra y para quien vende. Léelas una vez y compra o vende con calma.';
+
+/* ---------- Reglas con texto legal aprobado (EXACTO: no editar sin revisión legal) ---------- */
+export type LegalRuleId = 'reembolso_sin_envio';
+export interface LegalRule { id: LegalRuleId; version: number; icon: IconName; title: string; text: string;
+  /** Solo pedidos con envío (cara a cara no tiene paso de envío). */
+  shippingOnly?: boolean }
+/** Reembolso si no se envía (v1). */
+export const SHIP_REFUND_RULE = "Si quien vende no marca 'Ya lo envié' en 3 días, puedes cancelar y recibes todo tu pago de vuelta desde la custodia. Si no cancelas y pasan 2 días más sin envío, el reembolso se hace solo.";
+export const LEGAL_RULES: LegalRule[] = [
+  { id: 'reembolso_sin_envio', version: RULE_VERSION.shipRefund, icon: 'arrow-undo-outline', title: 'Reembolso si no se envía', text: SHIP_REFUND_RULE, shippingOnly: true },
+];
+/** Reglas vigentes al publicar (acuerdo de la beta en Vender): las de la versión actual. */
+export const currentLegalRules = (mode?: string | null) => LEGAL_RULES.filter((r) => r.version <= CURRENT_RULES_VERSION && !(r.shippingOnly && mode === 'cara_a_cara'));
+/** Reglas que rigen para ESTE pedido (su versión y su tipo de entrega). Pedidos viejos (versión 0): ninguna. */
+export const legalRulesFor = (o: { rules_version?: number | null; delivery_mode?: string | null } | null | undefined) =>
+  LEGAL_RULES.filter((r) => rulesVersionOf(o) >= r.version && !(r.shippingOnly && o?.delivery_mode === 'cara_a_cara'));
+/** Acuerdo de la beta para vender (hoja antes de publicar). */
+export const SELLER_AGREEMENT_TITLE = 'Antes de publicar';
+export const SELLER_AGREEMENT_INTRO = 'Estas reglas rigen para las ventas que publiques desde ahora. Quien compra las ve antes de pagar.';
+export const SELLER_AGREEMENT_ACCEPT = 'Acepto y publico';
+/** Hoja "Al pagar aceptas": encabezado de las reglas del pedido. */
+export const PAY_RULES_HEADING = 'Reglas de esta compra';
+export { CURRENT_RULES_VERSION };
 
 export interface Rule { id: string; icon: IconName; title: string; text: string; points?: string[] }
 export const RULES: Rule[] = [
@@ -45,11 +72,11 @@ export const RULES: Rule[] = [
       `Cualquiera de los dos puede pedir ${C.extensionDays.join(', ').replace(/, (\d+)$/, ' o $1')} días más; el otro acepta o rechaza. Nunca más de ${C.maxWindowDays} días desde el pago.`,
       'Mientras una extensión espera respuesta, el pago no se libera solo (hasta 24 h).',
     ] },
+  ...LEGAL_RULES.filter((r) => r.id === 'reembolso_sin_envio').map((r) => ({ id: r.id, icon: r.icon, title: r.title, text: r.text })),
   { id: 'problemas', icon: 'alert-circle', title: 'Problemas o disputas',
     text: 'El comprador puede reportar un problema antes de que se libere el pago. Eso congela el dinero.',
     points: [
       'Si el vendedor no envió nada y no llegó, el dinero se le devuelve al comprador.',
-      `Si el vendedor no envía en ${C.sellerShipDays} días, el comprador puede cancelar y recibir su reembolso.`,
       `El vendedor tiene ${C.sellerReplyHours} h para responder con pruebas. Si no responde, se le da la razón al comprador.`,
       'Si las versiones son distintas, el equipo revisa el caso con ayuda de IA y una persona decide.',
     ] },

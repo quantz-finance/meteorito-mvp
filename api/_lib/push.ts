@@ -2,12 +2,13 @@
 // Sin VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT, o sin la tabla push_subscriptions (migración 011), no hace nada.
 import { db } from './db';
 import { daysLabel, extensionRequestText, isFaceToFace } from './agreement';
+import { SHIP_REMINDER_TEXT } from './orderRules';
 
 export interface PushOrder { slug: string; status: string; delivery_mode?: string | null; seller_user_id?: string | null; buyer_user_id?: string | null; brand?: string | null; model?: string | null }
 export interface PushMsg { to: string; role: 'seller' | 'buyer'; title: string; body: string; url: string; tag: string }
 export interface PushSub { endpoint: string; user_id: string; p256dh: string; auth: string }
 
-const itemName = (o: PushOrder) => (`${o.brand ?? ''} ${o.model ?? ''}`.replace(/\s+/g, ' ').trim().slice(0, 40)) || 'tu artículo';
+export const itemName = (o: PushOrder) => (`${o.brand ?? ''} ${o.model ?? ''}`.replace(/\s+/g, ' ').trim().slice(0, 40)) || 'tu artículo';
 
 /** Textos por estado y por parte (tuteo, cortos). Pura: se prueba sin red. */
 export function pushMessages(o: PushOrder): PushMsg[] {
@@ -40,6 +41,25 @@ export function extensionMessages(o: PushOrder, kind: 'requested' | 'accepted' |
     : kind === 'accepted' ? ['Plazo extendido', `${other} aceptó ${daysLabel(days)} más para ${it}.`]
     : ['Extensión rechazada', `${other} no aceptó ${daysLabel(days)} más para ${it}. El plazo sigue igual.`];
   return [{ to, role: target, title, body, url: `/p/${o.slug}`, tag: `${o.slug}:ext` }];
+}
+
+/** Regla "reembolso si no se envía" (lib/rules.ts SHIP_REFUND_RULE). Pura.
+ *  reminder: día 2, solo a quien vende (texto EXACTO aprobado). cancel_buyer / cancel_auto: a las dos partes. */
+export function shipRuleMessages(o: PushOrder, kind: 'reminder' | 'cancel_buyer' | 'cancel_auto'): PushMsg[] {
+  const it = itemName(o), url = `/p/${o.slug}`, out: PushMsg[] = [];
+  const add = (role: 'seller' | 'buyer', title: string, body: string) => {
+    const to = role === 'seller' ? o.seller_user_id : o.buyer_user_id;
+    if (to && !(role === 'buyer' && to === o.seller_user_id)) out.push({ to, role, title, body, url, tag: `${o.slug}:ship_${kind}` });
+  };
+  if (kind === 'reminder') add('seller', 'Envía tu pedido', `${SHIP_REMINDER_TEXT}: ${it}.`);
+  else if (kind === 'cancel_buyer') {
+    add('buyer', 'Cancelaste la compra', `Te devolvemos todo tu pago de ${it} desde la custodia.`);
+    add('seller', 'Compra cancelada', `No se marcó "Ya lo envié" en 3 días: quien compró ${it} canceló y recibe su pago de vuelta.`);
+  } else {
+    add('buyer', 'Reembolso automático', `Pasaron 5 días sin envío: te devolvemos todo tu pago de ${it} desde la custodia.`);
+    add('seller', 'Compra cancelada', `Pasaron 5 días sin "Ya lo envié": el pago de ${it} vuelve a quien compró.`);
+  }
+  return out;
 }
 
 export const vapid = () => {

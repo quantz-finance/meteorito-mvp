@@ -6,6 +6,9 @@
 // se corrige en la fila y no se libera. Disputa y PIN bloqueado congelan la liberación (approveAndRelease).
 // Cripto: pedidos con cotización de las últimas 24 h -> cryptoStatus (api/_lib/crypto.ts).
 // Disputas: con el flag disputes_auto_resolve encendido (apagado por defecto) resuelve las que una regla decide (api/_lib/disputeAdmin.ts).
+// Regla "reembolso si no se envía" (v1, migración 033; api/_lib/shipRefund.ts): aviso del día 2 a quien vende y reembolso
+// automático del día 5. También con ?slug (la página del pedido lo pide cuando vence). Disparo: pg_cron (033) + Vercel Cron
+// diario de respaldo (vercel.json; Vercel manda el mismo Bearer CRON_SECRET).
 // Idempotente: lock por fila (release_lock_until) + updates condicionados al status. Verificación on-chain en approveAndRelease.
 import { db, json, fail, logEvent } from '../_lib/db';
 import { env, releaseDueAt, releaseBlockedUntil } from '../_lib/env';
@@ -15,6 +18,8 @@ import { approveAndRelease } from '../_lib/escrow';
 import { notifyDueSoon } from '../_lib/buyerContact';
 import { autoResolvePass } from '../_lib/disputeAdmin';
 import { cryptoCronPass } from '../_lib/crypto';
+import { refundUnshipped, remindSeller, shipRulePass } from '../_lib/shipRefund';
+import { shipDeadline } from '../_lib/orderRules';
 
 async function claim(id: string): Promise<boolean> {
   const now = new Date();
@@ -47,7 +52,16 @@ export default async function handler(req: any, res: any) {
     if (typeof slug === 'string') {
       if (!/^[a-z0-9]{6}$/.test(slug)) return json(res, 400, { error: 'slug inválido' });
       const { data: o } = await db().from('orders').select('*').eq('slug', slug).in('status', ['enviado', 'fondeado']).lte('auto_release_at', now).maybeSingle();
-      return json(res, 200, o ? await processOrder(o) : { slug, due: false });
+      if (o) return json(res, 200, await processOrder(o));
+      // Regla de envío (v1): solo si ya toca (aviso del día 2 o reembolso del día 5). Nunca adelanta nada.
+      const { data: f } = await db().from('orders').select('*').eq('slug', slug).in('status', ['fondeado', 'en_disputa']).maybeSingle();
+      const ph = shipDeadline(f).phase;
+      if (f && ph === 'reminder') return json(res, 200, { slug, reminded: await remindSeller(f) });
+      if (f && (ph === 'auto_due' || (f.status === 'en_disputa' && f.ship_cancel))) {
+        try { return json(res, 200, { slug, ...(await refundUnshipped(f, f.ship_cancel?.by === 'buyer' ? 'buyer' : 'auto')) }); }
+        catch (e: any) { return json(res, 200, { slug, error: String(e?.message ?? e).slice(0, 120) }); }
+      }
+      return json(res, 200, { slug, due: false });
     }
     if (req.headers.authorization !== `Bearer ${env.cronSecret()}`) return json(res, 401, { error: 'unauthorized' });
     const base = `and(status.eq.enviado,auto_release_at.lte.${now}),and(status.eq.entregado,released_tx.is.null)`;
@@ -61,8 +75,10 @@ export default async function handler(req: any, res: any) {
     const dueSoon = await notifyDueSoon(db());
     // Disputas: auto-resolución por reglas SOLO con el flag disputes_auto_resolve (apagado por defecto). Nunca tumba el cron.
     const disputes = await autoResolvePass().catch((e: any) => ({ skipped: 'error', resolved: [], errors: [String(e?.message ?? e).slice(0, 120)] }));
+    // Regla de envío (v1): aviso del día 2 y reembolso automático del día 5. Nunca tumba el cron.
+    const ship = await shipRulePass().catch((e: any) => ({ errors: [String(e?.message ?? e).slice(0, 120)] }));
     // Pagos con cripto: fondea los pedidos cuyo pago ya llegó aunque el comprador haya cerrado la pantalla. Nunca tumba el cron.
     const crypto = await cryptoCronPass().catch((e: any) => [{ slug: '', error: String(e?.message ?? e).slice(0, 120) }]);
-    return json(res, 200, { processed: out, disputes, due_soon_notices: dueSoon, ...(crypto.length ? { crypto } : {}) });
+    return json(res, 200, { processed: out, disputes, due_soon_notices: dueSoon, ship_rule: ship, ...(crypto.length ? { crypto } : {}) });
   } catch (e) { return fail(res, e); }
 }

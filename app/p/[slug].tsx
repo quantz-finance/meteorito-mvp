@@ -45,6 +45,7 @@ import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { DEMO_ENABLED } from '@/lib/demo';
 import { RulesHint } from '@/components/RulesLink';
 import { PAY_SUMMARY } from '@/lib/rules';
+import { shipDeadline } from '../../api/_lib/orderRules';
 import { looksLikeDemoProduct } from '../../api/_lib/demoFlag';
 import { DemoProductPage } from '@/components/DemoProduct';
 
@@ -88,6 +89,10 @@ function LinkDeVentaReal() {
     if (!DEMO_ENABLED && running && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
       fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
   }, [order?.status, order?.auto_release_at]);
+  // Regla v1 (reembolso si no se envía): pasados 5 días sin envío, pedirle al backend el reembolso automático (idempotente).
+  useEffect(() => {
+    if (!DEMO_ENABLED && order && shipDeadline(order).phase === 'auto_due') fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
+  }, [order?.status, order?.funded_at]);
   useEffect(load, [slug]);
   // Cuando el polling trae un estado nuevo, avisar con un toast suave (el chip y el timeline animan solos).
   const prevStatus = useRef<string | null>(null);

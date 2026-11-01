@@ -18,7 +18,7 @@ import { pctOf } from './disputeRules';
 import { enqueueIbanPayout, netUsdc, sellerPayee } from './payoutChoice';
 
 /** Reparto on-chain + actualización de pedido y disputa. buyerPct 0..100 del monto del pedido (excedente al comprador). */
-export async function resolveOrderDispute(order: any, resolverSecret: string, buyerPct: number) {
+export async function resolveOrderDispute(order: any, resolverSecret: string, buyerPct: number, opts: { notify?: boolean } = {}) {
   if (!(buyerPct >= 0 && buyerPct <= 100)) throw new HttpError(400, 'buyerPct 0..100');
   if (order.status !== 'en_disputa') throw new HttpError(409, `status ${order.status}`);
   const g = await chain().releaseGuard(order.contract_id);
@@ -33,7 +33,7 @@ export async function resolveOrderDispute(order: any, resolverSecret: string, bu
   const resolution = { buyerPct, toBuyer, toSeller, balance: bal };
   const now = new Date().toISOString();
   // advance() avisa por push a las dos partes ('resuelto').
-  await advance(order.id, 'en_disputa', { resolved_tx: r.hash, resolved_at: now, resolution, status: 'resuelto' });
+  await advance(order.id, 'en_disputa', { resolved_tx: r.hash, resolved_at: now, resolution, status: 'resuelto' }, { notify: opts.notify });
   await db().from('disputes').update({ state: 'resolved', resolution, resolved_tx: r.hash, resolved_at: now }).eq('order_id', order.id);
   await logEvent(order.id, 'dispute_resolved', { hash: r.hash, ...resolution });
   // Vendedor con Cuenta IBAN: su parte llegó a 'platform' -> cola manual de pagos (como en la liberación normal).
@@ -117,7 +117,7 @@ export function validateDecision(raw: any): DecideInput & { buyerPct: number } {
 }
 
 /** Decide una disputa: audita, ejecuta on-chain (si hay secreto) y deja la tarea de devolución al invitado. */
-export async function decideDispute(order: any, by: DecideBy, input: DecideInput & { buyerPct: number }, opts: { secret?: string | null } = {}) {
+export async function decideDispute(order: any, by: DecideBy, input: DecideInput & { buyerPct: number }, opts: { secret?: string | null; notify?: boolean } = {}) {
   if (order.status !== 'en_disputa') throw Object.assign(new HttpError(409, order.status === 'resuelto' ? 'Esta disputa ya está resuelta.' : `El pedido no está en disputa (${order.status}).`), { code: 'not_open' });
   const secret = opts.secret === undefined ? resolverSecret() : opts.secret;
   const base: Decision = { order_id: order.id, slug: order.slug, decided_by: by.sub, decided_by_email: by.email, source: by.source, outcome: input.outcome,
@@ -126,7 +126,7 @@ export async function decideDispute(order: any, by: DecideBy, input: DecideInput
   const ref = await recordDecision(base);
   if (!secret) return { executed: false as const, pending: true, command: resolveCommand(order.slug, input.buyerPct), auditId: ref.id };
   try {
-    const r = await resolveOrderDispute(order, secret, input.buyerPct);
+    const r = await resolveOrderDispute(order, secret, input.buyerPct, { notify: opts.notify });
     const guest = isGuestSub(order.buyer_user_id) && r.toBuyer > 0;
     const patch: Partial<Decision> = { status: 'executed', resolved_tx: r.resolvedTx, to_buyer: r.toBuyer, to_seller: r.toSeller, executed_at: new Date().toISOString(), guest_refund: guest ? 'pendiente' : 'no_aplica' };
     await updateDecision(ref, order.id, patch);
