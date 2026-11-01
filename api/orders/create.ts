@@ -13,6 +13,7 @@ import { listingSource } from '../_lib/importers/providers';
 import { guestSubFromReq } from '../_lib/guest';
 import { validateAgreement } from '../_lib/agreement';
 import { notifyFollowers } from '../_lib/follows';
+import { stampVersion } from '../_lib/orderRules';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 // Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
@@ -88,10 +89,14 @@ export default async function handler(req: any, res: any) {
     let agreed: Record<string, unknown> = agreement;
     // Importado de un link (Facebook, Mercado Libre, Encuentra24…): de dónde vino. Sin la migración 019 se crea sin esas columnas.
     let source: Record<string, unknown> = listingSource(b.source_url, b.source_provider);
+    // Reglas con versión (033): la que quien vende aceptó en la app antes de publicar (b.rules_ack). Clientes viejos -> 0
+    // (sin reglas nuevas: nada retroactivo ni sin haberlas visto). Sin la migración 033 se crea sin la columna.
+    let rules: Record<string, unknown> = { rules_version: stampVersion(b.rules_ack) };
     for (let i = 0; i < 5; i++) {
       const s = slug();
-      const ins = () => db().from('orders').insert({ ...row, ...agreed, ...source, slug: s, ...(kind ? { kind } : {}) });
+      const ins = () => db().from('orders').insert({ ...row, ...agreed, ...source, ...rules, slug: s, ...(kind ? { kind } : {}) });
       let { error } = await ins();
+      if (error && missingColumn(error) && Object.keys(rules).length) { rules = {}; ({ error } = await ins()); }
       if (error && missingColumn(error) && Object.keys(source).length) { source = {}; ({ error } = await ins()); }
       if (error && missingColumn(error) && Object.keys(agreed).length) { agreed = {}; ({ error } = await ins()); }
       if (error && kind && missingColumn(error)) { kind = null; ({ error } = await ins()); }
@@ -104,7 +109,7 @@ export default async function handler(req: any, res: any) {
         // Producto permanente nuevo: aviso push a quienes siguen al vendedor (022). Best-effort, nunca rompe la publicación.
         if (kind === 'listing') await notifyFollowers(user.sub, { slug: s, title: fullTitle });
         await trackServer(`slug:${s}`, 'order_created', { category: row.category, price_crc: price, from_invite: !!invite, delivery_mode: agreement.delivery_mode, protection_minutes: agreement.protection_minutes });
-        return json(res, 200, { slug: s, kind: kind ?? 'single', ...agreement });
+        return json(res, 200, { slug: s, kind: kind ?? 'single', ...agreement, rules_version: Number(rules.rules_version ?? 0) });
       }
       if (error.code !== '23505') throw error;
     }

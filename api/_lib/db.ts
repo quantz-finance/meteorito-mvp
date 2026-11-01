@@ -28,15 +28,18 @@ export async function orderBySlug(slug: unknown): Promise<any> {
   return data;
 }
 /** Update condicionado al status actual (evita carreras). */
-export async function advance(id: string, from: string, patch: Record<string, unknown>) {
+/** opts.notify=false: sin el push genérico por estado (quien llama manda su propio aviso, p. ej. cancelación sin envío). */
+export async function advance(id: string, from: string, patch: Record<string, unknown>, opts: { notify?: boolean } = {}) {
   const { data, error } = await db().from('orders').update(patch).eq('id', id).eq('status', from).select('id, slug, status, seller_user_id, buyer_user_id, brand, model');
   if (error) throw error;
   if (!data?.length) throw new HttpError(409, `el pedido ya no está en ${from}`);
   // Aviso push a las dos partes (pagado, enviado, entregado, liberado, disputa…). Best-effort, sin VAPID no hace nada.
+  // notify:false = sin el push genérico (quien llama manda avisos propios, p. ej. las reglas de lib/rules.ts); los avisos
+  // por correo / WhatsApp al comprador (028) se mandan igual.
   if (patch.status && patch.status !== from) {
     // Import ESTÁTICO: un import() relativo no entra al bundle de Vercel (ERR_MODULE_NOT_FOUND) y rompía TODOS los
     // cambios de estado (pagar sin cuenta, enviar, liberar...). Y nunca debe tumbar la operación real.
-    try { await notifyOrder(data[0] as any); } catch (e: any) { console.warn('[push] aviso falló', e?.message); }
+    if (opts.notify !== false) try { await notifyOrder(data[0] as any); } catch (e: any) { console.warn('[push] aviso falló', e?.message); }
     // Avisos por correo / WhatsApp al comprador que dejó un contacto (migración 028). Sin 028 no hace nada.
     try { await notifyBuyerStatus(db(), data[0] as any); } catch (e: any) { console.warn('[contacto] aviso falló', e?.message); }
   }

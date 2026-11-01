@@ -25,6 +25,7 @@ import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/
 import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
 import { cleanReviewComment } from '../api/_lib/reviewText'; // pura
 import { daysLabel, EXTENSION_DAYS, MAX_TOTAL_FROM_PAYMENT_MIN, pendingExtension, protectionOf, validateAgreement } from '../api/_lib/agreement'; // pura
+import { shipDeadline, stampVersion } from '../api/_lib/orderRules'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
 
@@ -39,6 +40,8 @@ export interface DemoOrder {
   // Igual que producción (012/013): producto permanente vs pedido de un comprador, comprador invitado, PIN, resolución.
   kind?: 'single' | 'listing'; listing_slug?: string | null; listing_status?: 'activa' | 'pausada' | 'archivada'; stock?: number | null;
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
+  /** Como producción (033): versión de reglas aceptada al publicar y cancelación por falta de envío. */
+  rules_version?: number; ship_cancel?: { by: 'buyer' | 'auto'; at: string } | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
 interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; socials?: Socials; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[] }
@@ -244,6 +247,7 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
       checks_summary: Array.isArray(body.checks) ? body.checks.slice(0, 20) : [], created_at: now(), ...listingSource(body.source_url, body.source_provider),
       seller_address: DEMO_SELLER.address, pin: null, pinShown: false, shipped_tx: null, evidence: null, dispute: null,
       delivery_mode: agreement.delivery_mode, protection_minutes: agreement.protection_minutes, release_ext: null, release_ext_minutes: 0,
+      rules_version: stampVersion(body.rules_ack), ship_cancel: null,
       // Como producción: link nuevo = producto permanente; de invitación (o single:true) = un solo uso, reservado.
       kind: inv || body.single === true ? 'single' : 'listing', listing_status: 'activa', listing_slug: null, buyer: null, pin_attempts: 0, resolution: null, invite_code: inv?.code ?? null,
     };
@@ -341,6 +345,12 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
       if (accept && !fits(pending.days)) throw err(409, 'ext_cap', `Con ${daysLabel(pending.days)} más pasarías los 30 días desde el pago.`);
       if (accept) { o.release_ext_minutes = (o.release_ext_minutes ?? 0) + pending.days * 1440; o.auto_release_at = iso(due + pending.days * 86_400_000); }
       o.release_ext = null; emit(); return { accepted: accept, autoReleaseAt: o.auto_release_at };
+    }
+    if (body.reason === 'cancel_unshipped') { // regla v1 (api/_lib/shipRefund.ts): desde el día 3 sin "Ya lo envié"
+      if (o.buyer && o.buyer !== me()) throw err(403, 'not_buyer', 'Solo quien compró puede cancelar.');
+      const ph = shipDeadline(o, nowMs()).phase;
+      if (ph !== 'cancelable' && ph !== 'auto_due') throw err(409, 'not_yet', 'Podrás cancelar si pasan 3 días desde el pago sin "Ya lo envié".');
+      demoShipRefund(o, 'buyer'); emit(); return { refunded: true };
     }
     const f2fPaid = o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara'; // cara a cara: se libera desde 'fondeado'
     if (o.status !== 'enviado' && !f2fPaid) throw err(409, 'bad_state', 'Este pedido no está enviado.');
@@ -518,7 +528,7 @@ export function demoGetStore(slug: string, owner = false) {
 export const demoGetPublicOrder = (slug: string) => { const o = S().orders[slug]; return o ? pub(o) : null; };
 export const demoGetSellerOrders = (addr: string) =>
   Object.values(S().orders).filter((o) => o.seller_address === addr && !(o.listing_slug && o.status === 'creado')).sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((o) => ({ slug: o.slug, category: o.category, brand: o.brand, model: o.model, price_crc: o.price_crc, status: o.status, identifier_masked: o.identifier_masked, created_at: o.created_at, kind: o.kind, listing_slug: o.listing_slug ?? null, listing_status: o.listing_status, delivery_mode: o.delivery_mode ?? 'envio',
+    .map((o) => ({ slug: o.slug, category: o.category, brand: o.brand, model: o.model, price_crc: o.price_crc, status: o.status, identifier_masked: o.identifier_masked, created_at: o.created_at, kind: o.kind, listing_slug: o.listing_slug ?? null, listing_status: o.listing_status, delivery_mode: o.delivery_mode ?? 'envio', funded_at: o.funded_at ?? null, rules_version: o.rules_version ?? 0,
       released_at: o.status === 'liberado' ? o.released_at ?? null : null, resolved_at: o.status === 'resuelto' ? o.released_at ?? null : null, resolution: o.resolution ?? null, photo: o.photos?.[0] ?? null }));
 /** Invitación pública simulada (misma forma que GET /api/invites). */
 export function demoGetInvite(code: string) {
@@ -529,6 +539,7 @@ export function demoGetInvite(code: string) {
 export function demoRunCron(): string[] {
   const st = S(); const out: string[] = [];
   for (const o of Object.values(st.orders)) {
+    if (shipDeadline(o, nowMs()).phase === 'auto_due') { demoShipRefund(o, 'auto'); out.push(o.slug); continue; } // regla v1: día 5
     const running = o.status === 'enviado' || (o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara');
     if (!running || !o.auto_release_at || new Date(o.auto_release_at).getTime() > nowMs()) continue;
     if ((o.pin_attempts ?? 0) >= 3) continue;
@@ -536,6 +547,10 @@ export function demoRunCron(): string[] {
     o.status = 'liberado'; o.released_tx = demoTxHash('release:' + o.slug); o.released_at = iso(); out.push(o.slug);
   }
   emit(); return out;
+}
+/** Reembolso por falta de envío (regla v1): en producción pasa por la disputa on-chain y la resolución 100% al comprador. */
+function demoShipRefund(o: DemoOrder, by: 'buyer' | 'auto') {
+  const at = iso(); o.ship_cancel = { by, at }; o.disputed_at = at; o.status = 'resuelto'; o.resolution = { buyerPct: 100 }; o.released_at = at;
 }
 /** Resolución de disputa (la hace el equipo en producción): % devuelto al comprador. */
 export function demoResolve(slug: string, buyerPct: number) {
@@ -548,11 +563,11 @@ export function demoBalances(addr: string) {
   return { funded: true, xlm: '9.5000000', usdc };
 }
 /** Pedido de ejemplo ya en un estado dado (para grabar solo un tramo del flujo). Devuelve el slug. */
-export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado', opts: { title?: string; price_crc?: number; photos?: string[]; single?: boolean; delivery_mode?: 'envio' | 'cara_a_cara'; protection_minutes?: number } = {}): Promise<string> {
+export async function demoSeed(upTo: 'creado' | 'fondeado' | 'enviado' = 'enviado', opts: { title?: string; price_crc?: number; photos?: string[]; single?: boolean; delivery_mode?: 'envio' | 'cara_a_cara'; protection_minutes?: number; /** versión de reglas aceptada (033) */ rules?: number } = {}): Promise<string> {
   const prev = S().role; const set = (r: DemoRole) => { S().role = r; };
   set('seller');
   // Igual que la pantalla única de vender: solo título, precio y fotos. Devuelve el producto (creado) o el pedido del comprador.
-  let { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [], ...(opts.single ? { single: true } : {}),
+  let { slug } = await demoApi('/api/orders/create', { title: opts.title ?? 'Samsung Galaxy S23', price_crc: opts.price_crc ?? 185000, photos: opts.photos ?? [], ...(opts.single ? { single: true } : {}), ...(opts.rules ? { rules_ack: opts.rules } : {}),
     ...(opts.delivery_mode ? { delivery_mode: opts.delivery_mode } : {}), ...(opts.protection_minutes ? { protection_minutes: opts.protection_minutes } : {}) });
   if (upTo !== 'creado') { set('buyer'); slug = (await demoApi('/api/escrow/pay', { slug, step: 'start' })).slug; await demoApi('/api/escrow/pay', { slug, step: 'confirm_sinpe' }); }
   if (upTo === 'enviado' && opts.delivery_mode !== 'cara_a_cara') { // mismo camino que la cámara: token 'ship', firma (lo marca usado) y "Ya lo envié" con la foto

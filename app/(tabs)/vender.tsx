@@ -18,7 +18,9 @@ import { blockedNotice, checkListingUrl, detectProvider, importFromLink, importN
 import { useStableWindow } from '@/lib/viewport';
 import { ui } from '@/components/ui';
 import { BetaNotice, RulesHint } from '@/components/RulesLink';
-import { SELL_SUMMARY } from '@/lib/rules';
+import { CURRENT_RULES_VERSION, currentLegalRules, SELL_SUMMARY } from '@/lib/rules';
+import { acceptedRulesVersion, acceptRules, needsRulesAck } from '@/lib/rulesAck';
+import { SellerAgreementSheet } from '@/components/LegalRules';
 import { Card, ErrorText, haptic, Icon, IconButton, PrimaryButton, Screen, Sheet, Skeleton, SuccessCheck, type IconName } from '@/components/ds';
 import { AppearSub } from '@/components/Appear';
 import { ShareLink } from '@/components/ShareLink';
@@ -82,6 +84,7 @@ function VenderForm() {
   const [mode, setMode] = useState<DeliveryMode>(d0?.mode ?? 'envio');
   const [windowMin, setWindowMin] = useState<number>(d0?.windowMin ?? DEFAULT_PROTECTION_MIN[d0?.mode ?? 'envio']);
   const [agreeOpen, setAgreeOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false); // acuerdo de la beta: reglas antes de publicar (lib/rulesAck.ts)
   const [customOpen, setCustomOpen] = useState(false);
   const [customDays, setCustomDays] = useState('');
   const customMin = customOpen ? daysToMinutes(customDays) : null;
@@ -182,13 +185,16 @@ function VenderForm() {
     if (a.wallet?.state === 'needs-approval') { setOrphan(true); haptic.error(); track('create_failed', { code: 'device_needs_passkey', wallet_state: 'needs-approval', has_passkey: !!a.wallet.hasPasskey }); return; }
     // Cavos todavía cargando la cuenta (p. ej. justo después de entrar): esperar a que termine en vez de fallar.
     if (a.wallet?.state === 'loading') { setWaitWallet(true); setBusy(true); return; }
+    // Acuerdo de la beta: quien vende ve y acepta las reglas vigentes antes de publicar (una vez por versión).
+    if (needsRulesAck() && currentLegalRules(mode).length) { setRulesOpen(true); track('sell_rules_shown', { version: CURRENT_RULES_VERSION }); return; }
+    const rulesAck = currentLegalRules(mode).length ? acceptedRulesVersion() : CURRENT_RULES_VERSION;
     track('sell_submit_tapped', { step: 0 });
     setBusy(true);
     try {
       await ensureWalletReady(a).catch((e) => { const msg = walletErrorNotice(e); if (e?.code === 'device_not_authorized' || needsDeviceStep(e)) setOrphan(true); throw Object.assign(new Error(msg), { code: e?.code }); }); // primer link: activar la wallet
       const urls = photos.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (Facebook / invitación)
       const t = title.trim();
-      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}), ...(source ? { source_url: source.url, source_provider: source.provider } : {}) });
+      const slug = await createOrder(a, { title: t, price_crc: priceNum, photos: urls, delivery_mode: mode, protection_minutes: windowMin, rules_ack: rulesAck, ...(description ? { description } : {}), ...(invite ? { invite: invite.code } : {}), ...(source ? { source_url: source.url, source_provider: source.provider } : {}) });
       track('link_created', { category: 'otro', photos: urls.length, price_bucket: priceBucket(priceNum), from_invite: !!invite, from_facebook: source?.provider === 'facebook', import_provider: source?.provider ?? null, delivery_mode: mode, protection_minutes: windowMin });
       haptic.success();
       setCreated({ slug, title: t, price: priceNum, photo: photos[0]?.uri ?? null, agreement: agreementSummary(mode, windowMin),
@@ -332,6 +338,8 @@ function VenderForm() {
       </AppearSub>
 
       <CameraCapture visible={camOpen} purpose="listing" refId="new" onClose={() => setCamOpen(false)} onDone={addCameraPhoto} />
+      <SellerAgreementSheet visible={rulesOpen} mode={mode} onClose={() => setRulesOpen(false)}
+        onAccept={() => { acceptRules(); track('sell_rules_accepted', { version: CURRENT_RULES_VERSION }); setRulesOpen(false); submit(); }} />
       <Sheet visible={agreeOpen} onClose={() => setAgreeOpen(false)} title="Entrega y plazo"
         footer={<PrimaryButton title="Listo" icon="checkmark" disabled={customOpen && !customMin}
           onPress={() => { if (customOpen && customMin) setWindowMin(customMin); setAgreeOpen(false); }} />}>

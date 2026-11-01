@@ -86,5 +86,11 @@
         }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/escrow/cron",
+      "schedule": "0 15 * * *"
+    }
   ]
 }

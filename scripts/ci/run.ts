@@ -95,10 +95,13 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '96', name: 'Cara a cara + PIN: guard permite fondeado->entregado solo cara a cara (032); liberar con hito ya aprobado on-chain (PIN, Recibí, cron) sin re-aprobar', file: './t96-cara-a-cara-pin-libera.test.ts', onchain: false },
   { id: '97', name: 'Tour guiado: arranca solo una vez (visto en localStorage, sin storage en memoria), solo en pestañas, "Ver recorrido" en Mi cuenta y Cómo funciona, pasos sin destino centrados, copy sin palabras prohibidas', file: './t97-tour.test.ts', onchain: false },
   { id: '92', name: 'Pie del producto: texto exacto de custodia (sin "Protección: 7 días"), aviso legal una vez, barrido de la UI', file: './t92-pie-custodia.test.ts', onchain: false },
+  { id: '98', name: 'Reglas legales (lib/rules.ts): texto exacto, un solo lugar, en Cómo funciona + Al pagar aceptas + acuerdo de la beta, sin palabras prohibidas, por versión', file: './t98-reglas-texto.test.ts', onchain: false },
+  { id: '99', name: 'Regla v1 reembolso si no se envía: 3 días fijos, aviso día 2, cancelar día 3, automático día 5, no retroactivo, idempotente, sin 033', file: './t99-reembolso-sin-envio.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
   { id: '3+6b', name: 'Release con disputa abierta rechazado + resolución', file: './t03-dispute-onchain.test.ts', onchain: true },
+  { id: '99b', name: 'On-chain: reembolso automático sin envío (día 5) -> dispute + resolución 100% comprador, idempotente', file: './t99b-reembolso-sin-envio-onchain.test.ts', onchain: true },
   { id: '24', name: 'On-chain: monto 7 decimales -> vendedor recibe ₡2 500 exactos', file: './t24-rounding-onchain.test.ts', onchain: true },
   { id: '18', name: 'Excedente on-chain: vendedor recibe solo el monto del pedido', file: './t18-excess-onchain.test.ts', onchain: true },
 ];

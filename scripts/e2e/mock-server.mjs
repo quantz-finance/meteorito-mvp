@@ -24,6 +24,13 @@ const PRIV = ['buyer', 'pin_attempts', 'ship_evidence']; // la foto del envío s
 const pub = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => !PRIV.includes(k)));
 // Acuerdo de entrega (migración 017): cara a cara corre desde el pago con su plazo (default 24 h).
 const f2fDue = (o) => (o.delivery_mode === 'cara_a_cara' ? { auto_release_at: new Date(Date.now() + (o.protection_minutes ?? 1440) * 60_000).toISOString() } : {});
+// Regla v1 "Reembolso si no se envía" (api/_lib/orderRules.ts shipDeadline): 3 días para "Ya lo envié"; 2 más y se reembolsa solo.
+const DAY = 86_400_000;
+const shipPhase = (o) => {
+  if (!((o.rules_version ?? 0) >= 1) || o.delivery_mode === 'cara_a_cara' || o.status !== 'fondeado' || o.shipped_tx || o.disputed_at || o.ship_cancel || !o.funded_at) return 'na';
+  const t = Date.now() - Date.parse(o.funded_at); return t >= 5 * DAY ? 'auto_due' : t >= 3 * DAY ? 'cancelable' : t >= 2 * DAY ? 'reminder' : 'waiting';
+};
+const shipRefund = (o, by) => { const at = new Date().toISOString(); Object.assign(o, { ship_cancel: { by, at }, disputed_at: at, dispute_tx: 'd'.repeat(64), status: 'resuelto', resolved_tx: 'x'.repeat(64), resolution: { buyerPct: 100 } }); };
 const hex = (n) => Array.from({ length: n }, (_, i) => ((S.seq * 31 + i * 7) % 16).toString(16)).join('');
 
 function staticFile(path) {
@@ -146,6 +153,12 @@ async function api(req, path, q, b) {
       if (b.accept === true) { o.release_ext_minutes = (o.release_ext_minutes ?? 0) + p.days * 1440; o.auto_release_at = new Date(Date.parse(o.auto_release_at) + p.days * 86_400_000).toISOString(); }
       o.release_ext = null; return { accepted: b.accept === true, autoReleaseAt: o.auto_release_at };
     }
+    if (b.reason === 'cancel_unshipped') { // como api/_lib/shipRefund.ts (lado comprador): desde el día 3 sin "Ya lo envié"
+      if (o.status === 'resuelto' && o.ship_cancel) return { already: true, status: o.status };
+      const ph = shipPhase(o);
+      if (ph !== 'cancelable' && ph !== 'auto_due') throw E(409, 'Podrás cancelar si pasan 3 días desde el pago sin "Ya lo envié".', 'not_yet');
+      shipRefund(o, 'buyer'); return { refunded: true };
+    }
     if (!running) throw E(409, 'Este pedido no está enviado.', 'bad_state');
     Object.assign(o, { status: 'liberado', released_tx: 'r'.repeat(64), approval_reason: 'buyer_confirm' }); return { released: true, releasedTx: o.released_tx };
   }
@@ -157,6 +170,7 @@ async function api(req, path, q, b) {
   }
   if (path === '/api/escrow/cron') {
     const o = S.orders[String(q.get('slug'))];
+    if (o && shipPhase(o) === 'auto_due') { shipRefund(o, 'auto'); return { refunded: true }; }
     if (o && o.status === 'enviado' && o.auto_release_at && new Date(o.auto_release_at) <= new Date() && o.pin_attempts < 3) Object.assign(o, { status: 'liberado', released_tx: 'a'.repeat(64), approval_reason: 'timeout' });
     return { ok: true };
   }

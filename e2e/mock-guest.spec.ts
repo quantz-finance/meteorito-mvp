@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken } from './mock';
 import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle, expectLegalVisible } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { SHIP_REFUND_RULE } from '../lib/rules';
 import { resolve } from 'node:path';
 
 test.describe.configure({ mode: 'serial' });
@@ -906,4 +907,76 @@ test('MCK-BETA-03 hoja de tarjeta: aviso de beta en el viewport (iPhone SE) y an
   await notice.getByText('Ver cómo funciona').click();
   await expect(page).toHaveURL(/\/como-funciona/);
   await expect(page.getByTestId('card-number')).toHaveCount(0);
+});
+
+/* ---------- Regla v1 "Reembolso si no se envía" (lib/rules.ts LEGAL_RULES), lado de quien compra ----------
+   La ve en "Al pagar aceptas" antes de pagar, ve el plazo, cancela desde el día 3 y recibe todo de vuelta; el día 5 se
+   reembolsa solo; los pedidos anteriores a las reglas no cambian. En este archivo (serial) porque usa reset() del
+   backend simulado. Capturas: REGLAS_SHOTS=/workspace/out -> reglas-*.png (iPhone SE). */
+const REGLAS_SHOTS = process.env.REGLAS_SHOTS;
+const rulesShot = async (page: Page, name: string) => { if (REGLAS_SHOTS && test.info().project.name === 'mock-iphone-se') { await page.waitForTimeout(400); await page.screenshot({ path: `${REGLAS_SHOTS}/reglas-${name}.png` }); } };
+const DAY = 86_400_000;
+const rulesListing = (rules_version: number) => ({ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000, rules_version });
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+async function payRules(page: Page, expectRules: boolean) {
+  await page.goto('/p/prod01');
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  const rule = page.getByTestId('legal-rule-reembolso_sin_envio');
+  if (expectRules) {
+    await expect(page.getByText('Reglas de esta compra')).toBeVisible();
+    await rule.scrollIntoViewIfNeeded();
+    await expect(rule.getByText(SHIP_REFUND_RULE, { exact: true })).toBeVisible();
+    await expect(page.getByText('Ya pagué', { exact: true })).toBeVisible(); // la regla y el botón caben (antes de pagar)
+    await rulesShot(page, 'pago-al-pagar-aceptas');
+  } else await expect(rule).toHaveCount(0);
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  return page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
+}
+
+test('MCK-REG-01 ve la regla antes de pagar, el plazo, y cancela desde el día 3 con reembolso completo', async ({ page, request }) => {
+  await reset(request, [rulesListing(1)]);
+  const slug = await payRules(page, true);
+  await expect(page.getByTestId('ship-deadline')).toContainText(/Quien vende tiene hasta el .+ para marcar 'Ya lo envié'\./);
+  await expect(page.getByTestId('ship-cancel')).toHaveCount(0); // antes de 3 días no se puede cancelar
+  await rulesShot(page, 'comprador-plazo');
+  await patch(request, slug, { funded_at: ago(3 * DAY + 3_600_000) });
+  await page.reload();
+  await expect(page.getByTestId('ship-late')).toBeVisible();
+  await expect(page.getByTestId('ship-cancel')).toBeVisible();
+  expect(BANNED.test(await page.getByTestId('ship-late').innerText())).toBe(false);
+  await rulesShot(page, 'comprador-cancelar');
+  await page.getByTestId('ship-cancel').click();
+  await expect(page.getByText('Recibes todo tu pago de vuelta desde la custodia y la compra se cancela.')).toBeVisible();
+  await rulesShot(page, 'comprador-confirmar');
+  await page.getByTestId('ship-cancel-confirm').click();
+  await expect.poll(async () => (await state(request)).orders[slug].status).toBe('resuelto');
+  const o = (await state(request)).orders[slug];
+  expect(o.ship_cancel.by).toBe('buyer');
+  expect(o.resolution.buyerPct).toBe(100);
+  await expect(page.getByTestId('ship-cancel')).toHaveCount(0);
+  await rulesShot(page, 'comprador-reembolsado');
+});
+
+test('MCK-REG-02 día 5 sin envío ni cancelación: el reembolso se hace solo', async ({ page, request }) => {
+  await reset(request, [rulesListing(1)]);
+  const slug = await payRules(page, true);
+  await patch(request, slug, { funded_at: ago(5 * DAY + 60_000) });
+  await page.reload();
+  await expect.poll(async () => (await state(request)).orders[slug].status).toBe('resuelto');
+  expect((await state(request)).orders[slug].ship_cancel.by).toBe('auto');
+});
+
+test('MCK-REG-03 pedido anterior a las reglas (sin versión): ni regla al pagar, ni cancelar, ni reembolso automático', async ({ page, request }) => {
+  await reset(request, [rulesListing(0)]);
+  const slug = await payRules(page, false);
+  await patch(request, slug, { funded_at: ago(6 * DAY) });
+  await page.reload();
+  await expect(page.getByText(PAID).first()).toBeVisible();
+  await expect(page.getByTestId('ship-cancel')).toHaveCount(0);
+  await expect(page.getByTestId('ship-deadline')).toHaveCount(0);
+  await page.waitForTimeout(800);
+  expect((await state(request)).orders[slug].status).toBe('fondeado');
 });

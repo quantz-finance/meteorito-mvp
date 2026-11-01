@@ -29,6 +29,10 @@ import { CardSheet, type CardPayInput } from '@/components/CardSheet';
 import { CryptoSheet } from '@/components/CryptoSheet';
 import { pressTransition } from '@/constants/motion';
 import { BetaNotice } from '@/components/RulesLink';
+import { LegalRuleRows } from '@/components/LegalRules';
+import { legalRulesFor, PAY_RULES_HEADING } from '@/lib/rules';
+import { shipDeadline } from '../api/_lib/orderRules';
+import { leftLabel, useNow, whenLabel } from '@/lib/ruleTimes';
 
 const CARD_PROCESSING = 'Tu pago con tarjeta se está procesando. Vuelve a tocar "Pagar con tarjeta" en unos segundos.';
 const CARD_PROCESSING_INAPP = 'Tu pago se está procesando. Vuelve a tocar "Pagar" en unos segundos: no se te cobra dos veces.';
@@ -44,7 +48,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const setPin = (p: string | null) => { setPinState(p); if (p) savePin(order.slug, p); };
   const granted = !!loadGrant(order.slug); // abrió un link de acceso (correo / WhatsApp) en este dispositivo
   const buyerHere = !!pin || granted || auth.isAuthenticated; // este dispositivo es el del comprador (PIN o link de acceso) o hay sesión
-  const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'crypto' | 'paid' | 'photo' | 'released' | 'dispute' | null>(null);
+  const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'crypto' | 'paid' | 'photo' | 'released' | 'dispute' | 'cancel' | null>(null);
   const [card, setCard] = useState(false); // el servidor tiene el pago con tarjeta configurado (start -> card)
   const [crypto, setCrypto] = useState(false); // pago con cripto (USDC/XLM en Stellar) disponible (start -> crypto)
   // 'inapp' (default): nuestro formulario. 'widget': respaldo con el widget de Lendara (LENDARA_MODE=widget en el servidor).
@@ -55,6 +59,11 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   };
 
   const win = useAutoReleaseWindow();
+  // Reglas con texto legal que rigen para ESTE pedido (su versión): se ven en "Al pagar aceptas", antes de pagar.
+  const legal = <LegalRuleRows rules={legalRulesFor(order)} heading={PAY_RULES_HEADING} />;
+  // Regla v1 "Reembolso si no se envía": plazo fijo de 3 días desde el pago para "Ya lo envié" (no es el plazo acordado).
+  const now = useNow();
+  const sd = shipDeadline(order, now);
   const f2f = order.delivery_mode === 'cara_a_cara';
   // Acuerdo que el comprador ve antes de pagar (y acepta al pagar: el servidor lo registra en order_events).
   const agreement = agreementSummary(order.delivery_mode, order.protection_minutes);
@@ -154,6 +163,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
         <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={payAcceptText(order.delivery_mode, order.protection_minutes)} />
+        {legal}
       </>}
     </Sheet>
     <CardSheet visible={sheet === 'card' && !!sinpe && order.status === 'escrow_creado'} amountCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
@@ -176,6 +186,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         </Card>
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
         <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={payAcceptText(order.delivery_mode, order.protection_minutes)} />
+        {legal}
         <Row icon="information-circle-outline" text='No envíes dinero: toca "Ya pagué" para continuar.' />
       </>}
     </Sheet>
@@ -193,6 +204,16 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       footer={<PrimaryButton title="Cerrar" variant="secondary" onPress={() => setSheet(null)} />}>
       {ship?.photo ? <Image testID="ship-photo-full" source={{ uri: ship.photo }} style={{ width: '100%', aspectRatio: 3 / 4, borderRadius: 12 }} resizeMode="contain" accessibilityLabel="Foto del envío" /> : null}
       {ship?.note ? <Text style={[T.callout, { textAlign: 'center' }]} selectable>{ship.note}</Text> : null}
+    </Sheet>
+    <Sheet visible={sheet === 'cancel' && order.status === 'fondeado'} onClose={() => setSheet(null)} title="Cancelar la compra"
+      footer={<>
+        {err && <ErrorText>{err}</ErrorText>}
+        <PrimaryButton testID="ship-cancel-confirm" title="Cancelar y recibir reembolso" icon="arrow-undo-outline" loading={busy}
+          onPress={() => run(async () => { await guestApi(auth, '/api/escrow/confirm', { slug: order.slug, reason: 'cancel_unshipped' }); track('ship_cancel_buyer'); setSheet(null); onChange(); })} />
+        <PrimaryButton title="Seguir esperando" variant="ghost" disabled={busy} onPress={() => setSheet(null)} />
+      </>}>
+      <Row icon="arrow-undo-outline" text="Recibes todo tu pago de vuelta desde la custodia y la compra se cancela." />
+      <Row icon="time-outline" text={sd.autoAt ? `Si no cancelas, el reembolso se hace solo el ${whenLabel(sd.autoAt)}.` : 'Si no cancelas, el reembolso se hace solo.'} />
     </Sheet>
     <Sheet visible={sheet === 'released'} onClose={() => setSheet(null)} footer={<PrimaryButton title="Cerrar" onPress={() => setSheet(null)} />}>
       <SuccessCheck celebrate />
@@ -264,14 +285,35 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     </>;
   } else if (order.status === 'fondeado' && f2f) {
     footer = <Text style={[T.callout, { textAlign: 'center' }]}>Pagado. Entrega cara a cara: el comprador tiene el código en el navegador donde pagó.</Text>;
+  } else if (order.status === 'fondeado' && (sd.phase === 'cancelable' || sd.phase === 'auto_due')) {
+    // Regla v1: pasaron 3 días sin "Ya lo envié" -> quien compra puede cancelar y recibir todo su pago de vuelta.
+    footer = <>
+      <Card testID="ship-late" style={{ gap: S.xs, paddingVertical: S.sm + 2 }}>
+        <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
+          <Icon name="time-outline" size={20} color={C.orange} />
+          <Text style={[T.headline, { flex: 1 }]}>Sin envío en 3 días</Text>
+        </View>
+        <Text style={T.callout}>{buyerHere ? "Quien vende no marcó 'Ya lo envié'. Puedes cancelar y recibir todo tu pago de vuelta." : "Quien vende no marcó 'Ya lo envié' en 3 días."}</Text>
+        {sd.autoAt ? <Text testID="ship-auto-at" style={T.footnote}>{`Si no cancelas, el reembolso se hace solo el ${whenLabel(sd.autoAt)}.`}</Text> : null}
+      </Card>
+      {err && !sheet && <ErrorText>{err}</ErrorText>}
+      {buyerHere ? <PrimaryButton testID="ship-cancel" title="Cancelar y recibir reembolso" icon="arrow-undo-outline" onPress={() => { setErr(null); setSheet('cancel'); }} /> : null}
+    </>;
   } else if (order.status === 'fondeado') {
-    footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
-      <Icon name="time-outline" size={20} color={C.lilac} /><Text style={[T.callout, { textAlign: 'center', flexShrink: 1 }]}>{PAID_WAITING}</Text>
+    footer = <View style={{ gap: S.xs, alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
+        <Icon name="time-outline" size={20} color={C.lilac} /><Text style={[T.callout, { textAlign: 'center', flexShrink: 1 }]}>{PAID_WAITING}</Text>
+      </View>
+      {sd.cancelAt && sd.phase !== 'na' ? <Text testID="ship-deadline" style={[T.footnote, { textAlign: 'center' }]}>
+        {`Quien vende tiene hasta el ${whenLabel(sd.cancelAt)} (${leftLabel(sd.cancelAt, now)}) para marcar 'Ya lo envié'.`}
+      </Text> : null}
     </View>;
   } else if (order.status === 'liberado' || order.status === 'resuelto' || order.status === 'entregado') {
     footer = <View style={{ flexDirection: 'row', gap: S.sm, justifyContent: 'center', alignItems: 'center', minHeight: 44 }}>
       <Icon name="checkmark-circle" size={22} color={C.success} /><Text style={[T.headline, { color: C.success }]}>{resolvedLabel(order)}</Text>
     </View>;
+  } else if (order.status === 'en_disputa' && order.ship_cancel) {
+    footer = <Text testID="ship-refund-pending" style={[T.callout, { textAlign: 'center' }]}>Compra cancelada por falta de envío: todo tu pago vuelve desde la custodia.</Text>;
   } else if (order.status === 'en_disputa') {
     footer = <Text style={[T.callout, { textAlign: 'center', color: C.orange }]}>En disputa: lo estamos revisando, respondemos en 24-48 h. El pago está en pausa.</Text>;
   }
