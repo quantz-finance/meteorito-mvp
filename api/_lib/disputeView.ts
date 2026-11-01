@@ -64,7 +64,9 @@ export function buildRow(x: RowInput): AdminDisputeRow {
     guest_refund_pending: guestRefundPending(o, x.decisions), resolution: o.resolution ?? null,
   };
 }
-export const responseDeadlineOf = (order: any, dispute: any) => replyDeadline({ order, dispute: { opened_at: dispute?.opened_at ?? order.disputed_at } });
+/** Plazo de respuesta de quien vende: el guardado por la regla v2 (034) o 48 h desde el aviso (o la apertura). */
+export const responseDeadlineOf = (order: any, dispute: any) => order?.dispute_reply_due_at
+  ?? replyDeadline({ order, dispute: { opened_at: dispute?.seller_notified_at ?? dispute?.opened_at ?? order.disputed_at } });
 export function toDecisionView(d: any): DecisionView {
   return { id: d.id ?? null, at: d.created_at, by: d.decided_by_email ?? (d.source === 'script' ? 'script' : String(d.decided_by ?? '').slice(0, 8)), source: d.source ?? 'admin',
     outcome: d.outcome, buyer_pct: Number(d.buyer_pct), note: d.note ?? '', status: d.status, resolved_tx: d.resolved_tx ?? null, error: d.error ?? null, rule_id: d.rule_id ?? null,

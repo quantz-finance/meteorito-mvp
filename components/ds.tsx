@@ -264,11 +264,12 @@ export function statusTone(status: string): 'lilac' | 'success' | 'warn' | 'mute
   return 'lilac';
 }
 
-export function MoneyTimeline({ status, compact, shipped, mode }: { status: string; compact?: boolean; shipped?: boolean; /** delivery_mode del pedido */ mode?: string | null }) {
+export function MoneyTimeline({ status, compact, shipped, mode, disputeNote }: { status: string; compact?: boolean; shipped?: boolean; /** delivery_mode del pedido */ mode?: string | null;
+  /** Texto de la nota en disputa (reglas por versión, lib/rules.ts); por defecto "respondemos en 24-48h". */ disputeNote?: string | null }) {
   const steps = mode === 'cara_a_cara' ? MONEY_STEPS_F2F : MONEY_STEPS;
   const done = moneyProgress(status, shipped, mode);
   const dispute = status === 'en_disputa';
-  const note = dispute ? <View style={st.disputeNote}><Icon name="alert-circle" size={18} color={C.orange} /><Text style={[T.footnote, { color: C.orange, flex: 1 }]}>Lo estamos revisando, respondemos en 24-48h.</Text></View> : null;
+  const note = dispute ? <View style={st.disputeNote}><Icon name="alert-circle" size={18} color={C.orange} /><Text style={[T.footnote, { color: C.orange, flex: 1 }]}>{disputeNote ?? 'Lo estamos revisando, respondemos en 24-48h.'}</Text></View> : null;
   const dot = compact ? 24 : 32;
   return (
     <View style={{ gap: S.sm }}>

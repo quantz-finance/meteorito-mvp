@@ -25,7 +25,7 @@ import { checkFacebookUrl, FB_IMPORT_FAILED, FB_URL_INVALID } from '../api/_lib/
 import { checkListingUrl, IMPORT_FAILED, listingSource } from '../api/_lib/importers/providers'; // pura
 import { cleanReviewComment } from '../api/_lib/reviewText'; // pura
 import { daysLabel, EXTENSION_DAYS, MAX_TOTAL_FROM_PAYMENT_MIN, pendingExtension, protectionOf, validateAgreement } from '../api/_lib/agreement'; // pura
-import { shipDeadline, stampVersion } from '../api/_lib/orderRules'; // pura
+import { BUYER_VERSION_MIN, SELLER_REPLY_RULE_HOURS, replyPhase, replyRuleApplies, shipDeadline, stampVersion } from '../api/_lib/orderRules'; // pura
 export type DemoRole = 'seller' | 'buyer';
 type Status = 'creado' | 'escrow_creado' | 'fondeado' | 'enviado' | 'entregado' | 'liberado' | 'en_disputa' | 'resuelto' | 'cancelado';
 
@@ -42,6 +42,8 @@ export interface DemoOrder {
   buyer?: string | null; pin_attempts?: number; resolution?: { buyerPct: number } | null; invite_code?: string | null;
   /** Como producción (033): versión de reglas aceptada al publicar y cancelación por falta de envío. */
   rules_version?: number; ship_cancel?: { by: 'buyer' | 'auto'; at: string } | null;
+  /** Regla v2 (034): vencimiento de las 48 h de quien vende y si respondió. */
+  dispute_reply_due_at?: string | null; dispute_replied_at?: string | null;
 }
 export interface DemoInvite { code: string; category: string; brand: string; model: string; title?: string; photos: string[]; price_crc: number; note: string | null; source_url?: string | null; status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; buyer: string }
 interface DemoState { role: DemoRole; badge: boolean; seq: number; /** pago con cripto (solo con ?crypto=1: los demás E2E siguen directo al SINPE) */ crypto?: boolean; cryptoPaid?: Record<string, { asset: 'USDC' | 'XLM'; amount: number }>; /** panel admin de disputas (solo con ?admin=1) */ admin?: boolean; audit?: Record<string, any[]>; responses?: Record<string, { body: string; photo: string | null; created_at: string }>; orders: Record<string, DemoOrder>; buyer?: string; invites?: Record<string, DemoInvite>; clock?: number; store?: { slug: string; name: string; socials?: Socials; avatar?: string | null; phone?: string | null; waPublic?: boolean; seenOn?: boolean; seenDecided?: boolean }; ratings?: Record<string, number>; session?: { gen: number; expired: boolean; loginOpen: boolean }; contacts?: Record<string, { channel: 'whatsapp' | 'email' | 'account'; masked: string }[]>; linked?: boolean; payout?: PayoutView | null; /** cola de pagos IBAN (admin demo) */ payouts?: any[] }
@@ -372,6 +374,11 @@ export async function demoApi(path: string, body: any = {}, token?: string | nul
     if (!['fondeado', 'enviado', 'entregado'].includes(o.status) || o.released_tx) throw err(409, 'bad_state', 'Ya no se puede reportar un problema.');
     const ev = Array.isArray(body.evidence) ? body.evidence : []; const caps = Array.isArray(body.captures) ? body.captures : [];
     if (ev.some((_: unknown, i: number) => { const c = demoCaps.get(String(caps[i] ?? '')); return !c || c.purpose !== 'dispute' || c.ref !== o.slug || !c.used; })) throw err(400, 'camera_required', 'Toma la foto con la cámara de Meteorito.');
+    if (replyRuleApplies(o)) { // regla v2 (como api/_lib/replyRule.ts validateBuyerVersion)
+      if (String(body.description ?? '').trim().length < BUYER_VERSION_MIN) throw err(400, 'version_required', 'Cuéntanos tu versión de lo que pasó (mínimo 10 caracteres).');
+      if (body.reason !== 'no_llego' && !ev.length) throw err(400, 'photo_required', 'Toma al menos una foto con la cámara para mostrar el problema.');
+      o.dispute_reply_due_at = new Date(nowMs() + SELLER_REPLY_RULE_HOURS * 3600_000).toISOString();
+    }
     o.status = 'en_disputa'; o.disputed_at = now(); o.dispute = { reason: body.reason, description: body.description ?? null, evidence: Array.isArray(body.evidence) ? body.evidence.slice(0, 4) : [], at: now() }; emit(); return { disputed: true };
   }
   if (p === '/api/store') {
@@ -540,6 +547,9 @@ export function demoRunCron(): string[] {
   const st = S(); const out: string[] = [];
   for (const o of Object.values(st.orders)) {
     if (shipDeadline(o, nowMs()).phase === 'auto_due') { demoShipRefund(o, 'auto'); out.push(o.slug); continue; } // regla v1: día 5
+    if (replyPhase(o, nowMs(), { replied: !!st.responses?.[o.slug] }).phase === 'due') { // regla v2: 48 h sin respuesta
+      o.status = 'resuelto'; o.resolution = { buyerPct: 100 }; o.released_at = iso(); out.push(o.slug); continue;
+    }
     const running = o.status === 'enviado' || (o.status === 'fondeado' && o.delivery_mode === 'cara_a_cara');
     if (!running || !o.auto_release_at || new Date(o.auto_release_at).getTime() > nowMs()) continue;
     if ((o.pin_attempts ?? 0) >= 3) continue;

@@ -45,7 +45,7 @@ import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { DEMO_ENABLED } from '@/lib/demo';
 import { RulesHint } from '@/components/RulesLink';
 import { PAY_SUMMARY } from '@/lib/rules';
-import { shipDeadline } from '../../api/_lib/orderRules';
+import { replyPhase, replyRuleApplies, shipDeadline } from '../../api/_lib/orderRules';
 import { looksLikeDemoProduct } from '../../api/_lib/demoFlag';
 import { DemoProductPage } from '@/components/DemoProduct';
 
@@ -89,10 +89,12 @@ function LinkDeVentaReal() {
     if (!DEMO_ENABLED && running && order.auto_release_at && new Date(order.auto_release_at) <= new Date())
       fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
   }, [order?.status, order?.auto_release_at]);
-  // Regla v1 (reembolso si no se envía): pasados 5 días sin envío, pedirle al backend el reembolso automático (idempotente).
+  // Reglas v1 (5 días sin envío) y v2 (48 h sin respuesta de quien vende): pedirle al backend el reembolso automático
+  // (idempotente; el servidor revisa el plazo y la respuesta).
   useEffect(() => {
-    if (!DEMO_ENABLED && order && shipDeadline(order).phase === 'auto_due') fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
-  }, [order?.status, order?.funded_at]);
+    if (DEMO_ENABLED || !order) return;
+    if (shipDeadline(order).phase === 'auto_due' || replyPhase(order).phase === 'due') fetch(`/api/escrow/cron?slug=${order.slug}`).then(() => load()).catch(() => {});
+  }, [order?.status, order?.funded_at, order?.dispute_reply_due_at, order?.dispute_replied_at]);
   useEffect(load, [slug]);
   // Cuando el polling trae un estado nuevo, avisar con un toast suave (el chip y el timeline animan solos).
   const prevStatus = useRef<string | null>(null);
@@ -152,7 +154,8 @@ function LinkDeVentaReal() {
       {moneyProgress(order.status) > 0 || order.status === 'en_disputa' ? (
         <Card style={{ gap: S.md }}>
           <Text style={T.caption}>Estado de tu pago</Text>
-          <MoneyTimeline status={order.status} shipped={!!(order as any).shipped_tx} mode={order.delivery_mode} />
+          <MoneyTimeline status={order.status} shipped={!!(order as any).shipped_tx} mode={order.delivery_mode}
+            disputeNote={replyRuleApplies(order) ? 'Quien vende tiene 48 h para responder. El pago sigue en custodia.' : null} />
         </Card>
       ) : (
         <Card style={{ gap: S.md }}>

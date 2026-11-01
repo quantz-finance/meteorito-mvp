@@ -3,7 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken } from './mock';
 import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle, expectLegalVisible } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { SHIP_REFUND_RULE } from '../lib/rules';
+import { DISPUTE_REPLY_RULE, SHIP_REFUND_RULE } from '../lib/rules';
 import { resolve } from 'node:path';
 
 test.describe.configure({ mode: 'serial' });
@@ -919,7 +919,7 @@ const DAY = 86_400_000;
 const rulesListing = (rules_version: number) => ({ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000, rules_version });
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
-async function payRules(page: Page, expectRules: boolean) {
+async function payRules(page: Page, expectRules: boolean, tag = '') {
   await page.goto('/p/prod01');
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
@@ -929,7 +929,7 @@ async function payRules(page: Page, expectRules: boolean) {
     await rule.scrollIntoViewIfNeeded();
     await expect(rule.getByText(SHIP_REFUND_RULE, { exact: true })).toBeVisible();
     await expect(page.getByText('Ya pagué', { exact: true })).toBeVisible(); // la regla y el botón caben (antes de pagar)
-    await rulesShot(page, 'pago-al-pagar-aceptas');
+    await rulesShot(page, 'pago-al-pagar-aceptas' + tag);
   } else await expect(rule).toHaveCount(0);
   await page.getByText('Ya pagué', { exact: true }).click();
   await expect(page.getByText(PAID).first()).toBeVisible();
@@ -979,4 +979,43 @@ test('MCK-REG-03 pedido anterior a las reglas (sin versión): ni regla al pagar,
   await expect(page.getByTestId('ship-deadline')).toHaveCount(0);
   await page.waitForTimeout(800);
   expect((await state(request)).orders[slug].status).toBe('fondeado');
+});
+
+/* ---------- Regla v2 "Respuesta de quien vende en 48 h", lado de quien compra ---------- */
+test('MCK-REG-04 disputa v2: la regla a la vista, versión obligatoria, cuenta regresiva; 48 h sin respuesta -> reembolso', async ({ page, request }) => {
+  await reset(request, [rulesListing(2)]);
+  const slug = await payRules(page, true, '-v2');
+  await expect(page.getByTestId('legal-rule-respuesta_48h')).toHaveCount(0); // hojas de pago ya cerradas
+  await page.getByText('Entendido', { exact: true }).click(); // hoja "Pagado"
+  await page.getByRole('button', { name: /Tengo un problema/ }).click();
+  await expect(page.getByText(DISPUTE_REPLY_RULE, { exact: true })).toBeVisible();
+  await page.getByText('No llegó', { exact: true }).click();
+  await page.getByText('Reportar problema').last().click();
+  await expect(page.getByText('Cuéntanos tu versión de lo que pasó (mínimo 10 caracteres).')).toBeVisible();
+  await page.getByTestId('dispute-version').fill('Pasaron 10 días y no ha llegado nada');
+  await rulesShot(page, 'comprador-disputa');
+  await page.getByText('Reportar problema').last().click();
+  await expect.poll(async () => (await state(request)).orders[slug].status).toBe('en_disputa');
+  await expect(page.getByTestId('reply-countdown')).toContainText(/Quien vende tiene hasta el .+ para responder\. Mientras tanto, el pago sigue en custodia\./);
+  await rulesShot(page, 'comprador-disputa-48h');
+  await patch(request, slug, { dispute_replied_at: new Date().toISOString() });
+  await page.reload();
+  await expect(page.getByTestId('reply-countdown')).toContainText('Una persona del equipo revisa las dos versiones y decide.');
+  await patch(request, slug, { dispute_replied_at: null, dispute_reply_due_at: ago(60_000) });
+  await page.reload();
+  await expect.poll(async () => (await state(request)).orders[slug].status).toBe('resuelto');
+  expect((await state(request)).orders[slug].reply_refund).toBe(true);
+});
+
+test('MCK-REG-05 disputa en un pedido v1 (anterior a la regla de 48 h): como antes', async ({ page, request }) => {
+  await reset(request, [rulesListing(1)]);
+  const slug = await payRules(page, true);
+  await page.getByText('Entendido', { exact: true }).click(); // hoja "Pagado"
+  await page.getByRole('button', { name: /Tengo un problema/ }).click();
+  await expect(page.getByText(DISPUTE_REPLY_RULE, { exact: true })).toHaveCount(0);
+  await page.getByText('No llegó', { exact: true }).click();
+  await page.getByText('Reportar problema').last().click();
+  await expect.poll(async () => (await state(request)).orders[slug].status).toBe('en_disputa');
+  expect((await state(request)).orders[slug].dispute_reply_due_at ?? null).toBeNull();
+  await expect(page.getByTestId('reply-countdown')).toHaveCount(0);
 });

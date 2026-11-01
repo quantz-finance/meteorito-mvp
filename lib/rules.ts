@@ -5,7 +5,7 @@
 // acuerdo de la beta en Vender (antes de publicar). Texto EXACTO fijado por scripts/ci/t98-reglas-texto.test.ts.
 import type { IconName } from '@/components/ds';
 import { startTour } from './tour';
-import { CURRENT_RULES_VERSION, RULE_VERSION, SHIP_AUTO_REFUND_EXTRA_DAYS, SHIP_DAYS, rulesVersionOf } from '../api/_lib/orderRules';
+import { CURRENT_RULES_VERSION, RULE_VERSION, SELLER_REPLY_RULE_HOURS, SHIP_AUTO_REFUND_EXTRA_DAYS, SHIP_DAYS, rulesVersionOf } from '../api/_lib/orderRules';
 
 export const RULES_CONFIG = {
   /** Días tras el envío para liberar el pago si el comprador no da el código ni reporta un problema. */
@@ -22,7 +22,7 @@ export const RULES_CONFIG = {
   /** Días extra sin envío ni cancelación para que el reembolso se haga solo. */
   autoRefundExtraDays: SHIP_AUTO_REFUND_EXTRA_DAYS,
   /** Horas que tiene el vendedor para responder una disputa con pruebas. */
-  sellerReplyHours: 48,
+  sellerReplyHours: SELLER_REPLY_RULE_HOURS,
   /** Días después de la liberación en los que el comprador todavía puede reportar un problema. */
   claimDays: 30,
 } as const;
@@ -33,15 +33,19 @@ export const RULES_TITLE = 'Cómo funciona Meteorito';
 export const RULES_INTRO = 'Son las mismas reglas para quien compra y para quien vende. Léelas una vez y compra o vende con calma.';
 
 /* ---------- Reglas con texto legal aprobado (EXACTO: no editar sin revisión legal) ---------- */
-export type LegalRuleId = 'reembolso_sin_envio';
+export type LegalRuleId = 'reembolso_sin_envio' | 'respuesta_48h';
 export interface LegalRule { id: LegalRuleId; version: number; icon: IconName; title: string; text: string;
   /** Solo pedidos con envío (cara a cara no tiene paso de envío). */
   shippingOnly?: boolean }
 /** Reembolso si no se envía (v1). */
 export const SHIP_REFUND_RULE = "Si quien vende no marca 'Ya lo envié' en 3 días, puedes cancelar y recibes todo tu pago de vuelta desde la custodia. Si no cancelas y pasan 2 días más sin envío, el reembolso se hace solo.";
+/** Respuesta del vendedor en 48 h (v2). */
+export const DISPUTE_REPLY_RULE = 'Si abres una disputa, quien vende tiene 48 h para responder. Mientras tanto, el pago sigue en custodia. Si no responde, se te reembolsa desde la custodia. Si responde, una persona del equipo revisa las dos versiones y decide.';
 export const LEGAL_RULES: LegalRule[] = [
   { id: 'reembolso_sin_envio', version: RULE_VERSION.shipRefund, icon: 'arrow-undo-outline', title: 'Reembolso si no se envía', text: SHIP_REFUND_RULE, shippingOnly: true },
+  { id: 'respuesta_48h', version: RULE_VERSION.sellerReply, icon: 'chatbubbles-outline', title: 'Respuesta de quien vende en 48 h', text: DISPUTE_REPLY_RULE },
 ];
+export const legalRule = (id: LegalRuleId) => LEGAL_RULES.find((r) => r.id === id)!;
 /** Reglas vigentes al publicar (acuerdo de la beta en Vender): las de la versión actual. */
 export const currentLegalRules = (mode?: string | null) => LEGAL_RULES.filter((r) => r.version <= CURRENT_RULES_VERSION && !(r.shippingOnly && mode === 'cara_a_cara'));
 /** Reglas que rigen para ESTE pedido (su versión y su tipo de entrega). Pedidos viejos (versión 0): ninguna. */
@@ -77,9 +81,10 @@ export const RULES: Rule[] = [
     text: 'El comprador puede reportar un problema antes de que se libere el pago. Eso congela el dinero.',
     points: [
       'Si el vendedor no envió nada y no llegó, el dinero se le devuelve al comprador.',
-      `El vendedor tiene ${C.sellerReplyHours} h para responder con pruebas. Si no responde, se le da la razón al comprador.`,
+      'Al abrir la disputa cuentas tu versión y tomas fotos con la cámara.',
       'Si las versiones son distintas, el equipo revisa el caso con ayuda de IA y una persona decide.',
     ] },
+  ...LEGAL_RULES.filter((r) => r.id === 'respuesta_48h').map((r) => ({ id: r.id, icon: r.icon, title: r.title, text: r.text })),
   { id: 'reclamos', icon: 'ribbon-outline', title: `Reclamos hasta ${C.claimDays} días después`,
     text: `Hasta ${C.claimDays} días después de la liberación, el comprador puede reportar un problema. El vendedor recibe el aviso y el caso cuenta en su calificación. El dinero ya no se congela.` },
   { id: 'contacto', icon: 'logo-whatsapp', title: 'Contacto',

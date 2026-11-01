@@ -166,11 +166,19 @@ async function api(req, path, q, b) {
     needGuest(); const o = get(String(b.slug));
     if (!isBuyer(o)) throw E(403, 'Solo el comprador puede reportar un problema.');
     if (!['fondeado', 'enviado', 'entregado'].includes(o.status)) throw E(409, 'Ya no se puede reportar un problema.', 'bad_state');
-    Object.assign(o, { status: 'en_disputa', disputed_at: new Date().toISOString() }); return { disputed: true };
+    // Regla v2 (api/_lib/replyRule.ts): versión obligatoria (≥ 10) y fotos salvo "No llegó"; 48 h para quien vende.
+    const v2 = (o.rules_version ?? 0) >= 2 && !o.ship_cancel;
+    if (v2 && String(b.description ?? '').trim().length < 10) throw E(400, 'Cuéntanos tu versión de lo que pasó (mínimo 10 caracteres).', 'version_required');
+    if (v2 && b.reason !== 'no_llego' && !(b.evidence ?? []).length) throw E(400, 'Toma al menos una foto con la cámara para mostrar el problema.', 'photo_required');
+    Object.assign(o, { status: 'en_disputa', disputed_at: new Date().toISOString(), dispute: { reason: b.reason, description: b.description ?? null },
+      ...(v2 ? { dispute_reply_due_at: new Date(Date.now() + 48 * 3_600_000).toISOString() } : {}) }); return { disputed: true, ...(v2 ? { reply_due_at: o.dispute_reply_due_at } : {}) };
   }
   if (path === '/api/escrow/cron') {
     const o = S.orders[String(q.get('slug'))];
     if (o && shipPhase(o) === 'auto_due') { shipRefund(o, 'auto'); return { refunded: true }; }
+    if (o && o.status === 'en_disputa' && (o.rules_version ?? 0) >= 2 && !o.ship_cancel && !o.dispute_replied_at && o.dispute_reply_due_at && Date.parse(o.dispute_reply_due_at) <= Date.now()) {
+      Object.assign(o, { status: 'resuelto', resolved_tx: 'y'.repeat(64), resolution: { buyerPct: 100 }, reply_refund: true }); return { refunded: true };
+    }
     if (o && o.status === 'enviado' && o.auto_release_at && new Date(o.auto_release_at) <= new Date() && o.pin_attempts < 3) Object.assign(o, { status: 'liberado', released_tx: 'a'.repeat(64), approval_reason: 'timeout' });
     return { ok: true };
   }

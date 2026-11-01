@@ -2,12 +2,12 @@
 // Sin reset ni estado del mock: puede correr en paralelo con mock-guest sin pisarlo.
 import { test, expect } from '@playwright/test';
 
-test('MCK-RUL-01 /como-funciona sin cuenta: las 8 reglas, sin login ni llamadas al API', async ({ page }) => {
+test('MCK-RUL-01 /como-funciona sin cuenta: las 9 reglas, sin login ni llamadas al API', async ({ page }) => {
   const apiCalls: string[] = [];
   page.on('request', (r) => { const u = new URL(r.url()); if (u.pathname.startsWith('/api/')) apiCalls.push(u.pathname); });
   await page.goto('/como-funciona');
   await expect(page.getByText('Cómo funciona Meteorito')).toBeVisible();
-  for (const t of ['Pago en custodia', 'Envío', 'Código de entrega', 'Liberación automática', 'Reembolso si no se envía', 'Problemas o disputas', 'Reclamos hasta 30 días después', 'Contacto'])
+  for (const t of ['Pago en custodia', 'Envío', 'Código de entrega', 'Liberación automática', 'Reembolso si no se envía', 'Problemas o disputas', 'Respuesta de quien vende en 48 h', 'Reclamos hasta 30 días después', 'Contacto'])
     await expect(page.getByText(new RegExp(`^\\d\\. ${t}$`))).toBeVisible();
   await expect(page.getByText(/por defecto, 7 días\)/)).toBeVisible();
   await expect(page.getByText('Ver recorrido')).toBeVisible(); // tour guiado (e2e/mock-tour.spec.ts)

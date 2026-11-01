@@ -12,9 +12,26 @@ import { evaluateRules } from './disputeRules';
 import { decideDispute, loadDecisions, resolverSecret } from './disputeResolve';
 import { buildRow, counts, EVENT_LABEL, linksOf, responseDeadlineOf, toDecisionView, type AdminDisputeDetail, type AdminDisputeRow, type ChatLine } from './disputeView';
 import { cameraPhoto, captureUrl, checkCaptureToken } from './capture';
+import { replyDueAt, replyRuleApplies, rulesVersionOf, RULE_VERSION } from './orderRules';
+import { missingColumn } from './listings';
+import { markReplied, replyExpired } from './replyRule';
 
 const ORDER_COLS = 'id, slug, status, brand, model, photos, price_crc, amount_usdc, buyer_user_id, seller_user_id, buyer_address, seller_address, contract_id, deploy_tx, funded_tx, funded_at, shipped_tx, shipped_at, ship_evidence, ship_evidence_hash, dispute_tx, disputed_at, resolved_tx, resolved_at, resolution, released_tx, created_at, delivery_mode';
 const ORDER_COLS_OLD = ORDER_COLS.replace(', delivery_mode', '');
+// Reglas por versión (033/034): primero con sus columnas; sin las migraciones, las columnas de antes.
+const RULE_COLS = ', rules_version, ship_cancel';
+const REPLY_COLS = ', dispute_reply_due_at, dispute_replied_at';
+const COL_SETS = [ORDER_COLS + RULE_COLS + REPLY_COLS, ORDER_COLS + RULE_COLS, ORDER_COLS, ORDER_COLS_OLD];
+async function selectOrders<T>(run: (cols: string) => PromiseLike<{ data: T; error: any }>): Promise<T> {
+  let last: any = null;
+  for (const cols of COL_SETS) {
+    const { data, error } = await run(cols);
+    if (!error) return data;
+    last = error;
+    if (!missingColumn(error) && !/delivery_mode|rules_version|ship_cancel|dispute_repl/.test(String(error.message))) break;
+  }
+  throw last;
+}
 
 /* ---------- Flags (027: app_flags; env manda si está puesta) ---------- */
 export interface DisputeFlags { autoResolve: boolean; ai: boolean }
@@ -40,10 +57,7 @@ export async function loadResponses(orderIds: string[]): Promise<{ byOrder: Reco
 
 async function ordersByIds(ids: string[]) {
   if (!ids.length) return [];
-  let { data, error } = await db().from('orders').select(ORDER_COLS).in('id', ids);
-  if (error && /delivery_mode/.test(String(error.message))) ({ data, error } = await db().from('orders').select(ORDER_COLS_OLD).in('id', ids));
-  if (error) throw error;
-  return data ?? [];
+  return (await selectOrders<any[] | null>((c) => db().from('orders').select(c).in('id', ids))) ?? [];
 }
 async function sellers(subs: string[]) {
   const out: Record<string, any> = {};
@@ -105,9 +119,7 @@ async function onchainOf(o: any): Promise<AdminDisputeDetail['onchain']> {
 
 async function loadOne(slug: string) {
   if (typeof slug !== 'string' || !/^[a-z0-9]{6}$/.test(slug)) throw new HttpError(400, 'slug inválido');
-  let { data: o, error } = await db().from('orders').select(ORDER_COLS).eq('slug', slug).maybeSingle();
-  if (error && /delivery_mode/.test(String(error.message))) ({ data: o, error } = await db().from('orders').select(ORDER_COLS_OLD).eq('slug', slug).maybeSingle());
-  if (error) throw error;
+  const o: any = await selectOrders<any>((c) => db().from('orders').select(c).eq('slug', slug).maybeSingle());
   if (!o) throw Object.assign(new HttpError(404, 'Ese pedido no existe.'), { code: 'not_found' });
   const { data: d } = await db().from('disputes').select('*').eq('order_id', o.id).maybeSingle();
   if (!d) throw Object.assign(new HttpError(404, 'Ese pedido no tiene disputa.'), { code: 'no_dispute' });
@@ -185,20 +197,30 @@ export async function adminAi(slug: string, req: any, refresh = false): Promise<
 /* ---------- Respuesta del vendedor (capa D) ---------- */
 export async function sellerResponseGet(order: any, sellerSub: string) {
   if (order.seller_user_id !== sellerSub) throw Object.assign(new HttpError(403, 'Solo el vendedor de este pedido puede responder.'), { code: 'not_seller' });
-  const { data: d } = await db().from('disputes').select('opened_at, state').eq('order_id', order.id).maybeSingle();
+  const { data: d } = await db().from('disputes').select('*').eq('order_id', order.id).maybeSingle();
   const resp = await loadResponses([order.id]);
   const open = order.status === 'en_disputa';
+  // Regla v2: plazo de 48 h desde el aviso (034) y, vencido sin respuesta, ya no se puede responder (se reembolsa).
+  const v2 = replyRuleApplies(order);
+  const deadline = d ? (v2 ? replyDueAt(order, d) : responseDeadlineOf(order, d)) : null;
+  const expired = v2 && !resp.byOrder[order.id] && !!deadline && Date.now() >= Date.parse(deadline);
   return { available: resp.available, open, response: resp.byOrder[order.id] ? { body: resp.byOrder[order.id].body, photo: resp.byOrder[order.id].photo ?? null, created_at: resp.byOrder[order.id].updated_at ?? resp.byOrder[order.id].created_at } : null,
-    deadline: d ? responseDeadlineOf(order, d) : null, can_respond: resp.available && open && !!d };
+    deadline, rule: v2 ? 'respuesta_48h' : null, expired, can_respond: resp.available && open && !!d && !expired };
 }
 export async function sellerRespond(order: any, sellerSub: string, raw: any) {
   if (order.seller_user_id !== sellerSub) throw Object.assign(new HttpError(403, 'Solo el vendedor de este pedido puede responder.'), { code: 'not_seller' });
   if (order.status !== 'en_disputa') throw Object.assign(new HttpError(409, 'Esta disputa ya no está abierta.'), { code: 'not_open' });
-  const body = typeof raw?.body === 'string' ? raw.body.trim() : '';
-  if (body.length < 3) throw Object.assign(new HttpError(400, 'Cuéntanos tu versión (mínimo 3 caracteres).'), { code: 'body_required' });
+  // Versión de quien vende: una foto de la cámara, la guía de envío o un texto (al menos uno).
+  const text = typeof raw?.body === 'string' ? raw.body.trim() : '';
+  const tracking = typeof raw?.tracking === 'string' ? raw.tracking.trim().replace(/\s+/g, ' ') : '';
+  if (tracking.length > 80) throw Object.assign(new HttpError(400, 'La guía de envío es muy larga (máximo 80 caracteres).'), { code: 'tracking_too_long' });
+  const hasPhoto = raw?.photo != null && raw.photo !== '';
+  if (text.length < 3 && !tracking && !hasPhoto) throw Object.assign(new HttpError(400, 'Responde con una foto, la guía de envío o un texto (mínimo 3 caracteres).'), { code: 'body_required' });
+  const body = [text.length >= 3 ? text : '', tracking ? `Guía de envío: ${tracking}` : ''].filter(Boolean).join('\n') || 'Respondió con una foto.';
   if (body.length > 1000) throw Object.assign(new HttpError(400, 'Máximo 1000 caracteres.'), { code: 'body_too_long' });
+  if (await replyExpired(order)) throw Object.assign(new HttpError(409, 'Pasaron las 48 h para responder: el pago se le devuelve a quien compró.'), { code: 'reply_expired' });
   let photo: string | null = null;
-  if (raw?.photo != null && raw.photo !== '') {
+  if (hasPhoto) {
     let c;
     try { c = checkCaptureToken(raw.capture, { purpose: 'dispute', subs: [sellerSub], ref: order.slug, allowExpired: true }); }
     catch (e: any) { throw Object.assign(new HttpError(400, e.message), { code: e.code === 'capture_token_required' ? 'camera_required' : e.code }); }
@@ -212,7 +234,8 @@ export async function sellerRespond(order: any, sellerSub: string, raw: any) {
     if (isMissingTable(error)) throw Object.assign(new HttpError(503, 'Todavía no puedes responder aquí. Escríbenos por el chat del pedido.'), { code: 'responses_unavailable' });
     throw error;
   }
-  await db().from('order_events').insert({ order_id: order.id, kind: 'seller_response', detail: { photo: !!photo, length: body.length } });
+  await db().from('order_events').insert({ order_id: order.id, kind: 'seller_response', detail: { photo: !!photo, tracking: !!tracking, length: body.length } });
+  await markReplied(order); // v2: pasa a revisión humana y se avisa a quien compra
   return { saved: true, response: { body, photo, created_at: now } };
 }
 
@@ -231,6 +254,8 @@ export async function autoResolvePass(limit = 5): Promise<{ skipped?: string; re
   for (const o of orders.filter((x: any) => x.status === 'en_disputa')) {
     if (out.resolved.length >= limit) break;
     if ((dec.byOrder[o.id] ?? []).length) continue;
+    // Regla v2 (lib/rules.ts): sin respuesta en 48 h la reembolsa api/_lib/replyRule.ts; si responde, decide una persona.
+    if (rulesVersionOf(o) >= RULE_VERSION.sellerReply) continue;
     const d = (ds ?? []).find((x: any) => x.order_id === o.id);
     const rule = evaluateRules({ order: o, dispute: { opened_at: d?.opened_at, reason: d?.reason }, response: resp.byOrder[o.id] ?? null, responsesAvailable: resp.available });
     if (!rule) continue;

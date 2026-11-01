@@ -31,7 +31,7 @@ import { pressTransition } from '@/constants/motion';
 import { BetaNotice } from '@/components/RulesLink';
 import { LegalRuleRows } from '@/components/LegalRules';
 import { legalRulesFor, PAY_RULES_HEADING } from '@/lib/rules';
-import { shipDeadline } from '../api/_lib/orderRules';
+import { replyPhase, shipDeadline } from '../api/_lib/orderRules';
 import { leftLabel, useNow, whenLabel } from '@/lib/ruleTimes';
 
 const CARD_PROCESSING = 'Tu pago con tarjeta se está procesando. Vuelve a tocar "Pagar con tarjeta" en unos segundos.';
@@ -64,6 +64,8 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   // Regla v1 "Reembolso si no se envía": plazo fijo de 3 días desde el pago para "Ya lo envié" (no es el plazo acordado).
   const now = useNow();
   const sd = shipDeadline(order, now);
+  // Regla v2 "Respuesta de quien vende en 48 h" (sin 034 no hay plazo en la vista pública: mensaje de siempre).
+  const rp = order.dispute_reply_due_at || order.dispute_replied_at ? replyPhase(order, now) : { phase: 'na' as const, dueAt: null };
   const f2f = order.delivery_mode === 'cara_a_cara';
   // Acuerdo que el comprador ve antes de pagar (y acepta al pagar: el servidor lo registra en order_events).
   const agreement = agreementSummary(order.delivery_mode, order.protection_minutes);
@@ -142,7 +144,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const run = async (f: () => Promise<void>) => { setBusy(true); setErr(null); try { await f(); } catch (e) { trackError('paybox', e); setErr(friendlyPayError((e as Error).message)); } finally { setBusy(false); } };
 
   const sheets = <>
-    <DisputeSheet visible={sheet === 'dispute'} onClose={() => setSheet(null)} slug={order.slug} onOpened={onChange} />
+    <DisputeSheet visible={sheet === 'dispute'} onClose={() => setSheet(null)} slug={order.slug} onOpened={onChange} order={order} />
     <Sheet visible={sheet === 'method' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Elige cómo pagar"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
@@ -314,6 +316,19 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     </View>;
   } else if (order.status === 'en_disputa' && order.ship_cancel) {
     footer = <Text testID="ship-refund-pending" style={[T.callout, { textAlign: 'center' }]}>Compra cancelada por falta de envío: todo tu pago vuelve desde la custodia.</Text>;
+  } else if (order.status === 'en_disputa' && rp.phase !== 'na') {
+    // Regla v2: cuenta regresiva de las 48 h de quien vende (las dos partes la ven).
+    footer = <Card testID="reply-rule-buyer" style={{ gap: S.xs, paddingVertical: S.sm + 2 }}>
+      <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'center' }}>
+        <Icon name={rp.phase === 'replied' ? 'chatbubbles-outline' : 'timer-outline'} size={20} color={C.orange} />
+        <Text style={[T.headline, { flex: 1 }]}>{rp.phase === 'replied' ? 'Quien vende respondió' : 'En disputa'}</Text>
+      </View>
+      <Text testID="reply-countdown" style={T.callout}>
+        {rp.phase === 'replied' ? 'Una persona del equipo revisa las dos versiones y decide. El pago sigue en custodia.'
+          : rp.phase === 'due' ? 'Quien vende no respondió en 48 h: se te reembolsa desde la custodia.'
+          : `Quien vende tiene hasta el ${whenLabel(rp.dueAt)} (${leftLabel(rp.dueAt, now)}) para responder. Mientras tanto, el pago sigue en custodia.`}
+      </Text>
+    </Card>;
   } else if (order.status === 'en_disputa') {
     footer = <Text style={[T.callout, { textAlign: 'center', color: C.orange }]}>En disputa: lo estamos revisando, respondemos en 24-48 h. El pago está en pausa.</Text>;
   }

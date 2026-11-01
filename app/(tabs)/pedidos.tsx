@@ -13,6 +13,7 @@ import { SellerOrderChat } from '@/components/OrderChat';
 import { SellerInboxButton } from '@/components/ChatInbox';
 import { AdminDisputesButton } from '@/components/AdminDisputesButton';
 import { SellerDisputeReply } from '@/components/SellerDisputeReply';
+import { replyRuleApplies } from '../../api/_lib/orderRules';
 import { S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
@@ -151,7 +152,8 @@ export default function Pedidos() {
             <Chip key={open.status} swap label={STATUS_LABEL[open.status] ?? open.status} tone={statusTone(open.status)} />
           </View>
           <Card style={{ gap: S.md }}>
-            <MoneyTimeline status={open.status} shipped={!!detail?.shipped_tx} mode={open.delivery_mode ?? (detail?.slug === open.slug ? detail?.delivery_mode : null)} />
+            <MoneyTimeline status={open.status} shipped={!!detail?.shipped_tx} mode={open.delivery_mode ?? (detail?.slug === open.slug ? detail?.delivery_mode : null)}
+              disputeNote={detail?.slug === open.slug && replyRuleApplies(detail) ? 'Tienes 48 h para responder. El pago sigue en custodia.' : null} />
             <Text style={T.callout}>{(detail?.slug === open.slug && detail?.delivery_mode === 'cara_a_cara' && F2F_HINT[open.status]) || NEXT_HINT[open.status] || ''}</Text>
           </Card>
           <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />

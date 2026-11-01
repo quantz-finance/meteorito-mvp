@@ -97,6 +97,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '92', name: 'Pie del producto: texto exacto de custodia (sin "Protección: 7 días"), aviso legal una vez, barrido de la UI', file: './t92-pie-custodia.test.ts', onchain: false },
   { id: '98', name: 'Reglas legales (lib/rules.ts): texto exacto, un solo lugar, en Cómo funciona + Al pagar aceptas + acuerdo de la beta, sin palabras prohibidas, por versión', file: './t98-reglas-texto.test.ts', onchain: false },
   { id: '99', name: 'Regla v1 reembolso si no se envía: 3 días fijos, aviso día 2, cancelar día 3, automático día 5, no retroactivo, idempotente, sin 033', file: './t99-reembolso-sin-envio.test.ts', onchain: false },
+  { id: '100', name: 'Regla v2 respuesta en 48 h: plazo desde el aviso, versión de quien compra, foto/guía/texto, sin respuesta -> reembolso, con respuesta -> persona, no retroactivo, idempotente, sin 034/027/033', file: './t100-respuesta-48h.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
