@@ -24,6 +24,7 @@ import { markReloginPending, rememberRoute, takeReturnRoute } from '@/lib/return
 import { isPublicRoute } from '@/lib/publicRoutes';
 import { DemoBadge } from '@/components/DemoBadge';
 import Welcome from '@/components/Welcome';
+import { TourAuto, TourHost } from '@/components/Tour';
 import { Brand } from '@/constants/Colors';
 
 /** Quita el splash HTML inline (app/+html.tsx) cuando la app ya pintó. */
@@ -76,6 +77,7 @@ export default function RootLayout() {
         <Gate />
       </CavosRoot>
       <ToastHost />
+      <TourHost />
     </ThemeProvider>
   );
 }
@@ -149,6 +151,7 @@ function Gate() {
       <Stack.Screen name="admin/disputa" />
     </Stack>
     <DemoBadge />
+    <TourAuto />
     </>
   );
 }

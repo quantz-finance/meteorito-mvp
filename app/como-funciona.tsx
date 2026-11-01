@@ -1,13 +1,16 @@
 // "Cómo funciona Meteorito": las reglas en lenguaje simple. Pública: funciona sin cuenta (los compradores no tienen).
 // El contenido vive en lib/rules.ts (un solo lugar).
 import { StyleSheet, Text, View } from 'react-native';
-import { Card, Icon, PrimaryButton, Screen } from '@/components/ds';
+import { Card, Icon, Screen } from '@/components/ds';
+import { TourButton } from '@/components/Tour';
 import { C, S, T } from '@/constants/theme';
 import { RULES, RULES_INTRO, RULES_TITLE, TOUR } from '@/lib/rules';
 
 export default function ComoFunciona() {
   return (
     <Screen back="/vender" guestBack="/" title={RULES_TITLE} subtitle={RULES_INTRO} space="calm">
+      {/* Arriba, visible sin scroll: vuelve a abrir el tour guiado (components/Tour.tsx). */}
+      {TOUR.enabled ? <TourButton from="rules" /> : null}
       {RULES.map((r, i) => (
         <Card key={r.id} style={s.card}>
           <View style={s.row}>
@@ -23,7 +26,6 @@ export default function ComoFunciona() {
           ))}
         </Card>
       ))}
-      {TOUR.enabled && TOUR.start ? <PrimaryButton title="Ver recorrido" icon="compass-outline" variant="secondary" onPress={TOUR.start} /> : null}
     </Screen>
   );
 }

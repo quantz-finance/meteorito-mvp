@@ -1,8 +1,9 @@
 // "Cómo funciona Meteorito": las reglas en UN solo lugar. La pantalla /como-funciona, los resúmenes de una línea
-// (pago y Vender) y, más adelante, el tour guiado leen de aquí. Lenguaje simple, en tuteo.
+// (pago y Vender) y el tour guiado (lib/tour.ts) leen de aquí. Lenguaje simple, en tuteo.
 // Algunas capas (cancelar a los 3 días, 48 h para responder, reclamos a 30 días) llegan en PRs siguientes:
 // sus valores viven en RULES_CONFIG para cambiarlos en un solo lugar.
 import type { IconName } from '@/components/ds';
+import { startTour } from './tour';
 
 export const RULES_CONFIG = {
   /** Días tras el envío para liberar el pago si el comprador no da el código ni reporta un problema. */
@@ -76,5 +77,5 @@ export const CUSTODY_RELEASE = 'se libera con tu PIN de entrega, o por tiempo si
  *  es una excepción permitida a la regla "sin testnet" de los e2e (e2e/helpers.ts). */
 export const CUSTODY_NOTICE = `Pago en custodia (beta en testnet, sin dinero real): ${CUSTODY_RELEASE}. Meteorito no verifica el producto.`;
 
-/** Hook del tour guiado (PR siguiente). Apagado: la pantalla no muestra "Ver recorrido" hasta que exista. */
-export const TOUR: { enabled: boolean; start: (() => void) | null } = { enabled: false, start: null };
+/** Tour guiado (lib/tour.ts + components/Tour.tsx): activo. "Ver recorrido" en Cómo funciona y Mi cuenta. */
+export const TOUR: { enabled: boolean; start: (() => void) | null } = { enabled: true, start: () => startTour('button') };

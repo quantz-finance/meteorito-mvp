@@ -6,6 +6,7 @@ import { Card, ErrorText, ListRow, PrimaryButton, Sheet, SkeletonCard } from '@/
 import { AnalyticsToggle, LegalLinks } from '@/components/LegalLinks';
 import { AppModePicker } from '@/components/AppModePicker';
 import { RulesLink } from '@/components/RulesLink';
+import { TourButton } from '@/components/Tour';
 import { C, T } from '@/constants/theme';
 import { Icon } from '@/components/ds';
 import { HISTORY_TITLE } from '@/lib/sellerTools';
@@ -25,6 +26,7 @@ export function AccountSheet({ visible, onClose, products }: { visible: boolean;
       <ListRow icon="receipt-outline" title={HISTORY_TITLE} subtitle={COPY.salesHistory.subtitle} right={<Icon name="chevron-forward" size={18} color={C.lilac} />}
         onPress={() => { onClose(); router.push('/ventas'); }} />
       <Card><RulesLink from="account" onNavigate={onClose} /></Card>
+      <TourButton from="account" before={onClose} />
       <Card><Text style={T.caption}>Correo</Text><Text style={T.body}>{auth.email ?? '—'}</Text></Card>
       <Card><AnalyticsToggle /></Card>
       <AppModePicker />
