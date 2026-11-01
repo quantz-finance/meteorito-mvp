@@ -37,7 +37,7 @@ const unavailable = () => Object.assign(new Error('Las notificaciones todavía n
 /** Llamar DIRECTO desde el toque del botón (iOS exige el gesto para pedir permiso). */
 export async function enablePush(auth: Pick<MeteoritoAuth, 'getAuthToken'> & Partial<MeteoritoAuth>, role: PushRole): Promise<void> {
   if (DEMO_ENABLED) { ls.set(KEY(role), '1'); return; }
-  if (Platform.OS !== 'web' || typeof Notification === 'undefined') throw unavailable(); // nativo: aún sin notificaciones
+  if (Platform.OS !== 'web') throw unavailable(); // nativo: aún sin notificaciones
   const perm = await Notification.requestPermission();
   if (perm !== 'granted') throw Object.assign(new Error(perm === 'denied' ? 'Bloqueaste las notificaciones. Actívalas en los ajustes del navegador.' : 'No activaste las notificaciones.'), { code: 'push_denied' });
   const r = await fetch('/api/store?push=key').catch(() => null);
