@@ -72,6 +72,10 @@
     "node": "22.x"
   },
   "overrides": {
-    "typescript": "$typescript"
+    "typescript": "$typescript",
+    "axios": "^1.21.0",
+    "follow-redirects": "^1.16.2",
+    "node-forge": "^1.4.2",
+    "toml": "^5.0.1"
   }
 }
