@@ -3,6 +3,7 @@
 // Sin autocapture de inputs, sin grabación de sesión, con opt-out persistente.
 import { Platform } from 'react-native';
 import { DEMO_ENABLED } from './demo';
+import { detectTraffic, type Traffic } from './internalTraffic';
 import { captureFirstTouch, identifyWithAttribution, registerAttribution, superProps, type Attribution } from './attribution';
 
 export const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY ?? '';
@@ -21,6 +22,7 @@ let started = false;
 const queue: [string, Props][] = [];
 let attr: Attribution | null = null; // first-touch del landing (lib/attribution.ts)
 let attrNew = false;
+let traffic: Traffic = { automated: false, internal: false }; // lib/internalTraffic.ts
 
 function readOpt(): boolean { try { return web && window.localStorage.getItem(OPT_KEY) === '1'; } catch { return false; } }
 export function isOptedOut() { return optedOut; }
@@ -45,17 +47,23 @@ export function subFromJwt(token: string | null): string | null {
   try { const p = token!.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); return JSON.parse(atob(p)).sub ?? null; } catch { return null; }
 }
 
-const base = (): Props => ({ platform: Platform.OS, network: 'testnet', app: 'meteorito-mvp' });
+const base = (): Props => ({ platform: Platform.OS, network: 'testnet', app: 'meteorito-mvp', is_internal: traffic.internal });
 
 export function initAnalytics() {
   if (started) return; started = true;
   optedOut = readOpt();
   if (DEMO_ENABLED) return; // demo: sin analítica
+  // CI/e2e/headless: no se envía nada. Equipo/QA (?internal=1, localhost, previews): is_internal=true en cada evento.
+  let store: Storage | null = null; try { store = web ? window.localStorage : null; } catch { /* modo privado estricto */ }
+  traffic = detectTraffic({
+    href: web ? window.location.href : null, ua: web ? navigator.userAgent : null, webdriver: web ? (navigator as any).webdriver === true : false,
+    store, buildFlag: process.env.EXPO_PUBLIC_ANALYTICS_INTERNAL,
+  });
+  if (traffic.automated) return;
   if (!POSTHOG_KEY || !web) return; // nativo: envío HTTP directo (send())
   // UTMs del landing: se leen YA (al cargar el módulo, antes de que el router redirija y borre el query).
   // Con opt-out no se guarda nada.
   if (!optedOut) {
-    let store: Storage | null = null; try { store = window.localStorage; } catch { /* modo privado estricto */ }
     ({ attr, isNew: attrNew } = captureFirstTouch(store, window.location.href, document.referrer));
   }
   import('posthog-js').then(({ default: posthog }) => {
@@ -68,6 +76,7 @@ export function initAnalytics() {
     } as any);
     ph = posthog;
     registerAttribution(posthog, attr); // super propiedades: van en cada evento
+    posthog.register({ is_internal: traffic.internal }); // también en $pageleave (lo captura posthog-js)
     if (distinctId) identifyWithAttribution(posthog, distinctId, attr);
     for (const [e, p] of queue.splice(0)) posthog.capture(e, p);
   }).catch(() => {});
@@ -85,7 +94,7 @@ async function send(event: string, properties: Props) {
 }
 
 export function track(event: string, props: Props = {}) {
-  if (DEMO_ENABLED || optedOut || !POSTHOG_KEY) return;
+  if (DEMO_ENABLED || optedOut || !POSTHOG_KEY || traffic.automated) return;
   const p = { ...base(), ...props };
   if (!web) { send(event, p); return; }
   if (ph) ph.capture(event, p); else queue.push([event, p]);
@@ -100,7 +109,7 @@ export async function identify(token: string | null) {
   distinctId = id;
   if (ph && !optedOut) identifyWithAttribution(ph, id, attr); // $set_once initial_utm_*
 }
-export function resetAnalytics() { distinctId = null; if (ph) { ph.reset(); registerAttribution(ph, attr); } } // reset borra las super propiedades
+export function resetAnalytics() { distinctId = null; if (ph) { ph.reset(); registerAttribution(ph, attr); ph.register({ is_internal: traffic.internal }); } } // reset borra las super propiedades
 /** Error genérico sin mensaje crudo (puede tener datos): solo código/área. */
 export const trackError = (area: string, e: unknown) =>
   track('error_shown', { area, code: String((e as any)?.message ?? e).slice(0, 60).replace(/[0-9A-Z]{20,}/g, '…') });
