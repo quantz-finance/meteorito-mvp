@@ -10,6 +10,7 @@ import { env, releaseDueAt } from '../_lib/env';
 import { isFaceToFace } from '../_lib/agreement';
 import { chain, evidenceHash, shipEvidence } from '../_lib/escrow';
 import { captureUploaded } from '../_lib/capture';
+import { scrubStoredPhotos } from '../_lib/scrubPhotos';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -25,6 +26,7 @@ export default async function handler(req: any, res: any) {
     const evidence = shipEvidence(req.body?.evidence, user.sub, order.slug);
     if (!(await captureUploaded(db().storage, { p: 'ship', id: evidence.token_id, sub: user.sub })))
       throw Object.assign(new HttpError(400, 'La foto del envío no terminó de subir. Tómala de nuevo.'), { code: 'ship_photo_missing' });
+    await scrubStoredPhotos(db().storage, [evidence.photo]); // sin EXIF/GPS (subida firmada: el servidor no vio los bytes)
     const h = evidenceHash(evidence);
     await db().from('orders').update({ ship_evidence: evidence, ship_evidence_hash: h }).eq('id', order.id).eq('status', 'fondeado');
     if (order.sp_mode === 'backend') {

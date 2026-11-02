@@ -6,6 +6,7 @@
 //       (compatible: { category, brand, model, ... } sigue funcionando; category es opcional, por defecto 'otro')
 //  POST { op:'cancel', code }                                       (solo el comprador, solo si sigue abierta)
 import { db, json, fail } from '../_lib/db';
+import { scrubStoredPhotos } from '../_lib/scrubPhotos';
 import { HttpError } from '../_lib/auth';
 import { guestSubFromReq } from '../_lib/guest';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
@@ -55,6 +56,7 @@ export default async function handler(req: any, res: any) {
       // Solo fotos de la cámara de la app (token 'listing' del invitado) o, si trae source_url de import, la foto que el
       // servidor guardó al importar ese mismo link.
       if (photos.some((u) => !listingPhotoOk(u, guest, source_url))) throw cameraRequired();
+      await scrubStoredPhotos(db().storage, photos); // sin EXIF/GPS (subida firmada: el servidor no vio los bytes)
       const row: Record<string, unknown> = { buyer_user_id: guest, category, brand, model, price_crc: price, note: str(b.note, 500, false), status: 'abierta', ...(photos.length ? { photos } : {}), ...(source_url ? { source_url } : {}) };
       for (let i = 0; i < 5; i++) {
         const code = inviteCode();
