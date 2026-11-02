@@ -1,0 +1,14 @@
+# gitleaks: reglas por defecto + allowlist mínima.
+# Única excepción conocida: una "semilla" Stellar de RELLENO usada en tests unitarios sin red
+# (scripts/ci/t53, t57, t96: APPROVER_SECRET / RELEASE_SIGNER_SECRET / SERVICE_SECRET de mentira).
+# Su checksum StrKey es inválido (StrKey.isValidEd25519SecretSeed -> false): no es ni puede ser una llave real.
+# Se permite SOLO ese valor exacto (allowlist por valor, sin `paths`: un `paths` global saltaría archivos enteros):
+# cualquier otra semilla o secreto, en cualquier archivo, sigue fallando.
+title = "meteorito-mvp"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Semilla Stellar de relleno (checksum inválido) en tests unitarios"
+regexes = ['''SBMUIURQN7BHVZ6QRNNIB3VIKUM3ZZ2UVHJDLRBVULXA2VTIZVOYY7RN''']

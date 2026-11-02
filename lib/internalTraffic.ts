@@ -6,11 +6,13 @@
 //    (filtro: is_internal != true). Se marca con:
 //      * `?internal=1` en cualquier URL de la app (queda guardado en este navegador; `?internal=0` lo borra),
 //      * builds con EXPO_PUBLIC_ANALYTICS_INTERNAL=1,
-//      * localhost y previews de Vercel (*.vercel.app): nunca son usuarios reales.
+//      * localhost y previews de Vercel (*.vercel.app, salvo los alias de producción meteorito-mvp*.vercel.app).
 //  El resto de eventos lleva `is_internal: false`. Nada de emails, ids ni listas de cuentas.
 export const INTERNAL_KEY = 'meteorito:internal';
 const AUTOMATION_UA = /HeadlessChrome|Playwright|Puppeteer|PhantomJS|Electron.*Headless/i;
 const INTERNAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\]|.+\.vercel\.app)$/i;
+// Alias de PRODUCCIÓN en vercel.app (mismo deploy que pago.meteorito.app): usuarios reales, no internos.
+const PROD_HOST = /^meteorito-mvp(-quantz4|-git-main-quantz4)?\.vercel\.app$/i;
 
 export type Traffic = { automated: boolean; internal: boolean };
 export function detectTraffic(o: {
@@ -25,6 +27,6 @@ export function detectTraffic(o: {
     else if (q === '0') o.store?.removeItem(INTERNAL_KEY);
   } catch { /* storage bloqueado: vale solo para esta carga */ }
   let stored = false; try { stored = o.store?.getItem(INTERNAL_KEY) === '1'; } catch { stored = false; }
-  const internal = automated || q === '1' || (q !== '0' && stored) || flag === '1' || INTERNAL_HOST.test(url?.hostname ?? '');
+  const internal = automated || q === '1' || (q !== '0' && stored) || flag === '1' || (INTERNAL_HOST.test(url?.hostname ?? '') && !PROD_HOST.test(url?.hostname ?? ''));
   return { automated, internal };
 }

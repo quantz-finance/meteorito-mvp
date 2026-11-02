@@ -1,0 +1,52 @@
+# Dependabot: actualizaciones semanales (lunes, hora de Costa Rica) de npm y GitHub Actions.
+# - Las alertas/PRs de SEGURIDAD no dependen de este archivo (se activan en Settings > Code security) y no usan límite.
+# - Expo/React Native se actualizan juntos con el SDK (npx expo install --fix), así que aquí se ignoran sus saltos
+#   mayores y menores; solo entran parches. El salto de SDK (p. ej. expo 58) es un PR a mano.
+# - En PRs de Dependabot el job CI corre sin testnet (no recibe los secretos; ver ci.yml): los tests on-chain se corren
+#   a mano antes de mergear algo que toque @stellar/stellar-sdk o el escrow.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Costa_Rica
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: chore(deps)
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+        exclude-patterns: ['expo', 'expo-*', '@expo/*', 'react', 'react-dom', 'react-native', 'react-native-*', '@types/react']
+    ignore:
+      - dependency-name: 'expo'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'expo-*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: '@expo/*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'react'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'react-dom'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'react-native'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      - dependency-name: 'react-native-*'
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: America/Costa_Rica
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']

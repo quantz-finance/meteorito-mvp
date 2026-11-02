@@ -1,0 +1,56 @@
+name: Security
+# Escaneo de secretos (gitleaks, todo el historial) y de dependencias de producción (npm audit).
+# Workflow aparte de CI: no usa secretos ni testnet, así que no entra en la cola `ci-testnet`.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 12 * * 1' # lunes 06:00 hora de Costa Rica: avisa de vulnerabilidades nuevas aunque no haya commits
+
+concurrency:
+  group: security-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historial completo: un secreto borrado en un commit posterior sigue expuesto
+      # Binario oficial con checksum fijo (gitleaks-action pide licencia de pago en repos de organizaciones).
+      - name: Instalar gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks && rm gitleaks.tgz
+      # --redact: el log nunca muestra el valor, solo archivo/commit/regla. Allowlist en .gitleaks.toml.
+      - name: gitleaks (historial completo)
+        run: ./gitleaks git --redact --no-banner --verbose --exit-code 1 .
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # NO BLOQUEANTE por ahora (continue-on-error): main tiene 10 high en dependencias de producción.
+      # El PR chore(deps) (stellar-sdk 17, follow-redirects, node-forge) baja la mayoría; los que quedan vienen de la
+      # toolchain de expo 57 (expo-router/@expo/cli) y se cierran con expo 58. Al llegar a 0 high: quitar continue-on-error.
+      - name: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+        run: |
+          npm audit --omit=dev --audit-level=high | tee audit.txt
+          status=${PIPESTATUS[0]}
+          { echo '### npm audit --omit=dev'; echo '```'; tail -n 5 audit.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $status

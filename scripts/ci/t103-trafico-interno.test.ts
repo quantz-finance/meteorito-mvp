@@ -21,6 +21,7 @@ export async function run(t: T) {
   t.check('carga siguiente sin query -> sigue interno', detectTraffic({ href: PROD, ua: UA, store: s }).internal);
   t.check('?internal=0 -> lo borra y deja de ser interno', !detectTraffic({ href: PROD + '?internal=0', ua: UA, store: s }).internal && !s.m.has(INTERNAL_KEY) && !detectTraffic({ href: PROD, ua: UA, store: s }).internal);
   t.check('localhost y previews *.vercel.app -> internos', detectTraffic({ href: 'http://localhost:8081/', ua: UA, store: mem() }).internal && detectTraffic({ href: 'https://meteorito-mvp-git-x-quantz4.vercel.app/', ua: UA, store: mem() }).internal);
+  t.check('alias de producción meteorito-mvp.vercel.app -> NO interno', !detectTraffic({ href: 'https://meteorito-mvp.vercel.app/', ua: UA, store: mem() }).internal && !detectTraffic({ href: 'https://meteorito-mvp-git-main-quantz4.vercel.app/', ua: UA, store: mem() }).internal);
   const broken = { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); }, removeItem: () => { throw new Error('bloqueado'); } };
   t.check('storage bloqueado o URL rara -> sin excepción', detectTraffic({ href: PROD + '?internal=1', ua: UA, store: broken }).internal && !detectTraffic({ href: 'no es url', ua: null, store: broken }).internal);
   t.check('sin storage (nativo) -> usuario normal', !detectTraffic({ href: null, ua: null, webdriver: false, store: null }).internal);
