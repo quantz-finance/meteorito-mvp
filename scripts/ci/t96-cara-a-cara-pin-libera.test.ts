@@ -16,11 +16,11 @@ const MIG = join(__dirname, '../../supabase/migrations');
 const OLD_PAIRS = ['creado>escrow_creado', 'creado>cancelado', 'escrow_creado>cancelado', 'escrow_creado>fondeado', 'fondeado>enviado', 'enviado>entregado',
   'entregado>liberado', 'fondeado>en_disputa', 'enviado>en_disputa', 'entregado>en_disputa', 'en_disputa>resuelto'];
 
-/** Lee el guard de la última migración que lo define: pares permitidos + excepciones condicionadas a delivery_mode. */
+/** Lee el guard de la última migración que lo define (`create or replace`; `alter function ... set search_path` no cuenta): pares permitidos + excepciones condicionadas a delivery_mode. */
 function loadGuard() {
-  const file = readdirSync(MIG).filter((f) => f.endsWith('.sql')).sort().filter((f) => /function public\.orders_status_guard\(\)/.test(readFileSync(join(MIG, f), 'utf8'))).pop()!;
+  const file = readdirSync(MIG).filter((f) => f.endsWith('.sql')).sort().filter((f) => /create or replace function public\.orders_status_guard\(\)/.test(readFileSync(join(MIG, f), 'utf8'))).pop()!;
   const sql = readFileSync(join(MIG, file), 'utf8');
-  const body = sql.slice(sql.indexOf('function public.orders_status_guard()'));
+  const body = sql.slice(sql.indexOf('create or replace function public.orders_status_guard()')); // no un `alter function` (036)
   const block = body.slice(body.indexOf('not in ('), body.indexOf('raise exception'));
   const cut = block.indexOf('and not (');
   const pairs = (s: string) => [...s.matchAll(/\('(\w+)','(\w+)'\)/g)].map((m) => `${m[1]}>${m[2]}`);
