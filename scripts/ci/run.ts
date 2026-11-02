@@ -100,6 +100,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '100', name: 'Regla v2 respuesta en 48 h: plazo desde el aviso, versión de quien compra, foto/guía/texto, sin respuesta -> reembolso, con respuesta -> persona, no retroactivo, idempotente, sin 034/027/033', file: './t100-respuesta-48h.test.ts', onchain: false },
   { id: '101', name: 'Regla v3 reclamo de 30 días: plazo desde la liberación, aviso a quien vende, responde antes de que cuente, historial solo con estados, sin mover fondos, no retroactivo, idempotente, sin 035', file: './t101-reclamo-30-dias.test.ts', onchain: false },
   { id: '104', name: 'Parches high de dependencias (axios, follow-redirects, node-forge, toml) + stellar-sdk 15.x por el runtime CJS de Vercel', file: './t104-deps-parches.test.ts', onchain: false },
+  { id: '102', name: 'Vistas públicas sin escritura para anon/authenticated (036) + search_path en triggers', file: './t102-vistas-sin-escritura.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },
