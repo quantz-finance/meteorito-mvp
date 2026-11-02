@@ -8,9 +8,11 @@ on:
 # Un solo run on-chain a la vez (comparten wallets de testnet): solo los PRs entran en ci-testnet.
 # main (push) corre sin red (TESTNET=skip: los tests on-chain ya pasaron en el PR que se mergeó) y en su propio grupo por
 # commit: un PR en cola ya no lo desplaza ("cancelled" sin correr) y el deploy de main no queda en "Waiting for checks".
+# PRs sin secretos (Dependabot o forks) nunca tocan testnet: van en su propio grupo por PR (un push nuevo cancela el
+# anterior) y no entran en ci-testnet, así no desplazan ni cancelan los runs on-chain de los PRs normales.
 concurrency:
-  group: ${{ github.event_name == 'push' && format('ci-main-{0}', github.sha) || 'ci-testnet' }}
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'push' && format('ci-main-{0}', github.sha) || ((github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository) && format('ci-nosecrets-{0}', github.event.pull_request.number) || 'ci-testnet') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && (github.event.pull_request.user.login == 'dependabot[bot]' || github.event.pull_request.head.repo.full_name != github.repository) }}
 
 permissions:
   contents: read
@@ -25,7 +27,8 @@ jobs:
       # PRs desde forks no reciben secretos: se corren solo los tests unitarios.
       # main (push) tampoco: corre unit + typecheck + export, sin tocar las wallets de testnet que usan los PRs.
       # Dependabot tampoco recibe los secretos de Actions: sin esto su PR fallaría con "Faltan secretos testnet".
-      TESTNET: ${{ (github.event_name == 'push' || github.actor == 'dependabot[bot]' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && 'skip' || '' }}
+      # Se mira el autor del PR (no github.actor): un re-run hecho por una persona sobre un PR de Dependabot tampoco gasta treasury.
+      TESTNET: ${{ (github.event_name == 'push' || github.event.pull_request.user.login == 'dependabot[bot]' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && 'skip' || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
