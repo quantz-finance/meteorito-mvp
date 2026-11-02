@@ -1,49 +1,54 @@
-# Dependabot: actualizaciones semanales (lunes, hora de Costa Rica) de npm y GitHub Actions.
-# - Las alertas/PRs de SEGURIDAD no dependen de este archivo (se activan en Settings > Code security) y no usan límite.
-# - Expo/React Native se actualizan juntos con el SDK (npx expo install --fix), así que aquí se ignoran sus saltos
-#   mayores y menores; solo entran parches. El salto de SDK (p. ej. expo 58) es un PR a mano.
-# - En PRs de Dependabot el job CI corre sin testnet (no recibe los secretos; ver ci.yml): los tests on-chain se corren
-#   a mano antes de mergear algo que toque @stellar/stellar-sdk o el escrow.
+# Dependabot: pocas PRs y agrupadas.
+# - Mensual (día 1, hora de Costa Rica). Cada ecosistema abre como máximo 1 PR de versión a la vez.
+# - npm: TODO (minor + patch) va en una sola PR agrupada; Expo/React Native en otra (solo parches: el salto de SDK,
+#   p. ej. expo 58, se hace a mano con `npx expo install --fix`). Los saltos mayores se ignoran (PR a mano).
+# - Las alertas/PRs de SEGURIDAD no dependen de este archivo (Settings > Code security) y no usan este límite.
+# - En PRs de Dependabot el job CI corre sin testnet (TESTNET=skip) y en su propio grupo de concurrencia (ver ci.yml):
+#   no gasta treasury ni bloquea la cola `ci-testnet`. Los tests on-chain se corren a mano antes de mergear algo que
+#   toque @stellar/stellar-sdk o el escrow.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: '06:00'
       timezone: America/Costa_Rica
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     labels: [dependencies]
     commit-message:
       prefix: chore(deps)
     groups:
+      expo-react-native:
+        patterns: ['expo', 'expo-*', '@expo/*', 'react', 'react-dom', 'react-native', 'react-native-*', '@types/react']
+        update-types: [patch]
       npm-minor-patch:
+        patterns: ['*']
         update-types: [minor, patch]
-        exclude-patterns: ['expo', 'expo-*', '@expo/*', 'react', 'react-dom', 'react-native', 'react-native-*', '@types/react']
     ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
       - dependency-name: 'expo'
-        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+        update-types: ['version-update:semver-minor']
       - dependency-name: 'expo-*'
-        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+        update-types: ['version-update:semver-minor']
       - dependency-name: '@expo/*'
-        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+        update-types: ['version-update:semver-minor']
       - dependency-name: 'react'
-        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+        update-types: ['version-update:semver-minor']
       - dependency-name: 'react-dom'
-        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+        update-types: ['version-update:semver-minor']
       - dependency-name: 'react-native'
-        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+        update-types: ['version-update:semver-minor']
       - dependency-name: 'react-native-*'
-        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+        update-types: ['version-update:semver-minor']
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
+      interval: monthly
       time: '06:00'
       timezone: America/Costa_Rica
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 1
     labels: [dependencies]
     commit-message:
       prefix: ci
