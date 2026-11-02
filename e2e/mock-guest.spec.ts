@@ -1,6 +1,6 @@
 // Build REAL + backend simulado (scripts/e2e/mock-server.mjs): el comprador sin cuenta tal como corre en producción.
 import { test, expect, type Page } from '@playwright/test';
-import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken } from './mock';
+import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken, readVault, plainGuestSecrets } from './mock';
 import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle, expectLegalVisible } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { CLAIM_RULE, DISPUTE_REPLY_RULE, SHIP_REFUND_RULE } from '../lib/rules';
@@ -816,8 +816,10 @@ test('CNT-03 "Ahora no" la oculta para esta compra (sin volver a insistir)', asy
 test('CNT-04 Crear cuenta: el login vuelve a la MISMA /p/<slug> (redirect de Google/Apple) con la compra intacta', async ({ page, request }, info) => {
   await reset(request, [cntOrder], false, 'inapp', true);
   await payAsGuestCnt(page);
-  const before = await page.evaluate(() => ({ key: localStorage.getItem('meteorito:guest:v1'), pin: localStorage.getItem('meteorito:guest:pin:cnt001') }));
+  const v0 = await readVault(page); const before = { key: v0['guest:key'], pin: v0['guest:pin:cnt001'] }; // bóveda cifrada (no localStorage)
   expect(before.pin).toBe(MOCK_PIN);
+  expect(before.key).toMatch(/^[a-f0-9]{64}$/);
+  expect(await plainGuestSecrets(page)).toEqual([]);
   const card = page.getByTestId('contact-card');
   await card.getByRole('radio', { name: 'Crear cuenta' }).click();
   await page.getByTestId('contact-consent').click();
@@ -832,7 +834,7 @@ test('CNT-04 Crear cuenta: el login vuelve a la MISMA /p/<slug> (redirect de Goo
   await page.goto('/p/cnt001?cavos_auth_code=e2e-code&state=e2e');
   await expect(page.getByText(PAID).first()).toBeVisible();
   await expect(page.getByTestId('contact-account-pending')).toBeVisible(); // retoma el vínculo pendiente
-  const after = await page.evaluate(() => ({ key: localStorage.getItem('meteorito:guest:v1'), pin: localStorage.getItem('meteorito:guest:pin:cnt001') }));
+  const v1 = await readVault(page); const after = { key: v1['guest:key'], pin: v1['guest:pin:cnt001'] };
   expect(after).toEqual(before); // misma llave y mismo código: la compra sigue en este dispositivo
   await expect(page.getByText('Tengo un problema')).toBeVisible();
   await noHScroll(page);

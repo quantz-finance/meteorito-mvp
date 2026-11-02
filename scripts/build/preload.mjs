@@ -39,8 +39,11 @@ if (commonFile) {
   else {
     const commonUrl = `/_expo/static/js/web/${commonFile}`;
     // Envuelve el cargador async de Metro (globalThis.__loadBundleAsync, lo asigna expo al arrancar el entry).
-    const loader = `(function(){var C=${JSON.stringify(commonUrl)},N=${JSON.stringify(needs)},p=null,o;function c(){return p||(p=new Promise(function(r,j){var s=document.createElement('script');s.src=C;s.async=true;s.onload=r;s.onerror=function(e){p=null;j(e)};document.head.appendChild(s)}))}Object.defineProperty(globalThis,'__loadBundleAsync',{configurable:true,get:function(){return o&&function(u){return N.indexOf(u)<0?o(u):c().then(function(){return o(u)})}},set:function(f){o=f}})})();`;
-    deferTag = `<script>${loader}</script>`;
+    // Script inline CONSTANTE (su hash sha256 va fijo en la CSP de vercel.json); los nombres con hash van en un bloque JSON
+    // (no ejecutable, la CSP no lo mira).
+    const cfg = JSON.stringify({ c: commonUrl, n: needs }).replace(/</g, '\\u003c');
+    const loader = `(function(){var d=document.getElementById('mt-chunks'),g=JSON.parse(d&&d.textContent||'{"n":[]}'),C=g.c,N=g.n,p=null,o;function c(){return p||(p=new Promise(function(r,j){var s=document.createElement('script');s.src=C;s.async=true;s.onload=r;s.onerror=function(e){p=null;j(e)};document.head.appendChild(s)}))}Object.defineProperty(globalThis,'__loadBundleAsync',{configurable:true,get:function(){return o&&function(u){return N.indexOf(u)<0?o(u):c().then(function(){return o(u)})}},set:function(f){o=f}})})();`;
+    deferTag = `<script type="application/json" id="mt-chunks">${cfg}</script><script>${loader}</script>`;
     console.log(`[postbuild] __common diferido; lo esperan ${needs.length} chunks async`);
   }
 }
@@ -66,3 +69,12 @@ const pre = files.map(url).filter((u) => /^\/_expo\/static\/js\/web\/(entry|__ex
 const version = createHash('sha1').update(pre.join()).digest('hex').slice(0, 10);
 writeFileSync(join(dist, 'sw.js'), swTpl.replace('__SW_VERSION__', version).replace('[/*__PRECACHE__*/]', JSON.stringify(pre)));
 console.log(`[postbuild] ${fonts.length} fuentes precargadas, ${pre.length} archivos en el precache del SW (v${version}) -> ${n} html`);
+
+// 4) CSP: cada <script> inline ejecutable de cada HTML tiene que estar permitido por su hash en vercel.json.
+//    Si alguien agrega uno nuevo, el build falla aquí (mejor que publicar una página que la CSP rompe).
+import { inlineScriptHashes, cspScriptHashes } from './csp.mjs';
+const allowed = cspScriptHashes(JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8')));
+const missing = new Map();
+for (const f of walk(dist).filter((f) => f.endsWith('.html'))) for (const h of inlineScriptHashes(readFileSync(f, 'utf8'))) if (!allowed.has(h)) missing.set(h, url(f));
+if (missing.size) fail('script inline sin hash en la CSP de vercel.json: ' + [...missing].map(([h, f]) => `'${h}' (${f})`).join(', '));
+console.log(`[postbuild] CSP: scripts inline permitidos por hash (${allowed.size})`);

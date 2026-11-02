@@ -15,7 +15,7 @@ import { Fonts } from '@/constants/Colors';
 import { C, S, T } from '@/constants/theme';
 import { guestApi } from '@/lib/api';
 import { myListingOrder, rememberListingOrder } from '@/lib/listings';
-import { loadGrant, loadPin, savePin } from '@/lib/guest';
+import { loadGrant, loadPin, savePin, useGuestVault } from '@/lib/guest';
 import { reissuePin } from '@/lib/buyerContact';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, orderTitle, type PublicOrder } from '@/lib/orders';
@@ -44,7 +44,9 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [sinpe, setSinpe] = useState<{ amountUsdc: number; priceCrc: number; reference: string } | null>(null);
-  const [pin, setPinState] = useState<string | null>(() => loadPin(order.slug)); // el PIN queda en este navegador (comprador invitado)
+  const vault = useGuestVault(); // la bóveda cifrada carga async: re-render al terminar
+  const [pin, setPinState] = useState<string | null>(() => loadPin(order.slug)); // el PIN queda en este navegador (comprador invitado, cifrado)
+  useEffect(() => { if (!pin) { const p = loadPin(order.slug); if (p) setPinState(p); } }, [vault, order.slug]); // eslint-disable-line react-hooks/exhaustive-deps
   const setPin = (p: string | null) => { setPinState(p); if (p) savePin(order.slug, p); };
   const granted = !!loadGrant(order.slug); // abrió un link de acceso (correo / WhatsApp) en este dispositivo
   const buyerHere = !!pin || granted || auth.isAuthenticated; // este dispositivo es el del comprador (PIN o link de acceso) o hay sesión

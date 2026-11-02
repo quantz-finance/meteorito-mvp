@@ -3,13 +3,14 @@
 // de un producto permanente), para compras hechas antes de que existiera el registro.
 import type { MeteoritoAuth } from './types';
 import { guestApi } from './api';
-import { hasGuestKey } from './guest';
+import { guestReady, hasGuestKey, pinSlugs } from './guest';
 import { getPublicOrder } from './orders';
 import { localPurchaseSlugs, mergePurchases, readLocalPurchases, rememberPurchase, rowFromOrder, type PurchaseRow } from './purchases';
 
 const MAX_PUBLIC_LOOKUPS = 20;
 
 export async function loadMyPurchases(auth: Pick<MeteoritoAuth, 'getAuthToken' | 'isAuthenticated'>): Promise<{ rows: PurchaseRow[]; serverFailed: boolean }> {
+  await guestReady(); // bóveda cargada y migración de localStorage hecha
   const local = readLocalPurchases();
   let server: PurchaseRow[] = []; let serverFailed = false;
   if (hasGuestKey() || auth.isAuthenticated) {
@@ -19,7 +20,7 @@ export async function loadMyPurchases(auth: Pick<MeteoritoAuth, 'getAuthToken' |
     } catch { serverFailed = true; }
   }
   const known = new Set(server.map((r) => r.slug));
-  const missing = localPurchaseSlugs().filter((s) => !known.has(s)).slice(0, MAX_PUBLIC_LOOKUPS);
+  const missing = [...new Set([...localPurchaseSlugs(), ...pinSlugs()])].filter((s) => !known.has(s)).slice(0, MAX_PUBLIC_LOOKUPS);
   const pub = (await Promise.all(missing.map((s) => getPublicOrder(s).then(rowFromOrder).catch(() => null)))).filter(Boolean) as PurchaseRow[];
   const rows = mergePurchases(server, pub, local);
   // Lo recuperado queda en el registro de este dispositivo (la próxima vez aparece aunque falle la red).
