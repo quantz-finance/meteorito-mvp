@@ -102,6 +102,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '103', name: 'Tráfico interno/CI fuera de PostHog: automatizado no envía, ?internal=1 / localhost / previews -> is_internal, sin datos nuevos', file: './t103-trafico-interno.test.ts', onchain: false },
   { id: '104', name: 'Parches high de dependencias (axios, follow-redirects, node-forge, toml) + stellar-sdk 15.x por el runtime CJS de Vercel', file: './t104-deps-parches.test.ts', onchain: false },
   { id: '102', name: 'Vistas públicas sin escritura para anon/authenticated (036) + search_path en triggers', file: './t102-vistas-sin-escritura.test.ts', onchain: false },
+  { id: '105', name: 'Fotos sin EXIF/GPS: import limpio antes de guardar, subidas firmadas limpiadas al usarse, JPEG/PNG/WebP sin recodificar', file: './t105-fotos-sin-exif.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

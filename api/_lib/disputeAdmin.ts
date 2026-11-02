@@ -5,6 +5,7 @@
 // seller_response_get, seller_respond (vendedor del pedido).
 import { HttpError } from './auth';
 import { db } from './db';
+import { scrubStoredPhotos } from './scrubPhotos';
 import { chain } from './escrow';
 import { isMissingTable } from './push';
 import { aiStatus, buildAiInput, inputHash, runAi, type AiFacts, type AiResult } from './disputeAi';
@@ -227,6 +228,7 @@ export async function sellerRespond(order: any, sellerSub: string, raw: any) {
     const cam = cameraPhoto(raw.photo, sellerSub);
     if (!cam || cam.id !== c.id || raw.photo !== captureUrl(c)) throw Object.assign(new HttpError(400, 'Toma la foto con la cámara de Meteorito.'), { code: 'camera_required' });
     photo = raw.photo;
+    await scrubStoredPhotos(db().storage, [photo]); // sin EXIF/GPS (subida firmada: el servidor no vio los bytes)
   }
   const now = new Date().toISOString();
   const { error } = await db().from('dispute_responses').upsert({ order_id: order.id, seller_user_id: sellerSub, body, photo, updated_at: now }, { onConflict: 'order_id' });

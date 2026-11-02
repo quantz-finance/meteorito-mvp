@@ -27,7 +27,8 @@
 //  Vendedor del pedido (Bearer):     { action:'claim_seller_get', slug } -> { available, claim, can_respond }
 //                                    { action:'claim_respond', slug, body } -> su respuesta (antes de 48 h: cuenta respondido)
 //  Admin:                            { action:'admin_claims' } / { action:'admin_claim_resolve', slug, note }
-import { json, fail, orderBySlug } from '../_lib/db';
+import { db, json, fail, orderBySlug } from '../_lib/db';
+import { scrubStoredPhotos } from '../_lib/scrubPhotos';
 import { HttpError, requireCavosUser } from '../_lib/auth';
 import { requireBuyerIdentity } from '../_lib/guest';
 import { DISPUTE_REASONS, openDispute, type DisputeReason } from '../_lib/escrow';
@@ -102,6 +103,7 @@ export default async function handler(req: any, res: any) {
     });
     if (reason === 'otro' && !description?.trim()) throw new HttpError(400, 'cuéntanos qué pasó');
     const order = await orderBySlug(slug);
+    await scrubStoredPhotos(db().storage, ev); // sin EXIF/GPS (subida firmada: el servidor no vio los bytes)
     const buyerSub = who.ids.find((i) => i === order.buyer_user_id) ?? sub;
     // Regla v2 (pedidos con rules_version >= 2): versión de quien compra obligatoria + aviso a quien vende con 48 h.
     validateBuyerVersion(order, { reason, description, evidence: ev });

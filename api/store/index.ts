@@ -79,6 +79,7 @@ import { LISTING_STATUSES, missingColumn } from '../_lib/listings';
 import { checkFacebookUrl } from '../_lib/fbparse';
 import { clientIp, FB_GUEST_IP_PER_MIN, importFacebookListing, fbRateLimited } from '../_lib/fbimport';
 import { storeImportedPhotos } from '../_lib/capture';
+import { scrubStoredPhotos } from '../_lib/scrubPhotos';
 import { MAX_PHOTO_BYTES } from '../_lib/photos';
 import { importListing } from '../_lib/importers';
 import { checkListingUrl } from '../_lib/importers/providers';
@@ -531,6 +532,7 @@ export default async function handler(req: any, res: any) {
       if (b.avatar_url !== undefined) {
         const url = b.avatar_url === null ? null : avatarUrlOf(b.avatar_url, user.sub);
         if (b.avatar_url !== null && !url) throw Object.assign(new HttpError(400, 'No pudimos usar esa foto. Elige otra imagen e intenta de nuevo.'), { code: 'bad_avatar' });
+        if (url) await scrubStoredPhotos(db().storage, [url]); // sin EXIF/GPS (subida firmada)
         patch.avatar_url = url;
       }
       if (b.contact_phone !== undefined) {

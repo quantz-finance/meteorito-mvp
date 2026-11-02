@@ -10,6 +10,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto
 import { HttpError } from './auth';
 import { env } from './env';
 import { publicPrefix, userDir } from './photos';
+import { stripImageMetadata } from './stripMeta';
 
 export type CapturePurpose = 'ship' | 'listing' | 'dispute';
 export const CAPTURE_PURPOSES: CapturePurpose[] = ['ship', 'listing', 'dispute'];
@@ -132,8 +133,10 @@ export async function storeImportedPhotos(storage: any, photos: string[], sub: s
   for (const d of photos) {
     const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(d);
     const ext = m ? IMPORT_PHOTO_EXT[m[1]] : null;
-    const buf = m ? Buffer.from(m[2], 'base64') : null;
-    if (!m || !ext || !buf || !buf.length || buf.length > maxBytes) { out.push(null); continue; }
+    const raw = m ? Buffer.from(m[2], 'base64') : null;
+    if (!m || !ext || !raw || !raw.length || raw.length > maxBytes) { out.push(null); continue; }
+    // Sin EXIF/GPS, XMP, IPTC ni comentarios: la foto del anuncio importado puede traer la ubicación de quien la tomó.
+    const buf = Buffer.from(stripImageMetadata(raw).bytes);
     const id = randomUUID(); const path = importPhotoPath(sub, key, id, ext);
     try {
       const { error } = await storage.from('listings').upload(path, buf, { contentType: m[1], upsert: false });

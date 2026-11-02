@@ -3,6 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { trackServer, trackApiError } from '../_lib/analytics';
 import { db, json, fail } from '../_lib/db';
+import { scrubStoredPhotos } from '../_lib/scrubPhotos';
 import { requireCavosUser, requireAddressProof, HttpError, bindWalletIfFresh } from '../_lib/auth';
 import { walletState } from '../_lib/wallet';
 import { MAX_PHOTOS, publicPrefix } from '../_lib/photos';
@@ -65,6 +66,8 @@ export default async function handler(req: any, res: any) {
     const invitePhotos: string[] = Array.isArray(invite?.photos) ? invite.photos : [];
     if (photos.some((u) => !invitePhotos.includes(u) && !u.startsWith(publicPrefix(user.sub)))) throw new HttpError(400, 'fotos inválidas');
     if (photos.some((u) => !invitePhotos.includes(u) && !listingPhotoOk(u, user.sub, importSource))) throw cameraRequired();
+    // Sin EXIF/GPS (subida firmada: el servidor no vio los bytes). Las de la invitación ya se limpiaron al crearla.
+    await scrubStoredPhotos(db().storage, photos.filter((u) => !invitePhotos.includes(u)));
     // El link no se publica si la wallet del vendedor no puede recibir USDC (activar con /api/wallet/activate).
     if ((await walletState(seller)) !== 'ready') throw Object.assign(new HttpError(409, 'Tu cuenta todavía no está activada para recibir pagos. Actívala y vuelve a publicar.'), { code: 'wallet_not_ready' });
     // La invitación debe seguir abierta y el precio acordado coincidir.
