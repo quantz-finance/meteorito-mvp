@@ -10,7 +10,7 @@ import { fakeDb } from './fakedb';
 import activate from '../../api/wallet/activate';
 
 const pre = (m: string) => Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)]);
-const sign = (kp: Keypair, m: string) => kp.sign(pre(m)).toString('base64');
+const sign = (kp: Keypair, m: string) => Buffer.from(kp.sign(pre(m))).toString('base64');
 
 export async function run(t: T) {
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';

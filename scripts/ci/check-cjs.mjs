@@ -1,10 +1,15 @@
-// Compila api/ como CommonJS (como Vercel) y carga cada función con require(esm) DESHABILITADO.
-// Evita que vuelva el crash ERR_REQUIRE_ESM (jose 6 / uint8array-extras). Uso: npm run check:cjs
+// Compila api/ como CommonJS (como Vercel) y carga cada función en un proceso aparte. Uso: npm run check:cjs
+// @stellar/stellar-sdk 17 publica un build CJS que hace require() de dependencias solo-ESM (uint8array-extras,
+// @noble/*, @stellar/js-xdr): necesita require(esm), activo por defecto desde Node 22.12 (Vercel corre 22.23.x,
+// ver /api/health -> node). Por eso se carga con require(esm) habilitado pero se exige Node >= 22.12, y sigue fallando
+// cualquier error de carga (ERR_REQUIRE_ESM en Node viejo, ERR_REQUIRE_ASYNC_MODULE por top-level await, etc.).
 import { execSync, spawnSync } from 'node:child_process';
 import { readdirSync, rmSync, statSync, symlinkSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '../..');
+const [maj, min] = process.versions.node.split('.').map(Number);
+if (maj < 22 || (maj === 22 && min < 12)) { console.error(`FAIL  Node ${process.versions.node}: el API necesita Node >= 22.12 (require(esm) por defecto)`); process.exit(1); }
 const out = join(root, '.ci-cjs');
 rmSync(out, { recursive: true, force: true });
 try { execSync(`npx tsc -p ${join(root, 'scripts/ci/tsconfig.cjs.json')}`, { cwd: root, stdio: 'pipe' }); }
@@ -24,12 +29,12 @@ const walk = (d) => { for (const f of readdirSync(d)) { const p = join(d, f); if
 walk(join(out, 'api'));
 let failed = 0;
 for (const f of entries.sort()) {
-  const r = spawnSync(process.execPath, ['--no-experimental-require-module', '-e',
+  const r = spawnSync(process.execPath, ['--no-warnings', '-e',
     `const m=require(${JSON.stringify(f)}); if (typeof m.default !== 'function') { console.error('sin default export'); process.exit(2) }`], { cwd: out, encoding: 'utf8' });
   const rel = f.slice(out.length + 1);
   if (r.status === 0) console.log(`OK    ${rel}`);
   else { failed++; console.log(`FAIL  ${rel}\n${(r.stderr || '').split('\n').filter((l) => /Error|ERR_/.test(l)).slice(0, 3).join('\n')}`); }
 }
 rmSync(out, { recursive: true, force: true });
-console.log(failed ? `\n${failed} funciones no cargan sin require(esm)` : `\n${entries.length} funciones cargan como CJS sin require(esm)`);
+console.log(failed ? `\n${failed} funciones no cargan como CJS` : `\n${entries.length} funciones cargan como CJS (Node ${process.versions.node})`);
 process.exit(failed ? 1 : 0);

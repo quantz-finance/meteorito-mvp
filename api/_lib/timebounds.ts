@@ -25,12 +25,15 @@ export function tightenTimebounds(unsignedXdr: string, nowS = Math.floor(Date.no
   const max = nowS + txWindowS();
   const cur = maxTimeOf(tx);
   if (cur > 0 && cur <= max) return tx;
+  // stellar-sdk 17: XDR inmutable (uniones discriminadas por .type, campos readonly): se arma un envelope nuevo.
   const env_ = tx.toEnvelope();
-  const inner = env_.v1().tx();
-  const cond = inner.cond();
-  if (cond.switch().name === 'precondV2') throw new TimeboundsError('precondiciones V2 no soportadas');
-  inner.cond(xdr.Preconditions.precondTime(new xdr.TimeBounds({ minTime: xdr.Uint64.fromString('0'), maxTime: xdr.Uint64.fromString(String(max)) })));
-  return new Transaction(env_, Networks.TESTNET);
+  if (env_.type !== 'envelopeTypeTx') throw new TimeboundsError('envelope no soportado');
+  const inner = env_.v1.tx;
+  if (inner.cond.type === 'precondV2') throw new TimeboundsError('precondiciones V2 no soportadas');
+  const cond = xdr.Preconditions.precondTime(new xdr.TimeBounds({ minTime: 0n, maxTime: BigInt(max) }));
+  const nextTx = new xdr.Transaction({ sourceAccount: inner.sourceAccount, fee: inner.fee, seqNum: inner.seqNum, cond, memo: inner.memo, operations: inner.operations, ext: inner.ext });
+  const nextEnv = xdr.TransactionEnvelope.envelopeTypeTx(new xdr.TransactionV1Envelope({ tx: nextTx, signatures: env_.v1.signatures }));
+  return new Transaction(nextEnv, Networks.TESTNET);
 }
 
 /** Tx ya firmada (p.ej. inner de un fee-bump firmado por el usuario): ¿tiene ventana corta y acotada? */

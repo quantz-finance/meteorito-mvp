@@ -48,7 +48,7 @@ async function send(kp: Keypair, to: string, asset: Asset, amount: string, memo:
   const cases = (process.argv.slice(2).length ? process.argv.slice(2) : ['A', 'B', 'C']).map((c) => c.toUpperCase());
   const out: any[] = [];
   for (const c of cases) {
-    const key = Keypair.random().rawSecretKey().toString('hex');
+    const key = Buffer.from(Keypair.random().rawSecretKey()).toString('hex');
     const call = async (h: any, body: any) => { const r = res(); const q: any = req(null, body); q.headers = { 'x-guest-key': key }; await h(q, r); if (r.code !== 200) throw new Error(`${body.step ?? body.reason} ${r.code} ${JSON.stringify(r.body)}`); return r.body; };
     const slug = `cr${c.toLowerCase()}${String(Date.now()).slice(-3)}`;
     // Dónde cobra el vendedor (029): W = wallet externa nueva con trustline USDC; I = Cuenta IBAN (receiver = platform).

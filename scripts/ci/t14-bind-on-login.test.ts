@@ -11,7 +11,7 @@ import activate from '../../api/wallet/activate';
 
 const _pf = (kp: Keypair, ref = 'bind') => { const m = proofMessage('wallet', ref, kp.publicKey(), Math.floor(Date.now() / 1000));
   const pre = Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)]);
-  return { address: kp.publicKey(), publicKey: kp.publicKey(), message: m, signature: kp.sign(pre).toString('base64') }; };
+  return { address: kp.publicKey(), publicKey: kp.publicKey(), message: m, signature: Buffer.from(kp.sign(pre)).toString('base64') }; };
 
 export async function run(t: T) {
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';
@@ -19,7 +19,7 @@ export async function run(t: T) {
   const db = fakeDb(); db.tables.user_wallets = []; __setDbForTests(db as any);
   const a = Keypair.random(), b = Keypair.random(); const now = Math.floor(Date.now() / 1000);
   const nonce = async (tok: string) => { const r = res(); await activate(req(tok, { step: 'nonce' }), r); return r.body.nonce as string; };
-  const sg = (kp: Keypair, m: string) => kp.sign(Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)])).toString('base64');
+  const sg = (kp: Keypair, m: string) => Buffer.from(kp.sign(Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)]))).toString('base64');
   const bindP = (kp: Keypair, sub: string, n: string) => ({ address: kp.publicKey(), publicKey: kp.publicKey(), signature: sg(kp, bindMessage(sub, n)), nonce: n });
   const bindRaw = async (tok: string, p: any) => { const r = res(); await activate(req(tok, { step: 'bind', proof: p }), r); return r; };
   const bind = async (tok: string, kp: Keypair, sub = 'u1') => bindRaw(tok, bindP(kp, sub, await nonce(await token({ sub }))));
@@ -49,7 +49,7 @@ export async function run(t: T) {
   const realFetch = globalThis.fetch; const calls: string[] = [];
   globalThis.fetch = (async (_u: any, i: any) => { const st = JSON.parse(i.body).step; calls.push(st); return { ok: true, status: 200, json: async () => (st === 'nonce' ? { nonce: 'd'.repeat(48) } : { bound: true }) }; }) as any;
   const mk = (tok: string): any => ({ isAuthenticated: true, address: a.publicKey(), getAuthToken: () => tok, wallet: { state: 'ready' },
-    signMessage: async (m: string) => { const pre = Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)]); return { publicKey: a.publicKey(), signature: a.sign(pre).toString('base64') }; } });
+    signMessage: async (m: string) => { const pre = Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)]); return { publicKey: a.publicKey(), signature: Buffer.from(a.sign(pre)).toString('base64') }; } });
   try {
     __resetBindForTests();
     t.check('cliente: token vencido -> omite en silencio', (await bindWalletOnLogin(mk(await token({ sub: 'u1', exp: now - 60 })))) === false && calls.length === 0);

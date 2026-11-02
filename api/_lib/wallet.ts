@@ -83,7 +83,7 @@ export function validateActivationTx(xdr: string, seller: string): Transaction {
     && ops[n - 1].type === 'endSponsoringFutureReserves' && ops[n - 1].source === seller;
   if (!okShape) throw new HttpError(400, 'operación no permitida');
   const sellerHint = Keypair.fromPublicKey(seller).signatureHint();
-  if (!tx.signatures.some((s) => Buffer.from(s.hint()).equals(Buffer.from(sellerHint)))) throw new HttpError(400, 'falta la firma del vendedor');
+  if (!tx.signatures.some((s) => Buffer.from(s.hint.toBytes()).equals(Buffer.from(sellerHint)))) throw new HttpError(400, 'falta la firma del vendedor');
   return tx;
 }
 

@@ -36,7 +36,7 @@ const SELLER = Keypair.random();
 const signProof = (kp: Keypair, action: string, ref: string) => {
   const ts = Math.floor(Date.now() / 1000); const message = proofMessage(action, ref, kp.publicKey(), ts);
   const pre = Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(message))), Buffer.from('\n'), Buffer.from(message)]);
-  return { address: kp.publicKey(), publicKey: kp.publicKey(), message, signature: kp.sign(pre).toString('base64') };
+  return { address: kp.publicKey(), publicKey: kp.publicKey(), message, signature: Buffer.from(kp.sign(pre)).toString('base64') };
 };
 /** Cuerpo válido de "crear link" (prueba de dirección + foto propia). */
 const sellerBody = (sub: string, over: any = {}) => ({ proof: signProof(SELLER, 'create', 'new'), title: 'iPhone 13', price_crc: 250000, photos: [publicPrefix(sub) + 'listing-44444444-4444-4444-8444-444444444444/0.jpg'], ...over });

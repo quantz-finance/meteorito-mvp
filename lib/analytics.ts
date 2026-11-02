@@ -36,7 +36,7 @@ async function sha256(s: string): Promise<string> {
     return Array.from(new Uint8Array(b)).map((x) => x.toString(16).padStart(2, '0')).join('');
   }
   const { hash } = await import('@stellar/stellar-sdk'); // nativo: sha256 ya incluido en el bundle
-  return hash(Buffer.from(s)).toString('hex');
+  return Buffer.from(hash(Buffer.from(s))).toString('hex'); // stellar-sdk 17: hash() devuelve Uint8Array
 }
 export const hashSub = async (sub: string) => 'u_' + (await sha256(`${ANALYTICS_SALT}:${sub}`)).slice(0, 32);
 

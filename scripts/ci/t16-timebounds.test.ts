@@ -19,7 +19,7 @@ export async function run(t: T) {
   t.check('XDR TW con ventana larga (+100 s) -> acortado a ≤60 s antes de firmar', maxTimeOf(tt) === now + 60 && tt.fee === long.fee && tt.operations.length === 1);
   const none = mk(null);
   t.check('XDR sin maxTime -> se fija maxTime=now+60', maxTimeOf(none) === 0 && maxTimeOf(tightenTimebounds(none.toXDR(), now)) === now + 60);
-  const short = mk(30); t.check('ventana ya corta -> sin cambios (mismo hash)', tightenTimebounds(short.toXDR()).hash().equals(short.hash()));
+  const short = mk(30); t.check('ventana ya corta -> sin cambios (mismo hash)', Buffer.from(tightenTimebounds(short.toXDR()).hash()).equals(Buffer.from(short.hash())));
   const signed = mk(null, now + 100); signed.sign(kp);
   t.check('XDR ya firmado -> no se tocan sus timebounds (error)', (() => { try { tightenTimebounds(signed.toXDR(), now); return false; } catch (e) { return e instanceof TimeboundsError; } })());
 

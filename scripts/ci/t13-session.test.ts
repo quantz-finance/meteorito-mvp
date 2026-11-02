@@ -13,7 +13,7 @@ import pay from '../../api/escrow/pay';
 import activate from '../../api/wallet/activate';
 
 const pre = (m: string) => Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)]);
-const sign = (kp: Keypair, m: string) => kp.sign(pre(m)).toString('base64');
+const sign = (kp: Keypair, m: string) => Buffer.from(kp.sign(pre(m))).toString('base64');
 const addrProof = (kp: Keypair, action: string, ref: string) => { const m = proofMessage(action, ref, kp.publicKey(), Math.floor(Date.now() / 1000)); return { address: kp.publicKey(), publicKey: kp.publicKey(), message: m, signature: sign(kp, m) }; };
 
 export async function run(t: T) {

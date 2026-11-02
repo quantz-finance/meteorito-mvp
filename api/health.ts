@@ -1,4 +1,4 @@
-// GET /api/health — verifica que el runtime puede cargar TODAS las dependencias del API (CJS, sin require(esm)).
+// GET /api/health — verifica que el runtime puede cargar TODAS las dependencias del API (CJS; con stellar-sdk 17 vía require(esm), Node >= 22.12).
 // Sin secretos (solo config pública: autoReleaseMinutes), sin env requeridas, sin DB ni red. Si alguna dependencia no carga, la función falla al importar (500).
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

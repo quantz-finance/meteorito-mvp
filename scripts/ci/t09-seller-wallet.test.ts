@@ -15,7 +15,7 @@ import pay from '../../api/escrow/pay';
 const signProof = (kp: Keypair, action: string, ref: string) => {
   const ts = Math.floor(Date.now() / 1000); const message = proofMessage(action, ref, kp.publicKey(), ts);
   const pre = Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(message))), Buffer.from('\n'), Buffer.from(message)]);
-  return { address: kp.publicKey(), publicKey: kp.publicKey(), message, signature: kp.sign(pre).toString('base64') };
+  return { address: kp.publicKey(), publicKey: kp.publicKey(), message, signature: Buffer.from(kp.sign(pre)).toString('base64') };
 };
 
 export async function run(t: T) {

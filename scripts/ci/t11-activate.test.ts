@@ -9,7 +9,7 @@ import activate from '../../api/wallet/activate';
 
 const pf = (kp: Keypair) => { const ts = Math.floor(Date.now() / 1000); const m = proofMessage('wallet', 'activate', kp.publicKey(), ts);
   const pre = Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(m))), Buffer.from('\n'), Buffer.from(m)]);
-  return { address: kp.publicKey(), publicKey: kp.publicKey(), message: m, signature: kp.sign(pre).toString('base64') }; };
+  return { address: kp.publicKey(), publicKey: kp.publicKey(), message: m, signature: Buffer.from(kp.sign(pre)).toString('base64') }; };
 
 export async function run(t: T, N: Testnet | null) {
   await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app'; process.env.CAVOS_JWT_AUDIENCE_LOG_ONLY = '';

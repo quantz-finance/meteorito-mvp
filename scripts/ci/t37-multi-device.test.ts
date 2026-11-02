@@ -23,7 +23,7 @@ function device(name: string, w: Partial<WalletInfo>, calls: string[], iat: numb
     signMessage: async (m: string) => {
       calls.push(`${name}:sign`);
       if (w.state === 'needs-approval') throw new Error('kit/stellar: this device is not an authorized signer of the wallet');
-      return { publicKey: ADDR, signature: kp.sign(Buffer.from(m)).toString('base64') };
+      return { publicKey: ADDR, signature: Buffer.from(kp.sign(Buffer.from(m))).toString('base64') };
     },
     signXdr: async () => { calls.push(`${name}:signXdr`); return 'SIGNED'; },
     wallet: { state: 'ready', recoveryProtected: true, hasPasskey: true, approveDevice: async () => {}, enrollPasskey: async () => {}, ...w },
