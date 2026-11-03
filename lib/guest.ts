@@ -63,14 +63,18 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') void guest
 const legacy = (k: string): string | null => { try { return ls()?.getItem(k) ?? null; } catch { return null; } };
 
 /** Llave de invitado de este navegador (la crea la primera vez). */
+let creating: Promise<string> | null = null;
 export async function guestKey(): Promise<string> {
   await guestReady();
   const v = vaultGet(V_KEY) ?? legacy(LEGACY_KEY);
   if (v && HEX64.test(v)) return v;
-  const k = randomHex(32);
-  await vaultSet(V_KEY, k);
-  try { ls()?.setItem(HAS_KEY_FLAG, '1'); } catch { /* */ }
-  return k;
+  // Una sola llave aunque varias pantallas la pidan a la vez (si no, cada una crearía la suya).
+  return (creating ??= (async () => {
+    const k = randomHex(32);
+    await vaultSet(V_KEY, k);
+    try { ls()?.setItem(HAS_KEY_FLAG, '1'); } catch { /* */ }
+    return k;
+  })());
 }
 export function savePin(slug: string, pin: string) { void vaultSet(V_PIN(slug), pin); try { ls()?.removeItem(LEGACY_PIN_PREFIX + slug); } catch { /* */ } }
 export function loadPin(slug: string): string | null { return vaultGet(V_PIN(slug)) ?? legacy(LEGACY_PIN_PREFIX + slug); }

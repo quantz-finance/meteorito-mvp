@@ -9,6 +9,7 @@
 const DB = 'meteorito-vault';
 const STORE = 'kv';
 const KEY_ID = '__aes';
+const KEY_RAW = '__aes_raw';
 const SESSION_PREFIX = 'meteorito:vault:';
 
 type Backend = 'idb' | 'session' | 'memory';
@@ -35,6 +36,12 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 const tx = (mode: IDBTransactionMode) => db!.transaction(STORE, mode).objectStore(STORE);
+/** Escritura que resuelve cuando la transacción quedó confirmada (no solo el request): una recarga inmediata la ve. */
+const commit = (fn: (s: IDBObjectStore) => void) => new Promise<void>((res, rej) => {
+  const t = db!.transaction(STORE, 'readwrite');
+  t.oncomplete = () => res(); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error ?? new Error('idb abort'));
+  fn(t.objectStore(STORE));
+});
 
 async function encrypt(v: string) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -53,25 +60,37 @@ async function hydrateIdb() {
   db = await openDb();
   let k = await req(tx('readonly').get(KEY_ID)) as CryptoKey | undefined;
   if (!k || typeof k !== 'object' || !('type' in k)) {
-    k = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-    await req(tx('readwrite').put(k, KEY_ID));
+    const raw = await req(tx('readonly').get(KEY_RAW)) as Uint8Array | undefined;
+    if (raw && raw.byteLength === 32) k = await crypto.subtle.importKey('raw', raw as unknown as ArrayBuffer, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  }
+  if (!k || typeof k !== 'object' || !('type' in k)) {
+    const nk = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    try { await commit((st) => st.put(nk, KEY_ID)); k = nk; }
+    catch {
+      // Navegadores que no pueden guardar un CryptoKey en IndexedDB (DataCloneError): llave en bytes en IndexedDB y
+      // en memoria como no extraíble. Sigue sin haber nada en texto plano en localStorage.
+      const bytes = crypto.getRandomValues(new Uint8Array(32));
+      await commit((st) => st.put(bytes, KEY_RAW));
+      k = await crypto.subtle.importKey('raw', bytes as unknown as ArrayBuffer, 'AES-GCM', false, ['encrypt', 'decrypt']);
+    }
   }
   aes = k;
-  const keys = (await req(tx('readonly').getAllKeys())).filter((x) => x !== KEY_ID).map(String);
+  const keys = (await req(tx('readonly').getAllKeys())).filter((x) => x !== KEY_ID && x !== KEY_RAW).map(String);
   for (const name of keys) {
     const v = await decrypt(await req(tx('readonly').get(name)));
     if (v !== null && !cache.has(name)) cache.set(name, v);
   }
   backend = 'idb';
+  try { hydrateSession(false); } catch { /* respaldo de escrituras que IndexedDB rechazó en esta pestaña */ }
 }
-function hydrateSession() {
+function hydrateSession(asBackend = true) {
   const s = ss(); if (!s) return;
   for (let i = 0; i < s.length; i++) {
     const k = s.key(i) ?? ''; if (!k.startsWith(SESSION_PREFIX)) continue;
     const name = k.slice(SESSION_PREFIX.length); const v = s.getItem(k);
     if (v !== null && !cache.has(name)) cache.set(name, v);
   }
-  backend = 'session';
+  if (asBackend) backend = 'session';
 }
 
 /** Carga la bóveda (una vez). Resuelve siempre. */
@@ -97,16 +116,18 @@ export async function vaultSet(name: string, value: string): Promise<boolean> {
   cache.set(name, value); notify();
   await vaultReady();
   try {
-    if (backend === 'idb' && db && aes) { await req(tx('readwrite').put(await encrypt(value), name)); return true; }
-    if (backend === 'session') { ss()?.setItem(SESSION_PREFIX + name, value); return true; }
-  } catch { /* queda en memoria */ }
+    if (backend === 'idb' && db && aes) { const rec = await encrypt(value); await commit((st) => st.put(rec, name)); return true; }
+  } catch { /* IndexedDB falló: sigue con sessionStorage */ }
+  try { const s = ss(); if (s) { s.setItem(SESSION_PREFIX + name, value); return backend === 'session'; } } catch { /* queda en memoria */ }
   return false;
 }
 export async function vaultDelete(name: string): Promise<void> {
   cache.delete(name); notify();
   await vaultReady();
   try {
-    if (backend === 'idb' && db) await req(tx('readwrite').delete(name));
-    if (backend === 'session') ss()?.removeItem(SESSION_PREFIX + name);
+    if (backend === 'idb' && db) await commit((st) => st.delete(name));
+  } catch { /* */ }
+  try {
+    ss()?.removeItem(SESSION_PREFIX + name);
   } catch { /* */ }
 }

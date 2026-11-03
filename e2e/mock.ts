@@ -21,8 +21,9 @@ export async function readVault(page: Page): Promise<Record<string, string>> {
     const db: IDBDatabase = await new Promise((res, rej) => { const r = indexedDB.open('meteorito-vault', 1); r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); }; r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
     const get = (k: IDBValidKey) => new Promise<any>((res, rej) => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
     const keys: IDBValidKey[] = await new Promise((res, rej) => { const q = db.transaction('kv').objectStore('kv').getAllKeys(); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
-    const aes = await get('__aes'); const out: Record<string, string> = {};
-    for (const k of keys) { if (k === '__aes') continue; const rec = await get(k); try { out[String(k)] = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.iv }, aes, rec.ct)); } catch { out[String(k)] = '<no descifra>'; } }
+    let aes = await get('__aes'); const out: Record<string, string> = {};
+    if (!aes) { const raw = await get('__aes_raw'); if (raw) aes = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']); }
+    for (const k of keys) { if (k === '__aes' || k === '__aes_raw') continue; const rec = await get(k); try { out[String(k)] = new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.iv }, aes, rec.ct)); } catch { out[String(k)] = '<no descifra>'; } }
     db.close(); return out;
   });
 }
