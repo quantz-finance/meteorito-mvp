@@ -2,6 +2,7 @@
 // El kit Cavos 0.3.0 guarda el id_token del login (~1 h) y no lo renueva. Si vence, adjuntamos una prueba FRESCA
 // firmada por la wallet ligada (X-Meteorito-Proof, nonce de un uso) y el servidor acepta el token vencido
 // (≤ SESSION_GRACE_DAYS, default 7). Reintento único.
+import { turnstileToken } from './turnstile';
 import type { MeteoritoAuth } from './types';
 import { DEMO_ENABLED, demoApi } from './demo';
 import { guestKey, loadGrant } from './guest';
@@ -194,8 +195,16 @@ async function guestApiInner<T>(auth: Pick<MeteoritoAuth, 'getAuthToken'>, path:
   const token = auth.getAuthToken(); if (token) headers.Authorization = `Bearer ${token}`;
   const slug = (body as any)?.slug; const grant = typeof slug === 'string' ? loadGrant(slug) : null; // link de acceso abierto aquí
   if (grant) headers['X-Order-Access'] = grant;
-  const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
-  const j: any = await r.json().catch(() => ({}));
+  let r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+  let j: any = await r.json().catch(() => ({}));
+  // Turnstile (solo si el servidor lo pide, solo en la web): resolver el reto y reintentar UNA vez con el token.
+  if (r.status === 403 && /^turnstile_/.test(String(j.code ?? '')) && body && typeof body === 'object') {
+    const token = await turnstileToken(j.siteKey, j.action);
+    if (token) {
+      r = await fetch(path, { method: 'POST', headers, body: JSON.stringify({ ...(body as object), turnstile: token }) });
+      j = await r.json().catch(() => ({}));
+    }
+  }
   if (!r.ok) throw Object.assign(new Error(j.error ?? `Error ${r.status}`), { status: r.status, code: j.code ?? `http_${r.status}` });
   return j as T;
 }

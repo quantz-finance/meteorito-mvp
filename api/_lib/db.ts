@@ -26,6 +26,8 @@ export function fail(res: any, e: any) {
   const body: any = { error: e.message };
   if ((e as any).code && typeof (e as any).code === 'string') body.code = (e as any).code;
   if (Array.isArray((e as any).missing)) body.missing = (e as any).missing;
+  // Turnstile (api/_lib/turnstile.ts): el cliente web necesita la site key pública para mostrar el reto.
+  if (/^turnstile_/.test(String(body.code ?? '')) && typeof (e as any).siteKey === 'string') { body.siteKey = (e as any).siteKey; body.action = (e as any).action; }
   // 429 del límite persistente (api/_lib/rateLimit.ts): cuándo reintentar, en segundos.
   const ra = (e as any).retryAfter;
   if (e.status === 429 && Number.isFinite(ra) && ra > 0) { res.setHeader('Retry-After', String(Math.ceil(ra))); body.retryAfter = Math.ceil(ra); }

@@ -1140,3 +1140,39 @@ test('SEC-03 migración: llave y código de la versión anterior pasan a la bóv
   await page.goto('/comprar/compras');
   await expect(page.getByText('Consola')).toBeVisible();
 });
+
+// Turnstile (punto 8): solo cuando el servidor lo pide. El script de Cloudflare se simula (sin red): resuelve con el token falso.
+const TS_STUB = `window.turnstile = { render: function (el, o) { el.setAttribute('data-sitekey', o.sitekey); setTimeout(function () { (window.__tsFail ? o['error-callback'] : o.callback)('XXXX.DUMMY.TOKEN.XXXX'); }, 50); return 'w1'; }, remove: function () {} };`;
+const stubTurnstile = (page: Page) => page.route('https://challenges.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: TS_STUB }));
+
+test('TS-01 Turnstile activo: el pago sin cuenta resuelve el reto solo y reintenta con el token; sin activar no hay reto', async ({ page, request }) => {
+  await reset(request, [listing]);
+  await stubTurnstile(page);
+  // Apagado (producción sin llaves): un solo start, sin token, sin script de Cloudflare.
+  await page.goto('/p/prod01');
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  let starts = await calls(request, '/api/escrow/pay', 'start');
+  expect(starts.every((c) => !c.turnstile)).toBe(true);
+  expect(await page.evaluate(() => !!document.querySelector('script[src*="challenges.cloudflare.com"]'))).toBe(false);
+  // Activo: nuevo comprador (otro contexto) -> 403 turnstile_required -> reto -> reintento con token -> SINPE.
+  await reset(request, [listing]);
+  await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
+  const ctx = await page.context().browser()!.newContext(); const p2 = await ctx.newPage(); await stubTurnstile(p2);
+  await p2.goto('/p/prod01');
+  await p2.getByText(/Pagar en custodia/).last().click();
+  await expect(p2.getByText('Paga por SINPE Móvil')).toBeVisible();
+  starts = await calls(request, '/api/escrow/pay', 'start');
+  expect(starts.map((c) => c.turnstile)).toEqual([false, true, false]); // sin token (403), con token, y el del pedido propio (ya con escrow)
+  expect(await p2.getByTestId('turnstile').count()).toBe(0); // el contenedor se quita al terminar
+  // El reto falla: no se paga y se ve un error (sin pedido nuevo).
+  await reset(request, [listing]);
+  await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
+  const p3 = await (await page.context().browser()!.newContext()).newPage(); await stubTurnstile(p3);
+  await p3.goto('/p/prod01');
+  await p3.evaluate(() => { (window as any).__tsFail = true; });
+  await p3.getByText(/Pagar en custodia/).last().click();
+  await expect(p3.getByText('Confirma que eres una persona para seguir.')).toBeVisible();
+  expect(await childOf(request)).toHaveLength(0);
+  await ctx.close();
+});

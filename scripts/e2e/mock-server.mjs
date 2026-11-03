@@ -63,6 +63,8 @@ function decodePh(buf, q, type = '') {
   } catch { return []; }
 }
 const send = (res, code, j) => { res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*' }); res.end(JSON.stringify(j)); };
+// Turnstile de prueba: site key 'siempre pasa' de Cloudflare y el token falso que devuelve el script simulado del test.
+const TS_SITE_KEY = '1x00000000000000000000AA', TS_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const E = (status, error, code) => Object.assign(new Error(error), { status, code });
 
 async function api(req, path, q, b) {
@@ -76,6 +78,8 @@ async function api(req, path, q, b) {
   if (path === '/api/escrow/pay') {
     needGuest(); let o = get(String(b.slug));
     if (b.step === 'start') {
+      // Turnstile activo (POST /__mock/turnstile): como api/_lib/turnstile.ts, sin token válido -> 403 turnstile_required.
+      if (S.turnstile && !o.contract_id && b.turnstile !== TS_TOKEN) throw Object.assign(E(403, 'Confirma que eres una persona para seguir.', b.turnstile ? 'turnstile_failed' : 'turnstile_required'), { extra: { siteKey: TS_SITE_KEY, action: 'guest_pay' } });
       if (o.kind === 'listing') {
         if (o.listing_status !== 'activa') throw E(409, 'El vendedor pausó este producto por ahora.', 'listing_paused');
         const parent = o; o = Object.values(S.orders).find((c) => c.listing_slug === parent.slug && c.buyer === guest && ['creado', 'escrow_creado'].includes(c.status));
@@ -300,6 +304,7 @@ createServer(async (req, res) => {
     const ls = u.pathname.match(/^\/__mock\/lendara\/([\w-]+)\/(completed|kyc_rejected|expired|pending_anchor)$/);
     if (ls && S.lendara[ls[1]]) { S.lendara[ls[1]].status = ls[2]; return send(res, 200, { ok: true }); }
     if (u.pathname === '/__mock/claims') { S.claimsOn = b.on !== false; return send(res, 200, { ok: true }); } // sin/con la migración 035
+    if (u.pathname === '/__mock/turnstile') { S.turnstile = b.on !== false; return send(res, 200, { ok: true }); }
     if (u.pathname === '/__mock/state') return send(res, 200, S);
     if (u.pathname === '/__mock/patch') { Object.assign(S.orders[b.slug], b.set); return send(res, 200, S.orders[b.slug]); }
     if (u.pathname === '/__mock/fail') { S.fail.push(b); return send(res, 200, { ok: true }); }
@@ -320,11 +325,11 @@ createServer(async (req, res) => {
   if (u.pathname.startsWith('/sb/')) return send(res, 404, { message: 'no simulado' });
   if (u.pathname.startsWith('/api/')) {
     const b = req.method === 'POST' ? await body(req) : {};
-    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, guest: !!req.headers['x-guest-key'], access: !!req.headers['x-order-access'], bearer: !!req.headers.authorization, at: Date.now(), ...(b.step === 'card_pay' ? { body: b } : {}) });
+    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, turnstile: !!b.turnstile, guest: !!req.headers['x-guest-key'], access: !!req.headers['x-order-access'], bearer: !!req.headers.authorization, at: Date.now(), ...(b.step === 'card_pay' ? { body: b } : {}) });
     const f = S.fail.find((x) => x.path === u.pathname && (x.step == null || x.step === b.step) && x.times > 0);
     if (f) { f.times--; if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs)); if (f.status) return send(res, f.status, { error: f.error ?? 'Error del servidor de prueba', code: f.code }); }
     try { return send(res, 200, await api(req, u.pathname, u.searchParams, b)); }
-    catch (e) { return send(res, e.status ?? 500, { error: e.message, code: e.code }); }
+    catch (e) { return send(res, e.status ?? 500, { error: e.message, code: e.code, ...(e.extra ?? {}) }); }
   }
   const file = staticFile(u.pathname);
   if (!existsSync(file)) { res.writeHead(404); return res.end(); }
