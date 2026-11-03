@@ -1143,15 +1143,9 @@ test('SEC-03 migración: llave y código de la versión anterior pasan a la bóv
 
 // Turnstile (punto 8): solo cuando el servidor lo pide. El script de Cloudflare se simula (sin red): resuelve con el token falso.
 const TS_STUB = `window.turnstile = { render: function (el, o) { el.setAttribute('data-sitekey', o.sitekey); setTimeout(function () { (window.__tsFail ? o['error-callback'] : o.callback)('XXXX.DUMMY.TOKEN.XXXX'); }, 50); return 'w1'; }, remove: function () {} };`;
-const stubTurnstile = async (page: Page) => {
-  if (process.env.TS_DEBUG) {
-    page.on('console', (m) => console.log('[console]', m.type(), m.text().slice(0, 300)));
-    page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 300)));
-    page.on('requestfailed', (r) => console.log('[reqfail]', r.url().slice(0, 120), r.failure()?.errorText));
-    page.on('response', (r) => { if (/challenges|escrow\/pay/.test(r.url())) console.log('[resp]', r.status(), r.url().slice(0, 120)); });
-  }
-  return page.route('https://challenges.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: TS_STUB }));
-};
+// Contextos con serviceWorkers 'block': con el SW de la PWA activo, WebKit no pasa las peticiones por page.route y se
+// cargaría el script REAL de Cloudflare (en Chromium sí las intercepta). Ver TS-01.
+const stubTurnstile = (page: Page) => page.route('https://challenges.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: TS_STUB }));
 
 test('TS-01 Turnstile activo: el pago sin cuenta resuelve el reto solo y reintenta con el token; sin activar no hay reto', async ({ page, browser, request }) => {
   await reset(request, [listing]);
@@ -1166,7 +1160,7 @@ test('TS-01 Turnstile activo: el pago sin cuenta resuelve el reto solo y reinten
   // Activo: comprador nuevo -> 403 turnstile_required -> reto -> reintento con token -> SINPE.
   await reset(request, [listing]);
   await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
-  const ctx = await browser.newContext(); const p2 = await ctx.newPage(); await stubTurnstile(p2);
+  const ctx = await browser.newContext({ serviceWorkers: 'block' }); const p2 = await ctx.newPage(); await stubTurnstile(p2);
   await p2.goto('/p/prod01');
   await p2.getByText(/Pagar en custodia/).last().click();
   await expect(p2.getByText('Paga por SINPE Móvil')).toBeVisible({ timeout: 15_000 });
@@ -1178,7 +1172,7 @@ test('TS-01 Turnstile activo: el pago sin cuenta resuelve el reto solo y reinten
   // El reto falla: no se paga y se ve el mensaje (sin pedido nuevo).
   await reset(request, [listing]);
   await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
-  const ctx3 = await browser.newContext(); const p3 = await ctx3.newPage(); await stubTurnstile(p3);
+  const ctx3 = await browser.newContext({ serviceWorkers: 'block' }); const p3 = await ctx3.newPage(); await stubTurnstile(p3);
   await p3.addInitScript(() => { (window as any).__tsFail = true; });
   await p3.goto('/p/prod01');
   await p3.getByText(/Pagar en custodia/).last().click();
