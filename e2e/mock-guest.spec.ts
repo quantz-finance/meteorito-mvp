@@ -1143,7 +1143,15 @@ test('SEC-03 migración: llave y código de la versión anterior pasan a la bóv
 
 // Turnstile (punto 8): solo cuando el servidor lo pide. El script de Cloudflare se simula (sin red): resuelve con el token falso.
 const TS_STUB = `window.turnstile = { render: function (el, o) { el.setAttribute('data-sitekey', o.sitekey); setTimeout(function () { (window.__tsFail ? o['error-callback'] : o.callback)('XXXX.DUMMY.TOKEN.XXXX'); }, 50); return 'w1'; }, remove: function () {} };`;
-const stubTurnstile = (page: Page) => page.route('https://challenges.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: TS_STUB }));
+const stubTurnstile = async (page: Page) => {
+  if (process.env.TS_DEBUG) {
+    page.on('console', (m) => console.log('[console]', m.type(), m.text().slice(0, 300)));
+    page.on('pageerror', (e) => console.log('[pageerror]', String(e).slice(0, 300)));
+    page.on('requestfailed', (r) => console.log('[reqfail]', r.url().slice(0, 120), r.failure()?.errorText));
+    page.on('response', (r) => { if (/challenges|escrow\/pay/.test(r.url())) console.log('[resp]', r.status(), r.url().slice(0, 120)); });
+  }
+  return page.route('https://challenges.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: TS_STUB }));
+};
 
 test('TS-01 Turnstile activo: el pago sin cuenta resuelve el reto solo y reintenta con el token; sin activar no hay reto', async ({ page, browser, request }) => {
   await reset(request, [listing]);
