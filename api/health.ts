@@ -14,6 +14,7 @@ import * as feebump from './_lib/feebump';
 import * as photos from './_lib/photos';
 import * as tw from './_lib/tw';
 import { activationConfig } from './_lib/wallet';
+import { BAD_REQUEST, S, validate } from './_lib/validate';
 
 function version(pkg: string): string {
   try { return require(`${pkg}/package.json`).version; } catch {}
@@ -40,12 +41,21 @@ const loaded = {
 
 export default function handler(req: any, res: any) {
   if (req.method !== 'GET') { res.status(405).setHeader('Content-Type', 'application/json'); return res.send(JSON.stringify({ error: 'method' })); }
+  try { validate(req, S.health); } catch { res.status(400).setHeader('Content-Type', 'application/json'); return res.send(JSON.stringify({ error: BAD_REQUEST, code: 'bad_request' })); }
   const ok = Object.values(loaded).every(Boolean);
+  // Respuesta mínima: lo que usa la app (autoReleaseMinutes) y el smoke de producción (platformMatches). Versiones, node y
+  // qué dependencia cargó: solo con el CRON_SECRET (diagnóstico de ERR_REQUIRE_ESM), nunca al público.
+  const secret = process.env.CRON_SECRET;
+  const internal = !!secret && req.headers?.authorization === `Bearer ${secret}`;
+  const wa = activationConfig();
   res.status(ok ? 200 : 500).setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   res.send(JSON.stringify({
-    ok, loaded, node: process.version,
-    config: { autoReleaseMinutes: env.env.autoReleaseMinutes(), walletActivation: activationConfig() },
-    versions: { jose: version('jose'), '@stellar/stellar-sdk': version('@stellar/stellar-sdk'), '@stellar/stellar-base': version('@stellar/stellar-base'), '@supabase/supabase-js': version('@supabase/supabase-js') },
+    ok,
+    config: { autoReleaseMinutes: env.env.autoReleaseMinutes(), walletActivation: internal ? wa : { platformMatches: wa.platformMatches } },
+    ...(internal ? {
+      loaded, node: process.version,
+      versions: { jose: version('jose'), '@stellar/stellar-sdk': version('@stellar/stellar-sdk'), '@stellar/stellar-base': version('@stellar/stellar-base'), '@supabase/supabase-js': version('@supabase/supabase-js') },
+    } : {}),
   }));
 }

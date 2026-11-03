@@ -42,6 +42,7 @@ import { startReplyWindow, validateBuyerVersion } from '../_lib/replyRule';
 import { replyRuleApplies } from '../_lib/orderRules';
 import { adminClearSocials } from '../_lib/socialsAdmin';
 import { adminClaims, claimForBuyer, claimForSeller, openClaim, resolveClaim, respondClaim } from '../_lib/claims';
+import { S, validate } from '../_lib/validate';
 
 async function action(req: any, res: any, a: string) {
   res.setHeader?.('Cache-Control', 'no-store');
@@ -85,6 +86,7 @@ async function action(req: any, res: any, a: string) {
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
+    validate(req, S.escrowDispute); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
     if (typeof req.body?.action === 'string') return await action(req, res, req.body.action);
     const who = await requireBuyerIdentity(req);
     const { slug, reason, description, evidence } = req.body ?? {};

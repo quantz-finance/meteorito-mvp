@@ -28,7 +28,7 @@ export async function run(t: T) {
   t.check('foto en la carpeta de OTRO vendedor -> 400, no se guarda', r.code === 400 && !db.tables.seller_profiles[0].avatar_url, `${r.code}`);
   for (const [why, url] of [['dominio externo', 'https://evil.example/x.jpg'], ['no es imagen (.svg)', mine.replace('0.jpg', '0.svg')], ['ruta con ..', mine.replace('0b1c2d3e', '../seller2/0b1c2d3e')], ['data URL', 'data:image/png;base64,AAAA'], ['no string', 42]] as const) {
     r = await call({ tok: tok1, body: { action: 'update', avatar_url: url } });
-    t.check(`foto inválida (${why}) -> 400`, r.code === 400 && r.body?.code === 'bad_avatar', `${r.code} ${r.body?.code}`);
+    t.check(`foto inválida (${why}) -> 400`, r.code === 400 && (r.body?.code === 'bad_avatar' || (typeof url !== 'string' && r.body?.code === 'bad_request')), `${r.code} ${r.body?.code}`); // tipo incorrecto: lo corta zod (genérico)
   }
   r = await call({ tok: tok1, body: { action: 'update', avatar_url: mine } });
   t.check('dueño guarda su foto -> 200 y queda en su perfil', r.code === 200 && db.tables.seller_profiles[0].avatar_url === mine && db.tables.seller_profiles[1].avatar_url == null, `${r.code} ${JSON.stringify(r.body)}`);

@@ -28,7 +28,7 @@ export async function run(t: T, N: Testnet | null) {
     t.check('UI: aviso genérico, sin código ni detalle técnico', !/código|platform|PLATFORM|secret/i.test(n) && /preparar tu cuenta/.test(n), n);
     process.env.STELLAR_NETWORK = 'public';
     r = await call({ step: 'prepare', proof: pf(kp) });
-    t.check('STELLAR_NETWORK != testnet -> rechazado', r.code === 500 && /solo testnet/.test(r.body.error), JSON.stringify(r.body));
+    t.check('STELLAR_NETWORK != testnet -> rechazado (500 genérico, sin detalle interno)', r.code === 500 && r.body.code === 'internal' && !/testnet|STELLAR/.test(r.body.error), JSON.stringify(r.body));
     process.env.STELLAR_NETWORK = 'testnet';
     if (!N) { t.check('activación real testnet: SKIP (sin secretos)', true); return; }
     // Activación real: Horizon real, platform CI.

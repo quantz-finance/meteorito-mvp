@@ -16,10 +16,12 @@ import { db } from '../_lib/db';
 import { orderForBuyer } from '../_lib/listings';
 import { cardConfirm, cardEnabled, cardMode, cardPay, cardSession } from '../_lib/lendara';
 import { cryptoEnabled, cryptoQuote, cryptoStatus } from '../_lib/crypto';
+import { S, validate } from '../_lib/validate';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
+    validate(req, S.escrowPay); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
     const who = await requireBuyerIdentity(req);
     const { slug, step, proof } = req.body ?? {};
     let order = await orderBySlug(slug);

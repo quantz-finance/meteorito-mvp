@@ -11,12 +11,22 @@ export const db = (): any => (c ??= createClient(env.supabaseUrl(), env.supabase
 /** Solo tests: inyecta un cliente falso. */
 export const __setDbForTests = (fake: any) => { c = fake; };
 export function json(res: any, status: number, body: unknown) { res.status(status).setHeader('Content-Type', 'application/json'); res.send(JSON.stringify(body)); }
+export const INTERNAL_ERROR = 'Algo salió mal. Intenta de nuevo.';
+export const PAYEE_NOT_READY = 'El vendedor todavía no puede recibir pagos. Avísale que abra Meteorito para activar su cuenta e intenta de nuevo.';
+/** Error -> respuesta. HttpError: su mensaje (escrito para quien usa la app) y su código. Cualquier otro (base de datos,
+ *  red, bug): 500 genérico, sin mensaje, código ni stack internos; el detalle queda solo en el log del servidor. */
 export function fail(res: any, e: any) {
-  const body: any = { error: e?.message ?? String(e) };
-  if (e?.code && typeof e.code === 'string') body.code = e.code;
-  if (Array.isArray(e?.missing)) body.missing = e.missing;
-  if (!(e instanceof HttpError)) console.error('[api] 500', e);
-  return json(res, e instanceof HttpError ? e.status : 500, body);
+  if (!(e instanceof HttpError)) {
+    console.error('[api] 500', e);
+    // Trustless Work / Horizon rechazó la tx por la cuenta de quien cobra (sin trustline, etc.): mensaje para la persona,
+    // sin el detalle técnico (antes el cliente lo deducía del texto crudo del error).
+    if (/trustline|could not be validated|send-transaction|result_codes/i.test(String(e?.message ?? ''))) return json(res, 502, { error: PAYEE_NOT_READY, code: 'payee_not_ready' });
+    return json(res, 500, { error: INTERNAL_ERROR, code: 'internal' });
+  }
+  const body: any = { error: e.message };
+  if ((e as any).code && typeof (e as any).code === 'string') body.code = (e as any).code;
+  if (Array.isArray((e as any).missing)) body.missing = (e as any).missing;
+  return json(res, e.status, body);
 }
 export async function orderBySlug(slug: unknown): Promise<any> {
   // Productos de EJEMPLO del feed (api/_lib/demoProducts.ts): no existen como pedido y nunca se pueden pagar.

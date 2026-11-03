@@ -14,6 +14,7 @@ import { cameraRequired, listingPhotoOk } from '../_lib/capture';
 import { missingColumn } from '../_lib/listings';
 import { checkListingUrl } from '../_lib/importers/providers';
 import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCode } from '../_lib/invites';
+import { S, validate } from '../_lib/validate';
 
 const str = (v: unknown, max: number, req = true) => {
   if (v == null || v === '') { if (req) throw new HttpError(400, 'faltan campos'); return null; }
@@ -22,6 +23,7 @@ const str = (v: unknown, max: number, req = true) => {
 
 export default async function handler(req: any, res: any) {
   try {
+    validate(req, S.invites); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
     if (req.method === 'GET') {
       const code = Array.isArray(req.query?.code) ? req.query.code[0] : req.query?.code;
       if (!validCode(code)) throw new HttpError(400, 'código inválido');
