@@ -1140,3 +1140,43 @@ test('SEC-03 migración: llave y código de la versión anterior pasan a la bóv
   await page.goto('/comprar/compras');
   await expect(page.getByText('Consola')).toBeVisible();
 });
+
+// Turnstile (punto 8): solo cuando el servidor lo pide. El script de Cloudflare se simula (sin red): resuelve con el token falso.
+const TS_STUB = `window.turnstile = { render: function (el, o) { el.setAttribute('data-sitekey', o.sitekey); setTimeout(function () { (window.__tsFail ? o['error-callback'] : o.callback)('XXXX.DUMMY.TOKEN.XXXX'); }, 50); return 'w1'; }, remove: function () {} };`;
+// Contextos con serviceWorkers 'block': con el SW de la PWA activo, WebKit no pasa las peticiones por page.route y se
+// cargaría el script REAL de Cloudflare (en Chromium sí las intercepta). Ver TS-01.
+const stubTurnstile = (page: Page) => page.route('https://challenges.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: TS_STUB }));
+
+test('TS-01 Turnstile activo: el pago sin cuenta resuelve el reto solo y reintenta con el token; sin activar no hay reto', async ({ page, browser, request }) => {
+  await reset(request, [listing]);
+  await stubTurnstile(page);
+  // Apagado (producción sin llaves): sin token y sin script de Cloudflare.
+  await page.goto('/p/prod01');
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+  expect((await calls(request, '/api/escrow/pay', 'start')).every((c) => !c.turnstile)).toBe(true);
+  expect(await page.evaluate(() => !!document.querySelector('script[src*="challenges.cloudflare.com"]'))).toBe(false);
+  await page.goto('about:blank');
+  // Activo: comprador nuevo -> 403 turnstile_required -> reto -> reintento con token -> SINPE.
+  await reset(request, [listing]);
+  await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
+  const ctx = await browser.newContext({ serviceWorkers: 'block' }); const p2 = await ctx.newPage(); await stubTurnstile(p2);
+  await p2.goto('/p/prod01');
+  await p2.getByText(/Pagar en custodia/).last().click();
+  await expect(p2.getByText('Paga por SINPE Móvil')).toBeVisible({ timeout: 15_000 });
+  const flags = (await calls(request, '/api/escrow/pay', 'start')).map((c) => !!c.turnstile);
+  expect(flags[0]).toBe(false); // el primero sin token (403)
+  expect(flags.slice(0, 2)).toEqual([false, true]); // el reintento con token
+  await expect(p2.getByTestId('turnstile')).toHaveCount(0); // el contenedor se quita al terminar
+  await ctx.close();
+  // El reto falla: no se paga y se ve el mensaje (sin pedido nuevo).
+  await reset(request, [listing]);
+  await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
+  const ctx3 = await browser.newContext({ serviceWorkers: 'block' }); const p3 = await ctx3.newPage(); await stubTurnstile(p3);
+  await p3.addInitScript(() => { (window as any).__tsFail = true; });
+  await p3.goto('/p/prod01');
+  await p3.getByText(/Pagar en custodia/).last().click();
+  await expect(p3.getByText('Confirma que eres una persona para seguir.').first()).toBeVisible({ timeout: 15_000 });
+  expect(await childOf(request)).toHaveLength(0);
+  await ctx3.close();
+});

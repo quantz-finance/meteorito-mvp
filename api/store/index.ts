@@ -98,6 +98,7 @@ import { demoWanted } from '../_lib/demoFlag';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
+import { requireHuman } from '../_lib/turnstile';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
 
@@ -342,6 +343,7 @@ export default async function handler(req: any, res: any) {
       // Vendedor (Bearer Cavos) o comprador sin cuenta que invita al vendedor desde el anuncio (X-Guest-Key).
       // import_listing: cualquier anuncio público (Facebook, Mercado Libre, Encuentra24, Amazon…), con protección SSRF.
       const who = await requireBuyerIdentity(req);
+      if (!who.cavos) await requireHuman(req, b.turnstile, 'guest_import'); // invitado: Turnstile si está activo (api/_lib/turnstile.ts)
       const any = b.action === 'import_listing';
       const chk = any ? checkListingUrl(b.url) : checkFacebookUrl(b.url);
       if (!chk.ok) throw Object.assign(new HttpError(400, chk.error), { code: any ? 'import_url_invalid' : 'fb_url_invalid' });

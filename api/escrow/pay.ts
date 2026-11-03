@@ -18,6 +18,7 @@ import { cardConfirm, cardEnabled, cardMode, cardPay, cardSession } from '../_li
 import { cryptoEnabled, cryptoQuote, cryptoStatus } from '../_lib/crypto';
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
+import { requireHuman } from '../_lib/turnstile';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -28,6 +29,8 @@ export default async function handler(req: any, res: any) {
     const { slug, step, proof } = req.body ?? {};
     let order = await orderBySlug(slug);
     if (step === 'start' && who.guest) {
+      // Compra sin cuenta que crea pedido/escrow nuevo: Turnstile si está activo (api/_lib/turnstile.ts). Reabrir el propio no.
+      if (!order.contract_id) await requireHuman(req, req.body?.turnstile, 'guest_pay');
       // Link creado a partir de una invitación: queda reservado para quien invitó (su llave de invitado).
       const reserved = await inviteForOrder(order.slug);
       if (reserved && reserved.buyer_user_id !== who.guest) throw Object.assign(new HttpError(403, 'Este link de pago está reservado para quien inició la compra. Abre el link desde el mismo navegador donde creaste la invitación.'), { code: 'invite_reserved' });

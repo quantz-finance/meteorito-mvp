@@ -50,7 +50,7 @@ export const S = {
   escrowPay: {
     query: query(),
     body: body({
-      slug: o(slug), proof: o(proof),
+      slug: o(slug), proof: o(proof), turnstile: o(str(2048)),
       step: o(anyAction(['start', 'confirm_sinpe', 'shipment', 'card_pay', 'card_session', 'card_confirm', 'crypto_quote', 'crypto_status', 'fund_xdr', 'fund_direct'])),
       signedXdr: o(xdr), asset: o(str(10)), buyer: o(str(80)),
       number: o(str(40)), exp: o(str(10)), cvc: o(str(8)), name: o(str(120)), email: o(str(254)), scenario: o(str(40)),
@@ -86,7 +86,7 @@ export const S = {
   store: {
     query: query({ store: o(str(80)), feed: o(str(20)), q: o(str(200)), cursor: o(str(200)), limit: o(str(10)), verified: o(str(10)), order: o(str(10)), profile: o(str(80)), activity: o(str(2000)), og: o(str(80)), demo: o(str(20)), slug: o(str(80)), chat: o(str(20)), seller_of: o(str(80)), push: o(str(10)), ejemplos: o(str(5)) }),
     body: body({
-      action: o(str(40)), slug: o(slug), store_slug: o(str(200)), stars: o(numeric), comment: o(str(2000)), buyer_name: o(str(200)),
+      action: o(str(40)), turnstile: o(str(2048)), slug: o(slug), store_slug: o(str(200)), stars: o(numeric), comment: o(str(2000)), buyer_name: o(str(200)),
       subscription: o(z.object({ endpoint: o(str(2000)), keys: o(z.record(str(40), str(400))) }).passthrough()), url: o(str(2000)),
       token: o(str(2000)), consent: o(z.boolean()), consent_version: o(z.union([str(40), z.number()])), channel: o(str(20)), email: o(str(254)), phone: o(str(40)), cc: o(str(8)),
       q: o(str(200)), verified: o(z.union([z.boolean(), str(10)])), cursor: o(str(200)), limit: o(numeric), view: o(str(20)), ejemplos: o(z.boolean()),
