@@ -97,6 +97,7 @@ import { DEMO_SALES } from '../_lib/demoSales';
 import { demoWanted } from '../_lib/demoFlag';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
 import { S, validate } from '../_lib/validate';
+import { rateLimit } from '../_lib/rateLimit';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
 
@@ -227,6 +228,11 @@ async function withSponsored<P extends { verified: any }>(page: P, q: any): Prom
 export default async function handler(req: any, res: any) {
   try {
     validate(req, S.store); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
+    { // Límite persistente por IP (migración 037) en las acciones sensibles: importar por link y accesos del comprador.
+      const a = req.method === 'POST' ? req.body?.action : undefined;
+      if (a === 'import_facebook' || a === 'import_listing') await rateLimit(req, 'store.import');
+      else if (typeof a === 'string' && (a.startsWith('buyer_access_') || a === 'buyer_link_account' || a === 'buyer_pin_reissue')) await rateLimit(req, 'store.access');
+    }
     if (req.method === 'GET' && req.query?.push === 'key') {
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300');
       return json(res, 200, { key: vapid()?.publicKey ?? null });

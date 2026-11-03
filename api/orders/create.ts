@@ -16,6 +16,7 @@ import { validateAgreement } from '../_lib/agreement';
 import { notifyFollowers } from '../_lib/follows';
 import { stampVersion } from '../_lib/orderRules';
 import { S, validate } from '../_lib/validate';
+import { rateLimit } from '../_lib/rateLimit';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 // Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
@@ -32,6 +33,7 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
     validate(req, S.ordersCreate); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
+    await rateLimit(req, 'orders.create'); // límite persistente por IP (migración 037)
     const user = await requireCavosUser(req);
     const b = req.body ?? {};
     const seller = await requireAddressProof(b.proof, 'create', 'new');

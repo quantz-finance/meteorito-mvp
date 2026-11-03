@@ -26,6 +26,9 @@ export function fail(res: any, e: any) {
   const body: any = { error: e.message };
   if ((e as any).code && typeof (e as any).code === 'string') body.code = (e as any).code;
   if (Array.isArray((e as any).missing)) body.missing = (e as any).missing;
+  // 429 del límite persistente (api/_lib/rateLimit.ts): cuándo reintentar, en segundos.
+  const ra = (e as any).retryAfter;
+  if (e.status === 429 && Number.isFinite(ra) && ra > 0) { res.setHeader('Retry-After', String(Math.ceil(ra))); body.retryAfter = Math.ceil(ra); }
   return json(res, e.status, body);
 }
 export async function orderBySlug(slug: unknown): Promise<any> {
