@@ -27,7 +27,7 @@ export async function run(t: T) {
     const sent: any[] = [];
     __setTurnstileFetch(async (url, init) => { sent.push({ url, body: String(init.body) }); return { ok: true, json: async () => ({ success: true, action: 'guest_pay' }) }; });
     let e: any = await err(requireHuman(req, undefined, 'guest_pay'));
-    t.check('activo y sin token -> 403 turnstile_required con la site key', e instanceof HttpError && e.status === 403 && e.code === 'turnstile_required' && e.siteKey === SITE && e.message === TURNSTILE_REQUIRED);
+    t.check('activo y sin token -> 403 turnstile_required con la site key', e instanceof HttpError && e.status === 403 && (e as any).code === 'turnstile_required' && (e as any).siteKey === SITE && e.message === TURNSTILE_REQUIRED);
     const r = res(); fail(r, e);
     t.check('la respuesta lleva siteKey y acción (públicas), nunca el secreto', r.code === 403 && r.body.siteKey === SITE && r.body.action === 'guest_pay' && !JSON.stringify(r.body).includes(SECRET));
     t.check('token válido -> pasa', (await err(requireHuman(req, 'tok-ok', 'guest_pay'))) === null);
