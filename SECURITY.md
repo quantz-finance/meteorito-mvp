@@ -32,3 +32,10 @@ Sensitive API routes (create link, pay, PIN entry, tx submit, wallet activation,
 import-by-link, buyer access links) share a persistent per-IP counter in Postgres (`supabase/migrations/037_rate_limits.sql`,
 `api/_lib/rateLimit.ts`). The key is an HMAC of route + IP (the IP is never stored), rows expire after two windows.
 Over the limit: `429` with `Retry-After`. If the database errors or is slow, requests pass (fail-open) and the event is logged.
+
+## Bot checks (Cloudflare Turnstile)
+
+Guest checkout (a new order/escrow) and guest import-by-link require a Turnstile token when `TURNSTILE_SECRET_KEY`
+and `TURNSTILE_SITE_KEY` are set (`api/_lib/turnstile.ts`). Without them the check is off. The server answers
+`403 turnstile_required` with the public site key; the web client (`lib/turnstile.ts`) solves the challenge and
+retries once. Native iOS never loads the widget. If Cloudflare's siteverify is unreachable, requests pass and it is logged.
