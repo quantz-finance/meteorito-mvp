@@ -3,7 +3,7 @@
 **Decisión (MVP testnet):** quien abre un link de pago `/p/<slug>` **no inicia sesión ni crea wallet** para pagar.
 
 ## Cómo funciona
-1. El navegador del comprador genera una **llave secreta aleatoria** (32 bytes, hex) y la guarda en `localStorage` (`meteorito:guest:v1`). Viaja en el header `X-Guest-Key`.
+1. El navegador del comprador genera una **llave secreta aleatoria** (32 bytes, hex) y la guarda **cifrada** en IndexedDB (`lib/secretVault.ts`: AES-GCM con una CryptoKey no extraíble; nada en texto plano en `localStorage`). El código de entrega (PIN) y los permisos de acceso van igual. Migración: si queda `meteorito:guest:v1` / `meteorito:guest:pin:<slug>` / `meteorito:guest:access:<slug>` de la versión anterior, se pasa a la bóveda una vez y se borra de `localStorage`. Viaja en el header `X-Guest-Key`.
 2. El servidor **no la guarda**. Identidad del comprador: `buyer_user_id = "guest:" + sha256("meteorito-guest-v1:" + llave)[0..40]`.
 3. `POST /api/escrow/pay` `start`: despliega el escrow Trustless Work con la wallet **`platform`** como `buyer_address` (no hay wallet del comprador). `confirm_sinpe` ("Ya pagué") lo fondea con la treasury de testnet (SINPE simulado). El PIN de entrega se devuelve una vez y se guarda también en el navegador del comprador.
 4. Confirmar recepción (`/api/escrow/confirm`, `buyer_confirm`) y abrir disputa (`/api/escrow/dispute`) exigen la misma llave: solo el navegador que pagó puede hacerlo. Las cuentas Cavos que ya habían comprado antes siguen funcionando (el servidor acepta el `sub` de Cavos **o** la llave).

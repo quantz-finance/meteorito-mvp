@@ -15,7 +15,7 @@ import { C, R, S, T } from '@/constants/theme';
 import { getCategory } from '@/lib/categories';
 import { useAuth } from '@/lib/cavos';
 import { formatCRC, getPublicOrder, orderTitle, STATUS_LABEL, type PublicOrder } from '@/lib/orders';
-import { isBuyerDevice, saveGrant } from '@/lib/guest';
+import { isBuyerDevice, saveGrant, useGuestVault } from '@/lib/guest';
 import { ContactCard } from '@/components/ContactCard';
 import { RecoverAccess } from '@/components/RecoverAccess';
 import { redeemAccess } from '@/lib/buyerContact';
@@ -61,7 +61,8 @@ function LinkDeVentaReal() {
   const { slug, acceso } = useLocalSearchParams<{ slug: string; acceso?: string }>();
   const auth = useAuth();
   const { isAuthenticated, email } = auth;
-  const [, setAccessTick] = useState(0); // re-render tras abrir un link de acceso (isBuyerDevice lee localStorage)
+  const [, setAccessTick] = useState(0); // re-render tras abrir un link de acceso
+  useGuestVault(); // isBuyerDevice lee la bóveda cifrada (carga async): re-render al cargar o cambiar
   const [accessMsg, setAccessMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Link de acceso (correo / WhatsApp): deja un permiso para ESTE pedido en este dispositivo y quita el token de la URL
   // (que no quede en el historial ni viaje como redirect_uri si después crea su cuenta).

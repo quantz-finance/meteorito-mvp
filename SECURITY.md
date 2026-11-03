@@ -20,3 +20,8 @@ Especially interesting: escrow release/dispute logic, signing roles, delivery PI
 
 - Never commit `.env` or any key. If you accidentally expose a key, report it right away so it can be rotated.
 - Do not send private keys in reports — testnet ones included.
+
+## Web hardening
+
+- Security headers and an enforced Content-Security-Policy live in `vercel.json` (global `/(.*)` entry). Inline scripts are allowed only by sha256 hash; `scripts/build/preload.mjs` fails the build if an inline script is missing from the CSP, and the local demo/e2e servers apply the same headers (`scripts/build/csp.mjs`).
+- Buyer secrets on the web (guest key, delivery PIN, access grants) are stored encrypted in IndexedDB with a non-extractable WebCrypto key (`lib/secretVault.ts`), never in plain `localStorage`.

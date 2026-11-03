@@ -3,7 +3,9 @@
 import { createServer } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+import { securityHeaders } from '../build/csp.mjs';
 
+const SEC = securityHeaders(JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'))); // mismos encabezados (CSP) que Vercel
 const root = resolve(process.argv[2] ?? 'dist-demo');
 const port = Number(process.argv[3] ?? process.env.PORT ?? 8081);
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '.ttf': 'font/ttf', '.svg': 'image/svg+xml', '.map': 'application/json' };
@@ -24,6 +26,6 @@ function resolveFile(path) {
 createServer((req, res) => {
   const f = resolveFile(req.url ?? '/');
   if (!f || !existsSync(f)) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"demo: sin backend"}'); console.warn('[demo-serve] 404', req.url); return; }
-  res.writeHead(200, { 'Content-Type': TYPES[extname(f)] ?? 'application/octet-stream' });
+  res.writeHead(200, { ...SEC, 'Content-Type': TYPES[extname(f)] ?? 'application/octet-stream' });
   res.end(readFileSync(f));
 }).listen(port, () => console.log(`Meteorito demo en http://localhost:${port}  (carpeta: ${root})`));

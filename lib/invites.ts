@@ -17,7 +17,7 @@ function remember(code: string) { try { window.localStorage.setItem(MINE, JSON.s
 
 export async function getInvite(code: string): Promise<Invite | null> {
   if (DEMO_ENABLED) return demoGetInvite(code) as Invite | null;
-  const r = await fetch(`/api/invites?code=${encodeURIComponent(code)}`, { headers: { 'X-Guest-Key': guestKey() }, cache: 'no-store' });
+  const r = await fetch(`/api/invites?code=${encodeURIComponent(code)}`, { headers: { 'X-Guest-Key': await guestKey() }, cache: 'no-store' });
   if (r.status === 404) return null;
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error ?? `Error ${r.status}`);

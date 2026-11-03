@@ -5,6 +5,9 @@ import { createServer } from 'node:http';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import { gunzipSync } from 'node:zlib';
+import { securityHeaders } from '../build/csp.mjs';
+
+const SEC = securityHeaders(JSON.parse(readFileSync(new URL('../../vercel.json', import.meta.url), 'utf8'))); // CSP y demás, igual que Vercel
 
 const root = resolve(process.argv[2] ?? 'dist-e2e');
 const port = Number(process.argv[3] ?? 8084);
@@ -325,6 +328,6 @@ createServer(async (req, res) => {
   }
   const file = staticFile(u.pathname);
   if (!existsSync(file)) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
+  res.writeHead(200, { ...SEC, 'Content-Type': TYPES[extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' });
   res.end(readFileSync(file));
 }).listen(port, () => console.log(`E2E mock en http://localhost:${port} (carpeta: ${root})`));
