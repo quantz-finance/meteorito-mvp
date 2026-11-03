@@ -96,6 +96,7 @@ import { decodeDemoCursor, demoActivityBySlug, demoPage, demoProduct, demoProfil
 import { DEMO_SALES } from '../_lib/demoSales';
 import { demoWanted } from '../_lib/demoFlag';
 import { avatarUrlOf, baseSlugFromEmail, cleanName, cleanReviewComment, REVIEW_MAX, REVIEW_PAIR_MAX, REVIEW_PAIR_WINDOW_DAYS, shortBuyerName, nameFromEmail, normalizeStoreSlug, RATABLE, storeDbErr, validStoreSlug, withSuffix } from '../_lib/store';
+import { S, validate } from '../_lib/validate';
 
 const PUBLIC_COLS = 'store_slug, display_name, rating_avg, rating_count';
 
@@ -225,6 +226,7 @@ async function withSponsored<P extends { verified: any }>(page: P, q: any): Prom
 
 export default async function handler(req: any, res: any) {
   try {
+    validate(req, S.store); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
     if (req.method === 'GET' && req.query?.push === 'key') {
       res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=300');
       return json(res, 200, { key: vapid()?.publicKey ?? null });

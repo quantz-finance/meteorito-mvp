@@ -15,6 +15,7 @@ import { requireCavosUser, HttpError } from '../_lib/auth';
 import { guestSubFromReq, requireBuyerIdentity, isBuyerOf } from '../_lib/guest';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, PHOTO_MIME, publicPrefix, userDir } from '../_lib/photos';
 import { captureCode, capturePath, captureUploaded, captureUrl, checkCaptureToken, isCapturePurpose, markSigned, signCaptureToken, validCaptureRef, type CapturePurpose } from '../_lib/capture';
+import { S, validate } from '../_lib/validate';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const guestErr = () => Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir la página.'), { code: 'guest_key_missing' });
@@ -31,6 +32,7 @@ async function captureOwner(req: any, purpose: CapturePurpose): Promise<{ sub: s
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
+    validate(req, S.photosUpload); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
     const b = req.body ?? {};
     res.setHeader?.('Cache-Control', 'no-store');
 

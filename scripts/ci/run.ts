@@ -104,6 +104,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '102', name: 'Vistas públicas sin escritura para anon/authenticated (036) + search_path en triggers', file: './t102-vistas-sin-escritura.test.ts', onchain: false },
   { id: '105', name: 'Fotos sin EXIF/GPS: import limpio antes de guardar, subidas firmadas limpiadas al usarse, JPEG/PNG/WebP sin recodificar', file: './t105-fotos-sin-exif.test.ts', onchain: false },
   { id: '106', name: 'Encabezados de seguridad + CSP por hash (build verificado) + llave/PIN del comprador cifrados fuera de localStorage con migración', file: './t106-headers-csp-boveda.test.ts', onchain: false },
+  { id: '107', name: 'zod en todos los endpoints (body + query) -> 400 genérico; 500 sin detalles internos; /api/health mínimo', file: './t107-zod-respuestas.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

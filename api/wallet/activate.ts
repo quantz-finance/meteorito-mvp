@@ -7,10 +7,12 @@ import { env } from '../_lib/env';
 import { requireCavosUser, requireAddressProof, HttpError, issueSessionNonce, bindWalletIfFresh, requireBindProof, SESSION_EXPIRED } from '../_lib/auth';
 import { relinkWallet, cancelUnfundedListing } from '../_lib/relink';
 import { walletState, buildActivationTx, assertActivationConfig, validateActivationTx, signAndSubmitActivation } from '../_lib/wallet';
+import { S, validate } from '../_lib/validate';
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
+    validate(req, S.walletActivate); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
     // step 'nonce': nonce de un uso (5 min, del sub) para renovar un token vencido o para 'bind'; token fresco o vencido ≤ ventana (aquí para no sumar otra función en Vercel).
     if (req.body?.step === 'nonce') return json(res, 200, { nonce: await issueSessionNonce(req) });
     const user = await requireCavosUser(req);

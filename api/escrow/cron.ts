@@ -23,6 +23,7 @@ import { cryptoCronPass } from '../_lib/crypto';
 import { refundUnshipped, remindSeller, shipRulePass } from '../_lib/shipRefund';
 import { replyRuleApplies, shipDeadline } from '../_lib/orderRules';
 import { refundNoReply, replyRulePass } from '../_lib/replyRule';
+import { S, validate } from '../_lib/validate';
 
 async function claim(id: string): Promise<boolean> {
   const now = new Date();
@@ -44,12 +45,13 @@ async function processOrder(o: any) {
   } else if (o.status !== 'entregado') return { slug: o.slug, skipped: o.status };
   if (!(await claim(o.id))) return { slug: o.slug, skipped: 'locked' };
   try { return { slug: o.slug, ...(await approveAndRelease(o, 'timeout')) }; }
-  catch (e: any) { return { slug: o.slug, error: e.message }; }
+  catch (e: any) { console.error('[cron] liberación falló', o.slug, e?.message); return { slug: o.slug, error: 'failed' }; }
   finally { await db().from('orders').update({ release_lock_until: null }).eq('id', o.id); }
 }
 
 export default async function handler(req: any, res: any) {
   try {
+    validate(req, S.escrowCron); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
     const now = new Date().toISOString();
     const slug = req.query?.slug;
     if (typeof slug === 'string') {
@@ -62,12 +64,12 @@ export default async function handler(req: any, res: any) {
       if (f && ph === 'reminder') return json(res, 200, { slug, reminded: await remindSeller(f) });
       if (f && (ph === 'auto_due' || (f.status === 'en_disputa' && f.ship_cancel))) {
         try { return json(res, 200, { slug, ...(await refundUnshipped(f, f.ship_cancel?.by === 'buyer' ? 'buyer' : 'auto')) }); }
-        catch (e: any) { return json(res, 200, { slug, error: String(e?.message ?? e).slice(0, 120) }); }
+        catch (e: any) { console.error('[cron] regla falló', slug, e?.message); return json(res, 200, { slug, error: 'failed' }); }
       }
       // Regla v2: 48 h sin respuesta de quien vende -> reembolso (refundNoReply revisa el plazo y la respuesta).
       if (f && f.status === 'en_disputa' && replyRuleApplies(f)) {
         try { return json(res, 200, { slug, ...(await refundNoReply(f)) }); }
-        catch (e: any) { return json(res, 200, { slug, error: String(e?.message ?? e).slice(0, 120) }); }
+        catch (e: any) { console.error('[cron] regla falló', slug, e?.message); return json(res, 200, { slug, error: 'failed' }); }
       }
       return json(res, 200, { slug, due: false });
     }
