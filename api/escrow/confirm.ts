@@ -19,6 +19,7 @@ import { missingColumn } from '../_lib/listings';
 import { extensionMessages, notifyOrder } from '../_lib/push';
 import { refundUnshipped } from '../_lib/shipRefund';
 import { S, validate } from '../_lib/validate';
+import { rateLimit } from '../_lib/rateLimit';
 
 /** Extensión de mutuo acuerdo. Solo comprador y vendedor; solo con el plazo corriendo y sin disputa. */
 async function extension(req: any, order: any, reason: 'extend' | 'extend_answer') {
@@ -65,6 +66,7 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
     validate(req, S.escrowConfirm); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
+    if (req.body?.reason === 'pin') await rateLimit(req, 'escrow.pin'); // entrada de PIN: límite persistente por IP (037)
     const { slug, reason, pin } = req.body ?? {};
     const order = await orderBySlug(slug);
     if (reason === 'extend' || reason === 'extend_answer') return json(res, 200, await extension(req, order, reason));

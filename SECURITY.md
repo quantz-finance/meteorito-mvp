@@ -25,3 +25,10 @@ Especially interesting: escrow release/dispute logic, signing roles, delivery PI
 
 - Security headers and an enforced Content-Security-Policy live in `vercel.json` (global `/(.*)` entry). Inline scripts are allowed only by sha256 hash; `scripts/build/preload.mjs` fails the build if an inline script is missing from the CSP, and the local demo/e2e servers apply the same headers (`scripts/build/csp.mjs`).
 - Buyer secrets on the web (guest key, delivery PIN, access grants) are stored encrypted in IndexedDB with a non-extractable WebCrypto key (`lib/secretVault.ts`), never in plain `localStorage`.
+
+## Rate limiting
+
+Sensitive API routes (create link, pay, PIN entry, tx submit, wallet activation, photo uploads, invitations,
+import-by-link, buyer access links) share a persistent per-IP counter in Postgres (`supabase/migrations/037_rate_limits.sql`,
+`api/_lib/rateLimit.ts`). The key is an HMAC of route + IP (the IP is never stored), rows expire after two windows.
+Over the limit: `429` with `Retry-After`. If the database errors or is slow, requests pass (fail-open) and the event is logged.

@@ -7,6 +7,7 @@ import { requireCavosUser, HttpError } from '../_lib/auth';
 import { env, releaseDueAt } from '../_lib/env';
 import { validateEscrowTx, feeBumpAndSend } from '../_lib/feebump';
 import { S, validate } from '../_lib/validate';
+import { rateLimit } from '../_lib/rateLimit';
 
 const ACTIONS: Record<string, { fn: string; role: 'seller' | 'buyer'; from: string }> = {
   ship: { fn: 'change_milestone_status', role: 'seller', from: 'fondeado' },
@@ -16,6 +17,7 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
     validate(req, S.txSubmit); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
+    await rateLimit(req, 'tx.submit'); // límite persistente por IP (migración 037)
     const user = await requireCavosUser(req);
     const { slug, action, signedXdr } = req.body ?? {};
     const a = ACTIONS[action];

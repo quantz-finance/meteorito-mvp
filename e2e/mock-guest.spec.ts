@@ -1124,8 +1124,11 @@ test('SEC-02 sin violaciones de CSP: bienvenida, Comprar, tienda, producto y pag
 
 test('SEC-03 migración: llave y código de la versión anterior pasan a la bóveda, se borran de localStorage y la compra sigue', async ({ page, request }) => {
   await reset(request, [{ slug: 'old111', status: 'fondeado', contract_id: 'C1', buyer: SEC_KEY, model: 'Consola', price_crc: 90000, delivery_mode: 'cara_a_cara' }]);
-  await page.goto('/como-funciona');
-  await page.evaluate(([k, pin]) => { localStorage.setItem('meteorito:guest:v1', k); localStorage.setItem('meteorito:guest:pin:old111', pin); }, [SEC_KEY, MOCK_PIN]);
+  // Lo que dejó la versión anterior, puesto ANTES de que cargue la app (una sola vez): la bóveda arranca vacía y migra.
+  await page.addInitScript(([k, pin]) => {
+    if (sessionStorage.getItem('sec03')) return; sessionStorage.setItem('sec03', '1');
+    localStorage.setItem('meteorito:guest:v1', k); localStorage.setItem('meteorito:guest:pin:old111', pin);
+  }, [SEC_KEY, MOCK_PIN]);
   await page.goto('/p/old111');
   await expect(page.getByTestId('delivery-code')).toHaveText(MOCK_PIN);
   await expect.poll(() => plainGuestSecrets(page)).toEqual([]);
