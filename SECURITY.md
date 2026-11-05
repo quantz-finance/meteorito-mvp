@@ -35,16 +35,20 @@ Over the limit: `429` with `Retry-After`. If the database errors or is slow, req
 
 ## Risk limits
 
-Order create, buyer invites, and pay (`start`, `confirm_sinpe`, `card_pay`, `fund_direct`, plus a re-check
-without counting on `card_session`, `card_confirm`, `fund_xdr`, and `crypto_status`) enforce configurable amount caps, per-person and per-IP
-velocity, and a block list (`api/_lib/risk.ts`, `docs/riesgo.md`). Defaults live in code. Overrides: `app_flags`
-key `risk_limits` (migration 027) and `RISK_*` env vars. `supabase/migrations/050_risk_flags.sql` only seeds those
-rows and two indexes — it is not applied by deploy.
+Order create, buyer invites, and the steps that **start** a payment (`start`, `confirm_sinpe`, `card_pay`,
+`fund_direct`) enforce configurable amount caps, per-person velocity, a shared-IP cooldown, and a block list
+(`api/_lib/risk.ts`, `docs/riesgo.md`). `card_session`, `card_confirm`, `fund_xdr`, and `crypto_status` are not
+risk-checked (liquidation and polling). An order that already has `funded_tx`, or whose status is past
+`escrow_creado`, is not risk-checked either, so a duplicate SINPE confirmation stays idempotent.
+Defaults live in code. Overrides: `app_flags` key `risk_limits` (migration 027) and `RISK_*` env vars.
+`supabase/migrations/050_risk_flags.sql` only seeds those rows and indexes — it is not applied by deploy.
 
 Over a cap, or if the person is already blocked, the handler returns **403** `unavailable` with a generic
-message and does not create the order or move the payment. Server logs and `order_events` use `risk_limit`,
-`risk_velocity`, `risk_signal`, and `risk_block`. The client never receives the threshold or the reason.
-If the flag read fails (and `RISK_LIMITS_DISABLED` is not `1`), the request is rejected.
+message and does not create the order or start the payment. One over-limit attempt does not write a 24 h
+block. A burst does, for that person only — an IP is never stored as a block (mobile CGNAT and shared Wi-Fi).
+Server logs and `order_events` use `risk_limit`, `risk_velocity`, `risk_signal`, and `risk_block`. The client
+never receives the threshold or the reason. If the flag read fails while **publishing**, the request is
+rejected. If it fails during a **payment**, the payment proceeds and the failure is logged.
 
 ## Bot checks (Cloudflare Turnstile)
 

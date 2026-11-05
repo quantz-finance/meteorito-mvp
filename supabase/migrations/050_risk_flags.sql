@@ -4,6 +4,7 @@
 -- Sin esta migración la app igual aplica los defaults de api/_lib/risk.ts.
 -- Sin 027 no hay dónde guardar topes ni bloqueos (el tope en código sigue; el bloqueo no persiste).
 -- Sin 037 la velocity por persona cae a un conteo de orders/invitations; la velocity por IP no corre.
+-- El índice de invitations repite el de 009 (mismo nombre): si ya existe, no hace nada.
 -- Idempotente. Montos en colones.
 
 insert into public.app_flags (key, value) values
@@ -14,5 +15,7 @@ on conflict (key) do nothing;
 -- Sumas del día y ráfagas leen por persona + fecha. Sin estos índices funciona igual, más lento.
 create index if not exists orders_seller_user_created_idx on public.orders (seller_user_id, created_at desc);
 create index if not exists orders_buyer_user_created_idx on public.orders (buyer_user_id, created_at desc);
+-- 009 ya crea invitations_buyer_idx (buyer_user_id, created_at). Si esa migración no corrió, queda aquí.
+create index if not exists invitations_buyer_idx on public.invitations (buyer_user_id, created_at desc);
 
 notify pgrst, 'reload schema';

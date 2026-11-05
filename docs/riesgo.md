@@ -1,34 +1,53 @@
 # Límites de riesgo
 
-Topes y señales al publicar un link, al crear una invitación y al pagar (`api/orders/create.ts`,
-`api/invites/index.ts`, `api/escrow/pay.ts`). El código vive en `api/_lib/risk.ts`.
+Topes y señales al publicar un link, al crear una invitación y al **iniciar** un pago
+(`api/orders/create.ts`, `api/invites/index.ts`, `api/escrow/pay.ts`). El código vive en `api/_lib/risk.ts`.
 
 Si algo no pasa, la API responde **403** con el texto fijo «No pudimos completar esto. Intenta más tarde.»
 y el código `unavailable`. No dice cuál tope se pasó ni por qué. En el servidor queda un log `[risk]`
 y, si ya hay pedido, una fila en `order_events` con `kind` `risk_limit`, `risk_velocity`, `risk_signal`
 o `risk_block`.
 
-El límite por IP de la migración 037 sigue aparte y es fail-open. Estos topes, si se vencen o si la
-persona ya está bloqueada, **rechazan** la operación.
-
-## Qué se revisa
+## Qué se revisa y qué se bloquea
 
 | Señal | Default | Efecto |
 | --- | --- | --- |
-| Monto de un pedido | ₡5 000 000 | Rechaza y bloquea |
-| Suma de esa persona en 24 h (pedidos + invitaciones) | ₡15 000 000 | Rechaza y bloquea |
-| Pedidos o invitaciones por hora | 20 | Rechaza y bloquea |
-| Pasos de pago que mueven dinero, por hora (`start`, `confirm_sinpe`, `card_pay`, `fund_direct`) | 30 | Rechaza y bloquea |
-| Misma IP | 4 × el tope de la persona | Rechaza y bloquea a la persona y a la IP |
-| Ráfaga | 8 en 10 min | Rechaza y bloquea |
-| Cuenta nueva (wallet de menos de 48 h, o invitado sin pedidos) y monto sobre ₡1 500 000 | — | Rechaza y bloquea |
-| Monto atípico (≥ ₡2 000 000) en una cuenta que ya tiene historia | — | Solo se anota; no bloquea |
+| Monto de un pedido | ₡5 000 000 | Rechaza ese intento. No deja bloqueo. |
+| Gasto del comprador en 24 h | ₡15 000 000 | Rechaza ese intento. No deja bloqueo. |
+| Pedidos o invitaciones por hora (quien publica o invita) | 20 | Rechaza ese intento. No deja bloqueo. |
+| Pasos que inician un pago, por hora (`start`, `confirm_sinpe`, `card_pay`, `fund_direct`) | 30 | Rechaza ese intento. No deja bloqueo. |
+| Misma IP | 4 × el tope de la persona | Rechaza ese intento (la ventana de 037 es el cooldown). **No** se guarda un bloqueo de IP ni de la persona. |
+| Ráfaga de la persona | 8 en 10 min | Rechaza y bloquea a esa persona (`rb_`, 24 h). |
+| Cuenta nueva (wallet de menos de 48 h, o invitado sin pedidos) y monto sobre ₡1 500 000 | — | Rechaza ese intento. No deja bloqueo: es un solo intento. |
+| Monto atípico (≥ ₡2 000 000) en una cuenta que ya tiene historia | — | Solo se anota. |
+| Lista manual `risk_blocks` | — | Rechaza mientras el id siga en la lista. |
 
-`card_session`, `card_confirm`, `fund_xdr` y `crypto_status` vuelven a mirar bloqueo y topes de monto,
-pero no suman velocity: el cliente los consulta muchas veces mientras espera, o solo piden la transacción para firmar.
+Un solo intento sobre un tope no escribe `rb_`. El bloqueo persistente es para la ráfaga de esa persona
+y para la lista manual. Nunca para una IP.
 
-La velocity usa `rate_limit_hit` (037) con una llave HMAC (no se guarda la IP). Si esa función no
-está, se cuentan filas recientes. La IP solo se puede contar con 037.
+`card_session`, `card_confirm`, `fund_xdr` y `crypto_status` **no** pasan por riesgo: son liquidación o
+sondeo. Un pedido con `funded_tx`, o con un estado posterior a `escrow_creado`, tampoco: un `confirm_sinpe`
+repetido sigue siendo idempotente. Reabrir un `start` que ya tiene `contract_id` no suma velocity.
+
+Si la base no responde al **publicar**, se rechaza (fail-closed), salvo `RISK_LIMITS_DISABLED=1`.
+Si no responde al **pagar**, el pago sigue y queda un log `[risk] fail-open`: un timeout no puede dejar
+el dinero a medias. El sondeo del cliente (`card_confirm`, cripto) se detiene si llega `unavailable`.
+
+## Gasto de 24 h del comprador
+
+Cuenta pedidos **fondeados o en curso** (`escrow_creado` con escrow, `fondeado` y los estados que siguen),
+por el momento del pago: `funded_at`, o si no está el evento `funded` / `escrow_deployed`. No usa
+`orders.created_at` de un link viejo. No cuenta un start abandonado (`creado`), un pedido cancelado ni
+las invitaciones (eso duplicaba el mismo monto).
+
+Para un invitado el tope es un mejor esfuerzo: la identidad es `guest:<hash de la llave>`. Si borra la
+llave del navegador, el contador empieza de cero.
+
+Quien publica sigue sumando sus pedidos de las últimas 24 h por `created_at`. Quien invita suma sus
+invitaciones. Esas dos sumas no entran en el gasto del pago.
+
+La velocity usa `rate_limit_hit` (037) con una llave HMAC (no se guarda la IP). Si esa función no está,
+se cuentan filas recientes. La IP solo se puede contar con 037.
 
 ## Cómo configurarlo
 
@@ -66,12 +85,14 @@ update public.app_flags
  where key = 'risk_blocks';
 ```
 
-Un disparo alto también escribe `app_flags` con clave `rb_` + 40 hex (HMAC). El valor es
-`{"until":"<iso>","reason":"…"}`. Para soltar a alguien antes de tiempo, borra esa fila o pon
-`until` en el pasado. La lista manual se quita sacando el id de `subjects`.
+Una ráfaga también escribe `app_flags` con clave `rb_` + 40 hex (HMAC de la persona, no de la IP). El valor es
+`{"until":"<iso>","reason":"burst"}`. Para soltar a alguien antes de tiempo, borra esa fila o pon
+`until` en el pasado. Las filas vencidas se borran solas al pasar un chequeo. La lista manual se quita
+sacando el id de `subjects`.
 
 ## Migración 050
 
-`supabase/migrations/050_risk_flags.sql` solo inserta las dos filas (si no existen) y dos índices.
+`supabase/migrations/050_risk_flags.sql` solo inserta las dos filas (si no existen) y los índices
+(pedidos por vendedor, pedidos por comprador, e invitaciones por comprador — el mismo índice que 009).
 **No la aplica el deploy.** Hay que avisarle a Vitalik y correrla a mano después de 027.
 Sin ella, los defaults del código valen igual.

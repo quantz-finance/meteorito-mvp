@@ -1,9 +1,9 @@
-// Límites de riesgo (punto 9): tope por pedido, tope por persona en 24 h, velocity por hora y señales
+// Límites de riesgo (punto 9): tope por pedido, gasto del comprador en 24 h, velocity por hora y señales
 // (cuenta nueva con monto alto, monto atípico, ráfaga). Configurable en app_flags (027) y, por encima, con env.
-// Sin 050 rigen los defaults de este archivo. El bloqueo queda en app_flags (clave rb_<hash>, sin IP en claro).
-// La velocity reusa public.rate_limit_hit (037, api/_lib/rateLimit.ts). Si esa función no está, se cuentan
-// filas de orders / invitations. A diferencia del límite por IP (fail-open), un bloqueo o un tope vencido
-// rechaza la operación (fail-closed) con un mensaje genérico: el cliente no ve umbrales ni motivos.
+// Sin 050 rigen los defaults de este archivo. Un bloqueo de persona queda en app_flags (clave rb_<hash>).
+// La velocity reusa public.rate_limit_hit (037). Si esa función no está, se cuentan filas.
+// Publicar (action order) es fail-closed si la base falla. Pagar es fail-open: un timeout no puede dejar
+// el dinero a medias. El cliente solo ve un 403 genérico, sin umbrales ni motivos.
 import { HttpError } from './auth';
 import { db, logEvent } from './db';
 import { clientIp } from './fbimport';
@@ -12,9 +12,11 @@ import { isMissingTable } from './push';
 import { rateKey } from './rateLimit';
 
 export const RISK_DENIED = 'No pudimos completar esto. Intenta más tarde.';
-/** Misma N por IP que por persona, multiplicada: una IP compartida no choca con el tope de una sola persona. */
+/** Misma N por IP que por persona, multiplicada: una IP compartida (CGNAT, Wi-Fi) no choca con el tope de una sola persona. */
 export const RISK_IP_FACTOR = 4;
 const CHECK_MS = 1500;
+/** Gasto del comprador: fondeado o con el pago en curso. Un start abandonado ('creado') no entra. */
+const SPEND_STATUSES = ['escrow_creado', 'fondeado', 'enviado', 'entregado', 'liberado', 'en_disputa', 'resuelto'];
 
 /** Defaults y semilla de la migración 050 (mismo objeto). Montos en colones. */
 export const DEFAULT_RISK = {
@@ -59,21 +61,21 @@ const RANGES: Record<keyof typeof ENV_KEYS, [number, number]> = {
 
 export interface RiskInput {
   req: any;
-  /** order = publicar link o invitación; pay = empezar o confirmar un pago. */
+  /** order = publicar link o invitación; pay = empezar un pago (no liquidar ni sondear). */
   action: 'order' | 'pay';
   amountCrc: number;
   /** sub de Cavos o guest:<hash>. Nunca la llave de invitado ni una IP. */
   actor: string;
   orderId?: string | null;
-  /** false = revalida topes y bloqueo sin sumar velocity (consultas que se repiten: card_confirm, crypto_status). */
+  /** false = revalida topes y bloqueo sin sumar velocity (reabrir un escrow que ya existe). */
   count?: boolean;
 }
 
 const denied = (): never => { throw Object.assign(new HttpError(403, RISK_DENIED), { code: 'unavailable' }); };
-const dayAgo = () => new Date(Date.now() - 86_400_000).toISOString();
-const ipSubject = (ip: string) => `ip:${ip}`;
+const dayAgoMs = () => Date.now() - 86_400_000;
+const dayAgo = () => new Date(dayAgoMs()).toISOString();
 
-/** Clave de app_flags para un bloqueo. HMAC, cabe en el check de 027 (2–60) y no lleva la IP. */
+/** Clave de app_flags para un bloqueo de persona. HMAC, cabe en el check de 027 (2–60). Nunca una IP. */
 export function blockKey(subject: string): string {
   return 'rb_' + rateKey('risk.block', subject).slice(0, 40);
 }
@@ -107,7 +109,7 @@ async function timed<T>(p: Promise<T>): Promise<T> {
   } finally { if (timer) clearTimeout(timer); }
 }
 
-type Row = { id?: string; price_crc?: number; created_at?: string };
+type Row = { id?: string; price_crc?: number; created_at?: string; status?: string; funded_at?: string | null; funded_tx?: string | null; contract_id?: string | null };
 async function rowsSince(table: string, column: string, actor: string, since: string): Promise<Row[]> {
   const { data, error } = await timed(Promise.resolve(db().from(table).select('id, price_crc, created_at').eq(column, actor).gte('created_at', since).limit(400)));
   if (error) {
@@ -150,21 +152,43 @@ function stillBlocked(value: unknown): boolean {
   const t = Date.parse(String(until));
   return Number.isFinite(t) && t > Date.now();
 }
+function expiredBlock(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  const until = (value as any).until;
+  if (until == null) return false;
+  const t = Date.parse(String(until));
+  return Number.isFinite(t) && t <= Date.now();
+}
 
 async function record(kind: 'risk_limit' | 'risk_velocity' | 'risk_signal' | 'risk_block', orderId: string | null | undefined, detail: Record<string, unknown>) {
   console.warn('[risk]', JSON.stringify({ kind, ...detail }));
   if (orderId) await logEvent(orderId, kind, detail);
 }
 
+/** Bloqueo de persona. Con tope de tiempo: un upsert colgado no puede frenar el request. Nunca guarda una IP. */
 async function blockFor(subjects: string[], reason: string, hours: number) {
   const until = new Date(Date.now() + hours * 3_600_000).toISOString();
   for (const subject of subjects) {
-    const { error } = await db().from('app_flags').upsert(
-      { key: blockKey(subject), value: { until, reason }, updated_at: new Date().toISOString(), updated_by: 'risk' },
-      { onConflict: 'key' },
-    );
-    if (error && !isMissingTable(error)) console.warn('[risk] bloqueo no guardado', error.code ?? 'db');
+    if (!subject || subject.startsWith('ip:')) continue;
+    try {
+      const { error } = await timed(Promise.resolve(db().from('app_flags').upsert(
+        { key: blockKey(subject), value: { until, reason }, updated_at: new Date().toISOString(), updated_by: 'risk' },
+        { onConflict: 'key' },
+      )));
+      if (error && !isMissingTable(error)) console.warn('[risk] bloqueo no guardado', error.code ?? 'db');
+    } catch (e: any) { console.warn('[risk] bloqueo no guardado', e?.code ?? 'timeout'); }
   }
+}
+
+/** Borra rb_* vencidos (lote corto). Best-effort: si falla, el chequeo sigue. */
+async function sweepExpired() {
+  try {
+    const { data, error } = await timed(Promise.resolve(db().from('app_flags').select('key, value').ilike('key', 'rb_%').limit(40)));
+    if (error || !data?.length) return;
+    const dead = (data as { key?: string; value?: unknown }[]).filter((r) => r.key && expiredBlock(r.value)).map((r) => r.key as string);
+    if (!dead.length) return;
+    await timed(Promise.resolve(db().from('app_flags').delete().in('key', dead)));
+  } catch { /* la fila vencida deja de contar igual: stillBlocked mira until */ }
 }
 
 async function accountIsNew(actor: string, orderId: string | null, hours: number): Promise<boolean> {
@@ -196,14 +220,77 @@ function hitsOf(rows: Row[], exclude: string | null): Hit[] {
   });
 }
 
+/** Momento del pago: funded_at, si no el evento funded / escrow_deployed. Sin eso, un escrow en curso usa created_at. */
+function payMoment(row: Row, eventAt: number | null): number | null {
+  const funded = Date.parse(row.funded_at ?? '');
+  if (Number.isFinite(funded)) return funded;
+  if (eventAt != null) return eventAt;
+  if (row.status === 'escrow_creado' && row.contract_id) {
+    const t = Date.parse(row.created_at ?? '');
+    if (Number.isFinite(t)) return t;
+  }
+  return null;
+}
+
+async function eventMoments(ids: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (!ids.length) return map;
+  const { data, error } = await timed(Promise.resolve(db().from('order_events').select('order_id, kind, created_at').in('order_id', ids).in('kind', ['funded', 'escrow_deployed']).limit(800)));
+  if (error) {
+    if (isMissingTable(error) || missingColumn(error)) return map;
+    throw Object.assign(new Error('events'), { code: error.code ?? 'db' });
+  }
+  const best = new Map<string, { at: number; rank: number }>();
+  for (const e of (data ?? []) as { order_id?: string; kind?: string; created_at?: string }[]) {
+    const at = Date.parse(e.created_at ?? '');
+    if (!e.order_id || !Number.isFinite(at)) continue;
+    const rank = e.kind === 'funded' ? 2 : 1;
+    const prev = best.get(e.order_id);
+    if (!prev || rank > prev.rank || (rank === prev.rank && at > prev.at)) best.set(e.order_id, { at, rank });
+  }
+  for (const [id, v] of best) map.set(id, v.at);
+  return map;
+}
+
+/** Gasto del comprador en 24 h: solo fondeado o en curso, por el momento del pago. Sin invitaciones ni starts abandonados. */
+async function buyerSpend(actor: string, exclude: string | null): Promise<{ hits: Hit[]; capped: boolean }> {
+  const full = 'id, price_crc, status, funded_at, funded_tx, contract_id, created_at';
+  let r = await timed(Promise.resolve(db().from('orders').select(full).eq('buyer_user_id', actor).in('status', SPEND_STATUSES).limit(400)));
+  if (r.error && missingColumn(r.error)) {
+    r = await timed(Promise.resolve(db().from('orders').select('id, price_crc, status, created_at').eq('buyer_user_id', actor).in('status', SPEND_STATUSES).limit(400)));
+  }
+  if (r.error) {
+    if (isMissingTable(r.error)) return { hits: [], capped: false };
+    throw Object.assign(new Error('spend'), { code: r.error.code ?? 'db' });
+  }
+  const rows = (r.data ?? []) as Row[];
+  const need = rows.filter((row) => row.id && row.id !== exclude && !row.funded_at).map((row) => row.id as string);
+  const moments = await eventMoments(need);
+  const since = dayAgoMs();
+  const hits: Hit[] = [];
+  for (const row of rows) {
+    if (exclude && row.id === exclude) continue;
+    const at = payMoment(row, row.id ? moments.get(row.id) ?? null : null);
+    if (at == null || at < since) continue;
+    hits.push({ at, price: Math.round(Number(row.price_crc)) || 0, id: row.id ?? '' });
+  }
+  return { hits, capped: rows.length >= 400 };
+}
+
 async function run(p: RiskInput): Promise<void> {
   if (process.env.RISK_LIMITS_DISABLED === '1') return;
   const actor = typeof p.actor === 'string' ? p.actor : '';
   const amount = Math.round(Number(p.amountCrc));
-  if (!actor || actor.length > 200 || !Number.isFinite(amount) || amount < 0) return denied();
+  if (!actor || actor.length > 200) return denied();
+  // Un monto que no es número en un pago (pedido ya fondeado sin price_crc, p. ej.) no puede rechazar: el handler
+  // ni siquiera debería llegar aquí. Si llega, se deja pasar y se anota.
+  if (!Number.isFinite(amount) || amount < 0) {
+    if (p.action === 'pay') { console.warn('[risk] fail-open', 'bad_amount'); return; }
+    return denied();
+  }
+  await sweepExpired();
   const ip = clientIp(p.req);
-  const ipSub = ip ? ipSubject(ip) : null;
-  const keys = ['risk_limits', 'risk_blocks', blockKey(actor), ...(ipSub ? [blockKey(ipSub)] : [])];
+  const keys = ['risk_limits', 'risk_blocks', blockKey(actor)];
   const { data, error } = await timed(Promise.resolve(db().from('app_flags').select('key, value').in('key', keys)));
   if (error) {
     if (!isMissingTable(error)) throw Object.assign(new Error('flags'), { code: error.code ?? 'db' });
@@ -214,31 +301,33 @@ async function run(p: RiskInput): Promise<void> {
   if (!cfg.enabled) return;
   const orderId = p.orderId ?? null;
   const base = { action: p.action, amount_crc: amount };
-  if (subjectsOf(flags.risk_blocks).includes(actor) || stillBlocked(flags[blockKey(actor)]) || (ipSub && stillBlocked(flags[blockKey(ipSub)]))) {
+  // Lista manual o rb_ de esta persona. Una IP no se bloquea (CGNAT / Wi-Fi compartido).
+  if (subjectsOf(flags.risk_blocks).includes(actor) || stillBlocked(flags[blockKey(actor)])) {
     await record('risk_block', orderId, { ...base, reason: 'blocked' });
     return denied();
   }
   if (amount > cfg.max_order_crc) {
     await record('risk_limit', orderId, { ...base, reason: 'order_amount' });
-    await blockFor([actor], 'order_amount', cfg.block_hours);
-    return denied();
+    return denied(); // un solo intento sobre el tope: se rechaza, no se persiste
   }
   const since = dayAgo();
-  const column = p.action === 'order' ? 'seller_user_id' : 'buyer_user_id';
-  const [mine, invites] = await Promise.all([
-    rowsSince('orders', column, actor, since),
-    rowsSince('invitations', 'buyer_user_id', actor, since),
-  ]);
-  const activity = [...hitsOf(mine, orderId), ...hitsOf(invites, null)];
-  if (activity.length >= 400) {
-    await record('risk_limit', orderId, { ...base, reason: 'daily_amount' });
-    await blockFor([actor], 'daily_amount', cfg.block_hours);
-    return denied();
+  let activity: Hit[];
+  let capped = false;
+  if (p.action === 'pay') {
+    const spend = await buyerSpend(actor, orderId);
+    activity = spend.hits; capped = spend.capped;
+  } else {
+    // Publicar: pedidos del vendedor. Invitación: filas del invitado. No se suman al gasto de un pago.
+    const [mine, invites] = await Promise.all([
+      rowsSince('orders', 'seller_user_id', actor, since),
+      rowsSince('invitations', 'buyer_user_id', actor, since),
+    ]);
+    activity = [...hitsOf(mine, orderId), ...hitsOf(invites, null)];
+    capped = activity.length >= 400;
   }
   const daily = activity.reduce((s, h) => s + h.price, 0);
-  if (daily + amount > cfg.max_daily_crc) {
+  if (capped || daily + amount > cfg.max_daily_crc) {
     await record('risk_limit', orderId, { ...base, reason: 'daily_amount' });
-    await blockFor([actor], 'daily_amount', cfg.block_hours);
     return denied();
   }
   const count = p.count !== false;
@@ -252,17 +341,18 @@ async function run(p: RiskInput): Promise<void> {
     const [actorHour, actorBurst, ipHour, ipBurst] = await Promise.all([
       persistentHit(scope, actor, perHour, 3600),
       persistentHit(`${scope}.burst`, actor, cfg.burst_count, cfg.burst_window_sec),
-      ipSub ? persistentHit(`${scope}.ip`, ip!, perHour * RISK_IP_FACTOR, 3600) : Promise.resolve('down' as const),
-      ipSub ? persistentHit(`${scope}.ip.burst`, ip!, cfg.burst_count * RISK_IP_FACTOR, cfg.burst_window_sec) : Promise.resolve('down' as const),
+      ip ? persistentHit(`${scope}.ip`, ip, perHour * RISK_IP_FACTOR, 3600) : Promise.resolve('down' as const),
+      ip ? persistentHit(`${scope}.ip.burst`, ip, cfg.burst_count * RISK_IP_FACTOR, cfg.burst_window_sec) : Promise.resolve('down' as const),
     ]);
-    const hourDeny = actorHour === 'deny' || ipHour === 'deny' || (actorHour === 'down' && inHour + 1 > perHour);
-    const burstDeny = actorBurst === 'deny' || ipBurst === 'deny' || (actorBurst === 'down' && inBurst + 1 > cfg.burst_count);
-    if (hourDeny || burstDeny) {
-      const reason = burstDeny && !hourDeny ? 'burst' : 'velocity';
-      const ipHit = ipHour === 'deny' || ipBurst === 'deny';
-      const who = ipHit && actorHour !== 'deny' && actorBurst !== 'deny' ? 'ip' : actor.startsWith('guest:') ? 'guest' : 'user';
+    const personHour = actorHour === 'deny' || (actorHour === 'down' && inHour + 1 > perHour);
+    const personBurst = actorBurst === 'deny' || (actorBurst === 'down' && inBurst + 1 > cfg.burst_count);
+    const ipDeny = ipHour === 'deny' || ipBurst === 'deny';
+    if (personHour || personBurst || ipDeny) {
+      const reason = personBurst ? 'burst' : 'velocity';
+      const who = !personHour && !personBurst && ipDeny ? 'ip' : actor.startsWith('guest:') ? 'guest' : 'user';
       await record('risk_velocity', orderId, { ...base, reason, who });
-      await blockFor([actor, ...(ipHit && ipSub ? [ipSub] : [])], reason, cfg.block_hours);
+      // La hora y la IP solo rechazan este intento (la ventana de 037 es el cooldown). La ráfaga sí bloquea a la persona.
+      if (personBurst) await blockFor([actor], 'burst', cfg.block_hours);
       return denied();
     }
   }
@@ -271,19 +361,24 @@ async function run(p: RiskInput): Promise<void> {
   if (await accountIsNew(actor, orderId, cfg.new_account_hours) && amount > cfg.new_account_max_crc) { signals.push('new_account'); score += 3; }
   if (amount >= cfg.atypical_crc) { signals.push('atypical'); score += 2; }
   if (score >= 3) {
+    // Señal de la persona, pero es un solo intento: se rechaza ese monto y no queda bloqueada 24 h.
     await record('risk_signal', orderId, { ...base, reason: signals[0], signals, score });
-    await blockFor([actor], signals[0], cfg.block_hours);
     return denied();
   }
   if (signals.length) await record('risk_signal', orderId, { ...base, reason: signals[0], signals, score, decision: 'allow' });
 }
 
-/** Rechaza (403 genérico) si la persona, el invitado o su IP están bloqueados o se pasan de un tope. */
+/**
+ * Rechaza (403 genérico) si la persona o el invitado están bloqueados o se pasan de un tope.
+ * En un pago, si la base no responde, se deja pasar y se anota: el dinero en curso no se traba.
+ */
 export async function assertRisk(p: RiskInput): Promise<void> {
   try { await run(p); }
   catch (e: any) {
     if (e instanceof HttpError) throw e;
-    console.warn('[risk] fail-closed', e?.code ?? 'error');
+    const open = p.action === 'pay';
+    console.warn('[risk]', open ? 'fail-open' : 'fail-closed', e?.code ?? 'error');
+    if (open) return;
     denied();
   }
 }
