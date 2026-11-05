@@ -6,7 +6,7 @@ import { isSessionError } from '@/lib/authUx';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Card, Chip, ErrorText, IconButton, MoneyTimeline, PrimaryButton, Screen, Sheet, statusTone } from '@/components/ds';
+import { Card, Chip, ErrorText, Icon, IconButton, MoneyTimeline, PrimaryButton, Screen, Sheet, statusTone } from '@/components/ds';
 import { BuysSection, BUYS_CHROME, BUYS_EMPTY_H, HomeSummaryCard, ROW_GAP, ROW_H, SALES_CHROME, SALES_EMPTY_H, SaleRow, SalesBox } from '@/components/HomeSections';
 import { SellerActions } from '@/components/SellerActions';
 import { SellerOrderChat } from '@/components/OrderChat';
@@ -15,7 +15,7 @@ import { AdminDisputesButton } from '@/components/AdminDisputesButton';
 import { SellerDisputeReply } from '@/components/SellerDisputeReply';
 import { claimRuleApplies, replyRuleApplies } from '../../api/_lib/orderRules';
 import { SellerClaimReply } from '@/components/SellerClaimReply';
-import { S, T } from '@/constants/theme';
+import { C, S, T } from '@/constants/theme';
 import { useAuth } from '@/lib/cavos';
 import { ChainLinks } from '@/components/ChainLinks';
 import { formatCRC, getPublicOrder, getSellerOrders, type PublicOrder, orderLink, orderTitle, STATUS_LABEL, type SellerOrder } from '@/lib/orders';
@@ -35,6 +35,9 @@ import { useStableWindow } from '@/lib/viewport';
 import { useStamp } from '@/lib/freshness';
 import { lazy, Suspense } from 'react';
 const PushCard = lazy(() => import('@/components/PushCard')); // diferido
+
+/** Aviso fijo en el detalle del pedido (texto EXACTO aprobado). */
+const PAYMENT_HERE_NOTICE = 'El pago solo cuenta si lo ves aquí, en tu pedido. Meteorito nunca te va a pedir códigos, contraseñas ni datos de tu banco, ni que confirmes un pago fuera de la app.';
 
 const NEXT_HINT: Record<string, string> = {
   creado: 'Comparte el link. Cuando el comprador pague, te avisamos acá.',
@@ -157,6 +160,10 @@ export default function Pedidos() {
               disputeNote={detail?.slug === open.slug && replyRuleApplies(detail) ? 'Tienes 48 h para responder. El pago sigue en custodia.' : null} />
             <Text style={T.callout}>{(detail?.slug === open.slug && detail?.delivery_mode === 'cara_a_cara' && F2F_HINT[open.status]) || NEXT_HINT[open.status] || ''}</Text>
           </Card>
+          <View testID="payment-here-notice" accessibilityRole="text" style={{ flexDirection: 'row', gap: S.sm, alignItems: 'flex-start', backgroundColor: C.lilacBg, borderRadius: 12, padding: S.md }}>
+            <Icon name="information-circle-outline" size={20} color={C.lilac} />
+            <Text style={[T.footnote, { flex: 1, color: C.text }]}>{PAYMENT_HERE_NOTICE}</Text>
+          </View>
           <SellerActions slug={open.slug} status={open.status} order={detail?.slug === open.slug ? detail : null} onChange={load} />
           {open.status === 'en_disputa' ? <SellerDisputeReply slug={open.slug} /> : null}
           {open.status === 'liberado' && (detail?.slug !== open.slug || claimRuleApplies(detail)) ? <SellerClaimReply slug={open.slug} /> : null}
