@@ -109,6 +109,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '109', name: 'Turnstile: pagar/importar como invitado; apagado sin llaves; siteverify; fail-open; reintento web', file: './t109-turnstile.test.ts', onchain: false },
   { id: '110', name: 'Límites de riesgo: topes, gasto por momento de pago, ráfaga sin ban de IP, pago fail-open', file: './t110-risk-limits.test.ts', onchain: false },
   { id: '111', name: 'PII en reposo (fases A–C): AES-GCM, lectura en claro sin llave, dual-write, backfill admin, sin seller_email, IBAN de ejemplo, bundle sin PII_ENC', file: './t111-pii-enc.test.ts', onchain: false },
+  { id: '112', name: 'Descargar app (PWA): flujo por navegador, ?instalar=1, manifest instalable, solo web', file: './t112-install.test.ts', onchain: false },
   { id: '113', name: 'Login sin cuelgues: topes por paso (SDK, sesión 8 s, Google/Apple, código, passkey 60 s), Reintentar + código por correo, nunca adentro sin sesión, tour después del modal de Cavos', file: './t113-login-sin-cuelgues.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
