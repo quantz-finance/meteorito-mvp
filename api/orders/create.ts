@@ -17,6 +17,7 @@ import { notifyFollowers } from '../_lib/follows';
 import { stampVersion } from '../_lib/orderRules';
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
+import { assertRisk } from '../_lib/risk';
 
 const CATS = ['celular', 'consola', 'laptop', 'tablet', 'camara', 'otro'];
 // Link en un paso: solo título, precio y fotos. Categoría, marca, modelo, estado y declaraciones son opcionales
@@ -99,6 +100,8 @@ export default async function handler(req: any, res: any) {
     // Reglas con versión (033): la que quien vende aceptó en la app antes de publicar (b.rules_ack). Clientes viejos -> 0
     // (sin reglas nuevas: nada retroactivo ni sin haberlas visto). Sin la migración 033 se crea sin la columna.
     let rules: Record<string, unknown> = { rules_version: stampVersion(b.rules_ack) };
+    // Tope, velocity y bloqueo (api/_lib/risk.ts). Si no pasa, no se publica.
+    await assertRisk({ req, action: 'order', amountCrc: price, actor: user.sub });
     for (let i = 0; i < 5; i++) {
       const s = slug();
       const ins = () => db().from('orders').insert({ ...row, ...agreed, ...source, ...rules, slug: s, ...(kind ? { kind } : {}) });

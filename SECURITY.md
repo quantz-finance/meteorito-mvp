@@ -33,6 +33,19 @@ import-by-link, buyer access links) share a persistent per-IP counter in Postgre
 `api/_lib/rateLimit.ts`). The key is an HMAC of route + IP (the IP is never stored), rows expire after two windows.
 Over the limit: `429` with `Retry-After`. If the database errors or is slow, requests pass (fail-open) and the event is logged.
 
+## Risk limits
+
+Order create, buyer invites, and pay (`start`, `confirm_sinpe`, `card_pay`, `fund_direct`, plus a re-check
+without counting on `card_session`, `card_confirm`, `fund_xdr`, and `crypto_status`) enforce configurable amount caps, per-person and per-IP
+velocity, and a block list (`api/_lib/risk.ts`, `docs/riesgo.md`). Defaults live in code. Overrides: `app_flags`
+key `risk_limits` (migration 027) and `RISK_*` env vars. `supabase/migrations/050_risk_flags.sql` only seeds those
+rows and two indexes — it is not applied by deploy.
+
+Over a cap, or if the person is already blocked, the handler returns **403** `unavailable` with a generic
+message and does not create the order or move the payment. Server logs and `order_events` use `risk_limit`,
+`risk_velocity`, `risk_signal`, and `risk_block`. The client never receives the threshold or the reason.
+If the flag read fails (and `RISK_LIMITS_DISABLED` is not `1`), the request is rejected.
+
 ## Bot checks (Cloudflare Turnstile)
 
 Guest checkout (a new order/escrow) and guest import-by-link require a Turnstile token when `TURNSTILE_SECRET_KEY`
