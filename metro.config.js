@@ -7,9 +7,12 @@ const config = getDefaultConfig(__dirname);
 // Fuentes web woff2 (assets/fonts, generadas por scripts/build/subset-fonts.py).
 if (!config.resolver.assetExts.includes('woff2')) config.resolver.assetExts.push('woff2');
 const shim = path.join(__dirname, 'lib/shims/phosphor-icons.ts');
+// iOS/Android: "eventsource" (dependencia de @stellar/stellar-sdk) es solo Node -> stub (lib/shims/eventsource.ts).
+const eventsourceShim = path.join(__dirname, 'lib/shims/eventsource.ts');
 const upstream = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (moduleName === '@phosphor-icons/react' && platform === 'web') return { type: 'sourceFile', filePath: shim };
+  if (moduleName === 'eventsource' && platform !== 'web') return { type: 'sourceFile', filePath: eventsourceShim };
   return (upstream ?? context.resolveRequest)(context, moduleName, platform);
 };
 module.exports = config;

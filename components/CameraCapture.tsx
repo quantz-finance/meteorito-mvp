@@ -29,7 +29,7 @@ const HINTS: Record<CapturePurpose, string> = {
 
 /** Cámara simulada SOLO en modo demo (nunca en producción: DEMO_ENABLED se apaga en los dominios reales). */
 function fakeCamera(): null | 'ok' | 'denied' | 'busy' | 'unsupported' {
-  if (!DEMO_ENABLED || typeof window === 'undefined') return null;
+  if (!DEMO_ENABLED || Platform.OS !== 'web' || typeof window === 'undefined') return null; // nativo: window.location no existe
   const q = new URLSearchParams(window.location.search).get('camera');
   const v = q ?? (() => { try { return window.sessionStorage.getItem('meteorito:fake-camera'); } catch { return null; } })();
   return v === 'denied' || v === 'busy' || v === 'unsupported' ? v : 'ok';
