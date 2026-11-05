@@ -7,6 +7,7 @@
 // La tesorería recibe el USDC del comprador y fondea el escrow: costo neto ~0 USDC (solo fees en XLM).
 // Uso: npx tsx scripts/crypto-testnet-e2e.ts [A|B|C ...]
 import { Asset, Horizon, Keypair, Memo, Networks, Operation, TransactionBuilder } from '@stellar/stellar-sdk';
+import { HOLDER_PLACEHOLDER, IBAN_PLACEHOLDER, SINPE_PLACEHOLDER } from '../api/_lib/payout';
 import { baseEnv, testnet } from './ci/setup';
 import { fakeDb } from './ci/fakedb';
 import { req, res } from './ci/jwt';
@@ -61,7 +62,7 @@ async function send(kp: Keypair, to: string, asset: Asset, amount: string, memo:
       tx.sign(kp); await H.submitTransaction(tx); payoutWallet = kp.publicKey();
       db.tables.seller_payout.push({ sub: 'seller-ci', payout_method: 'wallet', stellar_address: payoutWallet, iban: null, holder_name: null });
     }
-    if (c === 'I') db.tables.seller_payout.push({ sub: 'seller-ci', payout_method: 'iban', stellar_address: null, iban: 'CR05015202001026284066', holder_name: 'Vendedor de prueba' });
+    if (c === 'I') db.tables.seller_payout.push({ sub: 'seller-ci', payout_method: 'iban', stellar_address: null, iban: IBAN_PLACEHOLDER, holder_name: HOLDER_PLACEHOLDER, sinpe_phone: SINPE_PLACEHOLDER });
     db.tables.orders.push({ id: crypto.randomUUID(), slug, status: 'creado', kind: 'single', seller_user_id: 'seller-ci', seller_address: seller, price_crc: 510, brand: 'CI', model: `cripto ${c}`,
       delivery_mode: 'cara_a_cara', protection_minutes: 1440, created_at: new Date(Date.now() - 5000).toISOString(), pin_attempts: 0 });
     const st = await call(pay, { slug, step: 'start' });

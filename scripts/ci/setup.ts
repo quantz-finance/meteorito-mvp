@@ -1,5 +1,6 @@
 // Setup común de tests CI. SOLO TESTNET: el backend ya rechaza STELLAR_NETWORK != testnet (env.network()).
 // Secretos: de variables de entorno (GitHub Actions) o, en local, de .ci-secrets.env.
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { Keypair } from '@stellar/stellar-sdk';
 
@@ -15,6 +16,10 @@ function fromFiles(): Record<string, string> | null {
   return SECRET_NAMES.every((n) => kv[n]) ? Object.fromEntries(SECRET_NAMES.map((n) => [n, kv[n]])) : null;
 }
 
+/** Llave de prueba generada al arrancar el proceso. No es una llave de producción y pii.ts no la tiene fija. */
+export const CI_PII_KID = 'ci';
+export const CI_PII_KEY_B64 = randomBytes(32).toString('base64');
+
 /** Variables base para el backend en tests (sin DB real: los tests inyectan fakeDb). */
 export function baseEnv() {
   Object.assign(process.env, {
@@ -22,6 +27,7 @@ export function baseEnv() {
     CI_NETWORK_RETRY: '1', CI_OWN_CONTRACTS_ONLY: '1', // reintentos con backoff SOLO en CI para red testnet (api/_lib/retry.ts)
     PIN_PEPPER: 'ci-pepper', CRON_SECRET: 'ci-cron', SERVICE_PROVIDER_MODE: 'seller', VERCEL_ENV: 'production',
     FEED_DEMO_PRODUCTS: '0', // productos de ejemplo del feed apagados en los tests viejos; t82 los prende
+    PII_ENC_KEYS: `${CI_PII_KID}:${CI_PII_KEY_B64}`, PII_ENC_ACTIVE_KID: CI_PII_KID,
   });
 }
 

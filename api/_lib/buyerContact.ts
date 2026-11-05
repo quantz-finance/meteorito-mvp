@@ -10,6 +10,8 @@
 import { createHash, createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
 import { HttpError } from './auth';
 import { isAdminUser, notFound } from './admin';
+import { missingColumn } from './listings';
+import { buyerContactKey, piiUnavailable, readPii, requireSeal } from './pii';
 import { isMissingTable } from './push';
 import {
   ACCESS_GRANT_DAYS, BETA_NOTICE_TEXT as BETA_NOTICE, ACCESS_LINK_DAYS, CONTACT_CONSENT_TEXT, CONTACT_CONSENT_VERSION, NOTICE_BY_STATUS, buildNotice, maskEmail, maskPhone,
@@ -88,14 +90,37 @@ const CONTACT_STATUSES = ['escrow_creado', 'fondeado', 'enviado', 'entregado', '
 export interface ContactView { channel: ContactChannel; masked: string }
 const view = (c: any): ContactView => ({
   channel: c.channel,
-  masked: c.channel === 'whatsapp' ? maskPhone(c.phone_e164) : c.email ? maskEmail(c.email) : 'Tu cuenta',
+  masked: c.channel === 'whatsapp' ? (c.phone_e164 ? maskPhone(c.phone_e164) : '••••') : c.email ? maskEmail(c.email) : 'Tu cuenta',
 });
+
+const CONTACT_WITH_ENC = 'channel, phone_e164, phone_e164_enc, email, email_enc, account_sub, revoked_at';
+const CONTACT_PLAIN = 'channel, phone_e164, email, account_sub, revoked_at';
+
+/** Texto en claro para usar (avisos, máscara, admin). Prefiere *_enc. Sin 051 reintenta sin esas columnas. */
+function openedContact(orderId: string, c: any) {
+  const rowKey = buyerContactKey(orderId, String(c.channel));
+  return {
+    ...c,
+    phone_e164: readPii({ table: 'buyer_contacts', column: 'phone_e164', rowKey, enc: c.phone_e164_enc, plain: c.phone_e164 }),
+    email: readPii({ table: 'buyer_contacts', column: 'email', rowKey, enc: c.email_enc, plain: c.email }),
+  };
+}
+async function selectContacts(db: Db, orderId: string, colsEnc: string, colsPlain: string, only?: ContactChannel) {
+  const run = (cols: string) => {
+    let q = db.from('buyer_contacts').select(cols).eq('order_id', orderId);
+    if (only) q = q.eq('channel', only);
+    return q;
+  };
+  let res = await run(colsEnc);
+  if (res.error && missingColumn(res.error)) res = await run(colsPlain);
+  return res;
+}
 
 /** Estado de la tarjeta: si la función está disponible (028) y qué contactos hay (enmascarados). */
 export async function getContacts(db: Db, order: any): Promise<{ available: boolean; contacts: ContactView[]; email: boolean }> {
-  const { data, error } = await db.from('buyer_contacts').select('channel, phone_e164, email, account_sub, revoked_at').eq('order_id', order.id);
+  const { data, error } = await selectContacts(db, order.id, CONTACT_WITH_ENC, CONTACT_PLAIN);
   if (error) { if (isMissingTable(error)) return { available: false, contacts: [], email: mailOn() }; throw error; }
-  return { available: true, contacts: (data ?? []).filter((c: any) => !c.revoked_at).map(view), email: mailOn() };
+  return { available: true, contacts: (data ?? []).filter((c: any) => !c.revoked_at).map((c: any) => view(openedContact(order.id, c))), email: mailOn() };
 }
 
 export interface SaveInput { channel: unknown; cc?: unknown; phone?: unknown; email?: unknown; consent?: unknown; consent_version?: unknown }
@@ -119,8 +144,16 @@ export async function saveContact(db: Db, order: any, who: Who, b: SaveInput): P
     if (!who.cavos) throw Object.assign(new HttpError(401, 'Entra con tu cuenta para continuar.'), { code: 'auth_missing' });
     row.account_sub = who.cavos.sub; row.email = normalizeEmail(who.cavos.email);
   } else throw new HttpError(400, 'Elige WhatsApp, correo o cuenta.');
+  // Dual-write (051): claro + ciphertext. Sin llave no se escribe ninguno de los dos.
+  const rowKey = buyerContactKey(order.id, String(row.channel));
+  row.phone_e164_enc = requireSeal(row.phone_e164 as string | null, 'buyer_contacts', 'phone_e164', rowKey);
+  row.email_enc = requireSeal(row.email as string | null, 'buyer_contacts', 'email', rowKey);
   const { error } = await db.from('buyer_contacts').upsert(row, { onConflict: 'order_id,channel' });
-  if (error) { if (isMissingTable(error)) throw unavailable(); throw error; }
+  if (error) {
+    if (missingColumn(error)) throw piiUnavailable();
+    if (isMissingTable(error)) throw unavailable();
+    throw error;
+  }
   // Correo: el primer aviso es el link de acceso (sirve para recuperar la compra en otro teléfono).
   let emailed = false;
   if (row.email && b.channel !== 'whatsapp') emailed = (await sendNotice(db, order, 'acceso', { only: b.channel as ContactChannel })).email > 0;
@@ -184,12 +217,11 @@ interface SendOpts { only?: ContactChannel; now?: number }
 export async function sendNotice(db: Db, order: NoticeOrder & { id: string; buyer_user_id: string }, kind: NoticeKind, opts: SendOpts = {}): Promise<{ email: number; whatsapp: number; skipped: number }> {
   const out = { email: 0, whatsapp: 0, skipped: 0 };
   try {
-    let q = db.from('buyer_contacts').select('channel, phone_e164, email, revoked_at').eq('order_id', order.id);
-    if (opts.only) q = q.eq('channel', opts.only);
-    const { data: contacts, error } = await q;
+    const { data: contacts, error } = await selectContacts(db, order.id, 'channel, phone_e164, phone_e164_enc, email, email_enc, revoked_at', 'channel, phone_e164, email, revoked_at', opts.only);
     if (error || !contacts?.length) return out;
     const now = opts.now ?? Date.now();
-    for (const c of contacts) {
+    for (const raw of contacts) {
+      const c = openedContact(order.id, raw);
       if (c.revoked_at) continue;
       const channel = c.channel as ContactChannel;
       if (channel !== 'whatsapp' && !c.email) continue;
@@ -229,16 +261,27 @@ export async function notifyBuyerStatus(db: Db, o: { id: string; slug: string; s
 export function requireAdmin(who: Who) {
   if (!who.cavos || !isAdminUser(who.cavos as any)) throw notFound();
 }
-/** Contactos de un pedido para el EQUIPO (sin enmascarar) con el wa.me del último aviso listo para enviar. */
-export async function adminContacts(db: Db, order: any) {
-  const { data, error } = await db.from('buyer_contacts').select('channel, phone_e164, email, consent_text_version, consent_at, revoked_at').eq('order_id', order.id);
+/** Contactos de un pedido para el EQUIPO (sin enmascarar) con el wa.me del último aviso listo para enviar.
+ *  Deja una fila en admin_audit (031): quién y qué canales, nunca el teléfono ni el correo. */
+export async function adminContacts(db: Db, order: any, adminEmail: string) {
+  const { data, error } = await selectContacts(db, order.id,
+    'channel, phone_e164, phone_e164_enc, email, email_enc, consent_text_version, consent_at, revoked_at',
+    'channel, phone_e164, email, consent_text_version, consent_at, revoked_at');
   if (error) { if (isMissingTable(error)) return { available: false, contacts: [] }; throw error; }
   const kind: NoticeKind = NOTICE_BY_STATUS[order.status] ?? 'acceso';
   const n = buildNotice(kind, order, accessLinkFor(order), BETA_NOTICE);
-  return {
-    available: true,
-    contacts: (data ?? []).map((c: any) => ({ ...c, wa_link: c.channel === 'whatsapp' && c.phone_e164 && !c.revoked_at ? waLink(c.phone_e164, n.whatsapp) : null })),
-  };
+  const contacts = (data ?? []).map((raw: any) => {
+    const c = openedContact(order.id, raw);
+    return {
+      channel: c.channel, phone_e164: c.phone_e164, email: c.email,
+      consent_text_version: c.consent_text_version, consent_at: c.consent_at, revoked_at: c.revoked_at,
+      wa_link: c.channel === 'whatsapp' && c.phone_e164 && !c.revoked_at ? waLink(c.phone_e164, n.whatsapp) : null,
+    };
+  });
+  const row = { kind: 'buyer_contacts_read', admin_email: adminEmail.slice(0, 200), target: String(order.slug ?? '').slice(0, 200), detail: { channels: contacts.map((c: { channel: string }) => c.channel) } };
+  const audit = await db.from('admin_audit').insert(row);
+  if (audit?.error) console.info('[admin-audit]', row.kind, row.target, isMissingTable(audit.error) ? 'sin-031' : (audit.error.code ?? ''));
+  return { available: true, contacts };
 }
 
 /** Cron: pedidos con la liberación automática en menos de 24 h -> aviso 'por_liberar' (una vez por pedido y canal). */

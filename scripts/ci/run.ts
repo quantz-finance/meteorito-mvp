@@ -108,6 +108,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '108', name: 'Límite de peticiones persistente (037): HMAC de ruta+IP, 429 + Retry-After, fail-open', file: './t108-rate-limit.test.ts', onchain: false },
   { id: '109', name: 'Turnstile: pagar/importar como invitado; apagado sin llaves; siteverify; fail-open; reintento web', file: './t109-turnstile.test.ts', onchain: false },
   { id: '110', name: 'Límites de riesgo: topes, gasto por momento de pago, ráfaga sin ban de IP, pago fail-open', file: './t110-risk-limits.test.ts', onchain: false },
+  { id: '111', name: 'PII en reposo (fases A–C): AES-GCM, lectura en claro sin llave, dual-write, backfill admin, sin seller_email, IBAN de ejemplo, bundle sin PII_ENC', file: './t111-pii-enc.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

@@ -85,6 +85,9 @@ import { importListing } from '../_lib/importers';
 import { checkListingUrl } from '../_lib/importers/providers';
 import { env } from '../_lib/env';
 import { canShowContact, normalizeContactPhone } from '../_lib/contact';
+import { readPii, requireSeal } from '../_lib/pii';
+import { adminPiiBackfill } from '../_lib/piiBackfill';
+import { requireAdmin as requireAdminUser } from '../_lib/admin';
 import { buyerOrders } from '../_lib/purchases';
 import { FOLLOW_IP_PER_MIN, followedSellerSubs, followingSlugs, followRateLimited, setFollow } from '../_lib/follows';
 import { sponsoredFor } from '../_lib/sponsored';
@@ -142,13 +145,16 @@ async function whatsappPublicOf(sub: string): Promise<boolean> {
     return !error && (data as any)?.whatsapp_public === true;
   } catch { return false; }
 }
-/** WhatsApp de contacto del vendedor (migración 016). Sin la columna o ante cualquier error: null (nunca rompe). */
+/** WhatsApp de contacto del vendedor (migración 016 + ciphertext 051). Sin la columna o ante cualquier error: null.
+ *  Prefiere contact_phone_enc. Sin 051, o en la fase B sin llave, lee el claro. */
 async function contactPhoneOf(sub: string | null | undefined): Promise<string | null> {
   if (!sub) return null;
   try {
-    const { data, error } = await db().from('seller_profiles').select('contact_phone').eq('sub', sub).maybeSingle();
-    if (error) return null;
-    return typeof (data as any)?.contact_phone === 'string' ? (data as any).contact_phone : null;
+    const q = (cols: string) => db().from('seller_profiles').select(cols).eq('sub', sub).maybeSingle();
+    let { data, error } = await q('sub, contact_phone, contact_phone_enc');
+    if (error && missingColumn(error)) ({ data, error } = await q('contact_phone'));
+    if (error || !data) return null;
+    return readPii({ table: 'seller_profiles', column: 'contact_phone', rowKey: sub, enc: (data as any).contact_phone_enc, plain: (data as any).contact_phone });
   } catch { return null; }
 }
 
@@ -292,6 +298,18 @@ export default async function handler(req: any, res: any) {
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
     const b = req.body ?? {};
 
+    if (b.action === 'admin_pii_backfill') {
+      // Corre dentro de Vercel: ahí están PII_ENC_* (Sensitive). Dry-run si apply no es true. Solo conteos.
+      const admin = await requireAdminUser(req);
+      res.setHeader?.('Cache-Control', 'no-store');
+      const apply = b.apply === true;
+      const out = await adminPiiBackfill(db(), apply);
+      const row = { kind: 'pii_backfill', admin_email: admin.email, target: apply ? 'apply' : 'dry-run', detail: out };
+      const audit = await db().from('admin_audit').insert(row);
+      if (audit?.error) console.info('[admin-audit]', 'pii_backfill', row.target, audit.error.code ?? '');
+      return json(res, 200, out);
+    }
+
     if (b.action === 'rate') {
       // Reseña de compra verificada: estrellas + comentario opcional + nombre corto opcional (migración 018).
       const stars = Number(b.stars);
@@ -383,6 +401,8 @@ export default async function handler(req: any, res: any) {
         // Otro dispositivo: si el correo coincide con el contacto guardado, le mandamos un link nuevo. Respuesta siempre igual.
         const email = normalizeEmail(b.email);
         if (email && !fbRateLimited(`acc:${clientIp(req) ?? 'x'}`, Date.now(), 4)) {
+          // Lookup por el claro: en esta fase el dual-write lo mantiene igual que email_enc.
+        // TODO PR2 / migración 052: descifrar email_enc y comparar con timingSafeEqual antes del cutover.
           const { data } = await db().from('buyer_contacts').select('channel, email').eq('order_id', order.id).eq('email', email).is('revoked_at', null);
           const ch = (data ?? [])[0]?.channel;
           if (ch) await sendNotice(db(), order, 'acceso', { only: ch as 'email' | 'account' });
@@ -390,7 +410,7 @@ export default async function handler(req: any, res: any) {
         return json(res, 200, { requested: true });
       }
       const who = await requireBuyerIdentity(req);
-      if (b.action === 'admin_contacts') { requireAdmin(who); return json(res, 200, await adminContacts(db(), order)); }
+      if (b.action === 'admin_contacts') { requireAdmin(who); return json(res, 200, await adminContacts(db(), order, String(who.cavos?.email ?? ''))); }
       if (!isBuyerOf(order, who)) throw Object.assign(new HttpError(403, 'Solo quien compró puede hacer esto.'), { code: 'not_buyer' });
       if (b.action === 'buyer_contact_get') return json(res, 200, await getContacts(db(), order));
       if (b.action === 'buyer_contact_save') return json(res, 200, await saveContact(db(), order, who, b));
@@ -548,7 +568,9 @@ export default async function handler(req: any, res: any) {
       if (b.contact_phone !== undefined) {
         const phone = normalizeContactPhone(b.contact_phone);
         if (phone === 'invalid') throw Object.assign(new HttpError(400, 'Escribe un número de Costa Rica: 8 dígitos (ej. 8888 1234).'), { code: 'bad_phone' });
+        // Dual-write. Sin llave: 503 y no se toca el claro ni el ciphertext.
         patch.contact_phone = phone;
+        patch.contact_phone_enc = requireSeal(phone, 'seller_profiles', 'contact_phone', user.sub);
       }
       // WhatsApp en el perfil público: opt-in explícito del dueño, solo con número guardado. Quitar el número lo apaga.
       let implicitWa = false;

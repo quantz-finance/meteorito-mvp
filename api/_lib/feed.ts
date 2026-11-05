@@ -13,6 +13,7 @@ import { HttpError } from './auth';
 import { missingColumn } from './listings';
 import { storeDbErr } from './store';
 import { waLink } from './contact';
+import { readPii } from './pii';
 import { decodeRankCursor, encodeRankCursor, FEED_RANK, rankFeed } from './feedRank';
 import { followerCount } from './follows';
 import { claimSummary } from './claims';
@@ -215,7 +216,7 @@ export async function sellerProfile(slug: string) {
   let row: any = null;
   // whatsapp_public (020): el vendedor elige mostrar su WhatsApp en el perfil. Hasta entonces el número solo lo ve el
   // comprador después de pagar (lo que se le prometió al guardarlo en 016), así que sin la columna no se muestra.
-  for (const cols of ['sub, store_slug, display_name, avatar_url, verified, verified_at, created_at, contact_phone, whatsapp_public', 'sub, store_slug, display_name, avatar_url, verified, verified_at, created_at', 'sub, store_slug, display_name, verified, created_at']) {
+  for (const cols of ['sub, store_slug, display_name, avatar_url, verified, verified_at, created_at, contact_phone, contact_phone_enc, whatsapp_public', 'sub, store_slug, display_name, avatar_url, verified, verified_at, created_at, contact_phone, whatsapp_public', 'sub, store_slug, display_name, avatar_url, verified, verified_at, created_at', 'sub, store_slug, display_name, verified, created_at']) {
     const { data, error } = await db().from('seller_profiles').select(cols).eq('store_slug', slug).maybeSingle();
     if (error && missingColumn(error)) continue;
     if (error) storeDbErr(error);
@@ -231,7 +232,9 @@ export async function sellerProfile(slug: string) {
     socialsOf(row.sub), // redes (031); {} sin la columna
   ]);
   if (e2) storeDbErr(e2);
-  const phone = row.whatsapp_public === true && typeof row.contact_phone === 'string' && row.contact_phone ? row.contact_phone : null;
+  const phone = row.whatsapp_public === true
+    ? readPii({ table: 'seller_profiles', column: 'contact_phone', rowKey: String(row.sub), enc: row.contact_phone_enc, plain: row.contact_phone })
+    : null;
   return {
     store_slug: row.store_slug, display_name: row.display_name, avatar_url: row.avatar_url ?? null,
     verified: row.verified === true, bio: null as string | null, location: null as string | null,

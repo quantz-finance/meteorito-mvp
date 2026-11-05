@@ -94,6 +94,7 @@ export const S = {
       body: o(str(5000)), client_id: o(str(100)), as: o(str(20)), summary: o(z.boolean()), blocked: o(z.boolean()), reason: o(str(40)), detail: o(str(2000)),
       method: o(str(20)), stellar_address: o(str(80)), iban: o(str(64)), holder_name: o(str(200)), sinpe_phone: o(str(40)), status: o(str(20)),
       display_name: o(str(200)), avatar_url: o(str(1000)), contact_phone: o(str(40)), whatsapp_public: o(z.unknown()), show_last_seen: o(z.unknown()),
+      apply: o(z.boolean()),
       socials: o(z.record(str(40), o(str(1000)))),
     }),
   },

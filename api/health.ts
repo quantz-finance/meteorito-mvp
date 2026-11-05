@@ -15,6 +15,7 @@ import * as photos from './_lib/photos';
 import * as tw from './_lib/tw';
 import { activationConfig } from './_lib/wallet';
 import { BAD_REQUEST, S, validate } from './_lib/validate';
+import { piiKeyStatus } from './_lib/pii';
 
 function version(pkg: string): string {
   try { return require(`${pkg}/package.json`).version; } catch {}
@@ -51,7 +52,7 @@ export default function handler(req: any, res: any) {
   res.status(ok ? 200 : 500).setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   res.send(JSON.stringify({
-    ok,
+    ok, pii: piiKeyStatus(),
     config: { autoReleaseMinutes: env.env.autoReleaseMinutes(), walletActivation: internal ? wa : { platformMatches: wa.platformMatches } },
     ...(internal ? {
       loaded, node: process.version,
