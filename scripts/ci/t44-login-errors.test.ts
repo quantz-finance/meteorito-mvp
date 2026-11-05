@@ -41,17 +41,18 @@ export async function run(t: T) {
   t.check('cualquier kit/auth crudo -> nunca se muestra crudo', !/kit\/auth/.test(authErrorText('kit/auth: /api/oauth/firebase/otp/request -> 500 {"error":"boom"}')));
   t.check('mensaje propio en español pasa igual', authErrorText('Tu sesión venció. Vuelve a iniciar sesión.') === 'Tu sesión venció. Vuelve a iniciar sesión.');
   t.check('sin palabras prohibidas', ![OTP_INVALID, OTP_STALE, OTP_RATE].some((m) => /seguro|protegido|garant|pronto|regulado/i.test(m)));
-  t.check('autofill iOS (código completo en la 1.ª casilla) -> se reparte, conserva ceros', JSON.stringify(otpFill('', 0, '012345')) === JSON.stringify({ code: '012345', focus: 5 }));
-  t.check('pegar con espacios/guion -> solo dígitos', otpFill('', 0, ' 01 2-345 ')?.code === '012345');
+  t.check('autofill iOS (código 9 alfanum completo en la 1.ª casilla) -> se reparte', JSON.stringify(otpFill('', 0, 'AbC123XyZ')) === JSON.stringify({ code: 'abc123xyz', focus: 8 }));
+  t.check('pegar con espacios/guion -> alfanum minúsculas (kit 0.5)', otpFill('', 0, ' AbC-12 3xy ')?.code === 'abc123xy');
   t.check('una tecla (o reemplazo de 2) -> comportamiento normal del kit', otpFill('1', 1, '2') === null && otpFill('12', 1, '23') === null);
-  t.check('autofill desde la casilla 2 -> desde ahí', otpFill('9', 1, '12345')?.code === '912345');
+  t.check('autofill desde la casilla 2 -> desde ahí', otpFill('9', 1, 'abc12')?.code === '9abc12');
+  t.check('código de 9 caracteres cabe completo', otpFill('', 0, 'a1b2c3d4e')?.code === 'a1b2c3d4e' && otpFill('', 0, 'a1b2c3d4e')?.focus === 8);
 
   const kit = readFileSync('node_modules/@cavos/kit/dist/react/index.mjs', 'utf8');
   t.check('kit instalado parchado (postinstall)', kit.includes(PATCH_MARK));
   const fresh = kit.includes(PATCH_MARK) ? null : kit;
-  const sample = 'const [error, setError] = useState("");\n    const digit = raw.replace(/\\D/g, "").slice(-1);\n maxLength: 1,\n children: "Enter your code" "We sent a 6-digit code to " `Resend in ${resendCountdown}s` "Resend code" "Use a different email"';
+  const sample = 'const [error, setError] = useState("");\n    const digit = normalizeEmailCode(raw).slice(-1);\n maxLength: 1,\n children: "Enter your code" "We sent a 9-character code to " `Resend in ${resendCountdown}s` "Resend code" "Use a different email"';
   const p = patchKitSource(fresh ?? sample);
-  t.check('parche: errores traducidos + autofill + 1.ª casilla acepta 6 + copy en español', p.out.includes('__meteoritoAuthError') && p.out.includes('__meteoritoOtpFill') && p.out.includes('maxLength: i === 0 ? 6 : 1') && p.out.includes('Reenviar código') && p.out.includes('último código'));
+  t.check('parche: errores traducidos + autofill + 1.ª casilla acepta 9 + copy ES 9 caracteres', p.out.includes('__meteoritoAuthError') && p.out.includes('__meteoritoOtpFill') && p.out.includes('maxLength: i === 0 ? 9 : 1') && p.out.includes('Reenviar código') && p.out.includes('último código') && p.out.includes('9 caracteres'));
   t.check('parche idempotente', patchKitSource(p.out).out === p.out);
   let threw = false; try { patchKitSource('nada que parchar'); } catch { threw = true; }
   t.check('parche falla fuerte si el kit cambió', threw);
@@ -59,6 +60,8 @@ export async function run(t: T) {
   t.check('puente registra traductor y autofill', /__meteoritoAuthError\s*=/.test(bridge) && /__meteoritoOtpFill\s*=/.test(bridge));
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   t.check('postinstall aplica el parche', /patch-cavos-kit/.test(pkg.scripts?.postinstall ?? ''));
+  t.check('kit @cavos/kit es ^0.5 (enclave release path)', /^\^?0\.5/.test(String(pkg.dependencies?.['@cavos/kit'] ?? '')));
+  t.check('puente web sin emailMode (0.5 no lo expone)', !/emailMode/.test(bridge));
 
   // --- Sesión inválida: una sola vez, sin la tarjeta de notificaciones
   const authInvalid = Object.assign(new Error('No pudimos verificar tu sesión. Vuelve a cargar la página.'), { status: 401, code: 'auth_invalid' });
