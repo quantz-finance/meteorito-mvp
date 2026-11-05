@@ -125,7 +125,7 @@ export default function CavosBridge() {
   return (
     <CavosProvider
       config={{ appId: CAVOS_APP_ID, chain: 'stellar', network: 'testnet', appSalt: APP_SALT, persistSession: true, socialRecovery: CAVOS_SOCIAL_RECOVERY }}
-      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], emailMode: 'otp', primaryColor: Brand.purple, secureStep: CAVOS_SECURE_STEP }}>
+      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], primaryColor: Brand.purple, secureStep: CAVOS_SECURE_STEP }}>
       <Bridge />
     </CavosProvider>
   );

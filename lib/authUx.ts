@@ -20,13 +20,14 @@ export function authErrorText(raw: string | null | undefined): string {
   return userMessage(m); // "kit/auth: ..." y demás técnicos -> mensaje propio (red, re-login o genérico)
 }
 
-/** Autofill de iOS o pegado: llega el código entero en una casilla -> repartir desde ahí (string: conserva ceros).
- *  null = una tecla normal (el kit sigue con su lógica de un dígito). */
+/** Autofill de iOS o pegado: llega el código entero en una casilla -> repartir desde ahí.
+ *  Kit 0.5: código de 9 caracteres alfanuméricos (normalizeEmailCode: minúsculas, sin espacios/guiones).
+ *  null = una tecla normal (el kit sigue con su lógica de un carácter). */
 export function otpFill(prev: string, i: number, raw: string): { code: string; focus: number } | null {
-  const digits = String(raw ?? '').replace(/\D/g, '');
-  if (digits.length < 3) return null;
-  const code = (String(prev ?? '').slice(0, i) + digits).slice(0, 6);
-  return { code, focus: Math.min(code.length, 5) };
+  const chars = String(raw ?? '').toLowerCase().replace(/[\s-]/g, '');
+  if (chars.length < 3) return null;
+  const code = (String(prev ?? '').slice(0, i) + chars).slice(0, 9);
+  return { code, focus: Math.min(code.length, 8) };
 }
 
 const SESSION_CODES = new Set(['auth_invalid', 'auth_missing', 'session_expired', 'session_relogin_required', 'session_wallet_mismatch', 'bind_invalid']);

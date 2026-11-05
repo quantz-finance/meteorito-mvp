@@ -1,9 +1,9 @@
-// Parche mínimo del modal de @cavos/kit 0.3.0 (se aplica en postinstall; falla fuerte si el kit cambió):
+// Parche mínimo del modal de @cavos/kit 0.5.x (se aplica en postinstall; falla fuerte si el kit cambió):
 //  1) Todo error del modal pasa por globalThis.__meteoritoAuthError (lib/authUx.ts): nunca "kit/auth: ... 401 {...}" crudo.
-//  2) Código por correo: el autofill de iOS / pegado entrega el código entero en una casilla; el kit guardaba solo el
-//     ÚLTIMO dígito (slice(-1)) -> código equivocado -> invalid_code. Ahora se reparte (globalThis.__meteoritoOtpFill).
-//     La 1.ª casilla acepta 6 caracteres para que el autofill no se recorte.
-//  3) Copy de la pantalla del código en español: "solo sirve el último código" + "Reenviar código".
+//  2) Código por correo (9 caracteres alfanuméricos en 0.5): el autofill de iOS / pegado entrega el código entero en una
+//     casilla; el kit guardaba solo el ÚLTIMO carácter (normalizeEmailCode(raw).slice(-1)) -> código equivocado. Ahora se
+//     reparte (globalThis.__meteoritoOtpFill). La 1.ª casilla acepta 9 caracteres para que el autofill no se recorte.
+//  3) Copy de la pantalla del código en español: "solo sirve el último código" + "9 caracteres" + "Reenviar código".
 // Parche v2 (login sin cuelgues, lib/loginGuard.ts; marca propia para que un node_modules con v1 en caché se actualice):
 //  4) Cada paso con red o prompt tiene tope (globalThis.__meteoritoGuard): Google/Apple, pedir/validar código, volver de
 //     Google/Apple y passkey. Al vencer: mensaje claro, el botón se libera; nunca un spinner eterno.
@@ -21,11 +21,12 @@ export const PATCH_MARK = '/* meteorito-patch:cavos-kit v1 */';
 const RULES = [
   { name: 'errores', re: /const \[error, setError\] = ((?:react\.)?useState)\(""\);/g,
     to: (_m, us) => `const [error, __setErrorRaw] = ${us}(""); const setError = (m) => __setErrorRaw(typeof m === "string" && m && globalThis.__meteoritoAuthError ? globalThis.__meteoritoAuthError(m) : m);` },
-  { name: 'autofill', re: /const digit = raw\.replace\(\/\\D\/g, ""\)\.slice\(-1\);/g,
-    to: () => `const __fill = globalThis.__meteoritoOtpFill ? globalThis.__meteoritoOtpFill(otpCode, i, raw) : null; if (__fill) { setOtpCode(__fill.code); otpBoxRefs.current[__fill.focus]?.focus(); return; } const digit = raw.replace(/\\D/g, "").slice(-1);` },
-  { name: 'maxlength', re: /maxLength: 1,/g, to: () => 'maxLength: i === 0 ? 6 : 1,' },
+  // 0.5.x: alphanumeric 9-char codes via normalizeEmailCode (not raw.replace(/\D/g))
+  { name: 'autofill', re: /const digit = normalizeEmailCode\(raw\)\.slice\(-1\);/g,
+    to: () => `const __fill = globalThis.__meteoritoOtpFill ? globalThis.__meteoritoOtpFill(otpCode, i, raw) : null; if (__fill) { setOtpCode(__fill.code); otpBoxRefs.current[__fill.focus]?.focus(); return; } const digit = normalizeEmailCode(raw).slice(-1);` },
+  { name: 'maxlength', re: /maxLength: 1,/g, to: () => 'maxLength: i === 0 ? 9 : 1,' },
   { name: 'titulo', re: /"Enter your code"/g, to: () => '"Ingresa tu código"' },
-  { name: 'enviado', re: /"We sent a 6-digit code to "/g, to: () => '"Solo sirve el último código que pediste. Lo enviamos a "' },
+  { name: 'enviado', re: /"We sent a 9-character code to "/g, to: () => '"Solo sirve el último código de 9 caracteres que pediste. Lo enviamos a "' },
   { name: 'reenviar-en', re: /`Resend in \$\{resendCountdown\}s`/g, to: () => '`Reenviar en ${resendCountdown} s`' },
   { name: 'reenviar', re: /"Resend code"/g, to: () => '"Reenviar código"' },
   { name: 'otro-correo', re: /"Use a different email"/g, to: () => '"Usar otro correo"' },

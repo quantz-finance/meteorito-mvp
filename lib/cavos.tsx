@@ -20,7 +20,7 @@ export function CavosRoot({ children }: { children: ReactNode }) {
         redirectUri: NATIVE_REDIRECT_URI,
         rpId: CAVOS_RP_ID,
       }}
-      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], emailMode: 'otp', primaryColor: Brand.purple, secureStep: 'required' /* kit RN 0.3.0 no expone socialRecovery: passkey es el único respaldo */ }}>
+      modal={{ appName: 'Meteorito', providers: ['google', 'apple', 'email'], primaryColor: Brand.purple, secureStep: 'required' /* RN: sin enclave; passkey es el único respaldo (socialRecovery solo en web) */ }}>
       {children}
     </CavosProvider>
   );

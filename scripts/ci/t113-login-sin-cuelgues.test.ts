@@ -2,7 +2,7 @@
 // cancelar passkey/ventana libera al instante, SDK que no baja -> Reintentar, la app nunca se abre sin sesión completa,
 // y el tour nunca se dibuja encima del modal de Cavos (cuenta nueva: "Set up a passkey" primero, tour después).
 import type { T } from './setup';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import {
   LOGIN_TIMEOUTS, LoginTimeoutError, withTimeout, guard, timeoutStep, timeoutMessage, isUserCancel, loginErrorCode,
   welcomeView, busyStep, setLoginTracker, webAuthnSignal, armOAuthReturn, installKitGuard, type LoginStep,
@@ -109,7 +109,7 @@ export async function run(t: T) {
     t.check('código por correo colgado: al tope el botón se libera y aparece el error de tope', busy === false && timeoutStep(error) === 'otp_send' && screen === 'email');
     // Validar código colgado
     busy = false; error = '';
-    const hv = run('handleOtpVerifySubmit', { email: 'a@b.c', otpCode: '123456', setError: (m: string) => { error = m; }, setBusy: (b: boolean) => { busy = b; }, verifyOtp: () => __mg(hung(), 'otp_verify'), setScreen: () => {}, setDeployState: () => {} });
+    const hv = run('handleOtpVerifySubmit', { email: 'a@b.c', otpCode: 'a1b2c3d4e', EMAIL_CODE_LENGTH: 9, setError: (m: string) => { error = m; }, setBusy: (b: boolean) => { busy = b; }, verifyOtp: () => __mg(hung(), 'otp_verify'), setScreen: () => {}, setDeployState: () => {} });
     const pv = hv({ preventDefault() {} }); await c.tick(LOGIN_TIMEOUTS.otp_verify); await pv;
     t.check('validar código colgado: botón liberado + error de tope', busy === false && timeoutStep(error) === 'otp_verify');
     // Passkey colgada y cancelada
@@ -141,8 +141,11 @@ export async function run(t: T) {
   }
   t.check('kit: modal se resetea al abrir (cierre a medias) y avisa si está abierto', /if \(open\) setExiting\(false\)/.test(kit) && /__meteoritoModalChange\?\.\(modalOpen\)/.test(kit));
   t.check('kit: vuelta de Google/Apple con tope', /__mg\(auth\.handleCallback\(authData, redirectUri\), "oauth_return"\)/.test(kit));
-  const chunks = readFileSync('node_modules/@cavos/kit/dist/chunk-ROQOJY2G.mjs', 'utf8');
-  t.check('kit: WebAuthn con AbortSignal (un solo prompt vivo)', /navigator\.credentials\.get\(\{ signal: globalThis\.__meteoritoWebAuthnSignal/.test(chunks) || !chunks.includes('navigator.credentials'));
+  // Chunk WebAuthn: el hash del nombre cambia entre versiones del kit; se busca por contenido (igual que el postinstall).
+  const webAuthnChunk = readdirSync('node_modules/@cavos/kit/dist').find((f) => /^chunk-.*\.mjs$/.test(f) && readFileSync(`node_modules/@cavos/kit/dist/${f}`, 'utf8').includes('navigator.credentials.'));
+  t.check('kit: hay chunk con WebAuthn', !!webAuthnChunk, String(webAuthnChunk));
+  const chunks = readFileSync(`node_modules/@cavos/kit/dist/${webAuthnChunk}`, 'utf8');
+  t.check('kit: WebAuthn con AbortSignal (un solo prompt vivo)', /navigator\.credentials\.get\(\{ signal: globalThis\.__meteoritoWebAuthnSignal/.test(chunks));
   const sample = 'const [pkError, setPkError] = useState("");const [exiting, setExiting] = useState(false);const [modalOpen, setModalOpen] = useState(false);await login(provider);await sendOtp(email);const id = await auth.verifyOtp(email, code);const id = await auth.handleCallback(authData, redirectUri);await approveDeviceWithPasskey();await enrollPasskeyDefault(); navigator.credentials.get({ a: 1 })';
   const pg = patchKitGuards(sample);
   t.check('parche v2 idempotente', patchKitGuards(pg.out).out === pg.out && (pg.applied as string[]).includes('webauthn-signal'));
