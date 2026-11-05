@@ -18,7 +18,24 @@ import { cardConfirm, cardEnabled, cardMode, cardPay, cardSession } from '../_li
 import { cryptoEnabled, cryptoQuote, cryptoStatus } from '../_lib/crypto';
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
+import { assertRisk } from '../_lib/risk';
 import { requireHuman } from '../_lib/turnstile';
+
+// Solo los pasos que INICIAN un pago. Liquidación y sondeo (card_session, card_confirm, fund_xdr,
+// crypto_status) no se evalúan: el cargo ya salió o el cliente solo está esperando.
+const PAY_START = new Set(['start', 'confirm_sinpe', 'card_pay', 'fund_direct']);
+/** Ya hay fondos, o el pedido pasó de escrow_creado: un confirm_sinpe duplicado no puede 403. */
+function paySettled(order: any): boolean {
+  if (order?.funded_tx) return true;
+  const st = String(order?.status ?? '');
+  return st !== 'creado' && st !== 'escrow_creado';
+}
+async function guardPay(req: any, order: any, actor: string, step: string) {
+  if (!PAY_START.has(step) || paySettled(order)) return;
+  // Reabrir un escrow que ya existe no suma velocity (el comprador vuelve a la misma compra).
+  const count = !(step === 'start' && order?.contract_id);
+  await assertRisk({ req, action: 'pay', amountCrc: Number(order.price_crc), actor, orderId: order.id ?? null, count });
+}
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
@@ -35,6 +52,7 @@ export default async function handler(req: any, res: any) {
       const reserved = await inviteForOrder(order.slug);
       if (reserved && reserved.buyer_user_id !== who.guest) throw Object.assign(new HttpError(403, 'Este link de pago está reservado para quien inició la compra. Abre el link desde el mismo navegador donde creaste la invitación.'), { code: 'invite_reserved' });
       if (who.cavos && who.cavos.sub === order.seller_user_id) throw Object.assign(new HttpError(409, 'No puedes comprar tu propio artículo.'), { code: 'self_purchase' });
+      await guardPay(req, order, who.guest, 'start');
       order = await orderForBuyer(db(), order, who.guest); // producto permanente: pedido propio de este comprador
       // Compra como INVITADO: sin cuenta ni wallet. El escrow queda con la wallet platform como buyer_address (docs/guest-checkout.md).
       if (order.contract_id && order.buyer_user_id !== who.guest) throw new HttpError(403, 'este pedido ya tiene comprador');
@@ -50,9 +68,10 @@ export default async function handler(req: any, res: any) {
       // Pedido ya tomado: solo su comprador puede re-consultarlo (no exponer datos de pago a otro sub).
       if (order.contract_id && order.buyer_user_id !== user.sub) throw new HttpError(403, 'este pedido ya tiene comprador');
       const buyer = await requireAddressProof(proof, 'pay', order.slug);
-      await bindWalletIfFresh(user, buyer);
       if (order.seller_user_id === user.sub || order.seller_address === buyer)
         throw Object.assign(new HttpError(409, 'No puedes comprar tu propio artículo.'), { code: 'self_purchase' });
+      await guardPay(req, order, user.sub, 'start');
+      await bindWalletIfFresh(user, buyer); // después del riesgo: un rechazo no liga la wallet
       order = await orderForBuyer(db(), order, user.sub); // producto permanente: pedido propio (la prueba firmó el slug pedido)
       // Fondeo testnet: lo hace el ramp simulado desde la treasury (confirm_sinpe); el comprador NO necesita saldo.
       // Su wallet sí debe poder recibir USDC (reembolso si hay disputa): misma activación patrocinada que el vendedor.
@@ -64,17 +83,20 @@ export default async function handler(req: any, res: any) {
     }
     if (step === 'confirm_sinpe') {
       if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
+      await guardPay(req, order, order.buyer_user_id, step);
       const r = await mockRampFund(order.id);
       return json(res, 200, r);
     }
     if (step === 'card_pay' || step === 'card_session' || step === 'card_confirm') {
       if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
+      await guardPay(req, order, order.buyer_user_id, step);
       // card_pay: formulario propio (default). card_session: widget de Lendara (respaldo, LENDARA_MODE=widget).
       if (step === 'card_pay') return json(res, 200, await cardPay(order, req.body));
       return json(res, 200, step === 'card_session' ? await cardSession(order) : await cardConfirm(order));
     }
     if (step === 'crypto_quote' || step === 'crypto_status') {
       if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
+      if (step === 'crypto_status') await guardPay(req, order, order.buyer_user_id, step);
       if (step === 'crypto_quote') return json(res, 200, await cryptoQuote(order, req.body?.asset, req.body?.buyer));
       return json(res, 200, await cryptoStatus(order));
     }
@@ -82,6 +104,7 @@ export default async function handler(req: any, res: any) {
     if (step === 'fund_xdr' || step === 'fund_direct') {
       if (!isBuyerOf(order, who)) throw new HttpError(403, 'no eres el comprador de este pedido');
       if (isGuestSub(order.buyer_user_id)) throw new HttpError(400, 'El pago directo con USDC requiere cuenta propia; como invitado usa el pago simulado.');
+      await guardPay(req, order, order.buyer_user_id, step);
       if (step === 'fund_xdr') return json(res, 200, await fundDirectXdr(order));
       const { signedXdr } = req.body ?? {};
       if (typeof signedXdr !== 'string' || signedXdr.length > 20000) throw new HttpError(400, 'XDR inválido');

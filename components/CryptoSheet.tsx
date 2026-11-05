@@ -52,7 +52,12 @@ export function CryptoSheet({ visible, priceCrc, onClose, onBack, call, onFunded
         if (!live) return;
         setStatus(s);
         if (s.state === 'funded' && !done.current) { done.current = true; track('crypto_funded', { asset: s.asset }); haptic.success(); onFunded(s); }
-      } catch { /* red: se reintenta en el próximo ciclo */ }
+      } catch (e: any) {
+        if (!live) return;
+        // unavailable: el servidor cortó este intento. Seguir sondeando no lo resuelve.
+        if (e?.code === 'unavailable') { live = false; clearInterval(id); setErr(typeof e?.message === 'string' && e.message ? e.message : 'No pudimos completar esto. Intenta más tarde.'); return; }
+        /* red: se reintenta en el próximo ciclo */
+      }
     }, CRYPTO_POLL_MS);
     return () => { live = false; clearInterval(id); };
   }, [visible, quote]); // eslint-disable-line react-hooks/exhaustive-deps

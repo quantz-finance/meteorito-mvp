@@ -124,10 +124,18 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     try {
       let r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_pay', name: p.name, email: p.email, scenario: p.scenario });
       const t0 = Date.now();
-      while (r.pending && Date.now() - t0 < CARD_POLL_MAX_MS) { await sleep(CARD_POLL_MS); r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_confirm' }); }
+      while (r.pending && Date.now() - t0 < CARD_POLL_MAX_MS) {
+        await sleep(CARD_POLL_MS);
+        r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_confirm' });
+      }
       if (r.pending) throw new Error(CARD_PROCESSING_INAPP);
       funded(r, 'card');
-    } catch (e) { trackError('card_pay', e); throw new Error(friendlyPayError((e as Error).message)); }
+    } catch (e: any) {
+      trackError('card_pay', e);
+      // unavailable: el sondeo se corta. Reintentar no cambia la respuesta.
+      if (e?.code === 'unavailable') throw e;
+      throw new Error(friendlyPayError((e as Error).message));
+    }
   };
   // Tarjeta (respaldo widget): sesión en el servidor -> widget de Lendara (iframe) -> el servidor verifica y fondea (card_confirm).
   const payCard = () => run(async () => {

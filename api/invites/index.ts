@@ -16,6 +16,7 @@ import { checkListingUrl } from '../_lib/importers/providers';
 import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCode } from '../_lib/invites';
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
+import { assertRisk } from '../_lib/risk';
 
 const str = (v: unknown, max: number, req = true) => {
   if (v == null || v === '') { if (req) throw new HttpError(400, 'faltan campos'); return null; }
@@ -61,6 +62,8 @@ export default async function handler(req: any, res: any) {
       // servidor guardó al importar ese mismo link.
       if (photos.some((u) => !listingPhotoOk(u, guest, source_url))) throw cameraRequired();
       await scrubStoredPhotos(db().storage, photos); // sin EXIF/GPS (subida firmada: el servidor no vio los bytes)
+      // Mismos topes que al publicar (api/_lib/risk.ts). Si no pasa, no se crea la invitación.
+      await assertRisk({ req, action: 'order', amountCrc: price, actor: guest });
       const row: Record<string, unknown> = { buyer_user_id: guest, category, brand, model, price_crc: price, note: str(b.note, 500, false), status: 'abierta', ...(photos.length ? { photos } : {}), ...(source_url ? { source_url } : {}) };
       for (let i = 0; i < 5; i++) {
         const code = inviteCode();
