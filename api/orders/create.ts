@@ -81,8 +81,9 @@ export default async function handler(req: any, res: any) {
       if (invite.buyer_user_id === user.sub || (myGuest && invite.buyer_user_id === myGuest)) throw new HttpError(400, 'No puedes aceptar tu propia invitación.');
       if (price !== invite.price_crc) throw Object.assign(new HttpError(409, `El precio acordado en la invitación es ₡${invite.price_crc}.`), { code: 'invite_price_mismatch' });
     }
+    // seller_email ya no se guarda (PII). La columna queda hasta la migración 052; el backfill la anula.
     const row = {
-      seller_address: seller, seller_user_id: user.sub, seller_email: user.email ?? null,
+      seller_address: seller, seller_user_id: user.sub,
       category, brand, model, condition: str(b.condition, 40, false) ?? '',
       price_crc: price, description: str(b.description, 2000, false), identifier: str(b.identifier, 40, false),
       photos, checks: Array.isArray(b.checks) ? b.checks.slice(0, 20) : [], status: 'creado',

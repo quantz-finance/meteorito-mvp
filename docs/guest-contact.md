@@ -42,3 +42,5 @@ WhatsApp queda como `pending_manual` en `buyer_notifications` (no hay API de env
 | `ADMIN_EMAILS` | Correos del equipo que pueden pedir `admin_contacts` (wa.me listos) |
 
 Sin la migración 028: la tarjeta no aparece, no hay vínculo ni correos, y los links de acceso siguen funcionando.
+
+Teléfono y correo se cifran en reposo además de guardarse en claro (dual-write, hasta la migración 052), solo con `VERCEL_ENV=production`. Preview y el resto fallan cerrado y no deben tener `PII_ENC_*`: `docs/pii-cifrado.md`.
