@@ -14,7 +14,11 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 |---|---|---|
 | `app_opened` | primer evento de cada carga de la app (web) | `first_touch` (true si esta carga guardó la atribución) + las UTMs first-touch |
 | `screen_viewed` | cada cambio de ruta | `screen` (`/`, `/vender`, `/p/:slug`, `welcome`…) |
-| `login_started` | Welcome → Entrar | – |
+| `login_started` | Welcome → Entrar (histórico; se mantiene para los embudos viejos) | – |
+| `login_start` | Welcome → Entrar / Reintentar | `retry` (tras un tope), `step` (paso que venció, si es reintento) |
+| `login_success` | sesión Cavos completa (cuenta + dirección) en el puente web | `method` (`login` o `restore` = sesión guardada) |
+| `login_timeout` | un paso de Cavos pasó su tope (lib/loginGuard.ts) | `step` (`sdk_load` 20 s, `session_restore` 8 s, `modal_open` 5 s, `oauth`, `oauth_redirect`, `oauth_return`, `otp_send`, `otp_verify`, `account_load` 20 s, `passkey` 60 s) |
+| `login_error` | error de un paso del login o de la sesión | `step`, `code` (`cancel`, `otp_invalid`, `otp_stale`, `rate_limited`, `network`, `passkey`, `passkey_pending`, `auth`, `other`…). Nunca el mensaje crudo, correo ni token. |
 | `signed_in` | sesión activa (tras identify) | – |
 | `sell_step_completed` | wizard Vender | `step` (0-3), `step_name` |
 | `sell_submit_tapped` | último paso | `step` |

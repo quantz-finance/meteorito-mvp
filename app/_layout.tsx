@@ -21,6 +21,7 @@ import { authStore, hasCavosTrace } from '@/lib/authStore';
 import { bindWalletOnLogin } from '@/lib/wallet';
 import { setReloginHandler, setReloginWaiter } from '@/lib/api';
 import { needsRelogin } from '@/lib/cavosSession';
+import { LOGIN_TIMEOUTS } from '@/lib/loginGuard';
 import { DEMO_ENABLED, demoAuthNow, demoLoginOpen } from '@/lib/demo';
 import { markReloginPending, rememberRoute, takeReturnRoute } from '@/lib/returnTo';
 import { isPublicRoute } from '@/lib/publicRoutes';
@@ -131,7 +132,7 @@ function Gate() {
   const [started, setStarted] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => { if (loading) setStarted(true); }, [loading]);
-  useEffect(() => { if (!trace) return; const id = setTimeout(() => setTimedOut(true), 12000); return () => clearTimeout(id); }, [trace]);
+  useEffect(() => { if (!trace) return; const id = setTimeout(() => setTimedOut(true), LOGIN_TIMEOUTS.session_restore); return () => clearTimeout(id); }, [trace]); // tope: luego la pantalla de entrar (nunca la app sin sesión)
   const waitingCavos = trace && !authed && !isPublic && (!started || loading) && !timedOut;
   useEffect(() => { if (!waitingCavos) hideBootSplash(); }, [waitingCavos]);
   if (!isPublic && (!auth.isAuthenticated || !auth.address)) return <Welcome />;

@@ -8,6 +8,7 @@ import { authStore, useAuthFlag } from './authStore';
 import { walletInfo, type MeteoritoAuth } from './types';
 import { Brand } from '@/constants/Colors';
 import { authErrorText, otpFill } from './authUx';
+import { installKitGuard, LOGIN_TIMEOUTS, trackLoginError, trackLoginTimeout } from './loginGuard';
 import { clearCavosToken, currentCavosToken, friendlyCavosError, persistCavosToken, rehydrateCavosToken, RELOGIN_MESSAGE, sessionExpiredOnOpen, hadSessionOnOpen, markSessionSettled, userMessage } from './cavosSession';
 
 // Se ejecuta al cargar este chunk, ANTES de que CavosProvider lea sessionStorage (PWA iOS: ver lib/cavosSession.ts).
@@ -18,7 +19,21 @@ const hadSessionOnOpenAtStart = typeof window !== 'undefined' && hadSessionOnOpe
 if (typeof window !== 'undefined') {
   (globalThis as any).__meteoritoAuthError = authErrorText;
   (globalThis as any).__meteoritoOtpFill = otpFill;
+  // Topes por paso (Google/Apple, código, passkey...) + eventos login_timeout/login_error (lib/loginGuard.ts).
+  installKitGuard(track);
+  // El tour (components/Tour.tsx) nunca se abre encima del modal de Cavos (login, passkey, frase de respaldo).
+  (globalThis as any).__meteoritoModalChange = (open: boolean) => authStore.setCavosModal(!!open);
 }
+/** ¿Se ve el modal de Cavos? (overlay con tarjeta visible) */
+function modalVisible(): boolean {
+  try {
+    const el = document.querySelector('.cavos-root.cavos-card, .cavos-root .cavos-card, [aria-modal="true"].cavos-root');
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.top < window.innerHeight && r.bottom > 0;
+  } catch { return true; }
+}
+let loginAttempted = false;
 
 function b64(u: Uint8Array) { let s = ''; u.forEach((b) => (s += String.fromCharCode(b))); return btoa(s); }
 function stellarWallet(c: any): any {
@@ -37,6 +52,20 @@ function cavosErr(e: unknown): Error {
 function Bridge() {
   const c = useCavos();
   const wantLogin = useAuthFlag('wantLogin');
+  // Abrir el modal "desde cero" (cerrar y abrir): limpia un cierre a medias que lo dejaba invisible. Si en 5 s no se ve,
+  // se intenta una vez más y, si tampoco, login_timeout(modal_open): la pantalla de entrar sigue usable.
+  const watch = useRef<any>(null);
+  const openLoginNow = () => {
+    loginAttempted = true;
+    c.clearAuthError(); c.closeModal(); setTimeout(() => c.openModal(), 0);
+    clearTimeout(watch.current);
+    const check = (again: boolean) => { watch.current = setTimeout(() => {
+      if (modalVisible() || authStore.get().bridged?.isAuthenticated) return;
+      if (again) { c.closeModal(); setTimeout(() => c.openModal(), 0); check(false); } else trackLoginTimeout('modal_open');
+    }, LOGIN_TIMEOUTS.modal_open); };
+    check(true);
+  };
+  useEffect(() => () => clearTimeout(watch.current), []);
   const auth: MeteoritoAuth = {
     configured: !!CAVOS_APP_ID,
     isAuthenticated: c.isAuthenticated,
@@ -46,7 +75,7 @@ function Bridge() {
     // Nunca el error crudo del SDK (registry/backup/lookup/passkey-wraps 401...): siempre un mensaje propio en español.
     // Sesión guardada que venció o que el SDK no pudo reconectar (falló en silencio): "Entrar de nuevo", no una pantalla muda.
     error: friendlyCavosError(c.authError) ?? (!c.isAuthenticated && !c.isLoading && (sessionExpiredOnOpen() || hadSessionOnOpen()) ? RELOGIN_MESSAGE : null),
-    openLogin: () => { c.clearAuthError(); c.openModal(); },
+    openLogin: () => openLoginNow(),
     logout: async () => { markSessionSettled(); clearCavosToken(); try { await c.logout(); } finally { clearCavosToken(); } },
     getAuthToken: () => currentCavosToken(),
     signMessage: async (m) => { try { const r = await stellarWallet(c).signMessage(m); return { publicKey: r.publicKey, signature: b64(r.signature) }; } catch (e) { throw cavosErr(e); } },
@@ -70,12 +99,25 @@ function Bridge() {
       error: c.authError ? String(c.authError).slice(0, 60) : null,
     }));
   }, [c.isLoading, c.isAuthenticated]);
-  // El usuario tocó "Entrar" antes de que el SDK cargara: abrir el modal ahora.
+  // El usuario tocó "Entrar" antes de que el SDK cargara: abrir el modal ahora. Si la sesión guardada sigue
+  // reconectando, se espera como mucho el tope de session_restore y se abre igual (nunca queda esperando para siempre).
   useEffect(() => {
-    if (!wantLogin || c.isLoading) return;
-    authStore.consumeLogin();
-    if (!c.isAuthenticated) { c.clearAuthError(); c.openModal(); }
+    if (!wantLogin) return;
+    const go = () => { authStore.consumeLogin(); if (!c.isAuthenticated) openLoginNow(); };
+    if (!c.isLoading) { go(); return; }
+    const id = setTimeout(go, LOGIN_TIMEOUTS.session_restore);
+    return () => clearTimeout(id);
   }, [wantLogin, c.isLoading, c.isAuthenticated]);
+  // Sesión guardada que no reconecta a tiempo: evento (la pantalla de entrar libera el botón, components/Welcome.tsx).
+  useEffect(() => {
+    if (!c.isLoading || !hadSessionOnOpenAtStart) return;
+    const id = setTimeout(() => trackLoginTimeout('session_restore'), LOGIN_TIMEOUTS.session_restore);
+    return () => clearTimeout(id);
+  }, [c.isLoading]);
+  // login_success (sesión Cavos completa: cuenta + dirección) y login_error (solo código, sin datos personales).
+  const ok = c.isAuthenticated && !!c.address;
+  useEffect(() => { if (ok) track('login_success', { method: loginAttempted ? 'login' : 'restore' }); }, [ok]);
+  useEffect(() => { if (c.authError) trackLoginError(loginAttempted ? 'login' : 'session_restore', c.authError); }, [c.authError]);
   return null;
 }
 

@@ -77,6 +77,19 @@ export function isTourAutoRoute(segments: readonly string[]): boolean {
   return segments[0] === '(tabs)';
 }
 
+/** Orden con Cavos: el tour automático espera a que el login termine (settled: ni cargando ni con sesión a medias, sin
+ *  dirección) y a que el modal de Cavos esté CERRADO (login, "Set up a passkey" / frase de respaldo de una cuenta nueva).
+ *  Nunca encima de un modal de Cavos. El comprador invitado en Comprar (sin login) lo sigue viendo como siempre. */
+export function tourMayStart(s: { route: boolean; allowed: boolean; open: boolean; settled: boolean; cavosModal: boolean }): boolean {
+  return s.route && s.allowed && !s.open && s.settled && !s.cavosModal;
+}
+/** ¿El login terminó? (sin carga y sin una sesión a medias: autenticado pero sin dirección todavía) */
+export const authSettled = (a: { isLoading: boolean; isAuthenticated: boolean; address: string | null }) => !a.isLoading && !(a.isAuthenticated && !a.address);
+/** ¿Hay un modal de Cavos en pantalla? (web; respaldo por si el aviso del kit no llegó). */
+export function cavosModalInDom(): boolean {
+  try { return typeof document !== 'undefined' && !!document.querySelector('.cavos-root'); } catch { return false; }
+}
+
 function automated(): boolean {
   try { return !!(globalThis as { navigator?: { webdriver?: boolean } }).navigator?.webdriver; } catch { return false; }
 }
