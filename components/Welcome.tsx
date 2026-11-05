@@ -13,6 +13,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { LearnSheet } from '@/components/LearnSheet';
 import { LegalLinks } from '@/components/LegalLinks';
+import { InstallButton } from '@/components/InstallApp';
 import { needsRelogin, RELOGIN_TITLE } from '@/lib/cavosSession';
 
 export default function Welcome() {
@@ -35,6 +36,8 @@ export default function Welcome() {
     <AppearProvider value={cycle}>
     <View style={{ flex: 1, backgroundColor: Platform.OS === 'web' ? 'transparent' : C.bg }}>
       <SpaceBackground mode="full" />
+      {/* Descargar app (solo web, si no está instalada): arriba a la izquierda, fuera del flujo (la bienvenida no tiene scroll). */}
+      <View style={{ position: 'absolute', zIndex: 2, top: insets.top + S.md, left: S.md }}><InstallButton from="welcome" /></View>
       {bought ? <View style={{ position: 'absolute', zIndex: 2, top: insets.top + S.md, right: S.md }}>
         <IconButton icon="bag-check-outline" label={MY_PURCHASES_TITLE} onPress={() => router.push('/comprar/compras')} />
       </View> : null}

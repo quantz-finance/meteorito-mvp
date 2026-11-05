@@ -40,6 +40,11 @@ PostHog org **Quantz**, host `https://us.i.posthog.com`. Key pública de proyect
 | `chat_quick_reply` | `/chat` (chips del comprador) | `reply` (disponible/envios/precio), `role`, `kind` |
 | `chat_blocked` / `chat_reported` / `chat_open_failed` | `/chat`, botones de chat | `blocked` / `reason`, `role` / `source`, `code` |
 | `analytics_opted_out` | antes de apagar | – |
+| `install_click` | "Descargar app" (bienvenida, solo web) | `from`, `kind` (prompt = un toque, ios = guía, inapp, ios-other, generic) |
+| `install_accepted` / `install_dismissed` | respuesta al aviso del navegador (beforeinstallprompt) | `from` (welcome, sheet) |
+| `install_completed` | evento `appinstalled` del navegador | – |
+| `install_auto_open` / `install_sheet_shown` / `ios_guide_shown` | `?instalar=1` (landing) / hoja de instalación / guía de iPhone | `kind` |
+| `install_link_copied` | hoja de instalación en in-app o Chrome de iPhone → Copiar link | – |
 Todos llevan `platform`, `network: testnet`, `app`.
 
 ### Atribución del landing (first-touch)
