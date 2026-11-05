@@ -1,6 +1,8 @@
 // Primero: Buffer global para el SDK Cavos/Stellar (web).
 import { useLastSeenPing } from '@/lib/useLastSeenPing';
 import '@/lib/polyfills';
+// Temprano: guarda beforeinstallprompt y lee ?instalar=1 antes de que el router redirija (lib/install.ts).
+import '@/lib/install';
 
 import * as Font from 'expo-font';
 import { toast, ToastHost } from '@/components/ds';
@@ -26,6 +28,7 @@ import { DemoBadge } from '@/components/DemoBadge';
 import Welcome from '@/components/Welcome';
 import { TourAuto, TourHost } from '@/components/Tour';
 import { Brand } from '@/constants/Colors';
+import { InstallSheetHost } from '@/components/InstallApp';
 
 /** Quita el splash HTML inline (app/+html.tsx) cuando la app ya pintó. */
 function hideBootSplash() {
@@ -78,6 +81,7 @@ export default function RootLayout() {
       </CavosRoot>
       <ToastHost />
       <TourHost />
+      <InstallSheetHost />
     </ThemeProvider>
   );
 }
