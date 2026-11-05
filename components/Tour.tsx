@@ -11,9 +11,11 @@ import { C, R, S, T, TOUCH, shadow } from '@/constants/theme';
 import { Fonts } from '@/constants/Colors';
 import { track } from '@/lib/analytics';
 import {
-  TOUR_AUTO_DELAY_MS, TOUR_COPY, TOUR_STEPS, closeTour, getTourState, isTourAutoRoute, nextTourStep, prevTourStep,
-  startTour, subscribeTour, tourAutoAllowed, type TourSource,
+  TOUR_AUTO_DELAY_MS, TOUR_COPY, TOUR_STEPS, authSettled, cavosModalInDom, closeTour, getTourState, isTourAutoRoute, nextTourStep, prevTourStep,
+  startTour, subscribeTour, tourAutoAllowed, tourMayStart, type TourSource,
 } from '@/lib/tour';
+import { useAuthFlag } from '@/lib/authStore';
+import { useAuth } from '@/lib/cavos';
 
 const WEB = Platform.OS === 'web';
 type Rect = { x: number; y: number; w: number; h: number };
@@ -54,6 +56,7 @@ const same = (a: Rect | null, b: Rect | null) => a === b || (!!a && !!b && Math.
 /** Overlay del tour. Montar una sola vez (app/_layout.tsx). */
 export function TourHost() {
   const tour = useTour();
+  const cavosModal = useAuthFlag('cavosModal'); // modal de Cavos encima (p. ej. re-login): el tour se oculta, no se pierde
   const { width: vw, height: vh } = useWindowDimensions();
   const step = TOUR_STEPS[Math.min(tour.index, TOUR_STEPS.length - 1)];
   const [spot, setSpot] = useState<{ id: string; rect: Rect } | null>(null);
@@ -72,7 +75,7 @@ export function TourHost() {
     return () => clearInterval(id);
   }, [tour.open, tour.index, vh]);
 
-  if (!tour.open) return null;
+  if (!tour.open || cavosModal) return null;
   const last = tour.index === TOUR_STEPS.length - 1;
   const finish = (completed: boolean) => { track('tour_closed', { step: step.id, completed, source: tour.source }); closeTour(); };
   const r = spot?.rect ? { x: spot.rect.x - PAD, y: spot.rect.y - PAD, w: spot.rect.w + PAD * 2, h: spot.rect.h + PAD * 2 } : null;
@@ -136,14 +139,23 @@ function Btn({ title, kind, onPress, testID }: { title: string; kind: 'primary' 
 export function TourAuto() {
   const segments = useSegments();
   const auto = isTourAutoRoute(segments as string[]);
+  // Cuenta nueva: Cavos abre "Set up a passkey / Save a recovery phrase" con la sesión ya activa. El tour espera a que
+  // ese paso termine (o se cierre) y el login esté resuelto: nunca se dibuja encima de un modal de Cavos.
+  const auth = useAuth();
+  const settled = authSettled(auth);
+  const cavosModal = useAuthFlag('cavosModal');
   useEffect(() => {
-    if (!auto || !tourAutoAllowed()) return;
-    const id = setTimeout(() => {
-      if (!tourAutoAllowed() || getTourState().open) return;
+    const may = () => tourMayStart({ route: auto, allowed: tourAutoAllowed(), open: getTourState().open, settled, cavosModal });
+    if (!may()) return;
+    let id: any;
+    const attempt = () => { id = setTimeout(() => {
+      if (!may()) return;
+      if (cavosModalInDom()) { attempt(); return; } // el modal aún se está cerrando: esperar, no tapar
       startTour('auto'); track('tour_started', { source: 'auto' });
-    }, TOUR_AUTO_DELAY_MS);
+    }, TOUR_AUTO_DELAY_MS); };
+    attempt();
     return () => clearTimeout(id);
-  }, [auto]);
+  }, [auto, settled, cavosModal]);
   return null;
 }
 

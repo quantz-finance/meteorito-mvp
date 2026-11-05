@@ -1,6 +1,7 @@
 // Login y sesión: textos amables para errores del kit Cavos (nunca "kit/auth: ... 401"), autofill del código por correo
 // y reglas para mostrar un error de sesión UNA sola vez. Puro (sin React ni red): lo usan el puente Cavos y las pantallas.
 import { userMessage } from './cavosSession';
+import { timeoutMessage, timeoutStep } from './loginGuard';
 
 export const OTP_INVALID = 'El código no es válido o ya venció. Pide uno nuevo: solo sirve el último código que te enviamos.';
 export const OTP_STALE = 'Ese código ya no sirve porque pediste otro o la app se recargó. Toca «Reenviar código» y usa el más reciente.';
@@ -10,6 +11,8 @@ export const EMAIL_INVALID = 'Revisa tu correo: parece que tiene un error.';
 /** Error del kit (o nuestro) -> texto para la persona. Los errores técnicos nunca se muestran crudos. */
 export function authErrorText(raw: string | null | undefined): string {
   const m = String(raw ?? '');
+  const step = timeoutStep(m); // tope de un paso (lib/loginGuard.ts): qué pasó + Reintentar / código por correo
+  if (step) return timeoutMessage(step);
   if (/invalid_nonce/i.test(m)) return OTP_STALE;
   if (/invalid_code|code_expired|expired_code|otp_expired|invalid or expired code/i.test(m)) return OTP_INVALID;
   if (/\b429\b|too_many|rate.?limit/i.test(m)) return OTP_RATE;

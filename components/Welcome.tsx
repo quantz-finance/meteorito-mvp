@@ -14,6 +14,8 @@ import { useEffect, useState } from 'react';
 import { LearnSheet } from '@/components/LearnSheet';
 import { LegalLinks } from '@/components/LegalLinks';
 import { needsRelogin, RELOGIN_TITLE } from '@/lib/cavosSession';
+import { authStore, useAuthFlag } from '@/lib/authStore';
+import { busyStep, LOGIN_TIMEOUTS, trackLoginTimeout, welcomeView, type LoginStep } from '@/lib/loginGuard';
 
 export default function Welcome() {
   const { openLogin, isLoading, isAuthenticated, error, configured } = useAuth();
@@ -23,6 +25,26 @@ export default function Welcome() {
   useEffect(() => { setBought(hasLocalPurchases()); }, []);
   const busy = isLoading || isAuthenticated; // autenticado pero cargando la cuenta
   const relogin = needsRelogin(error); // sesión vencida/sin token: pantalla clara "Entrar de nuevo", nunca el error del SDK
+  // Sin spinner eterno: si el botón lleva más del tope de su paso ocupado (SDK que no baja, sesión guardada que no
+  // reconecta, cuenta que no llega) o el SDK no cargó, se libera con mensaje + "Reintentar". La persona sigue AQUÍ:
+  // la app solo se abre con una sesión Cavos completa (app/_layout.tsx).
+  const wantLogin = useAuthFlag('wantLogin'); const hint = useAuthFlag('hint'); const loadFailed = useAuthFlag('loadFailed');
+  const step = busyStep({ busy, wantLogin, hint, isAuthenticated, loadFailed });
+  const [stalled, setStalled] = useState<LoginStep | null>(null);
+  const [tries, setTries] = useState(0); // cada "Reintentar" vuelve a contar el tope
+  useEffect(() => {
+    if (loadFailed) { setStalled('sdk_load'); return; }
+    if (!busy) { setStalled(null); return; }
+    const id = setTimeout(() => { setStalled(step); if (step !== 'session_restore') trackLoginTimeout(step); }, LOGIN_TIMEOUTS[step]);
+    return () => clearTimeout(id);
+  }, [busy, step, loadFailed, tries]);
+  const view = welcomeView({ busy, configured, relogin, stalled });
+  const onEnter = () => {
+    track('login_started'); track('login_start', { retry: !!stalled, step: stalled ?? undefined });
+    const s = stalled; setStalled(null); setTries((n) => n + 1);
+    if (s === 'sdk_load' && !authStore.get().bridged) { authStore.retryLoad(); return; } // nuevo intento de bajar el SDK
+    openLogin();
+  };
   // Sin scroll: todo cabe en una pantalla, incluso con la barra de Safari visible (~620 px útiles). La mascota y los
   // espacios escalan con el alto real; los botones quedan siempre abajo.
   const { height, width } = useStableWindow();
@@ -59,8 +81,9 @@ export default function Welcome() {
                 <Text style={s.reloginText} numberOfLines={3}>{error}</Text>
               </View>
             </View>
-          ) : error ? <ErrorText>{error}</ErrorText> : null}
-          <PrimaryButton title={relogin ? 'Entrar de nuevo' : 'Entrar'} loading={busy} disabled={!configured} onPress={() => { track('login_started'); openLogin(); }} />
+          ) : error && !view.message ? <ErrorText>{error}</ErrorText> : null}
+          {view.message ? <View testID="login-stalled"><ErrorText>{view.message}</ErrorText></View> : null}
+          <PrimaryButton testID="login-enter" title={view.title} loading={view.loading} disabled={view.disabled} onPress={onEnter} />
           <PrimaryButton title={width < 350 ? 'Comprar sin cuenta' : 'Quiero comprar (sin cuenta)'} variant="secondary" icon="paper-plane-outline" onPress={() => { track('buyer_start_tapped'); router.push('/comprar'); }} />
           <PrimaryButton title="¿Cómo funciona?" variant="ghost" icon="help-circle-outline" onPress={() => { track('learn_cta_tapped'); setLearn(true); }} />
           <View style={s.footer}>
