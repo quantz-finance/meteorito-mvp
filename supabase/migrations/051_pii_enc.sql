@@ -28,3 +28,5 @@ alter table public.buyer_contacts add constraint buyer_contacts_channel_value ch
   or (channel = 'email' and (email is not null or email_enc is not null))
   or (channel = 'account' and account_sub is not null)
 );
+
+notify pgrst, 'reload schema';

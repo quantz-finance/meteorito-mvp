@@ -8,10 +8,11 @@
 // Env (sin fallback a PIN_PEPPER ni a ningún otro secreto):
 //   PII_ENC_KEYS=kid:base64,kid2:base64   (cada llave maestra = 32 bytes)
 //   PII_ENC_ACTIVE_KID=<kid>              (solo este cifra; todos descifran)
-// Fail-closed fuera de Production: VERCEL_ENV distinto de "production" (preview, development,
-// ausente, cualquier otro) NO lee PII_ENC_*. Escribir tira 503 pii_unavailable; leer devuelve null
-// (no el texto en claro). Preview comparte la base de Production: no debe tener estas llaves.
-// Con política activa, leer prefiere *_enc y, si no hay, el texto en claro.
+// v1 congelado (docs/pii-cifrado.md): salt UTF-8 "meteorito:pii:v1", info UTF-8 "enc", L = 32.
+// La llave maestra sale de PII_ENC_KEYS / PII_ENC_ACTIVE_KID del entorno donde corre la función
+// (Production o Preview; cada uno con su base). Sin fallback a otros secretos.
+// Fase B: sin llave, leer usa el claro; escribir tira 503 pii_unavailable (no deja solo el claro).
+// Con llave, leer prefiere *_enc y, si el blob no abre, null (no cae al claro).
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 import { HttpError } from './auth';
 
@@ -43,13 +44,8 @@ function decodeMaster(b64: string): Buffer | null {
   return buf.length === 32 ? buf : null;
 }
 
-/**
- * null = política apagada. Solo VERCEL_ENV=production carga llaves.
- * Preview, development y cualquier otro valor salen antes de leer PII_ENC_*.
- * No usa PIN_PEPPER ni ningún otro secreto.
- */
+/** null = sin anillo usable (ausente o mal formado). No usa ningún otro secreto. */
 export function loadKeyRing(env: NodeJS.ProcessEnv = process.env): KeyRing | null {
-  if (env.VERCEL_ENV !== 'production') return null;
   const raw = env.PII_ENC_KEYS?.trim();
   const active = env.PII_ENC_ACTIVE_KID?.trim();
   if (!raw || !active || !KID_RE.test(active)) return null;
@@ -67,6 +63,14 @@ export function loadKeyRing(env: NodeJS.ProcessEnv = process.env): KeyRing | nul
   }
   if (!keys.has(active)) return null;
   return { active, keys };
+}
+
+/** Estado para /api/health. No incluye material de llave. */
+export function piiKeyStatus(env: NodeJS.ProcessEnv = process.env): 'ok' | 'missing' | 'bad_format' {
+  const raw = env.PII_ENC_KEYS?.trim() ?? '';
+  const active = env.PII_ENC_ACTIVE_KID?.trim() ?? '';
+  if (!raw && !active) return 'missing';
+  return loadKeyRing(env) ? 'ok' : 'bad_format';
 }
 
 function aesKey(master: Buffer): Buffer {
@@ -116,8 +120,9 @@ export function requireSeal(plaintext: string | null, table: PiiTable, column: P
 }
 
 /**
- * Lectura. Con política activa: prefiere *_enc; si el blob no abre, null (no cae al claro).
- * Si no hay blob, usa el claro y deja pii_read_plain (sin el valor). Sin política: null.
+ * Lectura. Con llave: prefiere *_enc; si el blob no abre, null (no cae al claro).
+ * Sin blob, usa el claro y deja pii_read_plain (sin el valor).
+ * Fase B, sin llave: el claro. Si solo hay ciphertext y no hay llave, null.
  */
 export function readPii(opts: { table: PiiTable; column: PiiColumn; rowKey: string; enc: unknown; plain: unknown }): string | null {
   const enc = typeof opts.enc === 'string' && opts.enc ? opts.enc : null;
@@ -125,7 +130,8 @@ export function readPii(opts: { table: PiiTable; column: PiiColumn; rowKey: stri
   const where = `${opts.table}.${opts.column}`;
   const ring = loadKeyRing();
   if (!ring) {
-    if (enc || plain) console.warn('[pii] pii_read_unavailable', where);
+    if (plain) { console.warn('[pii] pii_read_plain', where); return plain; }
+    if (enc) console.warn('[pii] pii_read_unavailable', where);
     return null;
   }
   if (enc) {

@@ -1,18 +1,10 @@
-// Backfill de PII (fase C). Idempotente: cifra donde hay claro y *_enc es null, verifica el descifrado
-// en memoria y solo entonces escribe el blob. También pone orders.seller_email en null.
-// Imprime conteos. Nunca imprime teléfono, correo ni llaves.
-//
-// Por defecto dry-run (no escribe). --apply escribe.
-// Solo corre con VERCEL_ENV=production. Preview y cualquier otro entorno no cargan PII_ENC_*.
-// Correr --apply solo después de que Vitalik aplicó la migración 051 y las llaves están en Production.
-//
-//   npx tsx scripts/ops/pii-backfill.ts
-//   npx tsx scripts/ops/pii-backfill.ts --self-test
-//   npx tsx scripts/ops/pii-backfill.ts --apply
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { buyerContactKey, loadKeyRing, openPii, piiAad, sealPii } from '../../api/_lib/pii';
+// Backfill de PII (fase C). Corre dentro de Vercel (api/store, action admin_pii_backfill): ahí están
+// las variables Sensitive. Idempotente: cifra donde hay claro y *_enc es null, verifica el descifrado
+// en memoria y solo entonces escribe. También pone orders.seller_email en null.
+// La respuesta y los logs son conteos. Nunca teléfono, correo ni llaves.
+// Dry-run por defecto. --apply solo después de que Vitalik aplicó la migración 051.
+import { HttpError } from './auth';
+import { buyerContactKey, loadKeyRing, openPii, piiAad, piiUnavailable, sealPii } from './pii';
 
 const BATCH = 100;
 const MAX_BATCHES = 10000;
@@ -119,14 +111,8 @@ async function drainPhones(db: BackfillDb, apply: boolean, batch: number, counts
   }
 }
 
-const NON_PROD = 'pii_unavailable: cifrado solo con VERCEL_ENV=production. Preview y cualquier otro entorno no cargan PII_ENC_* (la base de Preview es la de Production).';
-
 export async function runBackfill(db: BackfillDb, opts: { apply: boolean; log: (line: string) => void; batch?: number }): Promise<{ code: number; counts: BackfillCounts }> {
   const counts = empty();
-  if (process.env.VERCEL_ENV !== 'production') {
-    opts.log(NON_PROD);
-    return { code: 1, counts };
-  }
   const ring = loadKeyRing();
   if (!ring) {
     opts.log(opts.apply ? 'pii_unavailable: sin llave activa, no se escribe' : 'dry-run keys=unavailable (no se cifra ni se escribe)');
@@ -157,7 +143,7 @@ function dbError(error: { code?: string } | null): Error {
   return new Error(String(error?.code ?? 'db'));
 }
 
-export function supabaseBackfill(client: SupabaseClient): BackfillDb {
+export function supabaseBackfill(client: { from(table: string): any }): BackfillDb {
   const cols = 'id, order_id, channel, phone_e164, email, phone_e164_enc, email_enc';
   return {
     async pendingContacts(limit, afterId) {
@@ -199,7 +185,7 @@ export function supabaseBackfill(client: SupabaseClient): BackfillDb {
     async nullSellerEmails(limit) {
       const sel = await client.from('orders').select('id').not('seller_email', 'is', null).limit(limit);
       if (sel.error) throw dbError(sel.error);
-      const ids = (sel.data ?? []).map((r) => r.id as string);
+      const ids = (sel.data ?? []).map((r: { id?: string }) => String(r.id ?? ''));
       if (!ids.length) return 0;
       const upd = await client.from('orders').update({ seller_email: null }).in('id', ids).select('id');
       if (upd.error) throw dbError(upd.error);
@@ -208,47 +194,19 @@ export function supabaseBackfill(client: SupabaseClient): BackfillDb {
   };
 }
 
-function selfTest(log: (s: string) => void): number {
-  if (!loadKeyRing()) { log('self-test pii_unavailable'); return 1; }
-  const phone = '+50600000000';
-  const row: ContactRow = { id: 'x', order_id: '00000000-0000-4000-8000-000000000001', channel: 'whatsapp', phone_e164: phone, email: null, phone_e164_enc: null, email_enc: null };
-  const w = contactWork(row);
-  if (w.status !== 'ready' || !w.patch.phone_e164_enc) { log('self-test fail'); return 1; }
-  const again = contactWork({ ...row, phone_e164_enc: w.patch.phone_e164_enc });
-  if (again.status !== 'skip') { log('self-test not-idempotent'); return 1; }
-  const line = 'self-test ok encrypted=1 skipped=1';
-  log(line);
-  return line.includes(phone) ? 1 : 0;
-}
+export interface BackfillReport extends BackfillCounts { dryRun: boolean }
 
-export async function main(argv: string[], log: (s: string) => void = (l) => console.log(l)): Promise<number> {
-  const secret = process.env.PII_ENC_KEYS ?? '';
-  const safe = (line: string) => log(secret.length >= 16 ? line.split(secret).join('[redacted]') : line);
-  if (argv.some((a) => a !== '--apply' && a !== '--self-test' && a !== '--dry-run')) { safe('argumento no reconocido'); return 1; }
-  if (process.env.VERCEL_ENV !== 'production') { safe(NON_PROD); return 1; }
-  if (argv.includes('--self-test')) return selfTest(safe);
-  const apply = argv.includes('--apply');
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) { safe('faltan SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY'); return 1; }
-  const client = createClient(url, key, { auth: { persistSession: false } });
+/** Acción de admin. apply=false no escribe. La respuesta son conteos, nunca el dato. */
+export async function adminPiiBackfill(client: { from(table: string): any }, apply: boolean): Promise<BackfillReport> {
+  if (apply && !loadKeyRing()) throw piiUnavailable();
   try {
-    const r = await runBackfill(supabaseBackfill(client), { apply, log: safe });
-    return r.code;
+    const r = await runBackfill(supabaseBackfill(client), { apply, log: () => {} });
+    return { dryRun: !apply, ...r.counts };
   } catch (e) {
-    const code = e instanceof Error ? e.message : 'db';
-    if (code === '42703' || code === 'PGRST204') { safe('faltan columnas *_enc (migración 051). Avisar a Vitalik antes de apply_migration.'); return 1; }
-    safe(`backfill error code=${/^[A-Za-z0-9]+$/.test(code) ? code : 'db'}`);
-    return 1;
+    const code = e instanceof Error ? e.message : '';
+    if (code === '42703' || code === 'PGRST204') {
+      throw Object.assign(new HttpError(503, 'Falta la migración 051. Hay que avisarle a quien aplica las migraciones.'), { code: 'pii_backfill_unavailable' });
+    }
+    throw e;
   }
-}
-
-function invokedDirectly(): boolean {
-  const argv1 = process.argv[1];
-  if (!argv1) return false;
-  return import.meta.url === pathToFileURL(path.resolve(argv1)).href;
-}
-
-if (invokedDirectly()) {
-  main(process.argv.slice(2)).then((code) => process.exit(code));
 }

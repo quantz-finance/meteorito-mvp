@@ -1,5 +1,6 @@
 // Setup común de tests CI. SOLO TESTNET: el backend ya rechaza STELLAR_NETWORK != testnet (env.network()).
 // Secretos: de variables de entorno (GitHub Actions) o, en local, de .ci-secrets.env.
+import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { Keypair } from '@stellar/stellar-sdk';
 
@@ -15,9 +16,9 @@ function fromFiles(): Record<string, string> | null {
   return SECRET_NAMES.every((n) => kv[n]) ? Object.fromEntries(SECRET_NAMES.map((n) => [n, kv[n]])) : null;
 }
 
-/** Llave de prueba (32 bytes 0x07). No es una llave de producción y pii.ts no la tiene fija. */
+/** Llave de prueba generada al arrancar el proceso. No es una llave de producción y pii.ts no la tiene fija. */
 export const CI_PII_KID = 'ci';
-export const CI_PII_KEY_B64 = 'BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=';
+export const CI_PII_KEY_B64 = randomBytes(32).toString('base64');
 
 /** Variables base para el backend en tests (sin DB real: los tests inyectan fakeDb). */
 export function baseEnv() {

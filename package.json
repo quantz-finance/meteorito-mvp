@@ -67,8 +67,7 @@
     "demo:serve": "node scripts/demo/serve.mjs dist-demo 8081",
     "demo:record": "tsx scripts/demo/record.ts",
     "test:e2e:prod": "playwright test -c playwright.prod.config.ts",
-    "pii:keys": "tsx scripts/ops/pii-enc-keys.ts",
-    "pii:backfill": "tsx scripts/ops/pii-backfill.ts"
+    "pii:keys": "tsx scripts/ops/pii-enc-keys.ts"
   },
   "private": true,
   "engines": {

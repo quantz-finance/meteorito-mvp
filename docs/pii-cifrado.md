@@ -10,11 +10,16 @@ Esta entrega **no** borra el texto en claro (eso es la migración 052, otro PR) 
 | Correo del comprador | `buyer_contacts.email` | `email_enc` |
 | WhatsApp del vendedor | `seller_profiles.contact_phone` | `contact_phone_enc` |
 
-Blob: `pii:v1:<kid>:<base64url(nonce 12 ‖ tag 16 ‖ ciphertext)>`.
-AAD: `meteorito:pii:v1|<tabla>.<columna>|<clave>`. Clave de fila: `order_id|channel` o `sub` del vendedor.
-La llave AES sale por HKDF-SHA256 de la llave maestra (32 bytes), salt `meteorito:pii:v1`, info `enc`.
+## v1 congelado
 
-Mientras existan las dos columnas, un guardado escribe las dos. Al leer se usa `*_enc` si abre; si todavía es null, el claro, y el log dice `pii_read_plain` **sin el valor**.
+El código y este documento usan los mismos parámetros. No los cambies en un lado solo.
+
+- Cifrado: AES-256-GCM. Nonce 12 bytes, tag 16 bytes, después el ciphertext.
+- Blob: `pii:v1:<kid>:<base64url(nonce 12 ‖ tag 16 ‖ ciphertext)>`.
+- AAD: `meteorito:pii:v1|<tabla>.<columna>|<clave>`. Clave de fila: `order_id|channel` o `sub` del vendedor.
+- HKDF-SHA256 de la llave maestra (32 bytes). Salt UTF-8 `meteorito:pii:v1`. Info UTF-8 `enc`. Largo 32. Esa salida es la llave AES.
+
+Mientras existan las dos columnas, un guardado escribe las dos **si hay llave**. Sin llave, guardar responde **503 `pii_unavailable`** y no toca la fila. Al leer, si hay llave se usa `*_enc` cuando abre; si el blob no abre, el campo queda null (no se usa el claro). Si todavía no hay blob, se usa el claro y el log dice `pii_read_plain` **sin el valor**. En esta fase, **sin llave, la lectura usa el claro** para que el WhatsApp del vendedor, `admin_contacts` y los avisos por correo sigan funcionando.
 
 ## Variables
 
@@ -23,51 +28,48 @@ Mientras existan las dos columnas, un guardado escribe las dos. Al leer se usa `
 | `PII_ENC_KEYS` | `kid:base64,kid2:base64`. Cada valor es 32 bytes. Sensitive. |
 | `PII_ENC_ACTIVE_KID` | Kid que cifra. Los demás solo descifran (rotación). Sensitive. |
 
-No hay fallback a `PIN_PEPPER`, `ORDER_ACCESS_SECRET` ni a ningún otro secreto.
+No hay fallback a `PIN_PEPPER`, `ORDER_ACCESS_SECRET` ni a ningún otro secreto. `/api/health` dice `pii: ok`, `missing` o `bad_format`, sin el material.
 
-El cifrado solo se arma con `VERCEL_ENV=production`. En Preview, development o si `VERCEL_ENV` no es exactamente `production`, el servidor **no lee** `PII_ENC_*`: guardar un contacto responde **503 `pii_unavailable`** y leer ese campo devuelve null. No hace falta (ni se debe) poner las llaves de Production en esos entornos.
+Production y Preview tienen proyectos de Supabase distintos. Preview es `meteorito-preview` (ref `nqukipgxnnsmqtcivpzr`), con las migraciones 001–037 y datos sintéticos. Cada entorno usa las llaves que tenga cargadas. No copies la llave de Production a Preview.
 
-Preview comparte hoy el proyecto de Supabase de Production. Por eso **Preview no debe tener variables `PII_ENC_*`**. Este PR solo entrega el fail-closed y el dual-write de Production. Cifrar en un entorno que no sea Production exige antes una de estas dos cosas:
-
-- un proyecto de Supabase distinto del de Production, o
-- datos sintéticos en Preview, sin PII real.
-
-Hasta que eso exista, no se habilita el cifrado fuera de Production.
-
-Hasta que existan las columnas (051) y las llaves de Production, guardar el WhatsApp del vendedor o el contacto del comprador responde 503. El resto de la tienda sigue igual.
+Hasta que existan las columnas (051) y las llaves de ese entorno, guardar el WhatsApp del vendedor o el contacto del comprador responde 503. Leer, en esta fase, sigue mostrando el claro. El resto de la tienda sigue igual.
 
 ## Migración 051
 
-Archivo: `supabase/migrations/051_pii_enc.sql`. Solo agrega columnas, checks de formato y afloja el check del canal para aceptar claro o cifrado.
+Archivo: `supabase/migrations/051_pii_enc.sql`. Solo agrega columnas, checks de formato, afloja el check del canal para aceptar claro o cifrado, y avisa a PostgREST (`notify pgrst, 'reload schema'`).
 
-**No la aplica el deploy.** Vitalik la aplica con Supabase `apply_migration`. Avisarle antes de aplicarla.
+**No la aplica el deploy.** Vitalik la aplica con Supabase `apply_migration`. Avísale antes de aplicarla.
 
-## Llaves (no correr contra Vercel sin el OK de Rolando)
+## Llaves (no corras `--apply` contra Vercel sin el OK de Rolando)
 
 ```bash
-npx tsx scripts/ops/pii-enc-keys.ts                  # dry-run: no genera ni imprime una llave
-npx tsx scripts/ops/pii-enc-keys.ts --self-test      # prueba en memoria; no llama a Vercel
+npx tsx scripts/ops/pii-enc-keys.ts                         # dry-run: no genera ni imprime una llave
+npx tsx scripts/ops/pii-enc-keys.ts --self-test             # prueba en memoria; no llama a Vercel
 npx tsx scripts/ops/pii-enc-keys.ts --apply --target production
+npx tsx scripts/ops/pii-enc-keys.ts --apply --target preview
 ```
 
-`--apply` exige `VERCEL_TOKEN` y `VERCEL_PROJECT_ID` (`VERCEL_ORG_ID` si es un team). Genera 32 bytes con CSPRNG y los carga como variables **Sensitive** solo en el target Production. No imprime la llave, no la escribe a disco y no acepta material de llave por argumentos. Si la variable ya existe en Production, no la reemplaza.
+`--apply` exige `VERCEL_TOKEN` y `VERCEL_PROJECT_ID` (`VERCEL_ORG_ID` si es un team). Genera 32 bytes con CSPRNG. Antes de llamar a Vercel escribe una copia en `/home/box/secrets/pii-<target>-<kid>.txt` con modo `0600`. Ese archivo es para Rolando: se lo pasas fuera de línea y después lo borras. El script no imprime la llave, no la acepta por argumentos y no reemplaza una variable que ya existe. Cada corrida genera una llave nueva, así Production y Preview no comparten material.
 
-`--target preview` y `--target development` se rechazan y no llaman a Vercel. No subas `PII_ENC_*` a Preview mientras comparta la base de Production.
+El orden de carga es `PII_ENC_KEYS` y después `PII_ENC_ACTIVE_KID`. **Cuando termine, redespliega** para que las funciones tomen las variables nuevas.
 
-**No ejecutar `--apply` contra Vercel hasta que Rolando lo autorice.** Este cambio no carga secretos.
+**No ejecutes `--apply` contra Vercel hasta que Rolando lo autorice.** Este cambio no carga secretos.
 
 ## Backfill
 
-Idempotente. Cifra filas con claro y `*_enc` null, comprueba el descifrado en memoria y solo entonces escribe el blob. También pone `orders.seller_email` en null. Imprime conteos, nunca el dato.
+Lo corre un admin **dentro de Vercel** (ahí está la llave Sensitive). No hace falta copiar `PII_ENC_KEYS` a tu máquina.
 
-```bash
-VERCEL_ENV=production npx tsx scripts/ops/pii-backfill.ts             # dry-run: cuenta, no escribe
-VERCEL_ENV=production npx tsx scripts/ops/pii-backfill.ts --self-test # ronda en memoria, sin base
-VERCEL_ENV=production npx tsx scripts/ops/pii-backfill.ts --apply     # escribe. Exige 051, llaves y service role
+`POST /api/store` con sesión de un correo de `ADMIN_EMAILS`:
+
+```json
+{ "action": "admin_pii_backfill" }
+{ "action": "admin_pii_backfill", "apply": true }
 ```
 
-`--apply` usa `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `PII_ENC_KEYS` y `PII_ENC_ACTIVE_KID`, y solo si `VERCEL_ENV` es exactamente `production`. En Preview o en cualquier otro entorno el script se niega y no toca la base. `VERCEL_ENV=production` aquí afirma que corrés el backfill de Production con las llaves de Production: no es un permiso para Preview. Correrlo **después** de que Vitalik aplicó la 051 y **después** de que las llaves están en Production.
+Sin `apply: true` es dry-run: no escribe. La respuesta son conteos (`contactsReady`, `phonesWrote`, `sellerEmailsNulled`, …). No devuelve teléfono ni correo. Idempotente: cifra filas con claro y `*_enc` null, comprueba el descifrado en memoria y solo entonces escribe el blob. También pone `orders.seller_email` en null. Queda una fila en `admin_audit` (`pii_backfill`) con los mismos conteos.
+
+Hazlo **después** de que Vitalik aplicó la 051, **después** de que las llaves están en ese entorno y **después** del redespliegue.
 
 ## Fuera de este PR
 
-Migración 052 (borrar el claro), `ORDER_ACCESS_SECRET` / `CAPTURE_SECRET` / `RATE_LIMIT_SALT`, mainnet, iOS, y generar la llave de Harvey.
+Migración 052 (borrar el claro). Antes de ese cutover, `buyer_access_request` tiene que descifrar el correo y compararlo con `timingSafeEqual` (hoy busca por el claro). También quedan fuera `ORDER_ACCESS_SECRET` / `CAPTURE_SECRET` / `RATE_LIMIT_SALT`, mainnet, iOS, y generar la llave de Harvey.

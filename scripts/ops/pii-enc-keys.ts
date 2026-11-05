@@ -3,27 +3,42 @@
 // NO EJECUTAR --apply CONTRA VERCEL HASTA QUE ROLANDO LO AUTORICE.
 // Por defecto es dry-run: no genera llave, no llama a la API, no escribe disco, no imprime material.
 // Cada corrida genera una llave NUEVA. No acepta material por argumentos.
-// Solo target production. Preview (y development) comparten hoy la base de Production:
-// NO deben recibir PII_ENC_*. Cifrar fuera de Production exige antes un proyecto de Supabase
-// distinto o datos sintéticos en Preview. Este script no habilita eso.
+// Production y Preview tienen bases distintas: cada target recibe su propia llave. Nunca copies una en el otro.
+// --apply escribe primero una copia 0600 en /home/box/secrets (para Rolando, fuera de línea) y después carga
+// PII_ENC_KEYS y luego PII_ENC_ACTIVE_KID. No imprime la llave. Después hay que redesplegar.
 //
 //   npx tsx scripts/ops/pii-enc-keys.ts
 //   npx tsx scripts/ops/pii-enc-keys.ts --self-test
 //   npx tsx scripts/ops/pii-enc-keys.ts --apply --target production
+//   npx tsx scripts/ops/pii-enc-keys.ts --apply --target preview
 //
 // --apply lee VERCEL_TOKEN y VERCEL_PROJECT_ID (VERCEL_ORG_ID si el proyecto es de un team). No los imprime.
 import { randomBytes } from 'node:crypto';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const NAMES = ['PII_ENC_KEYS', 'PII_ENC_ACTIVE_KID'] as const;
-type Target = 'production';
-const NON_PROD = 'Preview y el resto de no-producción no pueden tener PII_ENC_*: comparten la base de Production. Separar Supabase o usar datos sintéticos es requisito antes de cifrar fuera de Production.';
+type Target = 'production' | 'preview';
+export const BACKUP_DIR = '/home/box/secrets';
 
+export interface KeyBackup { dir: string; name: string; body: string; mode: number }
 export interface KeysIo {
   log: (line: string) => void;
   fetch: typeof fetch;
   env: Record<string, string | undefined>;
+  writeBackup?: (file: KeyBackup) => void;
+}
+
+/** Copia offline. mode 0600, sin reescribir un archivo que ya existe. No registra el contenido. */
+export function writeKeyBackup(file: KeyBackup): void {
+  if (file.mode !== 0o600) throw new Error('mode');
+  if (!/^pii-(production|preview)-k[0-9a-f]+\.txt$/.test(file.name)) throw new Error('name');
+  mkdirSync(file.dir, { recursive: true, mode: 0o700 });
+  try { chmodSync(file.dir, 0o700); } catch { /* el directorio puede ser de otro dueño; el archivo igual sale 0600 */ }
+  const dest = path.join(file.dir, file.name);
+  writeFileSync(dest, file.body, { mode: 0o600, flag: 'wx' });
+  chmodSync(dest, 0o600);
 }
 
 export function redact(line: string, secrets: readonly string[]): string {
@@ -49,9 +64,8 @@ export function parseKeysArgs(argv: string[]): { apply: boolean; selfTest: boole
     else if (a === '--dry-run') apply = false;
     else if (a === '--target') {
       const v = argv[++i];
-      if (v === 'preview' || v === 'development') return { apply, selfTest, target: null, bad: NON_PROD };
-      if (v !== 'production') return { apply, selfTest, target: null, bad: 'target debe ser production' };
-      target = 'production';
+      if (v !== 'production' && v !== 'preview') return { apply, selfTest, target: null, bad: 'target debe ser production o preview' };
+      target = v;
     } else return { apply, selfTest, target, bad: 'argumento no reconocido' };
   }
   return { apply, selfTest, target, bad: null };
@@ -128,13 +142,15 @@ export async function runKeys(argv: string[], io: KeysIo): Promise<number> {
     return ok ? 0 : 1;
   }
   if (!args.apply) {
-    log('dry-run: no se generó ninguna llave y no se llamó a Vercel.');
-    log('Solo Production. ' + NON_PROD);
+    log('dry-run: no se generó ninguna llave, no se escribió respaldo y no se llamó a Vercel.');
+    log('Production y Preview llevan llaves distintas. Cada corrida genera una llave nueva.');
+    log('Con --apply el respaldo queda en /home/box/secrets modo 0600. Pásaselo a Rolando y bórralo después.');
+    log('Después de cargar las variables hay que redesplegar para que las funciones las tomen.');
     log('NO ejecutar --apply contra Vercel hasta que Rolando lo autorice.');
-    log('Para cargar en Production: npx tsx scripts/ops/pii-enc-keys.ts --apply --target production');
+    log('Para cargar: npx tsx scripts/ops/pii-enc-keys.ts --apply --target production|preview');
     return 0;
   }
-  if (!args.target) { log('falta --target production'); return 1; }
+  if (!args.target) { log('falta --target production|preview'); return 1; }
   const projectId = io.env.VERCEL_PROJECT_ID ?? '';
   const teamId = io.env.VERCEL_ORG_ID || undefined;
   if (!token || !projectId) { log('faltan VERCEL_TOKEN o VERCEL_PROJECT_ID'); return 1; }
@@ -145,13 +161,23 @@ export async function runKeys(argv: string[], io: KeysIo): Promise<number> {
   }
   const key = randomBytes(32);
   const kid = 'k' + randomBytes(4).toString('hex');
-  const value = `${kid}:${key.toString('base64')}`;
-  secrets.push(value, key.toString('base64'));
-  const kidOk = await putSensitive(io, token, projectId, teamId, args.target, 'PII_ENC_ACTIVE_KID', kid, log);
-  const keysOk = kidOk && await putSensitive(io, token, projectId, teamId, args.target, 'PII_ENC_KEYS', value, log);
+  const b64 = key.toString('base64');
+  const value = `${kid}:${b64}`;
+  secrets.push(value, b64);
+  const backup: KeyBackup = {
+    dir: BACKUP_DIR,
+    name: `pii-${args.target}-${kid}.txt`,
+    mode: 0o600,
+    body: `PII_ENC_ACTIVE_KID=${kid}\nPII_ENC_KEYS=${value}\n`,
+  };
+  try { (io.writeBackup ?? writeKeyBackup)(backup); }
+  catch { log('no se pudo escribir el respaldo; no se cargó nada'); key.fill(0); return 1; }
+  log(`respaldo escrito en ${backup.dir}/${backup.name} modo=0600 (el valor no se muestra). Pásaselo a Rolando y bórralo después.`);
+  const keysOk = await putSensitive(io, token, projectId, teamId, args.target, 'PII_ENC_KEYS', value, log);
+  const kidOk = keysOk && await putSensitive(io, token, projectId, teamId, args.target, 'PII_ENC_ACTIVE_KID', kid, log);
   key.fill(0);
-  if (!keysOk) return 1;
-  log(`listo target=${args.target} kid=${kid} (el valor no se muestra)`);
+  if (!kidOk) { log('la carga no terminó; el respaldo sigue en disco. No generes otra llave hasta revisarlo con Rolando.'); return 1; }
+  log(`listo target=${args.target} kid=${kid} (el valor no se muestra). Redespliega para que las funciones tomen las variables.`);
   return 0;
 }
 

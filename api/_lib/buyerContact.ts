@@ -144,7 +144,7 @@ export async function saveContact(db: Db, order: any, who: Who, b: SaveInput): P
     if (!who.cavos) throw Object.assign(new HttpError(401, 'Entra con tu cuenta para continuar.'), { code: 'auth_missing' });
     row.account_sub = who.cavos.sub; row.email = normalizeEmail(who.cavos.email);
   } else throw new HttpError(400, 'Elige WhatsApp, correo o cuenta.');
-  // Dual-write (051): claro + ciphertext. Sin llave, o en Preview, no se escribe ninguno de los dos.
+  // Dual-write (051): claro + ciphertext. Sin llave no se escribe ninguno de los dos.
   const rowKey = buyerContactKey(order.id, String(row.channel));
   row.phone_e164_enc = requireSeal(row.phone_e164 as string | null, 'buyer_contacts', 'phone_e164', rowKey);
   row.email_enc = requireSeal(row.email as string | null, 'buyer_contacts', 'email', rowKey);
@@ -261,25 +261,27 @@ export async function notifyBuyerStatus(db: Db, o: { id: string; slug: string; s
 export function requireAdmin(who: Who) {
   if (!who.cavos || !isAdminUser(who.cavos as any)) throw notFound();
 }
-/** Contactos de un pedido para el EQUIPO (sin enmascarar) con el wa.me del último aviso listo para enviar. */
-export async function adminContacts(db: Db, order: any) {
+/** Contactos de un pedido para el EQUIPO (sin enmascarar) con el wa.me del último aviso listo para enviar.
+ *  Deja una fila en admin_audit (031): quién y qué canales, nunca el teléfono ni el correo. */
+export async function adminContacts(db: Db, order: any, adminEmail: string) {
   const { data, error } = await selectContacts(db, order.id,
     'channel, phone_e164, phone_e164_enc, email, email_enc, consent_text_version, consent_at, revoked_at',
     'channel, phone_e164, email, consent_text_version, consent_at, revoked_at');
   if (error) { if (isMissingTable(error)) return { available: false, contacts: [] }; throw error; }
   const kind: NoticeKind = NOTICE_BY_STATUS[order.status] ?? 'acceso';
   const n = buildNotice(kind, order, accessLinkFor(order), BETA_NOTICE);
-  return {
-    available: true,
-    contacts: (data ?? []).map((raw: any) => {
-      const c = openedContact(order.id, raw);
-      return {
-        channel: c.channel, phone_e164: c.phone_e164, email: c.email,
-        consent_text_version: c.consent_text_version, consent_at: c.consent_at, revoked_at: c.revoked_at,
-        wa_link: c.channel === 'whatsapp' && c.phone_e164 && !c.revoked_at ? waLink(c.phone_e164, n.whatsapp) : null,
-      };
-    }),
-  };
+  const contacts = (data ?? []).map((raw: any) => {
+    const c = openedContact(order.id, raw);
+    return {
+      channel: c.channel, phone_e164: c.phone_e164, email: c.email,
+      consent_text_version: c.consent_text_version, consent_at: c.consent_at, revoked_at: c.revoked_at,
+      wa_link: c.channel === 'whatsapp' && c.phone_e164 && !c.revoked_at ? waLink(c.phone_e164, n.whatsapp) : null,
+    };
+  });
+  const row = { kind: 'buyer_contacts_read', admin_email: adminEmail.slice(0, 200), target: String(order.slug ?? '').slice(0, 200), detail: { channels: contacts.map((c: { channel: string }) => c.channel) } };
+  const audit = await db.from('admin_audit').insert(row);
+  if (audit?.error) console.info('[admin-audit]', row.kind, row.target, isMissingTable(audit.error) ? 'sin-031' : (audit.error.code ?? ''));
+  return { available: true, contacts };
 }
 
 /** Cron: pedidos con la liberación automática en menos de 24 h -> aviso 'por_liberar' (una vez por pedido y canal). */

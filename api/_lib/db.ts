@@ -15,9 +15,15 @@ export const INTERNAL_ERROR = 'Algo salió mal. Intenta de nuevo.';
 export const PAYEE_NOT_READY = 'El vendedor todavía no puede recibir pagos. Avísale que abra Meteorito para activar su cuenta e intenta de nuevo.';
 /** Error -> respuesta. HttpError: su mensaje (escrito para quien usa la app) y su código. Cualquier otro (base de datos,
  *  red, bug): 500 genérico, sin mensaje, código ni stack internos; el detalle queda solo en el log del servidor. */
+/** Log de un 500 sin `details` ni `hint` (PostgREST a veces mete ahí el valor de la fila). */
+function logServerError(e: any) {
+  const code = typeof e?.code === 'string' ? e.code.slice(0, 40) : '';
+  const message = (typeof e?.message === 'string' ? e.message : '').replace(/pii:v1:[A-Za-z0-9_:-]+/g, '[pii]').slice(0, 240);
+  console.error('[api] 500', code, message);
+}
 export function fail(res: any, e: any) {
   if (!(e instanceof HttpError)) {
-    console.error('[api] 500', e);
+    logServerError(e);
     // Trustless Work / Horizon rechazó la tx por la cuenta de quien cobra (sin trustline, etc.): mensaje para la persona,
     // sin el detalle técnico (antes el cliente lo deducía del texto crudo del error).
     if (/trustline|could not be validated|send-transaction|result_codes/i.test(String(e?.message ?? ''))) return json(res, 502, { error: PAYEE_NOT_READY, code: 'payee_not_ready' });

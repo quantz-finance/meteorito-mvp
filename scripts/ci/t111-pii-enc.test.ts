@@ -1,25 +1,26 @@
-// (110) PII en reposo, fases A–C. Cifra teléfono y correo solo con VERCEL_ENV=production.
-// Preview, development y VERCEL_ENV ausente fallan cerrado (pii_unavailable) aunque haya llaves.
-// dual-write, deja de escribir orders.seller_email, y el gate de IBAN/SINPE/titular de ejemplo.
-// El bundle del cliente no puede nombrar PII_ENC. Sin red.
+// (111) PII en reposo, fases A–C. Cifra teléfono y correo con la llave del entorno (Production o Preview).
+// Sin llave: leer usa el claro; escribir responde 503. Dual-write, sin orders.seller_email,
+// gate de IBAN/SINPE/titular de ejemplo. El bundle del cliente no puede nombrar PII_ENC. Sin red.
 import { randomBytes } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { T } from './setup';
 import { CI_PII_KEY_B64, CI_PII_KID } from './setup';
 import { installTestJwks, res, token } from './jwt';
 import { fakeDb } from './fakedb';
-import { __setDbForTests } from '../../api/_lib/db';
+import { __setDbForTests, fail } from '../../api/_lib/db';
+import health from '../../api/health';
 import { guestSubFromReq } from '../../api/_lib/guest';
 import { childRow } from '../../api/_lib/listings';
 import {
-  PII_BLOB_RE, buyerContactKey, loadKeyRing, openPii, piiAad, piiUnavailable, readPii, requireSeal, sealPii,
+  PII_BLOB_RE, buyerContactKey, loadKeyRing, openPii, piiAad, piiKeyStatus, piiUnavailable, readPii, requireSeal, sealPii,
 } from '../../api/_lib/pii';
 import { HOLDER_PLACEHOLDER, IBAN_PLACEHOLDER, SINPE_PLACEHOLDER } from '../../api/_lib/payout';
 import { CONTACT_CONSENT_VERSION } from '../../api/_lib/contactText';
 import store from '../../api/store/index';
-import { contactWork, phoneWork, runBackfill, type BackfillDb, type ContactRow, type PhoneRow } from '../ops/pii-backfill';
-import { redact, runKeys } from '../ops/pii-enc-keys';
+import { contactWork, phoneWork, runBackfill, type BackfillDb, type ContactRow, type PhoneRow } from '../../api/_lib/piiBackfill';
+import { BACKUP_DIR, redact, runKeys, writeKeyBackup } from '../ops/pii-enc-keys';
 
 const root = new URL('../..', import.meta.url).pathname;
 const read = (f: string) => readFileSync(join(root, f), 'utf8');
@@ -112,17 +113,16 @@ export async function run(t: T) {
     try { requireSeal(PHONE, 'buyer_contacts', 'phone_e164', 'ord-1|whatsapp'); } catch (e) { code = (e as { code?: string }).code ?? ''; status = (e as { status?: number }).status ?? 0; }
     return code === 'pii_unavailable' && status === 503 && loadKeyRing() === null && sealPii(PHONE, aad) === null;
   }));
-  t.check('fuera de Production no carga PII_ENC_*', await withEnv({ VERCEL_ENV: 'preview' }, async () => loadKeyRing() === null && sealPii(PHONE, aad) === null)
-    && await withEnv({ VERCEL_ENV: 'development' }, async () => loadKeyRing() === null && openPii(blob, aad) === null)
-    && await withEnv({ VERCEL_ENV: undefined }, async () => {
-      if (loadKeyRing() !== null) return false;
-      try { requireSeal(PHONE, 'buyer_contacts', 'phone_e164', 'ord-1|whatsapp'); return false; }
-      catch (e) { return (e as { code?: string }).code === 'pii_unavailable'; }
-    }));
+  t.check('Preview y development usan la llave que tengan', await withEnv({ VERCEL_ENV: 'preview' }, async () => loadKeyRing()?.active === 'ci' && openPii(blob, aad) === PHONE)
+    && await withEnv({ VERCEL_ENV: 'development' }, async () => !!loadKeyRing())
+    && await withEnv({ VERCEL_ENV: undefined }, async () => openPii(blob, aad) === PHONE));
   t.check('llave corta o kid desconocido no activan', await withEnv({ PII_ENC_KEYS: 'ci:' + Buffer.alloc(16, 1).toString('base64'), PII_ENC_ACTIVE_KID: 'ci' }, async () => loadKeyRing() === null)
     && await withEnv({ PII_ENC_ACTIVE_KID: 'no-esta' }, async () => loadKeyRing() === null));
   const piiSrc = read('api/_lib/pii.ts').replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
   t.check('no cae a PIN_PEPPER ni a otros secretos', !/PIN_PEPPER|ORDER_ACCESS_SECRET|CAPTURE_SECRET|RATE_LIMIT_SALT|SUPABASE_/.test(piiSrc));
+  const spec = read('docs/pii-cifrado.md');
+  t.check('el documento congela el mismo HKDF que el código', spec.includes('Salt UTF-8 `meteorito:pii:v1`') && spec.includes('Info UTF-8 `enc`')
+    && /HKDF_SALT = Buffer.from\('meteorito:pii:v1'/.test(piiSrc) && /HKDF_INFO = Buffer.from\('enc'/.test(piiSrc));
   const logs: string[] = [];
   const origWarn = console.warn;
   console.warn = (...a: unknown[]) => { logs.push(a.map(String).join(' ')); };
@@ -133,9 +133,12 @@ export async function run(t: T) {
     t.check('sin blob usa el claro y loguea pii_read_plain sin el valor', readPii({ table: 'seller_profiles', column: 'contact_phone', rowKey: 'sub-1', enc: null, plain: PHONE }) === PHONE
       && logs.some((l) => l.includes('pii_read_plain') && l.includes('seller_profiles.contact_phone')) && !logs.some((l) => l.includes(PHONE) || l.includes('88881234')));
     logs.length = 0;
-    await withEnv({ PII_ENC_KEYS: undefined }, async () => {
-      t.check('sin llave, leer devuelve null (ni el claro)', readPii({ table: 'buyer_contacts', column: 'email', rowKey: 'o|email', enc: blob, plain: EMAIL }) === null
-        && logs.some((l) => l.includes('pii_read_unavailable')) && !logs.some((l) => l.includes(EMAIL) || l.includes(PHONE)));
+    await withEnv({ PII_ENC_KEYS: undefined, PII_ENC_ACTIVE_KID: undefined }, async () => {
+      t.check('fase B sin llave: leer cae al claro y no lo loguea', readPii({ table: 'buyer_contacts', column: 'email', rowKey: 'o|email', enc: blob, plain: EMAIL }) === EMAIL
+        && logs.some((l) => l.includes('pii_read_plain')) && !logs.some((l) => l.includes(EMAIL) || l.includes(PHONE)));
+      logs.length = 0;
+      t.check('sin llave y sin claro, el ciphertext no se inventa', readPii({ table: 'buyer_contacts', column: 'email', rowKey: 'o|email', enc: blob, plain: null }) === null
+        && logs.some((l) => l.includes('pii_read_unavailable')));
     });
   } finally { console.warn = origWarn; }
   t.check('piiUnavailable es 503', piiUnavailable().status === 503 && (piiUnavailable() as { code?: string }).code === 'pii_unavailable');
@@ -168,15 +171,12 @@ export async function run(t: T) {
     r = await call({ action: 'update', contact_phone: '8888 0000' }, tok);
     t.check('sin llave: 503 pii_unavailable y no se reescribe el teléfono', r.code === 503 && r.body?.code === 'pii_unavailable' && sp.contact_phone === before, `${r.code} ${r.body?.code}`);
     r = await call({ action: 'me' }, tok);
-    t.check('sin llave: el dueño no recibe el teléfono', r.code === 200 && r.body?.contact_phone === null && !JSON.stringify(r.body).includes('8888'));
+    t.check('sin llave: el dueño sigue viendo el claro', r.code === 200 && r.body?.contact_phone === before);
   });
-  for (const envName of ['preview', 'development', undefined] as const) {
-    await withEnv({ VERCEL_ENV: envName }, async () => {
-      const before = JSON.stringify(sp);
-      r = await call({ action: 'update', contact_phone: '2222 3333' }, tok);
-      t.check(`${envName ?? 'sin VERCEL_ENV'}: 503 y la fila no cambia`, r.code === 503 && r.body?.code === 'pii_unavailable' && JSON.stringify(sp) === before, `${r.code}`);
-    });
-  }
+  await withEnv({ VERCEL_ENV: 'preview' }, async () => {
+    r = await call({ action: 'update', contact_phone: '2222 3333' }, tok);
+    t.check('Preview con su llave también cifra', r.code === 200 && openPii(sp.contact_phone_enc, piiAad('seller_profiles', 'contact_phone', 'seller1')) === '+50622223333', `${r.code}`);
+  });
 
   /* ---------- dual-write comprador ---------- */
   const KEY = 'c'.repeat(64);
@@ -216,13 +216,14 @@ export async function run(t: T) {
   t.check('el pedido hijo no copia seller_email', !/seller_email/.test(copy));
   const child = childRow({ slug: 'prod01', seller_address: 'G', seller_user_id: 's', seller_email: 'secreto@correo.com', price_crc: 25000 }, 'guest:Z', 'abc123');
   t.check('childRow omite seller_email aunque el padre lo tenga', !('seller_email' in child));
-  const apiHits = walk(join(root, 'api')).filter((p) => /seller_email\s*:/.test(readFileSync(p, 'utf8')));
+  const apiHits = walk(join(root, 'api')).filter((p) => /seller_email\s*:/.test(readFileSync(p, 'utf8').replace(/seller_email:\s*null/g, '')));
   t.check('ningún archivo de api asigna seller_email', apiHits.length === 0, apiHits.map((p) => p.slice(root.length)).join(' '));
 
   /* ---------- migración 051 ---------- */
   const sql = read('supabase/migrations/051_pii_enc.sql');
   const fmt = '^pii:v1:[A-Za-z0-9_-]{1,32}:[A-Za-z0-9_-]{38,700}$';
-  t.check('051 aditiva: tres columnas, formato, canal en claro o cifrado, sin drop ni vistas', /phone_e164_enc/.test(sql) && /email_enc/.test(sql) && /contact_phone_enc/.test(sql)
+  t.check('051 aditiva: tres columnas, formato, canal en claro o cifrado, reload de schema, sin drop ni vistas', /phone_e164_enc/.test(sql) && /email_enc/.test(sql) && /contact_phone_enc/.test(sql)
+    && /notify pgrst, 'reload schema'/.test(sql)
     && sql.split(fmt).length === 4
     && /phone_e164 is not null or phone_e164_enc is not null/.test(sql)
     && /email is not null or email_enc is not null/.test(sql)
@@ -317,69 +318,133 @@ export async function run(t: T) {
   const skipped = contactWork({ id: 'c', order_id: 'o2', channel: 'whatsapp', phone_e164: memPhone, email: null, phone_e164_enc: 'ya', email_enc: null });
   t.check('fila que ya tiene blob se salta', skipped.status === 'skip');
   t.check('phoneWork de fila vacía se salta', phoneWork({ sub: 's2', contact_phone: null, contact_phone_enc: null }).status === 'skip');
-  for (const envName of ['preview', 'development', undefined] as const) {
-    await withEnv({ VERCEL_ENV: envName }, async () => {
-      const p = await runBackfill(mem(), { apply: true, log: (l) => blog.push(l) });
-      t.check(`backfill con ${envName ?? 'VERCEL_ENV ausente'} se niega`, p.code === 1 && blog.some((l) => l.includes('pii_unavailable') && l.includes('production')));
-    });
-  }
   blog.length = 0;
+  await withEnv({ VERCEL_ENV: 'preview' }, async () => {
+    const p = await runBackfill(mem(), { apply: false, log: (l) => blog.push(l) });
+    t.check('backfill en Preview cuenta si hay llave', p.code === 0 && p.counts.contactsReady === 0);
+  });
   await withEnv({ PII_ENC_KEYS: undefined, PII_ENC_ACTIVE_KID: undefined }, async () => {
     const p = await runBackfill(mem(), { apply: true, log: (l) => blog.push(l) });
     t.check('apply sin llave no escribe', p.code === 1 && blog.some((l) => l.includes('pii_unavailable')));
   });
 
+  /* ---------- admin: auditoría y backfill en la función ---------- */
+  const prevAdmin = process.env.ADMIN_EMAILS;
+  process.env.ADMIN_EMAILS = 'team@ci.test';
+  const team = await token({ sub: 'team' });
+  r = await call({ action: 'admin_contacts', slug: 'pii001' }, team);
+  const readAudit = (db.tables.admin_audit ?? []).find((a: any) => a.kind === 'buyer_contacts_read');
+  t.check('admin_contacts deja auditoría sin teléfono ni correo', r.code === 200 && readAudit?.admin_email === 'team@ci.test' && readAudit.target === 'pii001'
+    && Array.isArray(readAudit.detail?.channels) && !JSON.stringify(readAudit).includes(EMAIL) && !JSON.stringify(readAudit).includes('8888'), `${r.code}`);
+  r = await call({ action: 'admin_pii_backfill' }, tok);
+  t.check('backfill sin ser admin: 404', r.code === 404);
+  r = await call({ action: 'admin_pii_backfill' }, team);
+  const backfillBody = JSON.stringify(r.body ?? {});
+  t.check('backfill dry-run de admin: solo conteos', r.code === 200 && r.body?.dryRun === true && typeof r.body?.contactsReady === 'number'
+    && !backfillBody.includes(PHONE) && !backfillBody.includes(EMAIL) && !backfillBody.includes('pii:v1'), `${r.code} ${backfillBody.slice(0, 180)}`);
+  t.check('auditoría del backfill sin el dato', (db.tables.admin_audit ?? []).some((a: any) => a.kind === 'pii_backfill' && a.target === 'dry-run' && a.admin_email === 'team@ci.test'));
+  await withEnv({ PII_ENC_KEYS: undefined, PII_ENC_ACTIVE_KID: undefined }, async () => {
+    r = await call({ action: 'admin_pii_backfill', apply: true }, team);
+    t.check('backfill apply sin llave: 503 y no escribe', r.code === 503 && r.body?.code === 'pii_unavailable');
+  });
+  if (prevAdmin === undefined) delete process.env.ADMIN_EMAILS; else process.env.ADMIN_EMAILS = prevAdmin;
+
+  const hr = res();
+  await health({ method: 'GET', headers: {}, query: {}, body: {} }, hr);
+  t.check('health: pii ok con la llave de CI', hr.code === 200 && hr.body?.pii === 'ok' && piiKeyStatus() === 'ok');
+  t.check('health: missing y bad_format', await withEnv({ PII_ENC_KEYS: undefined, PII_ENC_ACTIVE_KID: undefined }, async () => piiKeyStatus() === 'missing')
+    && await withEnv({ PII_ENC_KEYS: 'no-es-base64-de-32', PII_ENC_ACTIVE_KID: 'ci' }, async () => piiKeyStatus() === 'bad_format'));
+  const logged: string[] = [];
+  const err0 = console.error;
+  console.error = (...a: unknown[]) => { logged.push(a.map(String).join(' ')); };
+  try {
+    fail(res(), Object.assign(new Error('falló la fila'), { code: '23514', details: `pii:v1:ci:${'A'.repeat(40)} ${EMAIL}` }));
+  } finally { console.error = err0; }
+  t.check('fail() no loguea details ni el blob', logged.length === 1 && !logged[0].includes('details') && !logged[0].includes(EMAIL) && !logged[0].includes('pii:v1') && logged[0].includes('23514'));
+
   /* ---------- script de llaves ---------- */
   const keysSrc = read('scripts/ops/pii-enc-keys.ts');
-  t.check('el script de llaves no toca el disco', !/node:fs|from 'fs'|writeFile|appendFile/.test(keysSrc));
+  t.check('el respaldo es 0600 en /home/box/secrets', BACKUP_DIR === '/home/box/secrets' && /0o600/.test(keysSrc) && /flag: 'wx'/.test(keysSrc));
+  const bakDir = mkdtempSync(join(tmpdir(), 'pii-bak-'));
+  try {
+    const sample = `PII_ENC_KEYS=kdeadbee:${Buffer.alloc(32, 4).toString('base64')}\n`;
+    writeKeyBackup({ dir: bakDir, name: 'pii-preview-kabc1234.txt', body: sample, mode: 0o600 });
+    const mode = statSync(join(bakDir, 'pii-preview-kabc1234.txt')).mode & 0o777;
+    t.check('writeKeyBackup deja el archivo en 0600', mode === 0o600);
+  } finally { rmSync(bakDir, { recursive: true, force: true }); }
   t.check('redact quita la llave', redact('valor ' + CI_PII_KEY_B64 + ' fin', [CI_PII_KEY_B64]) === 'valor [redacted] fin');
   const dryLogs: string[] = []; let fetches = 0;
   const dryCode = await runKeys([], { log: (l) => dryLogs.push(l), fetch: (async () => { fetches++; return new Response(''); }) as typeof fetch, env: {} });
-  t.check('dry-run por defecto: no llama a Vercel, avisa de Rolando y veda Preview', dryCode === 0 && fetches === 0 && dryLogs.some((l) => /dry-run/.test(l)) && dryLogs.some((l) => /Rolando/.test(l)) && dryLogs.some((l) => /PII_ENC_\*/.test(l))
+  t.check('dry-run por defecto: no llama a Vercel, avisa de Rolando y del redespliegue', dryCode === 0 && fetches === 0 && dryLogs.some((l) => /dry-run/.test(l)) && dryLogs.some((l) => /Rolando/.test(l)) && dryLogs.some((l) => /redesplegar/.test(l))
     && !dryLogs.some((l) => /[A-Za-z0-9+/]{40,}={0,2}/.test(l)));
   const refused: string[] = [];
   const fakeKey = randomBytes(32).toString('base64');
   const refuseCode = await runKeys(['--apply', '--target', 'production', fakeKey], { log: (l) => refused.push(l), fetch: (async () => { fetches++; return new Response(''); }) as typeof fetch, env: { VERCEL_TOKEN: 't'.repeat(20), VERCEL_PROJECT_ID: 'prj' } });
   t.check('no acepta material de llave por argumentos y no lo imprime', refuseCode === 1 && fetches === 0 && refused.some((l) => /no se acepta/.test(l)) && !refused.some((l) => l.includes(fakeKey)));
-  const posted: { url: string; body: string; auth: string }[] = [];
+  const posted: { url: string; body: string; method: string }[] = [];
+  const backups: { dir: string; name: string; mode: number; body: string }[] = [];
   const vercelTok = 'vercel-token-ci-0123456789';
   const applyLogs: string[] = [];
+  const writeBackup = (file: { dir: string; name: string; mode: number; body: string }) => { backups.push(file); };
   const applyCode = await runKeys(['--apply', '--target', 'production'], {
     log: (l) => applyLogs.push(l),
     env: { VERCEL_TOKEN: vercelTok, VERCEL_PROJECT_ID: 'prj_ci', VERCEL_ORG_ID: 'team_ci' },
+    writeBackup,
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       const body = typeof init?.body === 'string' ? init.body : '';
-      const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? '');
-      posted.push({ url, body, auth });
-      if (!init?.method || init.method === 'GET') return new Response(JSON.stringify({ envs: [] }), { status: 200 });
+      const method = init?.method ?? 'GET';
+      posted.push({ url, body, method });
+      if (method === 'POST' && backups.length === 0) return new Response('', { status: 500 });
+      if (method === 'GET') return new Response(JSON.stringify({ envs: [] }), { status: 200 });
       return new Response('', { status: 201 });
     }) as typeof fetch,
   });
-  const keysBody = posted.find((p) => p.body.includes('PII_ENC_KEYS'));
-  const parsed = keysBody ? JSON.parse(keysBody.body) as { type?: string; target?: string[]; value?: string } : null;
+  const posts = posted.filter((p) => p.method === 'POST');
+  const keysBody = posts.find((p) => p.body.includes('"PII_ENC_KEYS"'));
+  const parsed = keysBody ? JSON.parse(keysBody.body) as { type?: string; target?: string[]; value?: string; key?: string } : null;
   const b64 = parsed?.value?.slice(parsed.value.indexOf(':') + 1) ?? '';
   const postedUrl = keysBody?.url ?? '';
-  t.check('apply manda Sensitive a production y el log no trae la llave ni el token', applyCode === 0 && parsed?.type === 'sensitive' && parsed?.target?.[0] === 'production'
+  const backup = backups[0];
+  t.check('apply escribe el respaldo 0600 antes de cargar KEYS y luego ACTIVE_KID', applyCode === 0 && backup?.dir === BACKUP_DIR && backup.mode === 0o600
+    && backup.name.startsWith('pii-production-k') && backup.body.includes(b64) && posts[0]?.body.includes('"PII_ENC_KEYS"') && posts[1]?.body.includes('"PII_ENC_ACTIVE_KID"')
+    && parsed?.type === 'sensitive' && parsed.target?.[0] === 'production'
     && Buffer.from(b64, 'base64').length === 32 && postedUrl.includes('teamId=team_ci') && postedUrl.includes('decrypt=false')
-    && !applyLogs.some((l) => l.includes(b64) || l.includes(vercelTok)) && applyLogs.some((l) => /el valor no se muestra/.test(l)), `${applyCode} ${applyLogs.join(' | ')}`);
-  const beforePreview = fetches;
+    && !applyLogs.some((l) => l.includes(b64) || l.includes(vercelTok)) && applyLogs.some((l) => /Redespliega/.test(l)), `${applyCode} ${applyLogs.join(' | ')}`);
   const previewLogs: string[] = [];
+  const previewBackups: typeof backups = [];
+  const previewPosts: { body: string; method: string }[] = [];
   const previewCode = await runKeys(['--apply', '--target', 'preview'], {
     log: (l) => previewLogs.push(l),
     env: { VERCEL_TOKEN: vercelTok, VERCEL_PROJECT_ID: 'prj_ci' },
-    fetch: (async () => { fetches++; return new Response('', { status: 500 }); }) as typeof fetch,
+    writeBackup: (file) => { previewBackups.push(file); },
+    fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = typeof init?.body === 'string' ? init.body : '';
+      const method = init?.method ?? 'GET';
+      previewPosts.push({ body, method });
+      if (method === 'GET') return new Response(JSON.stringify({ envs: [] }), { status: 200 });
+      return new Response('', { status: 201 });
+    }) as typeof fetch,
   });
+  const previewValue = previewPosts.find((p) => p.body.includes('"PII_ENC_KEYS"'));
+  const previewB64 = previewValue ? (JSON.parse(previewValue.body) as { value?: string }).value?.split(':')[1] ?? '' : '';
+  t.check('Preview recibe una llave distinta y su propio respaldo', previewCode === 0 && previewB64.length > 0 && previewB64 !== b64
+    && previewBackups[0]?.name.startsWith('pii-preview-') && previewPosts.filter((p) => p.method === 'POST')[0]?.body.includes('"PII_ENC_KEYS"')
+    && !previewLogs.some((l) => l.includes(previewB64)));
+  const beforeDev = fetches;
+  const devLogs: string[] = [];
   const devCode = await runKeys(['--apply', '--target', 'development'], {
-    log: (l) => previewLogs.push(l),
+    log: (l) => devLogs.push(l),
     env: { VERCEL_TOKEN: vercelTok, VERCEL_PROJECT_ID: 'prj_ci' },
+    writeBackup: () => { fetches++; },
     fetch: (async () => { fetches++; return new Response('', { status: 500 }); }) as typeof fetch,
   });
-  t.check('Preview y development no reciben PII_ENC_*: no se llama a Vercel', previewCode === 1 && devCode === 1 && fetches === beforePreview && previewLogs.some((l) => /PII_ENC_\*/.test(l)));
+  t.check('development no es un target y no llama a Vercel', devCode === 1 && fetches === beforeDev && devLogs.some((l) => /production o preview/.test(l)));
   const againLogs: string[] = [];
   const again = await runKeys(['--apply', '--target', 'production'], {
     log: (l) => againLogs.push(l),
     env: { VERCEL_TOKEN: vercelTok, VERCEL_PROJECT_ID: 'prj_ci' },
+    writeBackup: () => { throw new Error('no debía escribir'); },
     fetch: (async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (!init?.method || init.method === 'GET') return new Response(JSON.stringify({ envs: [{ key: 'PII_ENC_KEYS', target: ['production'] }] }), { status: 200 });
       return new Response('', { status: 201 });
