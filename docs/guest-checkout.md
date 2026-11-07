@@ -1,3 +1,5 @@
+> Histórico: desde noviembre de 2026 el comprador nuevo necesita cuenta Cavos. Este documento describe la compatibilidad de pedidos e invitaciones `guest:` ya existentes; no permite iniciar nuevas compras sin sesión. El vendedor sí puede aceptar sin cuenta detrás de su flag. Ver `buyer-invites.md`.
+
 # Checkout de invitado (comprador sin cuenta)
 
 **Decisión (MVP testnet):** quien abre un link de pago `/p/<slug>` **no inicia sesión ni crea wallet** para pagar.

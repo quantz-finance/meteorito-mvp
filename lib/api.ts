@@ -155,7 +155,10 @@ async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown, ope
   const send = async (withProof: boolean) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
     // Crear link: también la llave de invitado, para que el servidor detecte si respondes a tu propia invitación.
-    if (path === '/api/orders/create') headers['X-Guest-Key'] = await guestKey();
+    if (['/api/orders/create', '/api/invites', '/api/escrow/pay'].includes(path)) headers['X-Guest-Key'] = await guestKey();
+    const slug = (body as any)?.slug;
+    const grant = typeof slug === 'string' ? loadGrant(slug) : null;
+    if (grant) headers['X-Order-Access'] = grant;
     if (withProof) headers['X-Meteorito-Proof'] = await sessionProofHeader(auth, token, 'POST', path.split('?')[0]);
     const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
     return { r, j: await r.json().catch(() => ({})) as any };
