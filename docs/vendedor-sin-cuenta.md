@@ -16,9 +16,40 @@ También requiere `SERVICE_SECRET` (service provider backend), `PLATFORM_PUBLIC`
 Apagar: quitar `SELLER_GUEST_ENABLED` y redeploy. Los pedidos de vendedor sin cuenta quedan bloqueados para fondear
 (503 `seller_guest_disabled`); los ya fondeados siguen con las guardas normales de liberación y disputa.
 
+## Privacidad (revisión de Harvey, migración 039)
+
+- **Aviso**: `/legal/vendedor` ("Aviso de privacidad para quien vende sin cuenta", `LEGAL.vendedor` en `lib/legal.ts`,
+  versión `SELLER_NOTICE_VERSION`). Responsable: Rolando Arguello Lizano (Costa Rica), contacto team@meteorito.app.
+  **Dirección física: marcador `[PENDIENTE: …]`** (`CONTROLLER_ADDRESS`; no existe en el repo, hay que completarla).
+  Cubre finalidades (OTP, acceso, recuperación, constancia de la aceptación; sin publicidad), que es necesario para este
+  camino, proveedores (Brevo, Supabase, Vercel; fuera de Costa Rica), derechos ARCO/revocar/PRODHAB y retención.
+- **Casilla** (no marcada; sin ella el botón "Enviarme el código" y el de recuperar están deshabilitados), con el link al
+  aviso antes del botón: "Autorizo el tratamiento de mi correo para verificar acceso y registrar mi aceptación, según el
+  aviso de privacidad. No incluye publicidad." El servidor rechaza `seller_otp_request` / `seller_recover_request` sin
+  `consent: true` (400 `consent_required`) o con otra `consent_version` (409 `consent_outdated`), antes de guardar nada.
+- **Registro aparte** de la aceptación comercial: `seller_guest_consents` (versión del texto, versión del aviso, sha256 del
+  texto, fecha; inmutable). Cada código (`seller_otp_challenges.consent_id`) apunta a su consentimiento.
+- **Retención: 90 días** (`SELLER_GUEST_RETENTION_DAYS`). `seller_guest_purge(p_days, p_guest)` disocia el correo
+  (`contact_enc = null`, `contact_hmac` al azar, `erased_at`), borra sesiones y códigos que no respaldan una aceptación.
+  Aplica 90 días después de cerrar la venta (liberado/resuelto/cancelado, sin reclamo abierto) o, si nunca aceptó, 90 días
+  después del último código. Nunca con una venta abierta. `seller_acceptances` y `seller_guest_consents` quedan solo con
+  hashes, versiones y fechas.
+  - **pg_cron** diario `meteorito_seller_guest_retention` (`27 4 * * *`, `select public.seller_guest_purge(90)`).
+  - **Op admin** `POST /api/invites {op:'seller_guest_purge'}` (Bearer de admin): corre la purga; con `email` disocia a ese
+    vendedor a pedido antes de plazo (si tiene una venta abierta responde `blocked: 1`).
+
+## Excepción de cobro (visible en el flujo y en los legales)
+
+> En esta prueba, Meteorito opera el rol serviceProvider mediante su backend. Al liberarse, los tokens de prueba llegan a una wallet de la plataforma, no a la del vendedor. El cobro es simulado: no hay transferencia bancaria ni dinero real.
+
+Se muestra en "Dónde cobras" y en el panel de la venta (`ExceptionBox`), en el aviso del vendedor, y como excepción en la
+Política de privacidad ("Pagos y escrow") y en los Términos ("El servicio" y "Escrow"). La custodia hasta la liberación
+no cambia: el pago queda apartado en el contrato de escrow de Trustless Work, no en una cuenta de Meteorito. Va dentro
+del hash del acuerdo (`agreementFor`).
+
 ## Flujo / API (`POST /api/invites`)
 
-- `seller_otp_request {code, email, delivery_mode, agreement_hash}`: valida que no sea el comprador, el hash del acuerdo
+- `seller_otp_request {code, email, delivery_mode, agreement_hash, consent, consent_version}`: exige el consentimiento, valida que no sea el comprador, el hash del acuerdo
   y los topes (8 códigos/invitación/h, 5/correo/h, rate limit `invites.otp`), envía el código (hash HMAC, 10 min, 5 intentos).
 - `seller_accept {challenge_id, otp, agreement_hash}`: RPC `seller_guest_accept` atómica (FOR UPDATE): consume el código,
   crea **un** pedido (`seller_auth_kind='guest'`, `seller_address` = SP backend, `payout_method='iban'`,
@@ -33,4 +64,4 @@ Apagar: quitar `SELLER_GUEST_ENABLED` y redeploy. Los pedidos de vendedor sin cu
 (`pay`, mock ramp, fondeo directo) exigen aceptación válida y snapshot coherente (`guestPayee`); nunca cae a Cavos.
 "Fondos en custodia" solo con `funded_tx` confirmado.
 
-Migración: `supabase/migrations/038_seller_guest.sql`. Pruebas: `t114` (API, QA del plan) y `t115` (SQL en PGlite).
+Migraciones: `038_seller_guest.sql`, `039_seller_guest_privacy.sql`. Pruebas: `t114` (API, QA del plan), `t115` (038 en PGlite) y `t116` (privacidad, retención y excepción).

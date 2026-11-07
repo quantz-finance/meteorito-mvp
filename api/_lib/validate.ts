@@ -75,7 +75,7 @@ export const S = {
   escrowCron: { query: query({ slug: o(str(80)) }) },
   invites: {
     query: query({ code: o(str(64)) }),
-    body: body({ op: o(str(40)), email: o(str(254)), delivery_mode: o(str(40)), agreement_hash: o(str(80)), challenge_id: o(str(64)), otp: o(str(12)), code: o(str(64)), title: o(str(200)), brand: o(str(200)), model: o(str(200)), category: o(str(40)), price_crc: o(numeric), note: o(str(2000)), photos: o(z.array(z.unknown()).max(10)), source_url: o(str(2000)), captures: o(z.array(o(captureTok)).max(10)) }),
+    body: body({ op: o(str(40)), email: o(str(254)), delivery_mode: o(str(40)), agreement_hash: o(str(80)), challenge_id: o(str(64)), otp: o(str(12)), consent: o(z.boolean()), consent_version: o(str(40)), code: o(str(64)), title: o(str(200)), brand: o(str(200)), model: o(str(200)), category: o(str(40)), price_crc: o(numeric), note: o(str(2000)), photos: o(z.array(z.unknown()).max(10)), source_url: o(str(2000)), captures: o(z.array(o(captureTok)).max(10)) }),
   },
   photosUpload: {
     query: query(),
