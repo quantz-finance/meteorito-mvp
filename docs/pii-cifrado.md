@@ -38,6 +38,8 @@ Hasta que existan las columnas (051) y las llaves de ese entorno, guardar el Wha
 
 Archivo: `supabase/migrations/051_pii_enc.sql`. Solo agrega columnas, checks de formato, afloja el check del canal para aceptar claro o cifrado, y avisa a PostgREST (`notify pgrst, 'reload schema'`).
 
+**Corrección requerida:** aplicar también `053_pii_enc_regex_fix.sql` después de 051. Reemplaza las tres regex inválidas `{38,700}` por mínimo 38 más un límite separado del payload de 700 caracteres; no reescribe datos. 052 sigue congelada.
+
 **No la aplica el deploy.** Vitalik la aplica con Supabase `apply_migration`. Avísale antes de aplicarla.
 
 ## Llaves (no corras `--apply` contra Vercel sin el OK de Rolando)
@@ -73,3 +75,16 @@ Hazlo **después** de que Vitalik aplicó la 051, **después** de que las llaves
 ## Fuera de este PR
 
 Migración 052 (borrar el claro). Antes de ese cutover, `buyer_access_request` tiene que descifrar el correo y compararlo con `timingSafeEqual` (hoy busca por el claro). También quedan fuera `ORDER_ACCESS_SECRET` / `CAPTURE_SECRET` / `RATE_LIMIT_SALT`, mainnet, iOS, y generar la llave de Harvey.
+
+## Advertencia operativa del backfill
+
+No existe un script CLI de backfill con `--apply`: `scripts/ops/pii-enc-keys.ts --apply` administra llaves, no cifra filas.
+El backfill vive en `api/_lib/piiBackfill.ts` y se invoca con `POST /api/store` (admin),
+`{"action":"admin_pii_backfill"}` para dry-run y `{"action":"admin_pii_backfill","apply":true}` para escribir.
+**No ejecutar apply con la autorización de solo cifrar:** además de llenar las columnas `*_enc`, pone
+`orders.seller_email` en NULL. Esa eliminación necesita autorización expresa independiente.
+La prueba local usa datos sintéticos y nunca conecta a producción. Un dry-run por el endpoint deja auditoría
+(`admin_audit`) aunque no cambie los datos personales. Requiere la migración 051 y su corrección 053,
+las variables `PII_ENC_KEYS`, `PII_ENC_ACTIVE_KID`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+y una sesión Cavos con permisos de admin (`ADMIN_EMAILS`); no copiar llaves entre entornos.
+El repositorio no confirma si 051 ya se aplicó: revisar el registro de migraciones en la base antes de ejecutar.
