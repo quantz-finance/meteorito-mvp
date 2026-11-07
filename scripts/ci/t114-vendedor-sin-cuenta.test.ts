@@ -16,7 +16,8 @@ import { agreementFor, guestPayee, sellerOrderView, sellerGuestAvailable, tokenH
 import { serviceProviderFor, mockRampFund } from '../../api/_lib/escrow';
 import { enqueueIbanPayout } from '../../api/_lib/payoutChoice';
 import { IBAN_PLACEHOLDER } from '../../api/_lib/payout';
-import { SELLER_GUEST_BETA } from '../../api/_lib/sellerGuestText';
+import { SELLER_GUEST_BETA, SELLER_GUEST_CONSENT_TEXT, SELLER_GUEST_CONSENT_VERSION, SELLER_NOTICE_VERSION } from '../../api/_lib/sellerGuestText';
+const CONSENT = { consent: true, consent_version: SELLER_GUEST_CONSENT_VERSION };
 import invites from '../../api/invites/index';
 import pay from '../../api/escrow/pay';
 import ship from '../../api/escrow/ship';
@@ -45,6 +46,7 @@ function installRpc(db: any) {
   for (const t of ['seller_guests', 'seller_otp_challenges', 'seller_acceptances', 'seller_guest_sessions']) T[t] ??= [];
   db.rpc = async (name: string, a: any) => {
     if (name === 'rate_limit_hit') return { data: [{ allowed: true }], error: null };
+    if (name === 'seller_guest_purge') { db.purgeCalls = [...(db.purgeCalls ?? []), a]; return { data: { ok: true, erased: a.p_guest ? 1 : 0, sessions: 0, codes: 0, blocked: 0 }, error: null }; }
     if (db.noRpc) return { data: null, error: { code: 'PGRST202', message: `Could not find the function public.${name}` } };
     const ch = T.seller_otp_challenges.find((c: any) => c.id === a.p_challenge_id);
     const want = name === 'seller_guest_accept' ? 'accept' : 'recover';
@@ -101,33 +103,50 @@ export async function run(t: T) {
   const h = ag.envio.hash;
 
   // El comprador no puede aceptar su propio link (llave o cuenta).
-  r = await call(invites, { guest: BUYER_KEY, body: { op: 'seller_otp_request', code, email: 'yo@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { guest: BUYER_KEY, body: { op: 'seller_otp_request', code, email: 'yo@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   t.check('comprador (misma llave) no puede pedir código para su link -> 400 own_invite', r.code === 400 && r.body?.code === 'own_invite' && mails.length === 0, `${r.code} ${r.body?.code}`);
   const inv0 = db.tables.invitations[0];
   inv0.buyer_user_id = 'cavos-buyer-1'; // comprador con cuenta (PR "Comprar primero")
-  r = await call(invites, { tok: await token({ sub: 'cavos-buyer-1' }), body: { op: 'seller_otp_request', code, email: 'yo@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { tok: await token({ sub: 'cavos-buyer-1' }), body: { op: 'seller_otp_request', code, email: 'yo@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   t.check('comprador (cuenta Cavos) no puede aceptar su link -> 400 own_invite', r.code === 400 && r.body?.code === 'own_invite', `${r.code} ${r.body?.code}`);
 
   // Hash viejo / modo cambiado.
-  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'cara_a_cara', agreement_hash: h } });
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'cara_a_cara', agreement_hash: h, ...CONSENT } });
   t.check('hash de otro acuerdo (entrega distinta) -> 409 agreement_changed', r.code === 409 && r.body?.code === 'agreement_changed', `${r.code} ${r.body?.code}`);
 
   // Flag apagado / correo sin configurar: sin códigos.
   process.env.SELLER_GUEST_ENABLED = '';
-  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   t.check('flag apagado -> 503 seller_guest_unavailable, sin correo', r.code === 503 && r.body?.code === 'seller_guest_unavailable' && mails.length === 0, `${r.code}`);
   process.env.SELLER_GUEST_ENABLED = '1';
   __setMailerForTests(async () => ({ ok: true, status: 201 }), false);
   t.check('correo sin configurar -> no disponible (no se inventan códigos)', sellerGuestAvailable().available === false && sellerGuestAvailable().reason === 'email_unconfigured');
   __setMailerForTests(async (m) => { mails.push({ to: m.to, text: m.text }); return { ok: true, status: 201 }; }, true);
 
+  // Consentimiento del correo (revisión de Harvey): sin la casilla no se guarda nada ni se manda código.
+  const pre = { g: (db.tables.seller_guests ?? []).length, m: mails.length };
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  t.check('sin consentimiento -> 400 consent_required, sin correo ni identidad guardada', r.code === 400 && r.body?.code === 'consent_required' && mails.length === pre.m && (db.tables.seller_guests ?? []).length === pre.g, `${r.code} ${r.body?.code}`);
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, consent: false, consent_version: SELLER_GUEST_CONSENT_VERSION } });
+  t.check('consent:false -> 400 consent_required', r.code === 400 && r.body?.code === 'consent_required' && mails.length === pre.m);
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, consent: true, consent_version: 'vendedor-correo-v0' } });
+  t.check('texto de consentimiento viejo -> 409 consent_outdated', r.code === 409 && r.body?.code === 'consent_outdated' && mails.length === pre.m);
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_recover_request', code, email: 'vende@ejemplo.com' } });
+  t.check('recuperar sin consentimiento -> 400 consent_required', r.code === 400 && r.body?.code === 'consent_required');
+
   // Pedir código.
-  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'Vende@Ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'Vende@Ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   const ch1 = r.body?.challenge_id as string;
   t.check('vendedor sin cuenta pide el código: correo enviado, respuesta enmascarada', r.code === 200 && !!ch1 && /^v•+@ejemplo\.com$/.test(r.body?.sent_to) && mails.length === 1 && mails[0].to === 'vende@ejemplo.com' && mails[0].text.includes(SELLER_GUEST_BETA), JSON.stringify(r.body));
   const code1 = lastCode();
   const g = db.tables.seller_guests[0], c1 = db.tables.seller_otp_challenges[0];
   t.check('no se guarda el correo ni el código en claro (HMAC + pii:v1)', !JSON.stringify(db.tables.seller_guests).includes('ejemplo.com') && /^pii:v1:/.test(g.contact_enc) && /^[a-f0-9]{64}$/.test(g.contact_hmac) && c1.otp_hash !== code1 && !JSON.stringify(c1).includes(code1));
+
+  const cons = (db.tables.seller_guest_consents ?? [])[0];
+  t.check('consentimiento guardado aparte: versión del texto, del aviso, hash del texto y fecha; el código lo referencia',
+    !!cons && cons.guest_id === g.id && cons.invite_code === code && cons.purpose === 'accept' && cons.consent_version === SELLER_GUEST_CONSENT_VERSION
+      && cons.notice_version === SELLER_NOTICE_VERSION && cons.consent_text_sha256 === createHash('sha256').update(SELLER_GUEST_CONSENT_TEXT).digest('hex')
+      && !Number.isNaN(Date.parse(cons.consented_at)) && c1.consent_id === cons.id && !JSON.stringify(cons).includes('ejemplo.com'), JSON.stringify(cons));
 
   // Fuerza bruta: 5 intentos por código.
   const accept = (otp: string, chId = ch1, extra: any = {}, cookie?: string) => call(invites, { guest: SELLER_KEY, cookie, body: { op: 'seller_accept', code, challenge_id: chId, otp, delivery_mode: 'envio', agreement_hash: h, ...extra } });
@@ -139,14 +158,14 @@ export async function run(t: T) {
   t.check('tras 5 intentos el código queda bloqueado aunque sea el correcto -> 429', r.code === 429 && r.body?.code === 'too_many_attempts' && db.tables.orders.length === 0, `${r.code} ${r.body?.code}`);
 
   // Vencido.
-  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   const ch2 = r.body.challenge_id; const code2 = lastCode();
   db.tables.seller_otp_challenges.find((c: any) => c.id === ch2).expires_at = new Date(Date.now() - 1000).toISOString();
   r = await accept(code2, ch2);
   t.check('código vencido -> 410', r.code === 410 && r.body?.code === 'challenge_expired', `${r.code}`);
 
   // Cambio de precio después de pedir el código -> invalida.
-  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   const ch3 = r.body.challenge_id; const code3 = lastCode();
   inv0.price_crc = 130000;
   r = await accept(code3, ch3);
@@ -154,7 +173,7 @@ export async function run(t: T) {
   inv0.price_crc = 120000;
 
   // Platform sin trustline bloquea antes de aceptar.
-  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { guest: SELLER_KEY, body: { op: 'seller_otp_request', code, email: 'vende@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   const ch4 = r.body.challenge_id; const code4 = lastCode();
   platformReady = false;
   r = await accept(code4, ch4);
@@ -179,7 +198,7 @@ export async function run(t: T) {
   t.check('sesión: solo el hash del token en la base', db.tables.seller_guest_sessions.length === 1 && db.tables.seller_guest_sessions[0].token_hash === tokenHash(ck.split('=')[1]) && !JSON.stringify(db.tables.seller_guest_sessions).includes(ck.split('=')[1]));
   r = await accept(code4, ch4);
   t.check('código reusado -> 409 (o invitación ya aceptada) y un solo pedido', (r.code === 409) && db.tables.orders.length === 1, `${r.code} ${r.body?.code}`);
-  r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_otp_request', code, email: 'otro@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_otp_request', code, email: 'otro@ejemplo.com', delivery_mode: 'envio', agreement_hash: h, ...CONSENT } });
   t.check('otra persona con el link ya aceptado -> 409 invite_not_open', r.code === 409 && r.body?.code === 'invite_not_open', `${r.code}`);
 
   // Vista pública vs. del vendedor.
@@ -214,10 +233,10 @@ export async function run(t: T) {
   o.status = 'creado'; delete o.funded_tx; delete o.contract_id;
 
   // Recuperar sesión revoca la anterior.
-  r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_recover_request', code, email: 'intruso@ejemplo.com' } });
+  r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_recover_request', code, email: 'intruso@ejemplo.com', ...CONSENT } });
   const before = mails.length;
   t.check('recuperar con otro correo: misma respuesta, sin correo', r.code === 200 && r.body?.sent === true && typeof r.body?.challenge_id === 'string' && mails.length === before);
-  r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_recover_request', code, email: 'vende@ejemplo.com' } });
+  r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_recover_request', code, email: 'vende@ejemplo.com', ...CONSENT } });
   const rch = r.body.challenge_id; const rcode = lastCode();
   r = await call(invites, { body: { op: 'seller_recover_verify', code, challenge_id: rch, otp: rcode } });
   const ck2 = cookieOf(r);
@@ -266,5 +285,15 @@ export async function run(t: T) {
   const a1 = agreementFor({ ...inv0, price_crc: 120000 }, 'envio').hash, a2 = agreementFor({ ...inv0, price_crc: 120001 }, 'envio').hash, a3 = agreementFor({ ...inv0, photos: ['x'] }, 'envio').hash;
   t.check('hash del acuerdo cambia con precio, fotos o entrega', a1 !== a2 && a1 !== a3 && a1 !== agreementFor(inv0, 'cara_a_cara').hash);
   t.check('el hash no depende del orden de claves (estable)', agreementFor({ model: inv0.model, brand: inv0.brand, code: inv0.code, price_crc: 120000, photos: [] }, 'envio').hash === agreementFor({ code: inv0.code, brand: inv0.brand, model: inv0.model, price_crc: 120000, photos: [] }, 'envio').hash);
+  // Retención: op admin seller_guest_purge (solo admin; pg_cron la corre cada día con 90 días).
+  r = await call(invites, { tok: await token({ sub: 'no-admin' }), body: { op: 'seller_guest_purge' } });
+  t.check('purga: quien no es admin -> 404 (no se revela)', r.code === 404 && !(db.purgeCalls ?? []).length, `${r.code}`);
+  r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_guest_purge' } });
+  t.check('purga: sin sesión -> 401', r.code === 401 && !(db.purgeCalls ?? []).length, `${r.code}`);
+  const adm = await token({ sub: 'admin-1', email: 'bobbyaliensshop@gmail.com', emailVerified: true });
+  r = await call(invites, { tok: adm, body: { op: 'seller_guest_purge' } });
+  t.check('purga admin: RPC con 90 días y sin vendedor puntual', r.code === 200 && db.purgeCalls?.[0]?.p_days === 90 && db.purgeCalls?.[0]?.p_guest === null, JSON.stringify(db.purgeCalls));
+  r = await call(invites, { tok: adm, body: { op: 'seller_guest_purge', email: 'VENDE@ejemplo.com' } });
+  t.check('purga admin a pedido: busca por HMAC del correo y disocia solo a ese vendedor', r.code === 200 && db.purgeCalls?.[1]?.p_guest === g.id && db.purgeCalls?.[1]?.p_days === 0 && r.body?.found === true, JSON.stringify(r.body));
   void createHash;
 }
