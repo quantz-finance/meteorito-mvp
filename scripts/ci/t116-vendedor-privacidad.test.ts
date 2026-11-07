@@ -37,7 +37,7 @@ export async function run(t: T) {
   t.check('aviso: obligatorio para este camino', has(/necesario/i) && /no puedes aceptar sin cuenta/.test(all));
   t.check('aviso: proveedores y transferencias (Brevo, Supabase, Vercel; fuera de Costa Rica)', /Brevo/.test(all) && /Supabase/.test(all) && /Vercel/.test(all) && /fuera de Costa Rica/.test(all));
   t.check('aviso: derechos ARCO y revocar', /ARCO/.test(all) && /revocar/.test(all));
-  t.check('aviso: sin eliminación automática; a pedido o manual, con constancias', /No eliminamos tus datos de forma automática ni agendada/.test(all) && /a pedido o por un administrador de forma manual/.test(all) && all.includes('Eliminamos el correo almacenado y sustituimos su identificador de búsqueda; conservamos las constancias indicadas.') && !/ya no se puede ligar/.test(all) && SELLER_GUEST_RETENTION_DAYS === 90);
+  t.check('aviso: sin eliminación automática; a pedido o manual, con constancias', /No eliminamos tus datos de forma automática ni agendada/.test(all) && /Revisamos manualmente y de forma periódica qué datos siguen siendo necesarios/.test(all) && /evaluamos qué datos hacen falta para resolverlo/.test(all) && all.includes('Eliminamos el correo almacenado y sustituimos su identificador de búsqueda; conservamos las constancias indicadas.') && !/ya no se puede ligar/.test(all) && SELLER_GUEST_RETENTION_DAYS === 90);
   t.check('aviso: sin el marco Cavos/comprador', !/Cavos/.test(notice) && !/comprador/.test(notice));
   t.check('aviso con versión y fecha', !!v.version && !!v.updated);
   t.check('ruta /legal/vendedor', /doc === 'vendedor'/.test(readFileSync('app/legal/[doc].tsx', 'utf8')));
