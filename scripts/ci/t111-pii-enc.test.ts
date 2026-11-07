@@ -229,6 +229,37 @@ export async function run(t: T) {
     && /email is not null or email_enc is not null/.test(sql)
     && !/drop column|drop table|create or replace view|grant /i.test(sql));
 
+  // Ejecutar SQL real: el test de 051 anterior solo comparaba el texto y no detectaba el límite 255 de Postgres.
+  const { PGlite } = await import('@electric-sql/pglite');
+  const pg = new PGlite();
+  try {
+    await pg.exec(`create table buyer_contacts (phone_e164 text, email text, channel text, account_sub text);
+      create table seller_profiles (sub text);`);
+    await pg.exec(sql);
+    const fixed = read('supabase/migrations/053_pii_enc_regex_fix.sql');
+    await pg.exec(fixed);
+    await pg.exec(fixed); // idempotente
+    const aad = piiAad('buyer_contacts', 'email', 'sql|email');
+    const real = sealPii('sql@example.test', aad)!;
+    const accepts = async (value: string | null) => {
+      try {
+        await pg.query(`insert into buyer_contacts (channel, phone_e164_enc, email_enc) values ('email', $1, $1)`, [value]);
+        await pg.query(`insert into seller_profiles (contact_phone_enc) values ($1)`, [value]);
+        return true;
+      } catch { return false; }
+    };
+    t.check('053: los tres CHECK aceptan ciphertext real y se puede descifrar', await accepts(real) && openPii(real, aad) === 'sql@example.test');
+    t.check('053: límites 38/700 iguales a JS, con kid 1/32',
+      await accepts('pii:v1:k:' + 'A'.repeat(38)) && await accepts('pii:v1:' + 'k'.repeat(32) + ':' + 'A'.repeat(700)));
+    t.check('053: rechaza payload corto/largo, kid largo, prefijo y caracteres inválidos',
+      !(await accepts('pii:v1:k:' + 'A'.repeat(37))) && !(await accepts('pii:v1:k:' + 'A'.repeat(701)))
+      && !(await accepts('pii:v1:' + 'k'.repeat(33) + ':' + 'A'.repeat(40)))
+      && !(await accepts('pii:v2:k:' + 'A'.repeat(40))) && !(await accepts('pii:v1:k:' + '+'.repeat(40))));
+    await pg.query(`insert into buyer_contacts (channel, account_sub) values ('account', 'synthetic')`);
+    await pg.query(`insert into seller_profiles (contact_phone_enc) values (null)`);
+    t.check('053: permite NULL y no borra columnas, filas ni vistas', !/delete from|drop (?:column|table|view)/i.test(fixed));
+  } finally { await pg.close(); }
+
   /* ---------- gate IBAN ---------- */
   const payoutSrc = read('api/_lib/payout.ts');
   const fn = payoutSrc.slice(payoutSrc.indexOf('export const placeholderPayoutRow'));
