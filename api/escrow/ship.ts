@@ -5,7 +5,8 @@
 //  Modo backend: firma y listo. Modo seller: devuelve unsignedXdr; el cliente firma con wallet.signXdr y lo manda a
 //  /api/tx/submit (action 'ship'), que hace fee-bump. La liberación automática vence con el plazo acordado (default 7 días) desde ese momento.
 import { json, fail, orderBySlug, db, advance, logEvent } from '../_lib/db';
-import { requireCavosUser, HttpError } from '../_lib/auth';
+import { HttpError } from '../_lib/auth';
+import { sellerSubFor } from '../_lib/sellerGuest';
 import { env, releaseDueAt } from '../_lib/env';
 import { isFaceToFace } from '../_lib/agreement';
 import { chain, evidenceHash, shipEvidence } from '../_lib/escrow';
@@ -17,9 +18,10 @@ export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return json(res, 405, { error: 'method' });
   try {
     validate(req, S.escrowShip); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
-    const user = await requireCavosUser(req);
     const { slug } = req.body ?? {};
     const order = await orderBySlug(slug);
+    // Cuenta Cavos del vendedor o, en pedidos de vendedor sin cuenta (038), su sesión HttpOnly de ESTE pedido.
+    const user = { sub: await sellerSubFor(req, order) };
     if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no eres el vendedor');
     if (order.status !== 'fondeado') throw new HttpError(409, `status ${order.status}`);
     // Cancelación sin envío en curso (api/_lib/shipRefund.ts toma el lock de la fila): no se mezcla con "Ya lo envié".

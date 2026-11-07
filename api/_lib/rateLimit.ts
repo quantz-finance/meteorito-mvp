@@ -17,7 +17,9 @@ export const LIMITS = {
   'photos.upload':   { max: 60, windowSec: 600 },
   'invites.create':  { max: 30, windowSec: 600 },
   'store.import':    { max: 20, windowSec: 600 },  // importar por link
-  'store.access':    { max: 10, windowSec: 600 },  // enlaces de acceso / PIN reenviado / vincular cuenta (tipo OTP)
+  'store.access':    { max: 10, windowSec: 600 },
+  'invites.otp':     { max: 10, windowSec: 600 },  // vendedor sin cuenta: pedir código (además de topes por invitación y correo)
+  'invites.otp_verify': { max: 20, windowSec: 600 }, // vendedor sin cuenta: verificar código (además de 5 intentos por código)  // enlaces de acceso / PIN reenviado / vincular cuenta (tipo OTP)
 } satisfies Record<string, Limit>;
 export type LimitRoute = keyof typeof LIMITS;
 

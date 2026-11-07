@@ -20,13 +20,15 @@ import { extensionMessages, notifyOrder } from '../_lib/push';
 import { refundUnshipped } from '../_lib/shipRefund';
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
+import { guestSellerSession, isGuestSellerOrder, sellerSubFor } from '../_lib/sellerGuest';
 
 /** Extensión de mutuo acuerdo. Solo comprador y vendedor; solo con el plazo corriendo y sin disputa. */
 async function extension(req: any, order: any, reason: 'extend' | 'extend_answer') {
-  const who = await requireBuyerIdentity(req).catch(async () => ({ ids: [] as string[], guest: null, cavos: await requireCavosUser(req) }));
+  const sellerGuest = isGuestSellerOrder(order) ? await guestSellerSession(req, order) : null;
+  const who = await requireBuyerIdentity(req).catch(async (e) => { if (sellerGuest) return { ids: [] as string[], guest: null, cavos: null }; return { ids: [] as string[], guest: null, cavos: await requireCavosUser(req).catch(() => { throw e; }) }; });
   const roles: ('buyer' | 'seller')[] = [];
   if (isBuyerOf(order, who as any)) roles.push('buyer');
-  if (who.cavos && order.seller_user_id === who.cavos.sub) roles.push('seller');
+  if ((who.cavos && order.seller_user_id === who.cavos.sub) || sellerGuest) roles.push('seller');
   if (!roles.length) throw new HttpError(403, 'Solo el comprador y el vendedor pueden cambiar el plazo.');
   const running = order.status === 'enviado' || (order.status === 'fondeado' && isFaceToFace(order));
   if (!running || order.dispute_tx || order.disputed_at) throw Object.assign(new HttpError(409, 'El plazo no se puede cambiar en este momento.'), { code: 'ext_not_running' });
@@ -77,7 +79,7 @@ export default async function handler(req: any, res: any) {
     if (reason === 'buyer_confirm') {
       if (!isBuyerOf(order, await requireBuyerIdentity(req))) throw new HttpError(403, 'no eres el comprador');
     } else if (reason === 'pin') {
-      const user = await requireCavosUser(req);
+      const user = { sub: await sellerSubFor(req, order) }; // Cavos o sesión del vendedor sin cuenta (038)
       if (order.seller_user_id !== user.sub) throw new HttpError(403, 'no eres el vendedor');
       if ((order.pin_attempts ?? 0) >= 3) throw new HttpError(429, 'demasiados intentos de PIN');
       const ok = typeof pin === 'string' && /^\d{6}$/.test(pin) && order.delivery_pin_hash &&

@@ -14,9 +14,11 @@ import { userMessage } from '@/lib/cavosSession';
 import type { CapturedPhoto } from '@/lib/capture';
 import { deadlineLabel, getSellerResponse, sendSellerResponse, shortDate, type SellerResponseState } from '@/lib/admin';
 import { leftLabel, useNow, whenLabel } from '@/lib/ruleTimes';
+import { sellerCall } from '@/lib/sellerGuest';
 
-export function SellerDisputeReply({ slug }: { slug: string }) {
-  const auth = useAuth();
+export function SellerDisputeReply({ slug, guest = false }: { slug: string; /** vendedor sin cuenta (sesión del pedido) */ guest?: boolean }) {
+  const cavos = useAuth();
+  const auth = guest ? ({ ...cavos, getAuthToken: () => null } as typeof cavos) : cavos;
   const [st, setSt] = useState<SellerResponseState | null>(null);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
@@ -29,7 +31,7 @@ export function SellerDisputeReply({ slug }: { slug: string }) {
 
   useEffect(() => {
     let live = true;
-    getSellerResponse(auth, slug).then((r) => { if (live) setSt(r); }).catch(() => { if (live) setSt(null); });
+    (guest ? sellerCall<SellerResponseState>('/api/escrow/dispute', { action: 'seller_response_get', slug }) : getSellerResponse(auth, slug)).then((r) => { if (live) setSt(r); }).catch(() => { if (live) setSt(null); });
     return () => { live = false; };
   }, [slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -58,7 +60,9 @@ export function SellerDisputeReply({ slug }: { slug: string }) {
   const submit = async () => {
     setBusy(true); setErr(null);
     try {
-      const r = await sendSellerResponse(auth, slug, text.trim(), photo ? { url: photo.url, token: photo.token } : null, guide.trim() || undefined);
+      const p = photo ? { url: photo.url, token: photo.token } : null, g = guide.trim() || undefined;
+      const r = guest ? await sellerCall<{ saved: boolean; response: SellerResponseState['response'] }>('/api/escrow/dispute', { action: 'seller_respond', slug, body: text.trim(), ...(g ? { tracking: g } : {}), ...(p ? { photo: p.url, capture: p.token } : {}) })
+        : await sendSellerResponse(auth, slug, text.trim(), p, g);
       setSt({ ...st, response: r.response }); setEditing(false);
     } catch (e) { setErr(userMessage((e as Error).message)); }
     finally { setBusy(false); }
@@ -86,7 +90,7 @@ export function SellerDisputeReply({ slug }: { slug: string }) {
       </Pressable>}
       {err ? <ErrorText>{err}</ErrorText> : null}
       <PrimaryButton testID="seller-reply-send" title="Enviar mi versión" icon="paper-plane" loading={busy} disabled={v2 ? text.trim().length < 3 && !guide.trim() && !photo : text.trim().length < 3} onPress={submit} />
-      <CameraCapture visible={cam} purpose="dispute" refId={slug} asSeller title="Foto para tu respuesta" hint="Muestra el comprobante de envío o el producto."
+      <CameraCapture visible={cam} purpose="dispute" refId={slug} asSeller asGuest={guest} title="Foto para tu respuesta" hint="Muestra el comprobante de envío o el producto."
         onClose={() => setCam(false)} onDone={(p) => { setPhoto(p); setCam(false); }} />
     </Card>
   );

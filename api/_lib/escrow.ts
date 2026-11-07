@@ -11,6 +11,7 @@ import { assertReceiverReady, SELLER_NOT_READY } from './wallet';
 import { tightenTimebounds } from './timebounds';
 import { enqueueIbanPayout, netUsdc, receiverFor, savePayoutRoute } from './payoutChoice';
 import { rulesVersionOf } from './orderRules';
+import { guestPayee, isGuestSellerOrder } from './sellerGuest';
 
 /** Llamadas on-chain que usan el envío y la liberación. Los tests las reemplazan (sin red). */
 type Chain = Pick<typeof tw, 'releaseGuard' | 'approveMilestone' | 'getBalance' | 'releaseFunds' | 'changeMilestoneStatus' | 'changeMilestoneStatusXdr' | 'resolveDispute'>
@@ -48,8 +49,13 @@ export function grossUsdc(priceCrc: number) {
 }
 
 export function serviceProviderFor(order: any) {
-  return env.spMode() === 'backend' ? pub(env.serviceSecret()) : order.seller_address;
+  // Vendedor sin cuenta: no tiene wallet que firme el envío; el serviceProvider es SIEMPRE el backend (su sesión autoriza off-chain).
+  return env.spMode() === 'backend' || isGuestSellerOrder(order) ? pub(env.serviceSecret()) : order.seller_address;
 }
+const spModeFor = (order: any) => (isGuestSellerOrder(order) ? 'backend' : env.spMode());
+/** Fondeo de un pedido de vendedor sin cuenta: exige aceptación válida y destino platform en TODAS las vías (SINPE simulado,
+ *  tarjeta, cripto y USDC directo). Pedidos de siempre: sin cambios. */
+async function assertFundable(order: any) { if (isGuestSellerOrder(order)) await guestPayee(order, { checkWallet: true }); }
 
 export async function deployFor(order: any, buyerAddress: string, buyerUserId: string) {
   if (order.contract_id) return order.contract_id as string;
@@ -57,7 +63,9 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
   if (buyerAddress === order.seller_address || buyerUserId === order.seller_user_id) throw new HttpError(400, 'no puedes comprar tu propio link');
   // Dónde cobra el vendedor (029): su wallet Stellar, la wallet platform (Cuenta IBAN, pago manual) o, por defecto, su cuenta
   // en Meteorito. receiverFor ya comprobó la trustline de las dos primeras; la de siempre se comprueba aquí.
-  const payee = await receiverFor(order);
+  // Vendedor sin cuenta (038): receiver = platform (cola IBAN simulada) del snapshot aceptado. Sin aceptación válida no hay escrow,
+  // y nunca cae a 'cavos' (no hay cuenta del vendedor a la que caer).
+  const payee = isGuestSellerOrder(order) ? await guestPayee(order, { checkWallet: true }) : await receiverFor(order);
   // Receiver sin cuenta/trustline USDC -> TW responde 400 crudo. Lo detectamos antes con un error accionable.
   if (payee.route === 'cavos') await assertReceiverReady(order.seller_address);
   const amount = grossUsdc(Number(order.price_crc));
@@ -81,7 +89,7 @@ export async function deployFor(order: any, buyerAddress: string, buyerUserId: s
   });
   await advance(order.id, 'creado', {
     contract_id: contractId, deploy_tx: hash, buyer_address: buyerAddress, buyer_user_id: buyerUserId,
-    amount_usdc: amount, fx_crc_per_usdc: env.crcUsdcRate(), sp_mode: env.spMode(), status: 'escrow_creado',
+    amount_usdc: amount, fx_crc_per_usdc: env.crcUsdcRate(), sp_mode: spModeFor(order), status: 'escrow_creado',
   });
   await logEvent(order.id, 'escrow_deployed', { contractId, hash, amount });
   await savePayoutRoute(order.id, payee);
@@ -94,6 +102,7 @@ export async function mockRampFund(orderId: string, meta: Record<string, unknown
   const { data: order } = await db().from('orders').select('*').eq('id', orderId).single();
   if (order.funded_tx) return { fundedTx: order.funded_tx as string, pin: null };
   if (order.status !== 'escrow_creado') throw new HttpError(409, `status ${order.status}`);
+  await assertFundable(order);
   const amount = Number(order.amount_usdc);
   if (!opts.locked) {
     const { error: lockErr } = await db().from('ramp_mock_payments').insert({ order_id: order.id, amount_usdc: amount });
@@ -122,6 +131,7 @@ export async function mockRampFund(orderId: string, meta: Record<string, unknown
  *  Misma verificación on-chain que el ramp simulado (monto exacto del pedido en DB). Devuelve el PIN una sola vez. */
 export async function fundDirectXdr(order: any) {
   if (order.status !== 'escrow_creado' || !order.contract_id) throw new HttpError(409, `status ${order.status}`);
+  await assertFundable(order);
   const x = await tw.fundEscrowXdr(order.contract_id, Number(order.amount_usdc), order.buyer_address);
   return { unsignedXdr: x.unsignedTransaction, amountUsdc: Number(order.amount_usdc) };
 }
@@ -129,6 +139,7 @@ export async function fundDirect(orderId: string, signedXdr: string) {
   const { data: order } = await db().from('orders').select('*').eq('id', orderId).single();
   if (order.funded_tx) return { fundedTx: order.funded_tx as string, pin: null };
   if (order.status !== 'escrow_creado') throw new HttpError(409, `status ${order.status}`);
+  await assertFundable(order);
   const amount = Number(order.amount_usdc);
   const inner = validateEscrowTx(signedXdr, { contractId: order.contract_id, fns: ['fund_escrow'], source: order.buyer_address });
   const esc = await tw.onChainEscrow(order.contract_id);

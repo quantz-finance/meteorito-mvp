@@ -21,7 +21,9 @@ import { leftLabel, useNow, whenLabel } from '@/lib/ruleTimes';
 /** "Ya lo envié" solo se puede tocar con la foto de la cámara ya subida. */
 export const canShip = (photo: CapturedPhoto | null) => !!photo?.url && !!photo.token;
 
-export function SellerActions({ slug, status, order, onChange }: { slug: string; status: string; onChange: () => void;
+export function SellerActions({ slug, status, order, onChange, call, asGuest = false }: { slug: string; status: string; onChange: () => void;
+  /** Vendedor sin cuenta: transporte con su sesión (lib/sellerGuest.ts sellerCall) y cámara sin cuenta. */
+  call?: (path: string, body: unknown) => Promise<any>; asGuest?: boolean;
   /** Pedido público (acuerdo de entrega y extensión pendiente). Sin él: envío. */
   order?: { status: string; delivery_mode?: string | null; release_ext?: any; funded_at?: string | null; rules_version?: number | null; shipped_tx?: string | null } | null }) {
   const f2f = order?.delivery_mode === 'cara_a_cara';
@@ -45,6 +47,7 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
         : `Pasaron 3 días sin 'Ya lo envié': quien compra puede cancelar y recibir su pago de vuelta. El ${whenLabel(sd.autoAt)} el reembolso se hace solo.`}
     </Text>
   </View>;
+  const send = (path: string, body: unknown) => (call ? call(path, body) : api(auth, path, body));
   const run = async (f: () => Promise<void>, ok: string) => { setBusy(true); setErr(null); try { await f(); setDone(ok); onChange(); } catch (e) { setErr(userMessage((e as Error).message)); } finally { setBusy(false); } };
 
   if (done) return <View style={{ gap: S.md, alignItems: 'center', paddingVertical: S.md }}>
@@ -53,14 +56,14 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
   </View>;
 
   const ext = order && order.status === status
-    ? <ExtensionBox order={order} role="seller" onChange={onChange} call={(b) => api(auth, '/api/escrow/confirm', { slug, ...b })} /> : null;
+    ? <ExtensionBox order={order} role="seller" onChange={onChange} call={(b) => send('/api/escrow/confirm', { slug, ...b })} /> : null;
   const pinForm = (hint?: string) => <View style={{ gap: S.sm }}>
     {hint ? <Text style={T.callout}>{hint}</Text> : null}
     <Text style={T.caption}>Código de entrega del comprador (PIN)</Text>
     <TextInput style={[ui.input, { fontFamily: Fonts.black, fontSize: 28, letterSpacing: 8, textAlign: 'center', fontVariant: ['tabular-nums'] }]}
       placeholder="••••••" keyboardType="number-pad" maxLength={6} value={pin} onChangeText={setPin} placeholderTextColor={C.textDim} accessibilityLabel="Código de entrega del comprador" />
     <PrimaryButton title="Confirmar PIN y cobrar" icon="lock-open" loading={busy} disabled={pin.length !== 6}
-      onPress={() => run(async () => { await api(auth, '/api/escrow/confirm', { slug, reason: 'pin', pin }); }, '¡Cobrado! El pago fue liberado')} />
+      onPress={() => run(async () => { await send('/api/escrow/confirm', { slug, reason: 'pin', pin }); }, '¡Cobrado! El pago fue liberado')} />
     {err && <ErrorText>{err}</ErrorText>}
     {ext}
   </View>;
@@ -96,12 +99,12 @@ export function SellerActions({ slug, status, order, onChange }: { slug: string;
         if (!photo) throw new Error('Toma la foto del envío con la cámara.');
         const evidence: Record<string, string> = { photo: photo.url, capture_token: photo.token, captured_at: photo.captured_at };
         if (note.trim()) evidence.note = note.trim();
-        const r = await api(auth, '/api/escrow/ship', { slug, evidence });
-        if (r.unsignedXdr) await api(auth, '/api/tx/submit', { slug, action: 'ship', signedXdr: await auth.signXdr(r.unsignedXdr) });
+        const r = await send('/api/escrow/ship', { slug, evidence });
+        if (r.unsignedXdr && !call) await api(auth, '/api/tx/submit', { slug, action: 'ship', signedXdr: await auth.signXdr(r.unsignedXdr) });
       }, 'Marcado como enviado')} />
     {!photo && !err ? <Text testID="ship-photo-required" style={[T.footnote, { textAlign: 'center' }]}>Toma la foto para poder marcarlo como enviado.</Text> : null}
     {err && <ErrorText>{err}</ErrorText>}
-    <CameraCapture visible={camOpen} purpose="ship" refId={slug} onClose={() => setCamOpen(false)} onDone={(p) => { setPhoto(p); setCamOpen(false); }} />
+    <CameraCapture visible={camOpen} purpose="ship" refId={slug} asGuest={asGuest} onClose={() => setCamOpen(false)} onDone={(p) => { setPhoto(p); setCamOpen(false); }} />
   </View>;
 
   if (status === 'enviado') return pinForm();
