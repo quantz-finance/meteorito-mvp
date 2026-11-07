@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { open, expectNoScroll, expectInputs16, settle, BANNED, VOSEO } from './helpers';
 
-// Comprar → Invitar a un vendedor con el link de CUALQUIER marketplace (comprador sin cuenta, modo demo).
+// Comprar → Invitar a un vendedor con el link de CUALQUIER marketplace (comprador de demo).
 // Walmart/Facebook se leen (nombre, precio, foto); Mercado Libre, Amazon, Encuentra24… se aceptan sin pedirlos ni
 // mostrar error, y el link va en la invitación para el vendedor.
 const ML = 'https://articulo.mercadolibre.co.cr/MLC-123456789-bicicleta-aro-29-_JM';

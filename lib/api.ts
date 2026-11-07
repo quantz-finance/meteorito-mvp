@@ -152,6 +152,7 @@ async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown, ope
   // Sin token (sesión fuera de la gracia o borrada): pedir volver a entrar, nunca "recarga la página".
   if (!token) throw relogin();
   await ensureBound(auth); // token fresco nuevo (login / re-login): bind primero
+  let requestBody = body;
   const send = async (withProof: boolean) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
     // Crear link: también la llave de invitado, para que el servidor detecte si respondes a tu propia invitación.
@@ -160,10 +161,10 @@ async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown, ope
     const grant = typeof slug === 'string' ? loadGrant(slug) : null;
     if (grant) headers['X-Order-Access'] = grant;
     if (withProof) headers['X-Meteorito-Proof'] = await sessionProofHeader(auth, token, 'POST', path.split('?')[0]);
-    const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(body) });
+    const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(requestBody) });
     return { r, j: await r.json().catch(() => ({})) as any };
   };
-  const pre = tokenExpiresSoon(token);
+  let withSessionProof = tokenExpiresSoon(token);
   const guarded = async (withProof: boolean) => {
     try { return await send(withProof); }
     catch (e: any) {
@@ -173,8 +174,20 @@ async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown, ope
       throw e;
     }
   };
-  let { r, j } = await guarded(pre);
-  if (!pre && r.status === 401 && j.code === 'session_expired') ({ r, j } = await guarded(true)); // reintento único
+  let { r, j } = await guarded(withSessionProof);
+  if (!withSessionProof && r.status === 401 && j.code === 'session_expired') {
+    withSessionProof = true;
+    ({ r, j } = await guarded(true)); // reintento único
+  }
+  // Las compras históricas aún pueden pedir el reto después del login. Nunca cambiar a transporte sin sesión:
+  // conserva Bearer, prueba de dirección y, si correspondía, un nonce/firma de sesión nuevo al reintentar UNA vez.
+  if (path === '/api/escrow/pay' && (body as any)?.step === 'start' && r.status === 403 && /^turnstile_/.test(String(j.code ?? ''))) {
+    const turnstile = await turnstileToken(j.siteKey, j.action);
+    if (turnstile) {
+      requestBody = { ...(body as object), turnstile };
+      ({ r, j } = await guarded(withSessionProof));
+    }
+  }
   if (!r.ok) {
     if (j.code === 'session_relogin_required') throw relogin(j.error); // nunca se reintenta sin un token nuevo
     if (r.status === 401) console.error('[api] auth', path, j.code, j.error);

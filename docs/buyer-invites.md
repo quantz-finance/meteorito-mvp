@@ -34,3 +34,9 @@ Servidor centralizado + polling (`lib/refresh.ts`, `POLL_MS = 7000`, `lib/useOrd
 - No se crean nuevas compras de invitado. Las invitaciones y pedidos históricos `guest:` mantienen sus llaves, rutas API, custodia y disputas; la interfaz pide entrar también al consultar esos pedidos. No se borran ni reasignan datos.
 - `/i/<code>` continúa público para quien vende (flag `SELLER_GUEST_ENABLED` y controles de aceptación intactos).
 - Sin migración nueva. No activar el flag ni fusionar sin revisión de Harvey.
+
+## Pruebas E2E sin servicios externos
+- `scripts/e2e/build-mock.mjs` habilita `E2E_MOCK_CAVOS=1` solo para ese build. Metro sustituye el proveedor Cavos por `scripts/e2e/cavos-bridge.mock.tsx`; Gate, Welcome y el transporte API siguen siendo los reales. El build de producción no habilita ese resolver.
+- La cuenta, el JWT y la firma de esa prueba son ficticios y solo sirven con el backend simulado. No prueban el SDK Cavos ni una transacción de Stellar.
+- Los casos sin sesión comprueban el login y la vuelta a la misma URL; los casos de compra usan una cuenta simulada. También se comprueba que entrar no reasigna una compra histórica de llave a la cuenta, que la recuperación por contacto siga visible tras el login y que el reto de las compras históricas conserve su rechazo. El reintento del reto mantiene el Bearer y la prueba de sesión cuando corresponde; no vuelve al transporte sin sesión.
+- Los contratos API usan JWT y pruebas de dirección firmadas con claves efímeras de prueba: comprueban ownership por cuenta, reservas y rechazo de invitaciones sin sesión.
