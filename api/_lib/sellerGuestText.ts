@@ -4,10 +4,24 @@ import { DEFAULT_PROTECTION_MIN, type DeliveryMode } from './agreement';
 
 /** Aviso de beta visible ANTES de aceptar (texto exacto pedido; no cambiar sin revisión legal). */
 export const SELLER_GUEST_BETA = 'Prueba en testnet: sin dinero real; no transferimos a tu banco.';
-/** Qué verificamos y qué no, explicado ANTES de aceptar. */
+/** Qué comprobamos y qué no, explicado ANTES de aceptar. */
 export const SELLER_GUEST_VERIFY = 'Para aceptar te mandamos un código de 6 dígitos a tu correo. Solo confirma que ese correo es tuyo y deja constancia de que aceptaste este acuerdo; no verifica tu identidad, no pedimos cédula ni tu cuenta bancaria real.';
 /** Cómo cobra en esta prueba (cola IBAN simulada). */
-export const SELLER_GUEST_PAYOUT = 'Cuenta bancaria (IBAN) · simulación. Al liberarse el pago, el USDC de testnet llega a la cuenta de Meteorito y queda anotado para revisión. No es una transferencia a tu banco.';
+export const SELLER_GUEST_PAYOUT = 'Simulación: el IBAN es un dato de ejemplo y no se usa para pagar.';
+/** Excepción a "el pago se libera al vendedor / no queda en una cuenta de Meteorito" (texto exacto de la revisión de Harvey). */
+export const SELLER_GUEST_EXCEPTION = 'En esta prueba, Meteorito opera el rol serviceProvider mediante su backend. Al liberarse, los tokens de prueba llegan a una wallet de la plataforma, no a la del vendedor. El cobro es simulado: no hay transferencia bancaria ni dinero real.';
+/** La custodia hasta la liberación sigue igual que en el resto de Meteorito. */
+export const SELLER_GUEST_CUSTODY = 'Hasta que se libera, el pago queda apartado en el contrato de escrow de Trustless Work (red de pruebas de Stellar), no en una cuenta de Meteorito, y solo se mueve según las reglas de esta venta.';
+
+// ---- Privacidad del vendedor sin cuenta (migración 039; aviso en lib/legal.ts LEGAL.vendedor, ruta /legal/vendedor) ----
+/** Consentimiento del tratamiento del correo (texto exacto; separado de la aceptación comercial). Cambiar el texto = subir la versión. */
+export const SELLER_GUEST_CONSENT_TEXT = 'Autorizo el tratamiento de mi correo para verificar acceso y registrar mi aceptación, según el aviso de privacidad. No incluye publicidad.';
+export const SELLER_GUEST_CONSENT_VERSION = 'vendedor-correo-v1';
+/** Versión del aviso de privacidad para quien vende sin cuenta (LEGAL.vendedor). */
+export const SELLER_NOTICE_VERSION = 'aviso-vendedor-2026-11-07';
+export const SELLER_NOTICE_UPDATED = '7 de noviembre de 2026';
+/** Días después de cerrar la venta (o del último código, si nunca aceptó) en que se disocia el correo (seller_guest_purge). */
+export const SELLER_GUEST_RETENTION_DAYS = 90;
 export const SELLER_GUEST_RECEIPT = 'Constancia de acuerdo y pago; no es factura fiscal.';
 /** Prefijo del vendedor sin cuenta en seller_user_id: nunca coincide con un sub de Cavos ni con un comprador invitado. */
 export const SELLER_GUEST_PREFIX = 'seller_guest:';

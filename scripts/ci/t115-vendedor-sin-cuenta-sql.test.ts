@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { T } from './setup';
 
 const DIR = join(__dirname, '../../supabase/migrations');
-const STUBS = `create role anon; create role authenticated; create role service_role;
+export const STUBS = `create role anon; create role authenticated; create role service_role;
 create schema if not exists storage; create schema if not exists cron; create schema if not exists auth; create schema if not exists extensions;
 create table storage.buckets(id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[], created_at timestamptz default now());
 create table storage.objects(id uuid default gen_random_uuid() primary key, bucket_id text, name text, owner uuid, metadata jsonb, created_at timestamptz default now(), updated_at timestamptz);
@@ -20,6 +20,11 @@ create function auth.jwt() returns jsonb language sql as 'select null::jsonb';`;
 const G = (c: string) => 'G' + c.repeat(55);
 const H = (c: string) => c.repeat(64);
 
+/** Orden de producción: 050/051 se aplicaron antes que 038 y 039 (vendedor sin cuenta), que van al final. */
+const late = (f: string) => (f.startsWith('038') || f.startsWith('039') ? 1 : 0);
+export const migrationOrder = () => readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort((a, b) => late(a) - late(b) || a.localeCompare(b));
+export const MIGRATIONS_DIR = DIR;
+
 export async function run(t: T) {
   const { PGlite } = await import('@electric-sql/pglite');
   const { pgcrypto } = await import('@electric-sql/pglite/contrib/pgcrypto');
@@ -27,7 +32,7 @@ export async function run(t: T) {
   const db = new PGlite({ extensions: { pgcrypto, pg_trgm } });
   await db.exec(STUBS);
   // Supabase: 004 usa pg_cron/pg_net (no hay aquí). Lo demás se aplica en orden; 038 al final (como en producción).
-  const files = readdirSync(DIR).filter((f) => f.endsWith('.sql')).sort((a, b) => (a.startsWith('038') ? 1 : 0) - (b.startsWith('038') ? 1 : 0) || a.localeCompare(b));
+  const files = migrationOrder();
   let m038 = false;
   for (const f of files) {
     const sql = readFileSync(join(DIR, f), 'utf8');
