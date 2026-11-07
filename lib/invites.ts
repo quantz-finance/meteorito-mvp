@@ -1,5 +1,5 @@
 // Invitaciones de compra (comprador -> vendedor). API: /api/invites (docs/buyer-invites.md).
-import { guestApi } from './api';
+import { api } from './api';
 import { guestKey } from './guest';
 import { DEMO_ENABLED, demoGetInvite } from './demo';
 import { PUBLIC_BASE_URL } from './orders';
@@ -21,18 +21,20 @@ const MINE = 'meteorito:guest:invites';
 export function myInviteCodes(): string[] { try { return JSON.parse(window.localStorage.getItem(MINE) ?? '[]'); } catch { return []; } }
 function remember(code: string) { try { window.localStorage.setItem(MINE, JSON.stringify([code, ...myInviteCodes().filter((c) => c !== code)].slice(0, 20))); } catch { /* sin storage */ } }
 
-export async function getInvite(code: string): Promise<Invite | null> {
+export async function getInvite(code: string, auth?: Pick<MeteoritoAuth, 'getAuthToken'>): Promise<Invite | null> {
   if (DEMO_ENABLED) return demoGetInvite(code) as Invite | null;
-  const r = await fetch(`/api/invites?code=${encodeURIComponent(code)}`, { headers: { 'X-Guest-Key': await guestKey() }, cache: 'no-store' });
+  const headers: Record<string, string> = { 'X-Guest-Key': await guestKey() };
+  const token = auth?.getAuthToken(); if (token) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(`/api/invites?code=${encodeURIComponent(code)}`, { headers, cache: 'no-store' });
   if (r.status === 404) return null;
   const j: any = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error ?? `Error ${r.status}`);
   return j as Invite;
 }
 
-export async function createInvite(auth: Pick<MeteoritoAuth, 'getAuthToken'>, i: { title: string; price_crc: number; photos?: string[]; note?: string; source_url?: string } | { category: string; brand: string; model: string; price_crc: number; note?: string }): Promise<string> {
-  const r = await guestApi<{ code: string }>(auth, '/api/invites', { op: 'create', ...i });
+export async function createInvite(auth: MeteoritoAuth, i: { title: string; price_crc: number; photos?: string[]; note?: string; source_url?: string } | { category: string; brand: string; model: string; price_crc: number; note?: string }): Promise<string> {
+  const r = await api<{ code: string }>(auth, '/api/invites', { op: 'create', ...i });
   remember(r.code);
   return r.code;
 }
-export async function cancelInvite(auth: Pick<MeteoritoAuth, 'getAuthToken'>, code: string) { await guestApi(auth, '/api/invites', { op: 'cancel', code }); }
+export async function cancelInvite(auth: MeteoritoAuth, code: string) { await api(auth, '/api/invites', { op: 'cancel', code }); }

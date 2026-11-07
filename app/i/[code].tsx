@@ -39,8 +39,8 @@ export default function Invitacion() {
 
   const load = useCallback(async () => {
     if (!code) return;
-    try { const i = await getInvite(String(code)); setInv((prev) => keepIfSame(prev, i)); setErr(null); stamp.set(Date.now()); } catch (e) { setErr((e as Error).message); }
-  }, [code]);
+    try { const i = await getInvite(String(code), auth); setInv((prev) => keepIfSame(prev, i)); setErr(null); stamp.set(Date.now()); } catch (e) { setErr((e as Error).message); }
+  }, [code, auth.isAuthenticated, auth.getAuthToken]);
   useEffect(() => { load(); }, [load]);
   // Sincronización: el comprador ve al instante cuando el vendedor publica (y viceversa si la cancelan).
   useOrdersRefresh(load, inv ? [{ status: inv.status === 'abierta' ? 'creado' : 'liberado' }] : null);
@@ -105,7 +105,7 @@ export default function Invitacion() {
         {header}
         <Card style={{ gap: S.sm }}>
           <Text style={T.caption}>Cómo sigue</Text>
-          <Text style={T.callout}>1. El vendedor abre el link, publica el artículo con fotos y su cuenta.{'\n'}2. Tú recibes aquí el botón de pago (este link queda reservado para ti, en este navegador).{'\n'}3. Pagas en custodia y le das tu PIN solo cuando tengas el producto.</Text>
+          <Text style={T.callout}>1. El vendedor abre el link, acepta la compra y elige cómo recibir el pago.{'\n'}2. Tú recibes aquí el botón de pago (este link queda reservado para tu cuenta).{'\n'}3. Pagas en custodia y le das tu PIN solo cuando tengas el producto.</Text>
           <Freshness stamp={stamp} live={inv.status === 'abierta'} />
         </Card>
         {inv.status === 'abierta' && (

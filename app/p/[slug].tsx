@@ -118,7 +118,7 @@ function LinkDeVentaReal() {
   // Mismo encabezado y tarjeta que la invitación (/i/<code>): título grande, miniatura junto al nombre y el precio.
   const unpaid = !order || order.status === 'creado' || order.status === 'escrow_creado';
   const title = unpaid ? 'Link de pago' : 'Tu compra';
-  const subtitle = unpaid ? 'Pagas sin crear cuenta. El vendedor cobra cuando recibes.' : 'Aquí ves cada paso hasta que recibas. Se actualiza sola.';
+  const subtitle = unpaid ? 'Pagas con tu cuenta. El vendedor cobra cuando recibes.' : 'Aquí ves cada paso hasta que recibas. Se actualiza sola.';
   if (order === undefined) return (
     <Screen back="/pedidos" title={title} space="calm">
       <Skeleton h={120} r={R.lg} /><Skeleton h={160} r={R.lg} />
@@ -184,7 +184,8 @@ function LinkDeVentaReal() {
       </View> : null}
       {/* Avisos por WhatsApp / correo / cuenta: opcional, después de pagar, solo en el dispositivo del comprador. */}
       {CONTACT_CARD_STATUSES.includes(order.status) && isBuyerDevice(order.slug) ? <ContactCard slug={order.slug} /> : null}
-      {CONTACT_CARD_STATUSES.includes(order.status) && !isBuyerDevice(order.slug) && !isAuthenticated ? <RecoverAccess slug={order.slug} /> : null}
+      {/* Entrar no vincula las compras históricas: recuperar por contacto sigue disponible con sesión. El API exige el link firmado. */}
+      {CONTACT_CARD_STATUSES.includes(order.status) && !isBuyerDevice(order.slug) ? <RecoverAccess slug={order.slug} /> : null}
       {/* WhatsApp del vendedor: solo el comprador (su dispositivo) y solo después de pagar; el servidor lo vuelve a validar. */}
       {/* Chat de la compra (comprador): mismo criterio que el contacto; el servidor valida llave/sesión y pedido. */}
       {canShowContact(order.status) && isBuyerDevice(order.slug) ? <OrderChatCard slug={order.slug} /> : null}

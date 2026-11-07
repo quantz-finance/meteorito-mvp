@@ -1,6 +1,6 @@
 // Contrato del API (handlers reales de api/*, base falsa en memoria, JWT de prueba). Sin red ni dinero.
 // Reglas: escrituras sin sesión -> 401; método equivocado -> 405; errores con { error: string };
-// comprador invitado se identifica solo con X-Guest-Key de 64 hex; nadie ve ni toca pedidos ajenos.
+// Las compras nuevas requieren sesión Cavos; las llaves históricas conservan acceso solo a sus pedidos.
 import { test, expect } from '@playwright/test';
 import { installTestJwks, res, token } from '../scripts/ci/jwt';
 import { fakeDb } from '../scripts/ci/fakedb';
@@ -32,7 +32,7 @@ const call = async (h: any, o: { method?: string; body?: any; query?: any; guest
   const rq: any = { method: o.method ?? 'POST', headers: { ...(o.guest ? { 'x-guest-key': o.guest } : {}), ...(o.tok ? { authorization: `Bearer ${o.tok}` } : {}), ...(o.headers ?? {}) }, body: o.body ?? {}, query: o.query ?? {} };
   await h(rq, r); return r as { code: number; body: any };
 };
-const SELLER = Keypair.random();
+const SELLER = Keypair.random(), BUYER = Keypair.random();
 const signProof = (kp: Keypair, action: string, ref: string) => {
   const ts = Math.floor(Date.now() / 1000); const message = proofMessage(action, ref, kp.publicKey(), ts);
   const pre = Buffer.concat([Buffer.from('Cavos Signed Message:\n'), Buffer.from(String(Buffer.byteLength(message))), Buffer.from('\n'), Buffer.from(message)]);
@@ -64,6 +64,7 @@ const WRITES: [string, any, any][] = [
   ['store (import_facebook)', store, { action: 'import_facebook', url: 'https://www.facebook.com/marketplace/item/443277198670299/' }],
   ['photos/upload-url', upload, { count: 1 }],
   ['wallet/activate', activate, {}],
+  ['invites/create', invites, { op: 'create', title: 'Bici', price_crc: 150000 }],
 ];
 for (const [name, h, body] of WRITES) {
   test(`API-AUTH ${name}: sin sesión -> 401 con mensaje`, async () => {
@@ -140,7 +141,7 @@ test('API-CRON pedido con PIN bloqueado no se auto-libera', async () => {
 });
 
 test('API-INV invitación: el mismo comprador no puede responder su propia invitación', async () => {
-  const r1 = await call(invites, { guest: KEY_A, body: { op: 'create', category: 'celular', brand: '', model: 'iPhone 13', title: 'iPhone 13', price_crc: 250000 } });
+  const r1 = await call(invites, { guest: KEY_A, tok: await token({ sub: 'seller-1' }), body: { op: 'create', category: 'celular', brand: '', model: 'iPhone 13', title: 'iPhone 13', price_crc: 250000 } });
   expect(r1.code, r1.body?.error).toBe(200);
   const code = r1.body.code;
   const r2 = await call(create, { guest: KEY_A, tok: await token({ sub: 'seller-1' }), body: sellerBody('seller-1', { invite: code }) });
@@ -149,13 +150,13 @@ test('API-INV invitación: el mismo comprador no puede responder su propia invit
 });
 
 test('API-INV invitación: otro vendedor la responde y el link queda reservado para el comprador', async () => {
-  const r1 = await call(invites, { guest: KEY_A, body: { op: 'create', category: 'celular', brand: '', model: 'iPhone 13', title: 'iPhone 13', price_crc: 250000 } });
+  const r1 = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-1' }), body: { op: 'create', category: 'celular', brand: '', model: 'iPhone 13', title: 'iPhone 13', price_crc: 250000 } });
   const code = r1.body.code;
   const r2 = await call(create, { tok: await token({ sub: 'seller-1' }), body: sellerBody('seller-1', { invite: code }) });
   expect(r2.code, r2.body?.error).toBe(200);
   const slug = r2.body.slug;
-  // Otro comprador (llave B) no puede pagar el link reservado
-  const r3 = await call(pay, { guest: KEY_B, body: { slug, step: 'start' } });
+  // Otra cuenta no puede pagar el link reservado, aunque traiga una llave de navegador.
+  const r3 = await call(pay, { guest: KEY_B, tok: await token({ sub: 'buyer-2' }), body: { slug, step: 'start' } });
   expect(r3.code).toBe(403);
   expect(r3.body.code).toBe('invite_reserved');
 });
@@ -163,7 +164,7 @@ test('API-INV invitación: otro vendedor la responde y el link queda reservado p
 test('API-LST producto permanente en pausa: el comprador recibe 409 listing_paused y no se crea pedido', async () => {
   db.tables.orders.length = 0;
   db.tables.orders.push(order({ slug: 'prod01', kind: 'listing', listing_status: 'pausada', stock: null }));
-  const r = await call(pay, { guest: KEY_A, body: { slug: 'prod01', step: 'start' } });
+  const r = await call(pay, { guest: KEY_A, tok: await token({ sub: 'buyer-1' }), body: { slug: 'prod01', step: 'start', proof: signProof(BUYER, 'pay', 'prod01') } });
   expect(r.code).toBe(409);
   expect(r.body.code).toBe('listing_paused');
   expect(db.tables.orders.length).toBe(1);
@@ -172,7 +173,7 @@ test('API-LST producto permanente en pausa: el comprador recibe 409 listing_paus
 test('API-LST producto agotado (stock 0): 409 listing_sold_out', async () => {
   db.tables.orders.length = 0;
   db.tables.orders.push(order({ slug: 'prod01', kind: 'listing', listing_status: 'activa', stock: 0 }));
-  const r = await call(pay, { guest: KEY_A, body: { slug: 'prod01', step: 'start' } });
+  const r = await call(pay, { guest: KEY_A, tok: await token({ sub: 'buyer-1' }), body: { slug: 'prod01', step: 'start', proof: signProof(BUYER, 'pay', 'prod01') } });
   expect(r.code).toBe(409);
   expect(r.body.code).toBe('listing_sold_out');
 });
@@ -212,7 +213,7 @@ test('API-FB importar de Facebook: solo links de FB, nunca pide fuera de FB, dev
   } finally { __setFbFetchForTests(null); }
 });
 
-test('API-FB-BUYER comprador sin cuenta: importa con su llave de invitado (fixtures, sin red), invita con el link de FB y el vendedor publica con esa foto', async () => {
+test('API-FB-BUYER comprador con cuenta: importa, invita con el link de FB y el vendedor publica con esa foto (fixtures, sin red)', async () => {
   const html = readFileSync(resolve(__dirname, '../scripts/ci/fixtures/facebook/og-crc-dots-mobile.html'), 'utf8');
   const seen: string[] = [];
   __setFbFetchForTests(async (url) => {
@@ -222,6 +223,7 @@ test('API-FB-BUYER comprador sin cuenta: importa con su llave de invitado (fixtu
   });
   try {
     const ITEM = 'https://www.facebook.com/marketplace/item/1234567890/';
+    expect((await call(invites, { guest: KEY_A, body: { op: 'create', title: 'Artículo', price_crc: 25000 } })).code).toBe(401);
     expect((await call(store, { body: { action: 'import_facebook', url: ITEM } })).code).toBe(401);
     const r = await call(store, { guest: KEY_A, body: { action: 'import_facebook', url: ITEM }, headers: { 'x-forwarded-for': '192.0.2.10' } });
     expect(r.code).toBe(200);
@@ -236,8 +238,9 @@ test('API-FB-BUYER comprador sin cuenta: importa con su llave de invitado (fixtu
     expect(fbPhoto).toMatch(/\/import-[0-9a-f]{16}-[0-9a-f-]{36}\/0\.jpg$/);
     expect(r.body.source_url).toBe(ITEM);
     const up = { body: { publicUrl: fbPhoto } };
-    const inv = await call(invites, { guest: KEY_A, body: { op: 'create', title: r.body.title ?? 'Artículo', price_crc: r.body.price_crc, photos: [up.body.publicUrl], source_url: ITEM } });
+    const inv = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-fb' }), body: { op: 'create', title: r.body.title ?? 'Artículo', price_crc: r.body.price_crc, photos: [up.body.publicUrl], source_url: ITEM } });
     expect(inv.code).toBe(200);
+    expect(db.tables.invitations.find((i: any) => i.code === inv.body.code).buyer_user_id).toBe('buyer-fb');
     const pub = await call(invites, { method: 'GET', query: { code: inv.body.code } });
     expect(pub.body.source_url).toBe(ITEM);
     expect(pub.body.photos).toEqual([up.body.publicUrl]);

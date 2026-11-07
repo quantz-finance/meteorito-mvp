@@ -101,7 +101,7 @@ function VenderForm() {
   useEffect(() => {
     if (!inviteParam) { setInvite(null); return; }
     let live = true;
-    getInvite(String(inviteParam)).then((i) => {
+    getInvite(String(inviteParam), auth).then((i) => {
       if (!live || !i || i.status !== 'abierta') { if (live && i) setError('Esta invitación ya no está abierta.'); return; }
       setInvite(i); setCreated(null); setTitle(`${i.brand} ${i.model}`.trim().slice(0, TITLE_MAX)); setPrice(String(i.price_crc));
       // Fotos de la invitación (p. ej. la del anuncio de Facebook que importó el comprador): el API acepta reutilizarlas.
@@ -241,7 +241,7 @@ function VenderForm() {
         </Card>
         <ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} />
         <AdTemplateButton onPress={() => setAdOpen(true)} />
-        <Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga sin crear cuenta; tú cobras al entregar.</Text>
+        <Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga con su cuenta; tú cobras al entregar.</Text>
       </AppearSub>
       <AdTemplateSheet visible={adOpen} onClose={() => setAdOpen(false)} ad={created.ad} />
       <LastSeenInvite trigger={created.slug} />

@@ -1,5 +1,5 @@
 // Helpers del backend simulado (scripts/e2e/mock-server.mjs).
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Page, type BrowserContext } from '@playwright/test';
 export const MOCK = `http://localhost:${process.env.E2E_MOCK_PORT ?? 8084}`; // mismo puerto que playwright.config.ts
 export const MOCK_PIN = '135790';
 export async function reset(request: APIRequestContext, orders: any[], card = false, cardMode: 'inapp' | 'widget' = 'inapp', contacts = false) { await request.post(`${MOCK}/__mock/reset`, { data: { orders, card, cardMode, contacts } }); }
@@ -29,3 +29,14 @@ export async function readVault(page: Page): Promise<Record<string, string>> {
 }
 /** Claves de localStorage con secretos del comprador en texto plano (deberían ser 0 tras migrar). */
 export const plainGuestSecrets = (page: Page) => page.evaluate(() => Object.keys(localStorage).filter((k) => /^meteorito:guest:(v1|pin:|access:)/.test(k)));
+
+/** Proveedor externo simulado, Gate real: cada contexto representa una cuenta distinta. */
+export async function mockBuyer(context: BrowserContext) {
+  await context.addInitScript(() => {
+    if (!localStorage.getItem('cavos:e2e:session')) localStorage.setItem('cavos:e2e:session', crypto.randomUUID());
+  });
+  await context.route('https://horizon-testnet.stellar.org/accounts/**', async (route) => {
+    await route.fulfill({ json: { balances: [{ asset_type: 'native', balance: '10' },
+      { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5', balance: '10' }] } });
+  });
+}

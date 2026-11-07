@@ -1,10 +1,11 @@
-// Build REAL + backend simulado: tour guiado (components/Tour.tsx, lib/tour.ts) como lo ve quien abre la app sin cuenta.
+// Build REAL + backend simulado: tour guiado (components/Tour.tsx, lib/tour.ts) con una sesión Cavos simulada cuando el recorrido lo requiere.
 // Arranca solo UNA vez (primera vez en una pestaña: aquí Comprar), se cierra con "Saltar", no vuelve al recargar y
 // "Ver recorrido" (Cómo funciona) lo abre de nuevo. Pasos sin destino en pantalla: centrados, sin resaltar.
 // En navegadores automatizados el tour no arranca solo (taparía los demás e2e): este archivo lo activa con el flag.
 // Sin reset ni estado del mock: puede correr en paralelo con mock-guest sin pisarlo.
 import { test, expect, type Page } from '@playwright/test';
 import { TOUR_AUTO_DELAY_MS, TOUR_E2E_KEY, TOUR_SEEN_KEY, TOUR_STEPS } from '../lib/tour';
+import { mockBuyer } from './mock';
 import { BANNED, VOSEO } from './helpers';
 
 test.beforeEach(async ({ page }) => { await page.addInitScript((k) => localStorage.setItem(k, '1'), TOUR_E2E_KEY); });
@@ -18,6 +19,7 @@ async function expectInViewport(page: Page) {
 }
 
 test('MCK-TOUR-01 primera vez: arranca solo una vez, "Saltar" lo cierra, no vuelve al recargar; "Ver recorrido" lo abre de nuevo', async ({ page }) => {
+  await mockBuyer(page.context());
   await page.goto('/comprar');
   await expect(tour(page)).toBeVisible({ timeout: 15_000 });
   await expect(title(page)).toHaveText(TOUR_STEPS[0].title);
@@ -25,10 +27,10 @@ test('MCK-TOUR-01 primera vez: arranca solo una vez, "Saltar" lo cierra, no vuel
   expect(await page.evaluate((k) => localStorage.getItem(k), TOUR_SEEN_KEY)).toBe('1');
   const text = (await tour(page).innerText());
   expect(text).not.toMatch(BANNED); expect(text).not.toMatch(VOSEO);
-  // Paso 2 (link de pago): el invitado no tiene Vender; resalta "Pagar con link"
+  // Paso 2: con cuenta, resalta la pestaña Vender.
   await page.getByTestId('tour-next').click();
   await expect(title(page)).toHaveText(TOUR_STEPS[1].title);
-  await expect.poll(() => attr(page, 'data-tour-target')).toBe('comprar-link');
+  await expect.poll(() => attr(page, 'data-tour-target')).toBe('tab-vender');
   await expect(page.getByTestId('tour-spot')).toBeVisible();
   await expectInViewport(page);
   await page.getByTestId('tour-back').click();

@@ -69,26 +69,36 @@ const E = (status, error, code) => Object.assign(new Error(error), { status, cod
 
 async function api(req, path, q, b) {
   const guest = String(req.headers['x-guest-key'] ?? '');
+  let account = null;
+  try { account = JSON.parse(Buffer.from(String(req.headers.authorization ?? '').replace(/^Bearer /, '').split('.')[1] ?? '', 'base64').toString()).sub ?? null; } catch {}
   const needGuest = () => { if (!/^[0-9a-f]{64}$/.test(guest)) throw E(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.', 'guest_key_missing'); };
   const get = (slug) => { const o = S.orders[slug]; if (!o) throw E(404, 'Pedido no encontrado', 'not_found'); return o; };
   // Link de acceso ya abierto en este dispositivo (X-Order-Access): comprador SOLO de ese pedido (como api/_lib/guest.ts).
   const grantSlug = S.grants[String(req.headers['x-order-access'] ?? '')] ?? null;
-  const isBuyer = (o) => o.buyer === guest || (grantSlug === o.slug && String(b.slug) === o.slug);
+  const isBuyer = (o) => o.buyer === guest || (!!account && o.buyer === account) || (grantSlug === o.slug && String(b.slug) === o.slug);
+  if (path === '/api/wallet/activate') {
+    if (!account) throw E(401, 'Inicia sesión para continuar.', 'auth_missing');
+    return b.step === 'nonce' ? { nonce: 'e2e-fixture-nonce' } : { ready: true, bound: true };
+  }
   if (path === '/api/health') return { ok: true, config: { autoReleaseMinutes: 10080 } };
   if (path === '/api/escrow/pay') {
     needGuest(); let o = get(String(b.slug));
     if (b.step === 'start') {
+      if (!account && !o.buyer) throw E(401, 'Inicia sesión para continuar.', 'auth_missing');
+      if (account && (!b.proof?.address || !b.proof?.signature)) throw E(401, 'Falta la prueba de dirección.', 'proof_missing');
+      const buyer = account ?? guest;
+      const legacyBuyer = !!o.buyer && o.buyer === guest;
       // Turnstile activo (POST /__mock/turnstile): como api/_lib/turnstile.ts, sin token válido -> 403 turnstile_required.
-      if (S.turnstile && !o.contract_id && b.turnstile !== TS_TOKEN) throw Object.assign(E(403, 'Confirma que eres una persona para seguir.', b.turnstile ? 'turnstile_failed' : 'turnstile_required'), { extra: { siteKey: TS_SITE_KEY, action: 'guest_pay' } });
+      if ((!account || legacyBuyer) && S.turnstile && !o.contract_id && b.turnstile !== TS_TOKEN) throw Object.assign(E(403, 'Confirma que eres una persona para seguir.', b.turnstile ? 'turnstile_failed' : 'turnstile_required'), { extra: { siteKey: TS_SITE_KEY, action: 'guest_pay' } });
       if (o.kind === 'listing') {
         if (o.listing_status !== 'activa') throw E(409, 'El vendedor pausó este producto por ahora.', 'listing_paused');
-        const parent = o; o = Object.values(S.orders).find((c) => c.listing_slug === parent.slug && c.buyer === guest && ['creado', 'escrow_creado'].includes(c.status));
-        if (!o) { S.seq++; const slug = 'h' + hex(5); o = S.orders[slug] = base({ ...parent, slug, kind: 'single', listing_slug: parent.slug, buyer: guest, status: 'creado' }); }
+        const parent = o; o = Object.values(S.orders).find((c) => c.listing_slug === parent.slug && c.buyer === buyer && ['creado', 'escrow_creado'].includes(c.status));
+        if (!o) { S.seq++; const slug = 'h' + hex(5); o = S.orders[slug] = base({ ...parent, slug, kind: 'single', listing_slug: parent.slug, buyer, status: 'creado' }); }
       }
-      if (o.buyer && o.buyer !== guest) throw E(403, 'este pedido ya tiene comprador', 'taken');
+      if (o.buyer && !isBuyer(o)) throw E(403, 'este pedido ya tiene comprador', 'taken');
       if (!['creado', 'escrow_creado'].includes(o.status)) throw E(409, 'Este pedido ya no está disponible.', 'bad_state');
-      Object.assign(o, { buyer: guest, status: 'escrow_creado', contract_id: o.contract_id ?? 'C' + 'E2E'.padEnd(55, 'A'), amount_usdc: Math.round(o.price_crc / 510 * 100) / 100 });
-      return { slug: o.slug, contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` }, card: S.card, cardMode: S.cardMode, guest: true };
+      Object.assign(o, { buyer: o.buyer ?? buyer, buyer_address: b.proof?.address ?? null, status: 'escrow_creado', contract_id: o.contract_id ?? 'C' + 'E2E'.padEnd(55, 'A'), amount_usdc: Math.round(o.price_crc / 510 * 100) / 100 });
+      return { slug: o.slug, contractId: o.contract_id, amountUsdc: o.amount_usdc, priceCrc: o.price_crc, sinpe: { simulated: true, reference: `MET-${o.slug.toUpperCase()}` }, card: S.card, cardMode: S.cardMode, guest: o.buyer !== account };
     }
     if (b.step === 'shipment') { // como api/escrow/pay: solo el comprador ve la foto del envío y el número de guía
       if (!isBuyer(o)) throw E(403, 'no eres el comprador de este pedido');
@@ -251,7 +261,7 @@ async function api(req, path, q, b) {
     }
     if (b.action === 'buyer_orders') { // Mis compras: solo los pedidos de esta llave (sin 'creado'), sin datos del vendedor
       needGuest();
-      return { orders: Object.values(S.orders).filter((o) => o.buyer === guest && o.status !== 'creado').map((o) => ({ slug: o.slug, brand: o.brand, model: o.model, price_crc: o.price_crc,
+      return { orders: Object.values(S.orders).filter((o) => isBuyer(o) && o.status !== 'creado').map((o) => ({ slug: o.slug, brand: o.brand, model: o.model, price_crc: o.price_crc,
         photo: o.photos?.[0] ?? null, status: o.status, created_at: o.created_at, funded_at: o.funded_at ?? null, delivery_mode: o.delivery_mode ?? null, resolution: o.resolution ?? null })) };
     }
     if (b.action === 'seller_contact') { // WhatsApp del vendedor: solo el comprador (su llave) y solo con el pedido pagado
@@ -325,7 +335,7 @@ createServer(async (req, res) => {
   if (u.pathname.startsWith('/sb/')) return send(res, 404, { message: 'no simulado' });
   if (u.pathname.startsWith('/api/')) {
     const b = req.method === 'POST' ? await body(req) : {};
-    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, turnstile: !!b.turnstile, guest: !!req.headers['x-guest-key'], access: !!req.headers['x-order-access'], bearer: !!req.headers.authorization, at: Date.now(), ...(b.step === 'card_pay' ? { body: b } : {}) });
+    S.calls.push({ method: req.method, path: u.pathname, step: b.step, action: b.action, slug: b.slug, turnstile: !!b.turnstile, guest: !!req.headers['x-guest-key'], access: !!req.headers['x-order-access'], bearer: !!req.headers.authorization, sessionProof: !!req.headers['x-meteorito-proof'], at: Date.now(), ...(b.step === 'card_pay' ? { body: b } : {}) });
     const f = S.fail.find((x) => x.path === u.pathname && (x.step == null || x.step === b.step) && x.times > 0);
     if (f) { f.times--; if (f.delayMs) await new Promise((r) => setTimeout(r, f.delayMs)); if (f.status) return send(res, f.status, { error: f.error ?? 'Error del servidor de prueba', code: f.code }); }
     try { return send(res, 200, await api(req, u.pathname, u.searchParams, b)); }

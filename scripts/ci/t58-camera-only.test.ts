@@ -110,10 +110,10 @@ export async function run(t: T) {
     const createSrc = readFileSync('api/orders/create.ts', 'utf8');
     t.check('crear producto: las fotos importadas se validan con el source_url del body (no por ser de Facebook)', /listingPhotoOk\(u, user\.sub, importSource\)/.test(createSrc) && !/isFbPhoto|fb-/.test(createSrc + readFileSync('api/_lib/capture.ts', 'utf8')));
     const invites = (await import('../../api/invites/index')).default;
-    r = await call(invites, { guest: KEY, body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [publicPrefix(GUEST) + '55555555-5555-4555-8555-555555555555/0.jpg'] } });
+    r = await call(invites, { guest: KEY, tok: await token({ sub: 'buyer58' }), body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [publicPrefix(GUEST) + '55555555-5555-4555-8555-555555555555/0.jpg'] } });
     t.check('invitación con foto del carrete (vía vieja) -> 400 camera_required', r.code === 400 && r.body?.code === 'camera_required', `${r.code} ${r.body?.code}`);
     const gt = (await call(up, { guest: KEY, body: { action: 'capture_token', purpose: 'listing', ref: 'new', as: 'guest' } })).body.token;
-    r = await call(invites, { guest: KEY, body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [captureUrl(readCaptureToken(gt)!)] } });
+    r = await call(invites, { guest: KEY, tok: await token({ sub: 'buyer58' }), body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [captureUrl(readCaptureToken(gt)!)] } });
     t.check('invitación con foto de la cámara del invitado -> 200', r.code === 200, `${r.code} ${r.body?.error}`);
 
     /* ---------- 4) Import de Facebook: sigue usando la foto del anuncio (guardada por el servidor) ---------- */
@@ -127,9 +127,9 @@ export async function run(t: T) {
     t.check('import: la copia vale en el producto con ese source_url y no sin él', listingPhotoOk(fbUrl, 'seller-58', r.body?.source_url) && !listingPhotoOk(fbUrl, 'seller-58'));
     const gi = await call(store, { guest: KEY, body: { action: 'import_facebook', url: SRC } });
     const gUrl = gi.body?.photo_urls?.[0];
-    r = await call(invites, { guest: KEY, body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [gUrl] } });
+    r = await call(invites, { guest: KEY, tok: await token({ sub: 'buyer58' }), body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [gUrl] } });
     t.check('invitación con foto importada SIN source_url -> 400 camera_required', r.code === 400 && r.body?.code === 'camera_required', `${r.code} ${r.body?.code}`);
-    r = await call(invites, { guest: KEY, body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [gUrl], source_url: gi.body?.source_url } });
+    r = await call(invites, { guest: KEY, tok: await token({ sub: 'buyer58' }), body: { op: 'create', title: 'Bici de montaña', price_crc: 50000, photos: [gUrl], source_url: gi.body?.source_url } });
     t.check('invitación con foto importada + su source_url -> 200', r.code === 200, `${r.code} ${r.body?.error}`);
     __setFbFetchForTests(null);
 

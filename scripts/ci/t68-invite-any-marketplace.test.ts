@@ -3,7 +3,7 @@
 // Encuentra24… bloquean nuestros servidores: el link se acepta igual, sin error y SIN pedirlo, y va en la invitación.
 import { readFileSync } from 'node:fs';
 import type { T } from './setup';
-import { res } from './jwt';
+import { res, token, installTestJwks } from './jwt';
 import { __setDbForTests } from '../../api/_lib/db';
 import { fakeDb } from './fakedb';
 import invites from '../../api/invites/index';
@@ -11,8 +11,8 @@ import { inviteShareMessage, sourceName } from '../../lib/inviteShare';
 import { detectProvider, inviteCanRead, inviteDetectedLabel, inviteImportNotice, inviteMarketsLabel, INVITE_MARKETS, INVITE_UNREAD, type ListingImport } from '../../lib/listingImport';
 import { COPY } from '../../lib/copy';
 
-const call = async (h: any, o: { method?: string; body?: any; query?: any; guest?: string | null }) => {
-  const r = res(); const rq: any = { method: o.method ?? 'POST', headers: { ...(o.guest ? { 'x-guest-key': o.guest } : {}) }, body: o.body ?? {}, query: o.query ?? {} };
+const call = async (h: any, o: { method?: string; body?: any; query?: any; guest?: string | null; tok?: string }) => {
+  const r = res(); const rq: any = { method: o.method ?? 'POST', headers: { ...(o.tok ? { authorization: `Bearer ${o.tok}` } : {}), ...(o.guest ? { 'x-guest-key': o.guest } : {}) }, body: o.body ?? {}, query: o.query ?? {} };
   await h(rq, r); return r;
 };
 const LINKS = {
@@ -27,6 +27,7 @@ const BANNED = /segur|garant|verificad|empresa|fintech|banco|billetera|proteg/i;
 const VOSEO = /\b(tenés|podés|querés|pegá|tocá|escribí|mirá|copiá|abrí)\b/i;
 
 export async function run(t: T) {
+  await installTestJwks(); process.env.CAVOS_JWT_AUDIENCE = 'cav_ci_test_app';
   // --- detección: mismo providers.ts que Vender; solo se intenta leer donde funciona
   const d = (u: string) => detectProvider(u)!;
   t.check('detecta Facebook, Walmart, Mercado Libre, Amazon, Encuentra24 y AliExpress', Object.entries(LINKS).every(([id, u]) => d(u)?.id === id), JSON.stringify(Object.values(LINKS).map((u) => d(u)?.id)));
@@ -50,22 +51,22 @@ export async function run(t: T) {
   const n4 = inviteImportNotice(d('https://tienda.example.us/p/1'), { ...ok, provider: 'web', provider_name: 'tienda.example.us', converted: true, price_source: { amount: 300, currency: 'USD' } });
   t.check('precio en otra moneda: se dice que es sugerido', /US\$300/.test(n4.body) && /confírmalo/.test(n4.body), n4.body);
   t.check('hoja: iconos de marketplaces + "Pega el link del anuncio" (copy final)', INVITE_MARKETS.length === 5 && inviteMarketsLabel === 'Pega el link del anuncio');
-  t.check('plantilla de anuncio: "Paga aquí, sin crear cuenta: {link}"', COPY.adTemplate.payHere('https://x/p/1') === 'Paga aquí, sin crear cuenta: https://x/p/1');
+  t.check('plantilla de anuncio: "Paga aquí con tu cuenta: {link}"', COPY.adTemplate.payHere('https://x/p/1') === 'Paga aquí con tu cuenta: https://x/p/1');
 
   // --- la invitación acepta el link de cualquier marketplace (incluso los que no se leen) y rechaza lo que no es un link público
   const db = fakeDb(); __setDbForTests(db as any);
   const G = 'e'.repeat(64);
   const base = { op: 'create', title: 'Bicicleta aro 29', price_crc: 150000 };
   for (const [id, u] of Object.entries(LINKS)) {
-    const r = await call(invites, { guest: G, body: { ...base, source_url: u } });
+    const r = await call(invites, { guest: G, tok: await token({ sub: 'buyer68' }), body: { ...base, source_url: u } });
     const row = db.tables.invitations.find((i: any) => i.code === r.body?.code);
     t.check(`invitación con link de ${id}: se guarda normalizado`, r.code === 200 && row?.source_url === u, `${r.code} ${r.body?.error} ${row?.source_url}`);
   }
-  let r = await call(invites, { guest: G, body: { ...base, source_url: 'Mira: articulo.mercadolibre.com.mx/MLM-1-bici-_JM' } });
+  let r = await call(invites, { guest: G, tok: await token({ sub: 'buyer68' }), body: { ...base, source_url: 'Mira: articulo.mercadolibre.com.mx/MLM-1-bici-_JM' } });
   t.check('link pegado con texto alrededor y sin https://', r.code === 200 && db.tables.invitations.at(-1)?.source_url === 'https://articulo.mercadolibre.com.mx/MLM-1-bici-_JM', `${r.code}`);
   const before = db.tables.invitations.length;
   for (const bad of ['http://127.0.0.1/x', 'https://localhost/x', 'https://10.0.0.1/x', 'javascript:alert(1)', 'hola', 'https://user:pw@tienda.com/x', 'https://' + 'a'.repeat(1000) + '.com/']) {
-    r = await call(invites, { guest: G, body: { ...base, source_url: bad } });
+    r = await call(invites, { guest: G, tok: await token({ sub: 'buyer68' }), body: { ...base, source_url: bad } });
     t.check(`source_url inválido (${bad.slice(0, 30)}) -> 400 import_url_invalid`, r.code === 400 && r.body?.code === 'import_url_invalid', `${r.code} ${r.body?.code}`);
   }
   t.check('ninguna invitación creada con links inválidos', db.tables.invitations.length === before);

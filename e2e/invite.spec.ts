@@ -3,10 +3,10 @@ import { open, expectNoScroll, expectInputs16 } from './helpers';
 
 // El demo no simula /api/invites (el flujo completo crear -> aceptar -> pagar reservado está en api-contract.spec.ts y t27).
 test.describe('Invitación (UI)', () => {
-  test('INV-01 /i/nueva: sin cuenta, formulario corto, sin scroll, inputs ≥16 px', async ({ page }) => {
+  test('INV-01 /i/nueva: en demo, formulario corto, sin scroll, inputs ≥16 px', async ({ page }) => {
     await open(page, '/i/nueva', 'buyer', true);
     await expect(page.getByText('Invitar a un vendedor')).toBeVisible();
-    await expect(page.getByText(/No necesitas cuenta/)).toBeVisible();
+    await expect(page.getByText(/La invitación queda ligada a tu cuenta/)).toBeVisible();
     await expectNoScroll(page);
     await expectInputs16(page);
   });
