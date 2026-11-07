@@ -3,11 +3,13 @@
 // (en el build de demo arranca en Datos de ejemplo; en producción el default es Testnet).
 import { test, expect } from '@playwright/test';
 import { open } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
 
 test.describe('Modo de la app', () => {
   test.beforeEach(({}, info) => test.skip(info.project.name !== 'webkit-iphone-se', 'solo iPhone SE'));
 
   test('MODO-01 Mi cuenta: 3 modos (Mainnet desactivado); Testnet quita los ejemplos solo en este dispositivo', async ({ page, browser }) => {
+    test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
     await open(page, '/comprar', 'buyer', true);
     await expect(page.getByTestId('feed-sale').first()).toBeAttached(); // demo: Datos de ejemplo
     await open(page, '/pedidos', 'seller');
