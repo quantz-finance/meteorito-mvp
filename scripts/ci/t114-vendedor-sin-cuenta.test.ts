@@ -285,7 +285,7 @@ export async function run(t: T) {
   const a1 = agreementFor({ ...inv0, price_crc: 120000 }, 'envio').hash, a2 = agreementFor({ ...inv0, price_crc: 120001 }, 'envio').hash, a3 = agreementFor({ ...inv0, photos: ['x'] }, 'envio').hash;
   t.check('hash del acuerdo cambia con precio, fotos o entrega', a1 !== a2 && a1 !== a3 && a1 !== agreementFor(inv0, 'cara_a_cara').hash);
   t.check('el hash no depende del orden de claves (estable)', agreementFor({ model: inv0.model, brand: inv0.brand, code: inv0.code, price_crc: 120000, photos: [] }, 'envio').hash === agreementFor({ code: inv0.code, brand: inv0.brand, model: inv0.model, price_crc: 120000, photos: [] }, 'envio').hash);
-  // Retención: op admin seller_guest_purge (solo admin; pg_cron la corre cada día con 90 días).
+  // Retención: op admin seller_guest_purge (solo admin; ejecución manual, sin pg_cron).
   r = await call(invites, { tok: await token({ sub: 'no-admin' }), body: { op: 'seller_guest_purge' } });
   t.check('purga: quien no es admin -> 404 (no se revela)', r.code === 404 && !(db.purgeCalls ?? []).length, `${r.code}`);
   r = await call(invites, { guest: OTHER_KEY, body: { op: 'seller_guest_purge' } });

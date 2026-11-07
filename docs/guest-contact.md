@@ -44,3 +44,7 @@ WhatsApp queda como `pending_manual` en `buyer_notifications` (no hay API de env
 Sin la migración 028: la tarjeta no aparece, no hay vínculo ni correos, y los links de acceso siguen funcionando.
 
 Teléfono y correo se cifran en reposo además de guardarse en claro (dual-write, hasta la migración 052). Sin llave, la lectura sigue usando el claro y un guardado responde 503. Detalle: `docs/pii-cifrado.md`.
+
+## Eliminación de contactos
+
+Sin eliminación automática ni agendada (040). Solo a pedido o por intervención manual de un administrador. Las constancias de autorización y de la compra que correspondan se conservan.

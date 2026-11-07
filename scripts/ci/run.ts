@@ -114,7 +114,7 @@ const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
   { id: '114', name: 'Vendedor sin cuenta: OTP, aceptación atómica, sesión por pedido, custodia platform/backend, sin fallback a Cavos (QA del plan)', file: './t114-vendedor-sin-cuenta.test.ts', onchain: false },
   { id: '115', name: 'Migración 038 en Postgres (PGlite): aceptación atómica, un pedido por invitación, intentos, inmutables, recuperar revoca', file: './t115-vendedor-sin-cuenta-sql.test.ts', onchain: false },
   { id: '117', name: 'Dispositivo nuevo sin respaldo de la cuenta (kit 0.5 no sealed recovery): mensaje accionable, sin bucle de Entrar de nuevo, código de analítica propio', file: './t116-login-dispositivo-nuevo.test.ts', onchain: false },
-  { id: '116', name: 'Vendedor sin cuenta: aviso de privacidad, casilla no marcada exigida, consentimiento aparte (039), retención 90 días (seller_guest_purge + pg_cron), excepción serviceProvider/wallet de la plataforma', file: './t116-vendedor-privacidad.test.ts', onchain: false },
+  { id: '116', name: 'Vendedor sin cuenta: aviso de privacidad, casilla no marcada exigida, consentimiento aparte (039), purga manual sin borrado agendado (040), excepción serviceProvider/wallet de la plataforma', file: './t116-vendedor-privacidad.test.ts', onchain: false },
   { id: '45', name: 'Importar de Facebook: link solo FB (SSRF), parser OG real, precio a colones, timeout/tamaño', file: './t45-facebook-import.test.ts', onchain: false },
   { id: '1+5', name: 'Doble fondeo rechazado + webhook duplicado idempotente', file: './t01-funding.test.ts', onchain: true },
   { id: '2', name: 'Doble release rechazado', file: './t02-release.test.ts', onchain: true },

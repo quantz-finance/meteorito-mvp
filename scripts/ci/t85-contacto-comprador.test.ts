@@ -187,7 +187,7 @@ export async function run(t: T) {
   t.check('tarjeta: +506 por defecto, inputs de 16 px, casilla de consentimiento y "Ahora no"', card.includes('DEFAULT_COUNTRY_CODE') && /fontSize: 16/.test(card) && /accessibilityRole="checkbox"/.test(card) && /label="Ahora no"/.test(card));
   t.check('tarjeta: sin navegación (no router) y login sobre la misma URL', !/router\./.test(card) && /auth\.openLogin\(\)/.test(card) && /markLinkPending/.test(card));
   t.check('página: el token ?acceso= se quita de la URL tras usarlo', /setParams\(\{ acceso: undefined \}/.test(page));
-  t.check('privacidad: línea nueva marcada REVISIÓN LEGAL (Neo)', /REVISIÓN LEGAL \(Neo\): línea NUEVA de avisos al comprador/.test(legal) && /No se los mostramos al vendedor/.test(legal));
+  t.check('privacidad: línea nueva marcada REVISIÓN LEGAL (Neo)', /REVISIÓN LEGAL \(Neo\): avisos al comprador/.test(legal) && /No se los mostramos al vendedor/.test(legal));
   const sql = readFileSync('supabase/migrations/028_guest_contact.sql', 'utf8');
   t.check('028 idempotente y sin grants públicos', /create table if not exists public\.buyer_contacts/.test(sql) && /create table if not exists public\.buyer_links/.test(sql)
     && /create table if not exists public\.buyer_notifications/.test(sql) && /revoke all on public\.buyer_contacts from anon, authenticated/.test(sql) && !/create table (?!if not exists)/.test(sql)
