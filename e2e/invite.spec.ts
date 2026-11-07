@@ -13,7 +13,7 @@ test.describe('Invitación (UI)', () => {
   test('INV-02 /i/nueva vacío: no crea nada y pide los datos', async ({ page }) => {
     await open(page, '/i/nueva', 'buyer', true);
     await page.getByRole('button', { name: /Crear invitación/ }).click();
-    await expect(page.getByText(/nombre|precio|Escribe/i).first()).toBeVisible();
+    await expect(page.getByText(/nombre|precio|Escribe/i).filter({ visible: true }).first()).toBeVisible();
     await expect(page.getByText(/no están disponibles en el modo demo/)).toHaveCount(0);
   });
   test('INV-04 /i/<código inexistente>: mensaje claro con salida', async ({ page }) => {

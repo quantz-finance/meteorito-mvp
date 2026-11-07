@@ -26,7 +26,7 @@ function standaloneNow(): boolean {
 
 if (WEB) {
   const env = detectInstallEnv(navigator.userAgent || '', navigator.maxTouchPoints || 0);
-  // El query se lee YA: el router redirige "/" -> "/vender" y lo borra.
+  // El query se lee YA: el router redirige "/" -> "/comprar" y lo borra.
   state = { ...state, supported: true, installed: standaloneNow(), env, auto: wantsInstall(window.location.href) };
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault(); // sin la mini barra del navegador: lo abre nuestro botón

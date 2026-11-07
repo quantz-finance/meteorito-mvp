@@ -5,6 +5,9 @@
 const PUBLIC_ROOTS = ['p', 't', 'i', 'legal', 'como-funciona', 'mis-compras', 'chat', 'mensajes'];
 
 export function isPublicRoute(segments: readonly string[]): boolean {
+  // Crear una invitación de comprador (/i/nueva) pide entrar: quien compra crea su cuenta y empieza la transacción.
+  // Sin sesión se ve el login en la misma URL y, al entrar, sigue en /i/nueva. Abrir/aceptar una invitación (/i/<código>) sigue siendo público.
+  if (segments[0] === 'i' && segments[1] === 'nueva') return false;
   if (PUBLIC_ROOTS.includes(segments[0])) return true;
   return segments[0] === '(tabs)' && segments[1] === 'comprar';
 }

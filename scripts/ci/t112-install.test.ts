@@ -35,7 +35,7 @@ export async function run(t: T) {
   const m = JSON.parse(readFileSync('public/manifest.json', 'utf8'));
   const icon = (size: string, purpose: string) => m.icons.some((i: any) => i.sizes === size && String(i.purpose ?? 'any').split(' ').includes(purpose));
   t.check('manifest: name/short_name Meteorito', m.name === 'Meteorito' && m.short_name === 'Meteorito');
-  t.check('manifest: display standalone, start_url, scope, colores', m.display === 'standalone' && m.start_url === '/vender' && m.scope === '/' && !!m.theme_color && !!m.background_color);
+  t.check('manifest: display standalone, start_url, scope, colores', m.display === 'standalone' && m.start_url === '/comprar' && m.scope === '/' && !!m.theme_color && !!m.background_color);
   t.check('manifest: iconos 192 y 512 (any) + maskable', icon('192x192', 'any') && icon('512x512', 'any') && icon('512x512', 'maskable'));
   const html = readFileSync('app/+html.tsx', 'utf8');
   t.check('HTML: manifest, apple-touch-icon y apple-mobile-web-app-capable', html.includes('rel="manifest" href="/manifest.json"') && html.includes('rel="apple-touch-icon"') && html.includes('name="apple-mobile-web-app-capable" content="yes"'));
