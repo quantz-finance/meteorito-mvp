@@ -1,6 +1,8 @@
 // Invitación de compra. Dos vistas según quién la abre:
 //  - COMPRADOR (misma llave de invitado): estado en vivo + link para mandarle al vendedor + "Ir a pagar" cuando el vendedor publique.
-//  - VENDEDOR (cualquier otro): resumen de lo que piden y "Publicar para esta compra" (requiere su cuenta Cavos).
+//  - VENDEDOR (cualquier otro): resumen exacto del acuerdo y aceptar SIN cuenta con un código por correo (SELLER_GUEST_ENABLED,
+//    solo testnet; components/SellerGuestAccept.tsx) u "o entra con tu cuenta" -> "Publicar para esta compra" (Cavos, igual que antes).
+//  - VENDEDOR SIN CUENTA que ya aceptó (cookie HttpOnly del pedido): su panel de la venta.
 import * as Clipboard from 'expo-clipboard';
 import { userMessage } from '@/lib/cavosSession';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -20,6 +22,7 @@ import { useOrdersRefresh } from '@/lib/useOrdersRefresh';
 import { track } from '@/lib/analytics';
 import { useStamp } from '@/lib/freshness';
 import { keepIfSame } from '@/lib/refresh';
+import { SellerGuestAccept, SellerGuestOrder, SellerGuestRecover } from '@/components/SellerGuestAccept';
 
 const STATUS: Record<Invite['status'], { label: string; tone: 'warn' | 'success' | 'muted' }> = {
   abierta: { label: 'Esperando al vendedor', tone: 'warn' }, aceptada: { label: 'El vendedor ya publicó', tone: 'success' }, cancelada: { label: 'Cancelada', tone: 'muted' },
@@ -115,13 +118,36 @@ export default function Invitacion() {
 
   // Vista del vendedor.
   const open = inv.status === 'abierta';
+  const loginToPublish = () => { if (!auth.isAuthenticated) return auth.openLogin(); router.push({ pathname: '/vender', params: { invite: inv.code } }); };
+  // Vendedor sin cuenta que ya aceptó (cookie HttpOnly de ese pedido): su panel de la venta.
+  if (inv.seller_order) {
+    return (
+      <Screen back="/comprar" title="Tu venta" subtitle="Aceptaste sin cuenta. Aquí ves el pago y marcas la entrega.">
+        {header}
+        <SellerGuestOrder o={inv.seller_order} onChange={load} />
+        <Freshness stamp={stamp} live />
+      </Screen>
+    );
+  }
+  // Invitación abierta y vendedor sin cuenta disponible (flag + correo): resumen exacto + aceptar sin cuenta u "o entra con tu cuenta" (Cavos, igual que siempre).
+  if (open && inv.seller_guest?.available) {
+    return (
+      <Screen back="/comprar" title="Quieren comprarte" subtitle={inv.source_url ? `Vieron tu anuncio en ${where} y quieren pagarte en custodia.` : 'Alguien quiere comprarte este artículo y pagarte en custodia.'}
+        footer={null}>
+        {header}
+        <SellerGuestAccept inv={inv} onAccepted={load} onLogin={loginToPublish} />
+        <Freshness stamp={stamp} live />
+      </Screen>
+    );
+  }
   return (
     <Screen back="/comprar" title="Quieren comprarte" subtitle={inv.source_url ? `Vieron tu anuncio en ${where} y quieren pagarte en custodia.` : 'Alguien te invitó a vender este artículo en custodia.'}
       footer={open ? <PrimaryButton title={auth.isAuthenticated ? 'Publicar para esta compra' : 'Entrar para publicar'} icon="add-circle-outline"
         loading={auth.isLoading}
-        onPress={() => { if (!auth.isAuthenticated) return auth.openLogin(); router.push({ pathname: '/vender', params: { invite: inv.code } }); }} /> : null}>
+        onPress={loginToPublish} /> : null}>
       {header}
       {!open && <Card><Text style={T.callout}>{inv.status === 'aceptada' ? 'Esta invitación ya fue aceptada con otra publicación.' : 'El comprador canceló esta invitación.'}</Text></Card>}
+      {inv.status === 'aceptada' && inv.seller_guest?.order_is_guest && inv.seller_guest.available ? <SellerGuestRecover code={inv.code} onDone={load} /> : null}
       {open && <Card style={{ gap: S.sm }}>
         <Text style={T.caption}>Qué haces</Text>
         <Text style={T.callout}>Publicas el artículo (fotos, estado) al precio acordado. Te damos un link de pago que solo puede usar quien te invitó. El dinero queda en custodia hasta que entregues y el comprador confirme con su PIN.</Text>

@@ -25,7 +25,7 @@ const HKDF_SALT = Buffer.from('meteorito:pii:v1', 'utf8');
 const HKDF_INFO = Buffer.from('enc', 'utf8');
 const MAX_PLAIN = 2000;
 
-export type PiiTable = 'buyer_contacts' | 'seller_profiles';
+export type PiiTable = 'buyer_contacts' | 'seller_profiles' | 'seller_guests';
 export type PiiColumn = 'phone_e164' | 'email' | 'contact_phone';
 
 export const piiAad = (table: PiiTable, column: PiiColumn, rowKey: string) => `${PII_AAD_PREFIX}|${table}.${column}|${rowKey}`;

@@ -17,12 +17,24 @@ import { MAX_PHOTOS, MAX_PHOTO_BYTES, PHOTO_MIME, publicPrefix, userDir } from '
 import { captureCode, capturePath, captureUploaded, captureUrl, checkCaptureToken, isCapturePurpose, markSigned, signCaptureToken, validCaptureRef, type CapturePurpose } from '../_lib/capture';
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
+import { guestSellerSubs, isGuestSellerOrder, sellerSubFor } from '../_lib/sellerGuest';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const guestErr = () => Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir la página.'), { code: 'guest_key_missing' });
 
 /** Quién toma la foto para cada propósito: la carpeta (sub) del token y las identidades aceptadas al firmar. */
 async function captureOwner(req: any, purpose: CapturePurpose): Promise<{ sub: string; subs: string[] }> {
+  // Vendedor sin cuenta (038): envío o respuesta de disputa con su sesión HttpOnly del pedido (nunca la llave del link).
+  if (purpose === 'ship' || (purpose === 'dispute' && req.body?.as === 'seller')) {
+    if (typeof req.body?.ref === 'string' && /^[a-z0-9]{6}$/.test(req.body.ref)) {
+      const o = await orderBySlug(req.body.ref);
+      if (isGuestSellerOrder(o)) { const sub = await sellerSubFor(req, o); return { sub, subs: [sub] }; }
+    } else if (req.body?.capture_token) {
+      const subs = await guestSellerSubs(req); // subida con el token: el token dice el pedido y su carpeta
+      const tokSub = subs.find((s) => { try { checkCaptureToken(req.body?.capture_token, { purpose, subs: [s] }); return true; } catch { return false; } });
+      if (tokSub) return { sub: tokSub, subs: [tokSub] };
+    }
+  }
   // Disputa: el comprador (evidencia) o, con as:'seller', el vendedor (foto de su respuesta; api/_lib/disputeAdmin.ts).
   if (purpose === 'dispute' && req.body?.as === 'seller') { const u = await requireCavosUser(req); return { sub: u.sub, subs: [u.sub] }; }
   if (purpose === 'dispute') { const who = await requireBuyerIdentity(req); return { sub: who.cavos?.sub ?? who.guest!, subs: who.ids }; }

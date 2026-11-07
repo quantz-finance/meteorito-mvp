@@ -5,6 +5,11 @@
 //       (referencia para el vendedor; migración 015). Se acepta aunque no lo podamos leer.
 //       (compatible: { category, brand, model, ... } sigue funcionando; category es opcional, por defecto 'otro')
 //  POST { op:'cancel', code }                                       (solo el comprador, solo si sigue abierta)
+//  Vendedor SIN cuenta (api/_lib/sellerGuest.ts, docs/vendedor-sin-cuenta.md; flag SELLER_GUEST_ENABLED, solo testnet):
+//  POST { op:'seller_otp_request', code, email, delivery_mode, agreement_hash }        -> código por correo
+//  POST { op:'seller_accept', code, challenge_id, otp, delivery_mode, agreement_hash } -> pedido + aceptación + cookie HttpOnly
+//  POST { op:'seller_recover_request', code, email } / { op:'seller_recover_verify', code, challenge_id, otp } -> sesión nueva
+//  GET agrega seller_guest {available, agreements} (invitación abierta) y seller_order (solo con la sesión del vendedor).
 import { db, json, fail } from '../_lib/db';
 import { scrubStoredPhotos } from '../_lib/scrubPhotos';
 import { HttpError } from '../_lib/auth';
@@ -17,6 +22,24 @@ import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCo
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
 import { assertRisk } from '../_lib/risk';
+import { acceptInvite, agreementsFor, guestSellerSession, otpRequest, recoverRequest, recoverVerify, sellerGuestAvailable, sellerOrderView } from '../_lib/sellerGuest';
+
+const SELLER_OPS = new Set(['seller_otp_request', 'seller_accept', 'seller_recover_request', 'seller_recover_verify']);
+/** Bloque público del vendedor sin cuenta. Nunca expone sesión, correo, hash del código ni IBAN. */
+async function sellerGuestBlock(req: any, inv: any) {
+  const av = sellerGuestAvailable();
+  const out: Record<string, unknown> = { seller_guest: { available: av.available, ...(inv.status === 'abierta' ? { agreements: agreementsFor(inv) } : {}) } };
+  if (inv.status === 'aceptada' && inv.order_slug) {
+    try {
+      const { data: o } = await db().from('orders').select('*').eq('slug', inv.order_slug).maybeSingle();
+      if (o?.seller_auth_kind === 'guest') {
+        (out.seller_guest as any).order_is_guest = true;
+        if (await guestSellerSession(req, o)) out.seller_order = sellerOrderView(o);
+      }
+    } catch { /* sin 038: sin bloque */ }
+  }
+  return out;
+}
 
 const str = (v: unknown, max: number, req = true) => {
   if (v == null || v === '') { if (req) throw new HttpError(400, 'faltan campos'); return null; }
@@ -26,7 +49,8 @@ const str = (v: unknown, max: number, req = true) => {
 export default async function handler(req: any, res: any) {
   try {
     validate(req, S.invites); // zod: forma y tamaños de body/query (api/_lib/validate.ts) -> 400 genérico
-    if (req.method === 'POST') await rateLimit(req, 'invites.create'); // límite persistente por IP (migración 037)
+    const sellerOp = req.method === 'POST' && SELLER_OPS.has(req.body?.op);
+    if (req.method === 'POST' && !sellerOp) await rateLimit(req, 'invites.create'); // límite persistente por IP (migración 037)
     if (req.method === 'GET') {
       const code = Array.isArray(req.query?.code) ? req.query.code[0] : req.query?.code;
       if (!validCode(code)) throw new HttpError(400, 'código inválido');
@@ -34,10 +58,22 @@ export default async function handler(req: any, res: any) {
       if (!inv) throw new HttpError(404, 'invitación no existe');
       const g = guestSubFromReq(req);
       res.setHeader?.('Cache-Control', 'no-store');
-      return json(res, 200, publicInvite(inv, !!g && g === inv.buyer_user_id));
+      const mine = !!g && g === inv.buyer_user_id;
+      return json(res, 200, { ...publicInvite(inv, mine), ...(mine ? {} : await sellerGuestBlock(req, inv)) });
     }
     if (req.method !== 'POST') return json(res, 405, { error: 'method' });
     const b = req.body ?? {};
+    if (sellerOp) { // vendedor sin cuenta: no necesita llave de invitado ni cuenta
+      res.setHeader?.('Cache-Control', 'no-store');
+      await rateLimit(req, b.op === 'seller_accept' || b.op === 'seller_recover_verify' ? 'invites.otp_verify' : 'invites.otp');
+      if (!validCode(b.code)) throw new HttpError(400, 'código inválido');
+      const inv = await inviteByCode(b.code);
+      if (!inv) throw new HttpError(404, 'invitación no existe');
+      if (b.op === 'seller_otp_request') return json(res, 200, await otpRequest(req, inv, b));
+      if (b.op === 'seller_accept') return json(res, 200, await acceptInvite(req, res, inv, b));
+      if (b.op === 'seller_recover_request') return json(res, 200, await recoverRequest(inv, b));
+      return json(res, 200, await recoverVerify(res, b));
+    }
     const guest = guestSubFromReq(req);
     if (!guest) throw Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.'), { code: 'guest_key_missing' });
     if (b.op === 'create') {

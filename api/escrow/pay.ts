@@ -20,6 +20,7 @@ import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
 import { assertRisk } from '../_lib/risk';
 import { requireHuman } from '../_lib/turnstile';
+import { guestPayee, isGuestSellerOrder } from '../_lib/sellerGuest';
 
 // Solo los pasos que INICIAN un pago. Liquidación y sondeo (card_session, card_confirm, fund_xdr,
 // crypto_status) no se evalúan: el cargo ya salió o el cliente solo está esperando.
@@ -45,6 +46,8 @@ export default async function handler(req: any, res: any) {
     const who = await requireBuyerIdentity(req);
     const { slug, step, proof } = req.body ?? {};
     let order = await orderBySlug(slug);
+    // Vendedor sin cuenta (038): ningún paso de pago (desplegar, SINPE, tarjeta, cripto, USDC) sin aceptación válida y flag encendido.
+    if (isGuestSellerOrder(order) && step !== 'shipment') await guestPayee(order);
     if (step === 'start' && who.guest) {
       // Compra sin cuenta que crea pedido/escrow nuevo: Turnstile si está activo (api/_lib/turnstile.ts). Reabrir el propio no.
       if (!order.contract_id) await requireHuman(req, req.body?.turnstile, 'guest_pay');

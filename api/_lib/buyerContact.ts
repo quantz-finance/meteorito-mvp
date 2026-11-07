@@ -73,13 +73,16 @@ const brevoMailer: Mailer = async (m) => {
     headers: { 'api-key': process.env.BREVO_API_KEY!, 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
       sender: { email: process.env.EMAIL_FROM || 'hola@meteorito.app', name: process.env.EMAIL_FROM_NAME || 'Meteorito' },
-      to: [{ email: m.to }], subject: m.subject, htmlContent: m.html, textContent: m.text, tags: ['comprador', m.tag],
+      to: [{ email: m.to }], subject: m.subject, htmlContent: m.html, textContent: m.text, tags: [m.tag.startsWith('vendedor') ? 'vendedor' : 'comprador', m.tag],
     }),
   });
   return { ok: r.ok, status: r.status };
 };
 let mailer: Mailer = brevoMailer;
 let mailOn: () => boolean = emailEnabled;
+/** Mismo canal (Brevo) para el código del vendedor sin cuenta (api/_lib/sellerGuest.ts). */
+export const sendMail: Mailer = (m) => mailer(m);
+export const mailIsOn = () => mailOn();
 /** Solo tests. */
 export const __setMailerForTests = (m: Mailer | null, on?: boolean) => { mailer = m ?? brevoMailer; mailOn = on == null ? emailEnabled : () => on; };
 

@@ -43,14 +43,15 @@ import { replyRuleApplies } from '../_lib/orderRules';
 import { adminClearSocials } from '../_lib/socialsAdmin';
 import { adminClaims, claimForBuyer, claimForSeller, openClaim, resolveClaim, respondClaim } from '../_lib/claims';
 import { S, validate } from '../_lib/validate';
+import { sellerSubFor } from '../_lib/sellerGuest';
 
 async function action(req: any, res: any, a: string) {
   res.setHeader?.('Cache-Control', 'no-store');
   const b = req.body ?? {};
   if (a === 'seller_response_get' || a === 'seller_respond') {
-    const u = await requireCavosUser(req);
     const order = await orderBySlug(b.slug);
-    return json(res, 200, a === 'seller_respond' ? await sellerRespond(order, u.sub, b) : await sellerResponseGet(order, u.sub));
+    const sub = await sellerSubFor(req, order); // Cavos o sesión del vendedor sin cuenta (038)
+    return json(res, 200, a === 'seller_respond' ? await sellerRespond(order, sub, b) : await sellerResponseGet(order, sub));
   }
   if (a === 'claim_get' || a === 'claim_open') {
     const who = await requireBuyerIdentity(req);
@@ -58,9 +59,9 @@ async function action(req: any, res: any, a: string) {
     return json(res, 200, a === 'claim_open' ? await openClaim(order, who, b) : await claimForBuyer(order, who));
   }
   if (a === 'claim_seller_get' || a === 'claim_respond') {
-    const u = await requireCavosUser(req);
     const order = await orderBySlug(b.slug);
-    return json(res, 200, a === 'claim_respond' ? await respondClaim(order, u.sub, b) : await claimForSeller(order, u.sub));
+    const sub = await sellerSubFor(req, order);
+    return json(res, 200, a === 'claim_respond' ? await respondClaim(order, sub, b) : await claimForSeller(order, sub));
   }
   if (!a.startsWith('admin_')) throw new HttpError(400, 'acción inválida');
   const admin = await requireAdmin(req);

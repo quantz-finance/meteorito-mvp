@@ -8,7 +8,13 @@ import type { MeteoritoAuth } from './types';
 export interface Invite {
   code: string; category: string; brand: string; model: string; title?: string; photos?: string[]; price_crc: number; note: string | null; source_url?: string | null;
   status: 'abierta' | 'aceptada' | 'cancelada'; order_slug: string | null; created_at: string; mine: boolean;
+  /** Vendedor sin cuenta (api/_lib/sellerGuest.ts): si se puede aceptar sin cuenta y el acuerdo exacto (hash) por tipo de entrega. */
+  seller_guest?: { available: boolean; order_is_guest?: boolean; agreements?: Record<'envio' | 'cara_a_cara', { delivery_mode: 'envio' | 'cara_a_cara'; protection_minutes: number; rules_version: number; hash: string }> };
+  /** Solo con la sesión del vendedor sin cuenta (cookie HttpOnly de ese pedido). */
+  seller_order?: SellerOrderView | null;
 }
+export interface SellerOrderView { slug: string; status: string; delivery_mode: 'envio' | 'cara_a_cara'; funds_in_custody: boolean; funded_at: string | null; shipped_at: string | null;
+  shipped_tx: string | null; auto_release_at: string | null; release_ext: any; rules_version: number | null; released: boolean; price_crc: number; payout: 'iban_simulado' }
 export const inviteLink = (code: string) => `${PUBLIC_BASE_URL}/i/${code}`;
 const MINE = 'meteorito:guest:invites';
 
