@@ -9,6 +9,9 @@
 //  POST { op:'seller_otp_request', code, email, delivery_mode, agreement_hash }        -> código por correo
 //  POST { op:'seller_accept', code, challenge_id, otp, delivery_mode, agreement_hash } -> pedido + aceptación + cookie HttpOnly
 //  POST { op:'seller_recover_request', code, email } / { op:'seller_recover_verify', code, challenge_id, otp } -> sesión nueva
+//       seller_otp_request y seller_recover_request exigen consent:true + consent_version vigente (migración 039).
+//  POST { op:'seller_guest_purge', email? } (solo admin, Bearer Cavos) -> retención: disocia correos vencidos (90 días) o, con
+//       email, el de ese vendedor a pedido (nunca con una venta abierta). pg_cron lo corre cada día (meteorito_seller_guest_retention).
 //  GET agrega seller_guest {available, agreements} (invitación abierta) y seller_order (solo con la sesión del vendedor).
 import { db, json, fail } from '../_lib/db';
 import { scrubStoredPhotos } from '../_lib/scrubPhotos';
@@ -22,7 +25,8 @@ import { INVITE_CATS, inviteByCode, inviteCode, inviteErr, publicInvite, validCo
 import { S, validate } from '../_lib/validate';
 import { rateLimit } from '../_lib/rateLimit';
 import { assertRisk } from '../_lib/risk';
-import { acceptInvite, agreementsFor, guestSellerSession, otpRequest, recoverRequest, recoverVerify, sellerGuestAvailable, sellerOrderView } from '../_lib/sellerGuest';
+import { acceptInvite, agreementsFor, guestSellerSession, otpRequest, purgeGuests, recoverRequest, recoverVerify, sellerGuestAvailable, sellerOrderView } from '../_lib/sellerGuest';
+import { requireAdmin } from '../_lib/admin';
 
 const SELLER_OPS = new Set(['seller_otp_request', 'seller_accept', 'seller_recover_request', 'seller_recover_verify']);
 /** Bloque público del vendedor sin cuenta. Nunca expone sesión, correo, hash del código ni IBAN. */
@@ -74,6 +78,7 @@ export default async function handler(req: any, res: any) {
       if (b.op === 'seller_recover_request') return json(res, 200, await recoverRequest(inv, b));
       return json(res, 200, await recoverVerify(res, b));
     }
+    if (b.op === 'seller_guest_purge') { await requireAdmin(req); res.setHeader?.('Cache-Control', 'no-store'); return json(res, 200, await purgeGuests(b)); }
     const guest = guestSubFromReq(req);
     if (!guest) throw Object.assign(new HttpError(401, 'Falta la llave de invitado. Vuelve a abrir el link en el mismo navegador.'), { code: 'guest_key_missing' });
     if (b.op === 'create') {

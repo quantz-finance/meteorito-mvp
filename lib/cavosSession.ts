@@ -140,7 +140,7 @@ export function clearCavosToken() {
 
 // ---------- Traducción de errores Cavos ----------
 export const RELOGIN_TITLE = 'Tu sesión terminó';
-export const RELOGIN_MESSAGE = 'Para continuar, vuelve a entrar con la misma cuenta. Tu billetera sigue en este dispositivo.';
+export const RELOGIN_MESSAGE = 'Para continuar, vuelve a entrar con la misma cuenta. Tu cuenta sigue en este dispositivo.';
 const NETWORK_MESSAGE = 'No pudimos conectar con tu cuenta. Revisa tu conexión y vuelve a intentar.';
 const CANCEL_MESSAGE = 'Se canceló el inicio de sesión. Toca "Entrar" cuando quieras.';
 const PASSKEY_MESSAGE = 'No se pudo usar la passkey en este dispositivo. Vuelve a intentar o entra de nuevo con tu cuenta.';

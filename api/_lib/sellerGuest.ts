@@ -20,7 +20,8 @@ import { missingColumn } from './listings';
 import { HOLDER_PLACEHOLDER, IBAN_PLACEHOLDER } from './payout';
 import { CURRENT_RULES_VERSION } from './orderRules';
 import { DELIVERY_MODES, type DeliveryMode } from './agreement';
-import { OTP_MAX_ATTEMPTS, OTP_TTL_MIN, SELLER_GUEST_BETA, SELLER_GUEST_PREFIX, SESSION_DAYS, guestProtection } from './sellerGuestText';
+import { OTP_MAX_ATTEMPTS, OTP_TTL_MIN, SELLER_GUEST_BETA, SELLER_GUEST_CONSENT_TEXT, SELLER_GUEST_CONSENT_VERSION, SELLER_GUEST_EXCEPTION, SELLER_GUEST_PREFIX,
+  SELLER_GUEST_RETENTION_DAYS, SELLER_NOTICE_VERSION, SESSION_DAYS, guestProtection } from './sellerGuestText';
 
 export const isGuestSellerOrder = (o: any) => o?.seller_auth_kind === 'guest';
 /** Feature flag de la custodia para vendedores sin cuenta. Solo testnet (env.network() lanza si no). */
@@ -58,7 +59,7 @@ export interface Agreement { delivery_mode: DeliveryMode; protection_minutes: nu
 export function agreementFor(inv: any, mode: DeliveryMode): Agreement {
   const protection_minutes = guestProtection(mode);
   const body = { v: 1, code: inv.code, title: `${inv.brand ?? ''} ${inv.model ?? ''}`.trim(), price_crc: Number(inv.price_crc), photos: Array.isArray(inv.photos) ? inv.photos : [],
-    note: inv.note ?? null, source_url: inv.source_url ?? null, delivery_mode: mode, protection_minutes, rules_version: CURRENT_RULES_VERSION, payout: PAYOUT_TERMS, beta: SELLER_GUEST_BETA };
+    note: inv.note ?? null, source_url: inv.source_url ?? null, delivery_mode: mode, protection_minutes, rules_version: CURRENT_RULES_VERSION, payout: PAYOUT_TERMS, beta: SELLER_GUEST_BETA, exception: SELLER_GUEST_EXCEPTION };
   return { delivery_mode: mode, protection_minutes, rules_version: CURRENT_RULES_VERSION, hash: 'sha256:' + createHash('sha256').update(stable(body)).digest('hex') };
 }
 export const agreementsFor = (inv: any) => Object.fromEntries(DELIVERY_MODES.map((m) => [m, agreementFor(inv, m)])) as Record<DeliveryMode, Agreement>;
@@ -119,6 +120,21 @@ async function guestFor(email: string): Promise<string> {
   return id;
 }
 
+// ---------- Consentimiento del correo (migración 039; separado de la aceptación comercial) ----------
+export const CONSENT_TEXT_SHA256 = createHash('sha256').update(SELLER_GUEST_CONSENT_TEXT).digest('hex');
+/** Sin la casilla marcada (o con un texto viejo) no se guarda nada ni se manda código. */
+export function requireConsent(b: any) {
+  if (b?.consent !== true) throw Object.assign(new HttpError(400, 'Marca la casilla de autorización para recibir el código.'), { code: 'consent_required' });
+  if (b?.consent_version !== SELLER_GUEST_CONSENT_VERSION) throw Object.assign(new HttpError(409, 'Actualiza la página para ver el texto vigente.'), { code: 'consent_outdated' });
+}
+async function recordConsent(guestId: string, inviteCode: string, purpose: 'accept' | 'recover'): Promise<string> {
+  const id = randomUUID();
+  const { error } = await db().from('seller_guest_consents').insert({ id, guest_id: guestId, invite_code: inviteCode, purpose, consent_version: SELLER_GUEST_CONSENT_VERSION,
+    notice_version: SELLER_NOTICE_VERSION, consent_text_sha256: CONSENT_TEXT_SHA256, consented_at: new Date().toISOString() });
+  if (error) { if (schemaMissing(error)) throw unavailable('schema'); throw error; }
+  return id;
+}
+
 export const INVITE_OTP_PER_HOUR = 8;   // códigos por invitación
 export const GUEST_OTP_PER_HOUR = 5;    // códigos por correo
 async function capChallenges(col: 'invite_code' | 'guest_id', v: string, max: number) {
@@ -129,11 +145,12 @@ async function capChallenges(col: 'invite_code' | 'guest_id', v: string, max: nu
 async function newChallenge(inv: any, guestId: string, purpose: 'accept' | 'recover', a: Agreement | null) {
   await capChallenges('invite_code', inv.code, INVITE_OTP_PER_HOUR);
   await capChallenges('guest_id', guestId, GUEST_OTP_PER_HOUR);
+  const consent_id = await recordConsent(guestId, inv.code, purpose);
   const id = randomUUID();
   const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
   const expires_at = new Date(Date.now() + OTP_TTL_MIN * 60_000).toISOString();
   const { error } = await db().from('seller_otp_challenges').insert({ id, invite_code: inv.code, guest_id: guestId, purpose, otp_hash: otpHash(id, code),
-    agreement_hash: a?.hash ?? null, delivery_mode: a?.delivery_mode ?? null, expires_at });
+    agreement_hash: a?.hash ?? null, delivery_mode: a?.delivery_mode ?? null, expires_at, consent_id });
   if (error) { if (schemaMissing(error)) throw unavailable('schema'); throw error; }
   return { id, code, expires_at };
 }
@@ -143,6 +160,7 @@ export async function otpRequest(req: any, inv: any, b: any) {
   requireAvailable();
   notOpen(inv);
   await assertNotBuyer(req, inv);
+  requireConsent(b);
   const email = normalizeEmail(b?.email);
   if (!email) throw Object.assign(new HttpError(400, 'Escribe un correo válido.'), { code: 'bad_email' });
   const a = checkAgreement(inv, b);
@@ -202,6 +220,7 @@ export async function acceptInvite(req: any, res: any, inv: any, b: any) {
 /** op seller_recover_request: { code, email }. Respuesta siempre igual (no dice si el correo es el del vendedor). */
 export async function recoverRequest(inv: any, b: any) {
   requireAvailable();
+  requireConsent(b);
   const email = normalizeEmail(b?.email);
   if (!email) throw Object.assign(new HttpError(400, 'Escribe un correo válido.'), { code: 'bad_email' });
   const same = { sent: true, challenge_id: null as string | null };
@@ -297,4 +316,22 @@ export function sellerOrderView(o: any) {
   return { slug: o.slug, status: o.status, delivery_mode: o.delivery_mode ?? 'envio', funds_in_custody: paid, funded_at: paid ? o.funded_at ?? null : null,
     shipped_at: o.shipped_at ?? null, shipped_tx: o.shipped_tx ?? null, auto_release_at: o.auto_release_at ?? null, release_ext: o.release_ext ?? null,
     rules_version: o.rules_version ?? null, released: o.status === 'liberado' || o.status === 'resuelto', price_crc: Number(o.price_crc), payout: 'iban_simulado' };
+}
+
+// ---------- Retención (migración 039) ----------
+/** Disocia el correo de vendedores sin cuenta vencidos (pg_cron lo hace cada día) o, con email, de ese vendedor a pedido
+ *  (supresión antes de plazo; nunca con una venta abierta: blocked=1). Solo admin (api/invites op seller_guest_purge). */
+export async function purgeGuests(b: any) {
+  const email = b?.email == null ? null : normalizeEmail(b.email);
+  if (b?.email != null && !email) throw Object.assign(new HttpError(400, 'Escribe un correo válido.'), { code: 'bad_email' });
+  let guest: string | null = null;
+  if (email) {
+    const g = await db().from('seller_guests').select('id').eq('contact_hmac', contactHmac(email)).maybeSingle();
+    if (g.error) { if (schemaMissing(g.error)) throw unavailable('schema'); throw g.error; }
+    if (!g.data?.id) return { ok: true, erased: 0, sessions: 0, codes: 0, blocked: 0, found: false };
+    guest = g.data.id;
+  }
+  const { data, error } = await db().rpc('seller_guest_purge', { p_days: guest ? 0 : SELLER_GUEST_RETENTION_DAYS, p_guest: guest });
+  if (error) { if (schemaMissing(error)) throw unavailable('schema'); throw error; }
+  return { ...(data ?? {}), found: guest ? true : undefined };
 }

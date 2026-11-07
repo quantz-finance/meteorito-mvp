@@ -46,7 +46,7 @@ async function sessionProofHeader(auth: MeteoritoAuth, token: string, method: st
 
 export const bindMessage = (sub: string, nonce: string) => `meteorito:bind:${sessionRef(sub)}:${nonce}`;
 export const relinkMessage = (sub: string, nonce: string) => `meteorito:relink:${sessionRef(sub)}:${nonce}`;
-export const SESSION_RELOGIN_MSG = 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
+export const SESSION_RELOGIN_MSG = 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu cuenta se mantiene en este dispositivo.';
 
 // session_relogin_required: token vencido y la cuenta aún sin wallet ligada. NUNCA se reintenta y NUNCA se llama a
 // logout() (borra la llave). La app abre el login de Cavos (openLogin) y, con el token fresco, hace bind antes de todo.
