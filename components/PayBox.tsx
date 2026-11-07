@@ -51,6 +51,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const granted = !!loadGrant(order.slug); // abrió un link de acceso (correo / WhatsApp) en este dispositivo
   const buyerHere = !!pin || granted || auth.isAuthenticated; // este dispositivo es el del comprador (PIN o link de acceso) o hay sesión
   const [sheet, setSheet] = useState<'method' | 'card' | 'sinpe' | 'crypto' | 'paid' | 'photo' | 'released' | 'dispute' | 'cancel' | null>(null);
+  const [legacyGuest, setLegacyGuest] = useState(false); // identidad histórica indicada por el servidor
   const [card, setCard] = useState(false); // el servidor tiene el pago con tarjeta configurado (start -> card)
   const [crypto, setCrypto] = useState(false); // pago con cripto (USDC/XLM en Stellar) disponible (start -> crypto)
   // 'inapp' (default): nuestro formulario. 'widget': respaldo con el widget de Lendara (LENDARA_MODE=widget en el servidor).
@@ -60,6 +61,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     return api(auth, '/api/escrow/pay', { slug: order.slug, step: 'start', proof: await proof(auth, 'pay', order.slug) });
   };
   const payOpen = (r: any) => {
+    setLegacyGuest(r.guest === true);
     setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference }); setCard(!!r.card); setCrypto(!!r.crypto);
     setCardMode(r.cardMode === 'inapp' ? 'inapp' : 'widget'); setSheet(r.card || r.crypto ? 'method' : 'sinpe');
   };
@@ -203,6 +205,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
         <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
         <Row icon={f2f ? 'people-outline' : 'cube-outline'} text={payAcceptText(order.delivery_mode, order.protection_minutes)} />
         {legal}
+        <Row icon="information-circle-outline" text="En esta prueba, el fondeo simulado procede de la tesorería testnet, no del saldo de tu cuenta." />
         <Row icon="information-circle-outline" text='No envíes dinero: toca "Ya pagué" para continuar.' />
       </>}
     </Sheet>
@@ -212,7 +215,9 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <Text style={[T.title, { textAlign: 'center' }]}>{f2f ? F2F_PAID : PAID_WAITING}</Text>
       <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
       {f2f ? codeBox(F2F_CODE_HINT) : <Row icon="cube-outline" text="Cuando lo envíe, aquí vas a ver tu código de entrega." />}
-      <Text style={[T.footnote, { textAlign: 'center' }]}>Tu compra queda ligada a tu cuenta. Este navegador guarda tu código de entrega. Puedes elegir cómo recibir avisos de tu compra; es opcional.</Text>
+      <Text style={[T.footnote, { textAlign: 'center' }]}>{legacyGuest
+        ? 'Esta compra histórica conserva el acceso mediante la llave de este navegador; iniciar sesión no la vincula automáticamente a tu cuenta.'
+        : 'Tu compra queda ligada a tu cuenta. Este navegador guarda tu código de entrega. Puedes elegir cómo recibir avisos de tu compra; es opcional.'}</Text>
       <BetaNotice from="pin" onNavigate={() => setSheet(null)} />
       <ChainLinks order={order} align="center" />
     </Sheet>
