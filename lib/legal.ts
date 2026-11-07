@@ -6,7 +6,7 @@ export const CONTACT_EMAIL = 'team@meteorito.app';
 export const LEGAL_UPDATED = '24 de octubre de 2026';
 /** Responsable del tratamiento: SOLO los datos que ya están en este archivo. La dirección física no existe en el repo. */
 export const CONTROLLER_NAME = 'Rolando Arguello Lizano';
-export const CONTROLLER_ADDRESS = '[PENDIENTE: dirección física del responsable, Costa Rica]';
+export const CONTROLLER_ADDRESS = 'Torres de Heredia, A701, Barreal, Heredia, Costa Rica';
 /** Excepción visible para quien vende sin cuenta (prueba): el pago NO llega a su wallet. */
 export const SELLER_GUEST_EXCEPTION_LEGAL = 'Excepción (vendedor sin cuenta, prueba): ' + SELLER_GUEST_EXCEPTION;
 
@@ -58,7 +58,7 @@ const BASE_LEGAL: Record<LegalDocId, Doc> = {
     ],
   },
   // REVISIÓN LEGAL (Harvey, #155): aviso NUEVO para quien vende sin cuenta. Responsable y contacto: los mismos de la política;
-  // la dirección física no existe en el repo (CONTROLLER_ADDRESS es un marcador pendiente).
+  // Dirección física del responsable autorizada por Rolando (2026-11-07).
   vendedor: {
     title: 'Aviso de privacidad para quien vende sin cuenta',
     updated: SELLER_NOTICE_UPDATED,

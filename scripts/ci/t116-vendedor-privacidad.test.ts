@@ -32,7 +32,7 @@ export async function run(t: T) {
   const v = LEGAL.vendedor; const all = v.sections.map((s) => s.h + ': ' + s.p.join(' ')).join('\n');
   const has = (h: RegExp) => v.sections.some((s) => h.test(s.h));
   t.check('aviso: responsable real (el de la política) + contacto existente', all.includes(CONTROLLER_NAME) && LEGAL.privacidad.sections[0].p[0].includes(CONTROLLER_NAME) && all.includes(CONTACT_EMAIL));
-  t.check('aviso: dirección física = marcador pendiente visible (no inventada)', /^\[PENDIENTE: /.test(CONTROLLER_ADDRESS) && all.includes(CONTROLLER_ADDRESS));
+  t.check('aviso: dirección física publicada', CONTROLLER_ADDRESS === 'Torres de Heredia, A701, Barreal, Heredia, Costa Rica' && all.includes(CONTROLLER_ADDRESS));
   t.check('aviso: finalidades OTP, acceso, recuperación y registro de la aceptación; sin publicidad', /código de un solo uso \(OTP\)/.test(all) && /darte acceso/.test(all) && /recuperar ese acceso/.test(all) && /constancia de que aceptaste/.test(all) && /no los usamos para publicidad/.test(all));
   t.check('aviso: obligatorio para este camino', has(/necesario/i) && /no puedes aceptar sin cuenta/.test(all));
   t.check('aviso: proveedores y transferencias (Brevo, Supabase, Vercel; fuera de Costa Rica)', /Brevo/.test(all) && /Supabase/.test(all) && /Vercel/.test(all) && /fuera de Costa Rica/.test(all));

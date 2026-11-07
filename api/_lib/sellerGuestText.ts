@@ -16,9 +16,9 @@ export const SELLER_GUEST_CUSTODY = 'Hasta que se libera, el pago queda apartado
 // ---- Privacidad del vendedor sin cuenta (migración 039; aviso en lib/legal.ts LEGAL.vendedor, ruta /legal/vendedor) ----
 /** Consentimiento del tratamiento del correo (texto exacto; separado de la aceptación comercial). Cambiar el texto = subir la versión. */
 export const SELLER_GUEST_CONSENT_TEXT = 'Autorizo el tratamiento de mi correo para verificar acceso y registrar mi aceptación, según el aviso de privacidad. No incluye publicidad.';
-export const SELLER_GUEST_CONSENT_VERSION = 'vendedor-correo-v2';
+export const SELLER_GUEST_CONSENT_VERSION = 'vendedor-correo-v3';
 /** Versión del aviso de privacidad para quien vende sin cuenta (LEGAL.vendedor). */
-export const SELLER_NOTICE_VERSION = 'aviso-vendedor-2026-11-07-v2';
+export const SELLER_NOTICE_VERSION = 'aviso-vendedor-2026-11-07-v3';
 export const SELLER_NOTICE_UPDATED = '7 de noviembre de 2026';
 /** Umbral de elegibilidad de la purga MANUAL; no es un plazo de eliminación automática ni agendada. */
 export const SELLER_GUEST_RETENTION_DAYS = 90;

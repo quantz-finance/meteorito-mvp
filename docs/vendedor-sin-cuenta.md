@@ -20,7 +20,7 @@ Apagar: quitar `SELLER_GUEST_ENABLED` y redeploy. Los pedidos de vendedor sin cu
 
 - **Aviso**: `/legal/vendedor` ("Aviso de privacidad para quien vende sin cuenta", `LEGAL.vendedor` en `lib/legal.ts`,
   versión `SELLER_NOTICE_VERSION`). Responsable: Rolando Arguello Lizano (Costa Rica), contacto team@meteorito.app.
-  **Dirección física: marcador `[PENDIENTE: …]`** (`CONTROLLER_ADDRESS`; no existe en el repo, hay que completarla).
+  **Dirección física:** Torres de Heredia, A701, Barreal, Heredia, Costa Rica (`CONTROLLER_ADDRESS`).
   Cubre finalidades (OTP, acceso, recuperación, constancia de la aceptación; sin publicidad), que es necesario para este
   camino, proveedores (Brevo, Supabase, Vercel; fuera de Costa Rica), derechos ARCO/revocar/PRODHAB y retención.
 - **Casilla** (no marcada; sin ella el botón "Enviarme el código" y el de recuperar están deshabilitados), con el link al
