@@ -2,6 +2,7 @@
 // después del primer link (hoja chica, interruptor apagado) y queda en Mi cuenta. Rango grueso, nunca la hora. Demo.
 import { test, expect, type Page } from '@playwright/test';
 import { expectInputs16, expectNoScroll, open, settle, takePhoto, BANNED, VOSEO } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
 
 const INVITE = 'Mostrar a quienes ven tu tienda en Meteorito cuándo estuviste activo por última vez (aproximado, sin hora exacta). Puedes apagarlo cuando quieras en Mi cuenta.';
 const noHScroll = async (page: Page) => {
@@ -19,6 +20,7 @@ async function createLink(page: Page, title: string) {
 
 test.describe('Última conexión', () => {
   test('ACT-01 feed y perfil: solo quien la encendió, en rango, nunca la hora; quien no, nada (ni "inactivo")', async ({ page }, info) => {
+    test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
     await open(page, '/comprar?verified=all', 'buyer', true);
     await expect(page.getByTestId('seller-activity').first()).toBeVisible();
     const feedText = await page.locator('body').innerText();

@@ -1,6 +1,9 @@
 // Comprar: feed tipo red social + buscador + filtro de verificación, y perfil público del vendedor (/t/<usuario>). Demo.
 import { test, expect } from '@playwright/test';
 import { expectInputs16, open, searchFeed, settle, VOSEO } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
+// Marketplace oculto en la UI (lib/marketplace.ts): estos tests vuelven a correr al activarlo.
+test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto');
 
 const noHScroll = async (page: import('@playwright/test').Page) => {
   const w = await page.evaluate(() => ({ sw: document.scrollingElement!.scrollWidth, iw: window.innerWidth }));

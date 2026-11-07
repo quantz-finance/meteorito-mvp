@@ -3,11 +3,12 @@ import { expect, test } from '@playwright/test';
 import { expectNoScroll, open, PHOTO, settle } from './helpers';
 
 test.describe('Navegación', () => {
-  test('NAV-01 la barra tiene exactamente Comprar, Vender, Home (en ese orden)', async ({ page }) => {
+  test('NAV-01 la barra tiene exactamente Comprar y Vender (en ese orden)', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     const tabs = page.getByRole('tab');
-    await expect(tabs).toHaveCount(3);
-    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Comprar', 'Vender', 'Home']);
+    await expect(tabs).toHaveCount(2);
+    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Comprar', 'Vender']);
+    await expect(page.getByRole('button', { name: 'Mis ventas y cuenta' })).toBeVisible(); // Home se abre desde Vender
     await expect(page.getByRole('tab', { name: 'Inicio' })).toHaveCount(0);
   });
 

@@ -3,6 +3,9 @@
 // solo avisa que pronto se podrá (sin cobro).
 import { test, expect } from '@playwright/test';
 import { open, seed, settle } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
+// Marketplace oculto en la UI (lib/marketplace.ts): estos tests vuelven a correr al activarlo.
+test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto');
 
 const noHScroll = async (page: import('@playwright/test').Page) => {
   const w = await page.evaluate(() => ({ sw: document.scrollingElement!.scrollWidth, iw: window.innerWidth }));

@@ -5,6 +5,7 @@ import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle, expectLega
 import { readFileSync, writeFileSync } from 'node:fs';
 import { CLAIM_RULE, DISPUTE_REPLY_RULE, SHIP_REFUND_RULE } from '../lib/rules';
 import { resolve } from 'node:path';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
 
 test.describe.configure({ mode: 'serial' });
 const listing = { slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000 };
@@ -638,6 +639,7 @@ test('MCK-MIS-03 navegador nuevo: vacío con texto amable', async ({ page, reque
 // Bug: sin sesión, el icono "Mis compras" de la bienvenida abría la app completa (barra Vender/Comprar/Home + iconos)
 // sin salida. Ahora: Comprar entera es pública, sin la barra del vendedor, con "Volver" a la bienvenida.
 test('MCK-MIS-04 sin cuenta: bienvenida -> Mis compras sin menús del vendedor; Feed, seguimiento y Volver funcionan', async ({ page, request }, info) => {
+  test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
   await reset(request, [{ slug: 'trk555', status: 'enviado', contract_id: 'C5', buyer: KEY, model: 'Bici de montaña', price_crc: 150000 }, listing]);
   await page.addInitScript(([k]) => { localStorage.setItem('meteorito:guest:v1', k); }, [KEY]);
   await page.goto('/');
@@ -676,6 +678,7 @@ test('MCK-MIS-04 sin cuenta: bienvenida -> Mis compras sin menús del vendedor; 
 });
 
 test('MCK-MIS-05 sin cuenta, sin compras: vacío amable con link al feed', async ({ page, request }, info) => {
+  test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
   await reset(request, [listing]);
   await page.goto('/comprar/compras');
   await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí verás tus compras activas.');
@@ -690,6 +693,7 @@ test('MCK-MIS-05 sin cuenta, sin compras: vacío amable con link al feed', async
 
 // Compra completa sin cuenta desde la bienvenida: feed -> producto -> pagar (llave de invitado) -> seguimiento -> Mis compras.
 test('MCK-BUY-01 sin cuenta: bienvenida -> feed -> producto -> paga -> seguimiento -> Mis compras, sin login en ningún paso', async ({ page, request }) => {
+  test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
   await reset(request, [listing]);
   await page.goto('/');
   await page.getByText(/Quiero comprar|Comprar sin cuenta/).first().click();
@@ -874,6 +878,7 @@ test('CNT-05 link de acceso en OTRO dispositivo: recupera la compra, quita el to
 });
 
 test('MCK-SRCH-01 sin cuenta: la lupa abre el buscador y filtra el feed (sin barra de pestañas)', async ({ page, request }) => {
+  test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
   await reset(request, [listing, { slug: 'prod02', kind: 'listing', model: 'Consola PS5', price_crc: 300000 }]);
   const urls: string[] = []; page.on('request', (r) => urls.push(r.url()));
   await page.goto('/comprar');

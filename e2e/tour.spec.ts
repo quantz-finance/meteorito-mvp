@@ -27,7 +27,7 @@ test('TOUR-01 vendedor: arranca solo en Vender (resalta Generar link), una sola 
   await expect(page.getByTestId('tour-title')).toHaveText(TOUR_STEPS[0].title);
   await page.getByTestId('tour-next').click(); await page.getByTestId('tour-next').click(); await page.getByTestId('tour-next').click();
   await expect(page.getByTestId('tour-title')).toHaveText(TOUR_STEPS[3].title);
-  await expect.poll(() => tour.getAttribute('data-tour-target')).toBe('tab-pedidos');
+  // Home ya no tiene pestaña (dos secciones): el paso de entrega se muestra centrado en Home.
   // Paso 4 (el texto más largo): la tarjeta entera y sus botones caben en la pantalla (iPhone SE)
   const box = (await tour.boundingBox())!, vp = page.viewportSize()!;
   expect(box.y).toBeGreaterThanOrEqual(0); expect(box.y + box.height).toBeLessThanOrEqual(vp.height + 1);

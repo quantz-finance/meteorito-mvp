@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { MARKETPLACE_VISIBLE } from '@/lib/marketplace';
 import { COPY } from '@/lib/copy';
 import { SalesOutcomeLine, StarsInline, VerifiedBadge } from '@/components/SellerBits';
 import { useEffect, useRef, useState } from 'react';
@@ -252,7 +253,7 @@ function RateCard({ slug }: { slug: string }) {
       <Text style={T.headline}>{COPY.review.thanks}</Text>
       <View style={{ flexDirection: 'row', gap: S.xs }}>{[1, 2, 3, 4, 5].map((n) => <Icon key={n} name={n <= done ? 'star' : 'star-outline'} size={26} color={n <= done ? '#FFD84D' : C.textDim} />)}</View>
       <Text style={[T.footnote, { textAlign: 'center' }]}>{COPY.review.thanksText}</Text>
-      {store ? <PrimaryButton title={COPY.review.seeProfile} icon="person-circle-outline" variant="ghost" onPress={() => router.push({ pathname: '/t/[store]', params: { store } })} /> : null}
+      {store && MARKETPLACE_VISIBLE ? <PrimaryButton title={COPY.review.seeProfile} icon="person-circle-outline" variant="ghost" onPress={() => router.push({ pathname: '/t/[store]', params: { store } })} /> : null}
     </Card>
   );
   return (
@@ -293,8 +294,8 @@ function TrustBlock({ order }: { order: PublicOrder }) {
           en el dispositivo del comprador, está el chat de su compra (OrderChatCard) en su lugar. */}
       {!(canShowContact(order.status) && isBuyerDevice(order.slug)) ? <AskSellerButton storeSlug={seller === undefined ? undefined : seller?.store_slug ?? null} itemSlug={order.slug} /> : null}
       {name ? (
-        <Pressable disabled={!seller} accessibilityRole={seller ? 'link' : undefined} accessibilityLabel={seller ? `${COPY.ficha.seeProfile}: ${name}` : undefined}
-          onPress={() => { if (!seller) return; track('feed_item_clicked', { target: 'seller', from: 'ficha', verified: seller.verified }); router.push({ pathname: '/t/[store]', params: { store: seller.store_slug } }); }}
+        <Pressable disabled={!seller || !MARKETPLACE_VISIBLE} accessibilityRole={seller && MARKETPLACE_VISIBLE ? 'link' : undefined} accessibilityLabel={seller && MARKETPLACE_VISIBLE ? `${COPY.ficha.seeProfile}: ${name}` : undefined}
+          onPress={() => { if (!seller || !MARKETPLACE_VISIBLE) return; track('feed_item_clicked', { target: 'seller', from: 'ficha', verified: seller.verified }); router.push({ pathname: '/t/[store]', params: { store: seller.store_slug } }); }}
           style={({ pressed }) => [{ gap: 6 }, pressed && { opacity: 0.7 }]} testID="ficha-seller">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
             {seller?.avatar_url ? <Image source={{ uri: seller.avatar_url }} style={s.avatar} accessibilityIgnoresInvertColors />

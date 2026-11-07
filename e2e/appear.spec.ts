@@ -3,6 +3,7 @@
 // localStorage 'meteorito:e2e-anim' = '1'.
 import { expect, test, type Page } from '@playwright/test';
 import { open } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
 
 const enable = (page: Page) => page.addInitScript(() => localStorage.setItem('meteorito:e2e-anim', '1'));
 /** Animación de entrada de los hijos de un grupo: [nombre, duración ms, retraso ms]. Sin los avisos legales (y bloques que
@@ -40,6 +41,7 @@ test.describe('Entrada', () => {
   });
 
   test('APR-02 se repite al volver a la pestaña (sin perder lo escrito); Comprar: tarjetas escalonadas', async ({ page }) => {
+    test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
     await enable(page);
     await open(page, '/vender', 'seller', true);
     await page.getByPlaceholder('Ej. iPhone 13 de 128 GB').fill('Bici de montaña');

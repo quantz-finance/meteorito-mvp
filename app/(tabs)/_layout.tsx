@@ -18,7 +18,8 @@ export default function TabLayout() {
     }}>
       <Tabs.Screen name="comprar" options={{ title: 'Comprar' }} />
       <Tabs.Screen name="vender" options={{ title: 'Vender' }} />
-      <Tabs.Screen name="pedidos" options={{ title: 'Home' }} />
+      {/* Home (/pedidos: ventas, compras y Mi cuenta) sin pestaña: dos secciones, Comprar y Vender. Se abre desde Vender. */}
+      <Tabs.Screen name="pedidos" options={{ title: 'Home', href: null }} />
     </Tabs>
   );
 }
