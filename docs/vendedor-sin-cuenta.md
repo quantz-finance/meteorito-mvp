@@ -29,14 +29,16 @@ Apagar: quitar `SELLER_GUEST_ENABLED` y redeploy. Los pedidos de vendedor sin cu
   `consent: true` (400 `consent_required`) o con otra `consent_version` (409 `consent_outdated`), antes de guardar nada.
 - **Registro aparte** de la aceptación comercial: `seller_guest_consents` (versión del texto, versión del aviso, sha256 del
   texto, fecha; inmutable). Cada código (`seller_otp_challenges.consent_id`) apunta a su consentimiento.
-- **Retención: 90 días** (`SELLER_GUEST_RETENTION_DAYS`). `seller_guest_purge(p_days, p_guest)` disocia el correo
-  (`contact_enc = null`, `contact_hmac` al azar, `erased_at`), borra sesiones y códigos que no respaldan una aceptación.
-  Aplica 90 días después de cerrar la venta (liberado/resuelto/cancelado, sin reclamo abierto) o, si nunca aceptó, 90 días
-  después del último código. Nunca con una venta abierta. `seller_acceptances` y `seller_guest_consents` quedan solo con
-  hashes, versiones y fechas.
-  - **pg_cron** diario `meteorito_seller_guest_retention` (`27 4 * * *`, `select public.seller_guest_purge(90)`).
-  - **Op admin** `POST /api/invites {op:'seller_guest_purge'}` (Bearer de admin): corre la purga; con `email` disocia a ese
-    vendedor a pedido antes de plazo (si tiene una venta abierta responde `blocked: 1`).
+- **Sin borrado automático ni agendado** (040). La eliminación se realiza a pedido o por un administrador manualmente.
+  `seller_guest_purge(p_days, p_guest)` conserva su umbral de elegibilidad de 90 días para el lote manual;
+  con `p_guest` permite atender una solicitud puntual antes del umbral. Nunca con una venta abierta o reclamo pendiente.
+  Eliminamos el correo almacenado y sustituimos su identificador de búsqueda; conservamos las constancias indicadas.
+  La función pone `contact_enc = null`, sustituye `contact_hmac` al azar y marca `erased_at`;
+  borra sesiones y códigos que no respaldan una aceptación. Conserva `seller_acceptances` y `seller_guest_consents`.
+  Otras constancias pueden permitir relacionar la operación con una persona; no se promete anonimización total.
+  - No hay tarea pg_cron de retención del vendedor, chats ni contactos de compradores.
+  - **Op admin** `POST /api/invites {op:'seller_guest_purge'}` (Bearer de admin): ejecución manual;
+    con `email` atiende a ese vendedor a pedido (si tiene una venta abierta responde `blocked: 1`).
 
 ## Excepción de cobro (visible en el flujo y en los legales)
 

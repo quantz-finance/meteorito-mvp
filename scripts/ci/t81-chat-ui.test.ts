@@ -48,8 +48,8 @@ export async function run(t: T) {
   // Privacidad (para revisión legal)
   const legal = read('lib/legal.ts');
   const line = JSON.stringify(LEGAL.privacidad);
-  t.check('privacidad: línea del chat marcada para revisión legal (Neo)', /REVISIÓN LEGAL \(Neo\)[^\n]*chat/.test(legal) && /Mensajes del chat/.test(line) && /12 meses/.test(line));
-  t.check('privacidad: retención en pausa con disputa abierta (12 meses desde la resolución)', /Borramos cada conversación 12 meses después de su último mensaje\. Si hay una disputa abierta, no la borramos y los 12 meses empiezan a contar cuando se resuelve\./.test(line));
+  t.check('privacidad: línea del chat marcada para revisión legal (Neo)', /REVISIÓN LEGAL \(Neo\)[^\n]*chat/.test(legal) && /Mensajes del chat/.test(line) && /sin borrar evidencia/.test(line));
+  t.check('privacidad: sin borrado automático ni agendado; intervención manual y disputa abierta', /No borramos las conversaciones de forma automática ni agendada/.test(line) && /por un administrador de forma manual/.test(line) && /sin borrar evidencia de una disputa abierta/.test(line));
   t.check('privacidad: sin "quedan en este dispositivo" (los mensajes se guardan en el servidor)', !/quedan en este dispositivo/.test(JSON.stringify(K)));
   // Copy final aprobado (Neo): avisos que sí existen, reporte sin aviso a la otra parte, bloqueo con compra o disputa.
   t.check('copy final: bandeja vacía, primer mensaje, reporte y bloqueo', K.inboxEmptyBuyer === 'Escríbele a un vendedor desde su tienda o un producto. Tus conversaciones aparecen aquí.'

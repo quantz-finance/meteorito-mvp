@@ -37,7 +37,7 @@ export async function run(t: T) {
   t.check('aviso: obligatorio para este camino', has(/necesario/i) && /no puedes aceptar sin cuenta/.test(all));
   t.check('aviso: proveedores y transferencias (Brevo, Supabase, Vercel; fuera de Costa Rica)', /Brevo/.test(all) && /Supabase/.test(all) && /Vercel/.test(all) && /fuera de Costa Rica/.test(all));
   t.check('aviso: derechos ARCO y revocar', /ARCO/.test(all) && /revocar/.test(all));
-  t.check('aviso: retención de 90 días después de cerrar, y después solo hashes', all.includes(`${SELLER_GUEST_RETENTION_DAYS} días después de que se cierra la venta`) && /solo con hashes/.test(all) && SELLER_GUEST_RETENTION_DAYS === 90);
+  t.check('aviso: sin eliminación automática; a pedido o manual, con constancias', /No eliminamos tus datos de forma automática ni agendada/.test(all) && /a pedido o por un administrador de forma manual/.test(all) && all.includes('Eliminamos el correo almacenado y sustituimos su identificador de búsqueda; conservamos las constancias indicadas.') && !/ya no se puede ligar/.test(all) && SELLER_GUEST_RETENTION_DAYS === 90);
   t.check('aviso: sin el marco Cavos/comprador', !/Cavos/.test(notice) && !/comprador/.test(notice));
   t.check('aviso con versión y fecha', !!v.version && !!v.updated);
   t.check('ruta /legal/vendedor', /doc === 'vendedor'/.test(readFileSync('app/legal/[doc].tsx', 'utf8')));
@@ -130,6 +130,21 @@ export async function run(t: T) {
     && await fails(`insert into seller_guest_consents (guest_id, invite_code, purpose, consent_version, notice_version, consent_text_sha256) values ($1, 'inva0001', 'accept', 'v', 'v', 'xyz')`, [gA]));
   t.check('anon no ejecuta la purga; RLS encendido en consentimientos', (await one(`select has_function_privilege('anon', 'public.seller_guest_purge(integer, uuid)', 'execute') as x`)).x === false
     && (await one(`select relrowsecurity x from pg_class where relname = 'seller_guest_consents'`)).x === true);
-  t.check('pg_cron: job diario meteorito_seller_guest_retention con 90 días', /cron\.schedule\('meteorito_seller_guest_retention', '27 4 \* \* \*', \$job\$ select public\.seller_guest_purge\(90\); \$job\$\)/.test(readFileSync(join(MIGRATIONS_DIR, '039_seller_guest_privacy.sql'), 'utf8')));
+  const noSchedule = readFileSync(join(MIGRATIONS_DIR, '040_sin_borrado_agendado.sql'), 'utf8');
+  await db.exec('drop schema cron cascade'); // quitar solo el stub del motor de prueba
+  await db.exec(noSchedule); // sin pg_cron instalado: no falla
+  await db.exec(`create schema cron;
+    create table cron.job (jobid bigint primary key, jobname text);
+    create function cron.unschedule(bigint) returns boolean language sql as 'delete from cron.job where jobid = $1 returning true';
+    insert into cron.job values
+      (1, 'meteorito_seller_guest_retention'), (2, 'meteorito-chat-retention'),
+      (3, 'meteorito_buyer_contacts_retention'), (4, 'release-24h'),
+      (5, 'session-nonces-gc'), (6, 'rate-limits-gc'), (7, 'meteorito_seller_guest_retention');`);
+  await db.exec(noSchedule);
+  await db.exec(noSchedule); // idempotente, incluso si había nombres duplicados
+  const remaining = (await q(`select jobname from cron.job order by jobid`)).map((r: any) => r.jobname);
+  t.check('040: elimina solo las tres tareas de retención, idempotente; conserva tareas técnicas y pagos',
+    JSON.stringify(remaining) === JSON.stringify(['release-24h', 'session-nonces-gc', 'rate-limits-gc']));
+  t.check('040: sin schedule ni borrado de tablas/funciones', !/cron\.schedule\s*\(|drop\s+(?:table|function)|delete\s+from/i.test(noSchedule));
   await db.close();
 }

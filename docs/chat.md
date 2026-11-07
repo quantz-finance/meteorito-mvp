@@ -20,10 +20,10 @@ y punto en el icono). La insignia cuenta **conversaciones** sin leer, no mensaje
 - Al vendedor se le muestra el comprador como "Comprador · XXXX" (etiqueta estable y anónima).
 - Las tablas tienen RLS activado y sin permisos para `anon`/`authenticated`: solo el servidor (service role) las lee.
 - Los mensajes se guardan en el servidor (Supabase). El acceso del comprador sin cuenta va ligado a la llave de su dispositivo.
-- Retención: 12 meses desde el último mensaje (`chat_purge_old()`, pg_cron diario si existe). Con una disputa abierta ligada
-  la conversación no se borra, y los 12 meses cuentan desde lo último entre el último mensaje y la resolución de la disputa
-  (migración 026). Disputa ligada: la del pedido en el chat de una compra; en el chat de la tienda, cualquier pedido entre el
-  mismo comprador y vendedor.
+- Sin borrado automático ni agendado (040). La eliminación es a pedido o por un administrador manualmente.
+  `chat_purge_old()` queda disponible solo para intervención manual; conserva su umbral de 12 meses y no borra
+  evidencia de disputas abiertas. Ese umbral no es una promesa de eliminación automática.
+  En chats de tienda, la comprobación abarca los pedidos entre las mismas dos partes.
 
 ## Tiempo real: polling inteligente (no Supabase Realtime)
 
