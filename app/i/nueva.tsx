@@ -94,7 +94,7 @@ export default function NuevaInvitacion() {
 
   return (
     <Screen back="/comprar" title="Invitar a un vendedor" subtitle={short ? undefined : 'Dile qué quieres y a qué precio; él publica y te manda el link.'} scroll={false}
-      footer={<>{err && <ErrorText>{err}</ErrorText>}<PrimaryButton title="Crear invitación" icon="paper-plane-outline" loading={busy} onPress={submit} /></>}>
+      footer={<>{err && <ErrorText>{err}</ErrorText>}<PrimaryButton title={err ? "Reintentar" : "Crear invitación"} icon="paper-plane-outline" loading={busy} onPress={submit} /></>}>
       <View style={{ flex: 1, gap: S.sm }}>
         {fbNotice ? (
           <Card style={s.fbNotice}>

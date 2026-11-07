@@ -8,6 +8,7 @@ import { DEMO_ENABLED, demoApi } from './demo';
 import { guestKey, loadGrant } from './guest';
 import { holdUpdate } from './updater';
 import { RELOGIN_MESSAGE } from './cavosSession';
+import { invitePost } from './inviteRequest';
 
 export async function proof(auth: MeteoritoAuth, action: string, ref: string) {
   if (!auth.address) throw new Error('Inicia sesión');
@@ -151,7 +152,9 @@ async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown, ope
   const token = auth.getAuthToken();
   // Sin token (sesión fuera de la gracia o borrada): pedir volver a entrar, nunca "recarga la página".
   if (!token) throw relogin();
-  await ensureBound(auth); // token fresco nuevo (login / re-login): bind primero
+  // Crear una propuesta solo necesita identidad Cavos, no firma, despliegue ni passkey.
+  const identityOnly = path === '/api/invites' && (body as any)?.op === 'create';
+  if (!identityOnly) await ensureBound(auth); // las demás acciones conservan el bind
   let requestBody = body;
   const send = async (withProof: boolean) => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
@@ -161,6 +164,7 @@ async function apiInner<T>(auth: MeteoritoAuth, path: string, body: unknown, ope
     const grant = typeof slug === 'string' ? loadGrant(slug) : null;
     if (grant) headers['X-Order-Access'] = grant;
     if (withProof) headers['X-Meteorito-Proof'] = await sessionProofHeader(auth, token, 'POST', path.split('?')[0]);
+    if (identityOnly) return invitePost(path, headers, requestBody);
     const r = await fetch(path, { method: 'POST', headers, body: JSON.stringify(requestBody) });
     return { r, j: await r.json().catch(() => ({})) as any };
   };

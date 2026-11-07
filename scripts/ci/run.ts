@@ -5,6 +5,7 @@ import { baseEnv, SECRET_NAMES, testnet, type T } from './setup';
 
 baseEnv();
 const TESTS: { id: string; name: string; file: string; onchain: boolean }[] = [
+  { id: '118', name: 'Invitación OTP sin firma; deadline y modal reintentable', file: './t118-invites-timeout.test.ts', onchain: false },
   { id: '7', name: 'JWT aud/iss/exp/firma (+LOG_ONLY)', file: './t07-jwt.test.ts', onchain: false },
   { id: '4', name: 'PIN bloqueado tras 3 intentos', file: './t04-pin.test.ts', onchain: false },
   { id: '6a', name: 'Disputa: solo comprador, antes de liberar', file: './t06-dispute-auth.test.ts', onchain: false },

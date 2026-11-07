@@ -1,7 +1,7 @@
 // (7) JWT: aud incorrecto -> 401; iss/expirado/firma mala -> 401 incluso con LOG_ONLY; prod sin aud -> 503.
 import type { T } from './setup';
 import { AUD, installTestJwks, token } from './jwt';
-import { requireCavosUser } from '../../api/_lib/auth';
+import { requireCavosUser, EMAIL_ISS, jwksUrlFor, __setJwksForTests } from '../../api/_lib/auth';
 import { __setDbForTests } from '../../api/_lib/db';
 import { fakeDb } from './fakedb';
 
@@ -26,6 +26,21 @@ export async function run(t: T) {
   t.check('expirado + con fila, sin prueba -> 401 session_expired (renovable)', (await codeOf(await token({ sub: 'u9', exp: now - 120 }))) === '401:session_expired');
   t.check('firma inválida -> 401', (await call(await token({ sub: 'u1', badKey: true }))) === 401);
   t.check('sin token -> 401', await (async () => { try { await requireCavosUser({ headers: {} }); return false; } catch (e: any) { return e.status === 401; } })());
+
+  // Kit 0.5 email OTP: issuer, audience y JWKS propios (no son Firebase/Google).
+  const oldIssuers = process.env.CAVOS_JWT_ISSUERS;
+  delete process.env.CAVOS_JWT_ISSUERS;
+  t.check('correo OTP: token fresco enclave/cavos-email aceptado', await call(await token({ sub: 'otp-user', iss: EMAIL_ISS, aud: 'cavos-email', alg: 'ES256' })) === 200);
+  t.check('correo OTP: audiencia de app u OAuth no sustituye cavos-email', await call(await token({ sub: 'otp-user', iss: EMAIL_ISS, aud: AUD })) === 401);
+  t.check('correo OTP: firma mala sigue rechazada', await call(await token({ sub: 'otp-user', iss: EMAIL_ISS, aud: 'cavos-email', badKey: true })) === 401);
+  t.check('cavos-email NO amplía audiencias de otros emisores', await call(await token({ sub: 'u1', aud: 'cavos-email' })) === 401);
+  t.check('JWKS email aislado del JWKS legacy', jwksUrlFor(EMAIL_ISS) === 'https://enclave.cavos.xyz/.well-known/jwks.json' && jwksUrlFor('https://accounts.google.com') === 'https://www.googleapis.com/oauth2/v3/certs');
+  process.env.CAVOS_JWT_ISSUERS = 'https://cavos.app/firebase';
+  t.check('lista explícita de emisores sigue siendo respetada', await call(await token({ sub: 'otp-user', iss: EMAIL_ISS, aud: 'cavos-email', alg: 'ES256' })) === 401);
+  if (oldIssuers === undefined) delete process.env.CAVOS_JWT_ISSUERS; else process.env.CAVOS_JWT_ISSUERS = oldIssuers;
+  __setJwksForTests((async () => { throw Object.assign(new Error('deadline'), { code: 'ERR_JWKS_TIMEOUT' }); }) as any);
+  t.check('JWKS colgado -> 503 auth_unavailable, no 401 ni re-login', await codeOf(await token({ sub: 'u1' })) === '503:auth_unavailable');
+  await installTestJwks();
 
   set(AUD, true); // LOG_ONLY: solo el aud deja de rechazar; todo lo demás sigue estricto
   t.check('LOG_ONLY: aud incorrecto se registra pero pasa (comportamiento esperado)', (await call(await token({ sub: 'u1', aud: 'otra-app' }))) === 200);
