@@ -58,6 +58,8 @@ export function loginErrorCode(e: unknown): string {
   const name = (e as any)?.name ?? '';
   if (name === 'InvalidStateError' || /already pending|pending request/i.test(m)) return 'passkey_pending';
   if (isUserCancel(e)) return 'cancel';
+  if (/recovery by sign-in is turned off|recovery_revoked/i.test(m)) return 'recovery_off';
+  if (/no sealed recovery|no local key and no recovery wrap|not_enrolled|nothing to recover/i.test(m)) return 'no_recovery';
   if (/invalid_nonce/i.test(m)) return 'otp_stale';
   if (/invalid_code|code_expired|expired_code|otp_expired|invalid or expired code/i.test(m)) return 'otp_invalid';
   if (/\b429\b|too_many|rate.?limit/i.test(m)) return 'rate_limited';

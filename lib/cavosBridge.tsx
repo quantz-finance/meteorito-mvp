@@ -8,7 +8,7 @@ import { authStore, useAuthFlag } from './authStore';
 import { walletInfo, type MeteoritoAuth } from './types';
 import { Brand } from '@/constants/Colors';
 import { authErrorText, otpFill } from './authUx';
-import { installKitGuard, LOGIN_TIMEOUTS, trackLoginError, trackLoginTimeout } from './loginGuard';
+import { installKitGuard, LOGIN_TIMEOUTS, loginErrorCode, trackLoginError, trackLoginTimeout } from './loginGuard';
 import { clearCavosToken, currentCavosToken, friendlyCavosError, persistCavosToken, rehydrateCavosToken, RELOGIN_MESSAGE, sessionExpiredOnOpen, hadSessionOnOpen, markSessionSettled, userMessage } from './cavosSession';
 
 // Se ejecuta al cargar este chunk, ANTES de que CavosProvider lea sessionStorage (PWA iOS: ver lib/cavosSession.ts).
@@ -96,7 +96,7 @@ function Bridge() {
     const dbs: Promise<string[]> = (indexedDB as any)?.databases ? (indexedDB as any).databases().then((l: any[]) => l.map((d) => d.name)).catch(() => []) : Promise.resolve([]);
     dbs.then((names) => track('cavos_session_restore', {
       rehydrated, standalone, ok: c.isAuthenticated, device_key: names.includes('cavos-kit-stellar-control'),
-      error: c.authError ? String(c.authError).slice(0, 60) : null,
+      error: c.authError ? String(c.authError).slice(0, 120) : null, code: c.authError ? loginErrorCode(c.authError) : null,
     }));
   }, [c.isLoading, c.isAuthenticated]);
   // El usuario tocó "Entrar" antes de que el SDK cargara: abrir el modal ahora. Si la sesión guardada sigue
