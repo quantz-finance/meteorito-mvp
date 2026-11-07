@@ -110,7 +110,7 @@ export const COPY = {
   adTemplate: {
     title: 'Plantilla de anuncio', copy: 'Copiar anuncio', copied: 'Anuncio copiado',
     custody: 'Pago en custodia con Meteorito (beta en testnet, sin dinero real): el pago queda en un contrato de escrow en Stellar y se libera cuando quien compra da su PIN de entrega, o por tiempo si no abre una disputa antes. Meteorito no verifica el producto.',
-    payHere: (link: string) => `Paga aquí, sin crear cuenta: ${link}`,
+    payHere: (link: string) => `Paga aquí con tu cuenta: ${link}`,
   },
   salesHistory: {
     title: 'Historial de ventas', subtitle: 'Tus ventas con su estado y lo que cobraste.',
@@ -179,7 +179,7 @@ export const COPY = {
   store: {
     share: 'Compartir perfil', shareMine: 'Compartir mi tienda',
     linkCopied: 'Link copiado',
-    shareText: (name: string) => `Mira el perfil de ${name} en Meteorito: compras sin crear cuenta y con el pago en custodia.`,
+    shareText: (name: string) => `Mira el perfil de ${name} en Meteorito: compras con tu cuenta y con el pago en custodia.`,
     shareMineText: 'Mira lo que vendo en mi tienda de Meteorito:',
     ownerTitle: 'Tu tienda', ownerHint: 'Así ven tu tienda tus compradores. Solo tú ves esta sección.',
     edit: 'Editar nombre o usuario', account: 'Mi cuenta', accountHint: 'Cobros, WhatsApp, correo y sesión',

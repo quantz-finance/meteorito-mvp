@@ -55,7 +55,7 @@ test('CAM-02 envío: "Ya lo envié" bloqueado sin foto y permiso denegado con in
 });
 });
 
-test('CAM-03 invitación del comprador: foto con la cámara (sin cuenta), nunca del carrete', async ({ page }) => {
+test('CAM-03 invitación del comprador: foto con la cámara (demo), nunca del carrete', async ({ page }) => {
   const ch = noChooser(page);
   await open(page, '/i/nueva', 'buyer', true);
   await expect(page.locator('input[type=file]')).toHaveCount(0);

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { open, seed, orderStatus, DEMO_PIN, PAID, expectNoScroll, openSellerRow, takePhoto } from './helpers';
 
-test.describe('Comprador sin cuenta + ciclo de custodia (demo)', () => {
+test.describe('Comprador de demo + ciclo de custodia (demo)', () => {
   test('COM-01 paga por SINPE con "Ya pagué" y ve su PIN', async ({ page }) => {
     await open(page, '/', 'seller', true);
     const slug = await seed(page, 'creado');

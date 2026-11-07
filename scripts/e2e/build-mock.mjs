@@ -2,7 +2,7 @@
 // scripts/e2e/mock-server.mjs (mismo origen, puerto 8084). Sin red real, sin secretos. Salida: dist-e2e/.
 import { spawnSync } from 'node:child_process';
 const MOCK = `http://localhost:${process.env.E2E_MOCK_PORT ?? 8084}`; // mismo puerto que playwright.config.ts
-const env = { ...process.env, EXPO_PUBLIC_DEMO_MODE: '', EXPO_PUBLIC_SUPABASE_URL: `${MOCK}/sb`, EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon-e2e',
+const env = { ...process.env, E2E_MOCK_CAVOS: '1', EXPO_PUBLIC_CAVOS_APP_ID: 'cav-e2e-local', EXPO_PUBLIC_DEMO_MODE: '', EXPO_PUBLIC_SUPABASE_URL: `${MOCK}/sb`, EXPO_PUBLIC_SUPABASE_ANON_KEY: 'anon-e2e',
   EXPO_PUBLIC_POSTHOG_KEY: 'phc_e2e_mock', EXPO_PUBLIC_POSTHOG_HOST: `${MOCK}/ph`, // PostHog simulado en mock-server
   EXPO_PUBLIC_STELLAR_NETWORK: 'testnet', CI: process.env.CI ?? '1' };
 const run = (cmd, args) => { const r = spawnSync(cmd, args, { stdio: 'inherit', env }); if (r.status) process.exit(r.status ?? 1); };

@@ -31,19 +31,27 @@ export async function run(t: T) {
 
   let r = await call(invites, { body: { op: 'create', ...base } });
   t.check('crear invitación sin llave de invitado -> 401', r.code === 401, `${r.code}`);
-  r = await call(invites, { guest: KEY_A, body: { op: 'create', ...base, price_crc: 10 } });
-  t.check('precio fuera de rango -> 400', r.code === 400, `${r.code}`);
-  r = await call(invites, { guest: KEY_A, body: { op: 'create', ...base, category: 'auto' } });
-  t.check('categoría inválida -> 400', r.code === 400, `${r.code}`);
   r = await call(invites, { guest: KEY_A, body: { op: 'create', ...base } });
+  t.check('llave sola no crea invitaciones nuevas', r.code === 401 && db.tables.invitations.length === 0);
+  r = await call(invites, { guest: KEY_A, tok: 'invalid-token', body: { op: 'create', ...base } });
+  t.check('token inválido no cae a invitado al crear', r.code === 401 && db.tables.invitations.length === 0);
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { op: 'create', ...base, price_crc: 10 } });
+  t.check('precio fuera de rango -> 400', r.code === 400, `${r.code}`);
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { op: 'create', ...base, category: 'auto' } });
+  t.check('categoría inválida -> 400', r.code === 400, `${r.code}`);
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { op: 'create', ...base } });
   const code = r.body?.code as string;
-  t.check('comprador invitado crea invitación (código de 8 caracteres)', r.code === 200 && /^[a-z0-9]{8}$/.test(code), `${r.code} ${r.body?.error}`);
-  t.check('se guarda con status abierta y buyer = guest:<hash>', db.tables.invitations[0]?.status === 'abierta' && /^guest:/.test(db.tables.invitations[0]?.buyer_user_id));
+  t.check('comprador con cuenta crea invitación (código de 8 caracteres)', r.code === 200 && /^[a-z0-9]{8}$/.test(code), `${r.code} ${r.body?.error}`);
+  t.check('se guarda con status abierta y buyer = sub Cavos', db.tables.invitations[0]?.status === 'abierta' && db.tables.invitations[0]?.buyer_user_id === 'buyer-account');
 
   r = await call(invites, { method: 'GET', query: { code } });
   t.check('lectura pública sin login; no expone buyer_user_id', r.code === 200 && r.body.brand === 'Apple' && r.body.mine === false && !JSON.stringify(r.body).includes('guest:'), JSON.stringify(r.body));
+  r = await call(invites, { method: 'GET', query: { code }, guest: KEY_A, tok: await token({ sub: 'buyer-account' }) });
+  t.check('mine:true solo para la cuenta del comprador', r.body?.mine === true);
   r = await call(invites, { method: 'GET', query: { code }, guest: KEY_A });
-  t.check('mine:true solo para la llave del comprador', r.body?.mine === true);
+  t.check('misma llave sin sesión no es dueña de una invitación Cavos', r.body?.mine === false);
+  r = await call(invites, { method: 'GET', query: { code }, tok: await token({ sub: 'buyer-account' }) });
+  t.check('otro dispositivo con la misma cuenta recupera su invitación', r.body?.mine === true);
   r = await call(invites, { method: 'GET', query: { code: 'zz' } });
   t.check('código inválido -> 400', r.code === 400);
 
@@ -67,17 +75,32 @@ export async function run(t: T) {
   t.check('segunda publicación sobre la misma invitación -> 409', r.code === 409 && r.body?.code === 'invite_not_open' && db.tables.orders.length === 1, `${r.code} ${r.body?.error}`);
 
   // El link queda reservado a quien invitó.
-  r = await call(pay, { guest: KEY_B, body: { slug, step: 'start' } });
+  r = await call(pay, { guest: KEY_B, tok: await token({ sub: 'other-buyer' }), body: { slug, step: 'start' } });
   t.check('otro invitado no puede pagar el link reservado -> 403 invite_reserved', r.code === 403 && r.body?.code === 'invite_reserved', `${r.code} ${r.body?.error}`);
   t.check('…y no se escribió nada en el pedido', !db.tables.orders[0].contract_id);
 
+  r = await call(pay, { guest: KEY_A, body: { slug, step: 'start' } });
+  t.check('el link nuevo no se paga con llave sola', r.code === 401 && !db.tables.orders[0].contract_id);
+  r = await call(pay, { guest: KEY_A, tok: 'invalid-token', body: { slug, step: 'start' } });
+  t.check('token inválido no abre custodia invitada', r.code === 401 && !db.tables.orders[0].contract_id);
+  r = await call(pay, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { slug, step: 'start' } });
+  t.check('cuenta nueva necesita prueba de dirección aunque traiga llave', r.code === 401 && r.body?.code === 'proof_missing' && !db.tables.orders[0].contract_id);
+
   // Cancelar.
-  r = await call(invites, { guest: KEY_A, body: { op: 'create', ...base } });
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { op: 'create', ...base } });
   const c2 = r.body.code;
   r = await call(invites, { guest: KEY_B, body: { op: 'cancel', code: c2 } });
   t.check('otro no puede cancelar -> 403', r.code === 403, `${r.code}`);
-  r = await call(invites, { guest: KEY_A, body: { op: 'cancel', code: c2 } });
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { op: 'cancel', code: c2 } });
   t.check('el comprador cancela su invitación abierta', r.code === 200 && db.tables.invitations.find((i: any) => i.code === c2).status === 'cancelada');
   r = await call(create, { tok: await token({ sub: 'seller3' }), body: { ...sellerBody(250000, c2), photos: [publicPrefix('seller3') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg'] } });
   t.check('no se puede publicar sobre una invitación cancelada -> 409', r.code === 409 && db.tables.orders.length === 1, `${r.code}`);
+  // Invitación de llave anterior: conserva lectura, ownership y cancelación sin reescribir datos.
+  const { guestSubFromReq } = await import('../../api/_lib/guest');
+  const legacy = { ...base, code: 'legacy27', status: 'abierta', buyer_user_id: guestSubFromReq({ headers: { 'x-guest-key': KEY_A } }) };
+  db.tables.invitations.push(legacy);
+  r = await call(invites, { method: 'GET', guest: KEY_A, query: { code: legacy.code } });
+  t.check('invitación histórica reconoce su llave', r.code === 200 && r.body?.mine === true);
+  r = await call(invites, { guest: KEY_A, body: { op: 'cancel', code: legacy.code } });
+  t.check('invitación histórica se cancela con su llave original', r.code === 200 && legacy.status === 'cancelada');
 }

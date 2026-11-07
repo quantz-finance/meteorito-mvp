@@ -1,4 +1,4 @@
-// Comprador (sin cuenta): pide a un vendedor que publique el artículo. Mismos campos que el vendedor: nombre, precio y
+// Comprador (con cuenta Cavos): pide a un vendedor que publique el artículo. Mismos campos que el vendedor: nombre, precio y
 // fotos opcionales. Crea una INVITACIÓN; el vendedor la confirma y manda el link de pago (reservado para este comprador).
 // "Importar de un link": pega el link del anuncio de cualquier marketplace (Facebook, Mercado Libre, Amazon, Encuentra24,
 // Walmart o cualquier tienda https). Se detecta el proveedor al pegar (mismo providers.ts que Vender). Donde se deja leer
@@ -134,7 +134,7 @@ export default function NuevaInvitacion() {
             </Pressable>
           ) : null}
         </View>
-        <View style={{ flexDirection: 'row', gap: S.sm, marginTop: S.xs }}><Icon name="information-circle-outline" size={18} color={C.lilac} /><Text style={[T.footnote, { flex: 1 }]} numberOfLines={3}>No necesitas cuenta: tu navegador guarda una llave para que solo tú pagues el link.</Text></View>
+        <View style={{ flexDirection: 'row', gap: S.sm, marginTop: S.xs }}><Icon name="information-circle-outline" size={18} color={C.lilac} /><Text style={[T.footnote, { flex: 1 }]} numberOfLines={3}>La invitación queda ligada a tu cuenta. Solo tú puedes pagar el link cuando el vendedor acepte.</Text></View>
       </View>
 
       <CameraCapture visible={camOpen} purpose="listing" refId="new" asGuest onClose={() => setCamOpen(false)}

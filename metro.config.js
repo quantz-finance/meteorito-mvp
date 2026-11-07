@@ -9,6 +9,10 @@ if (!config.resolver.assetExts.includes('woff2')) config.resolver.assetExts.push
 const shim = path.join(__dirname, 'lib/shims/phosphor-icons.ts');
 const upstream = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  // Solo build-mock.mjs: sustituye el proveedor externo, nunca Gate/Welcome/API ni el build de producción.
+  if (process.env.E2E_MOCK_CAVOS === '1' && platform === 'web' && context.originModulePath.endsWith(path.join('lib', 'cavos.web.tsx')) && moduleName === './cavosBridge') {
+    return { type: 'sourceFile', filePath: path.join(__dirname, 'scripts/e2e/cavos-bridge.mock.tsx') };
+  }
   if (moduleName === '@phosphor-icons/react' && platform === 'web') return { type: 'sourceFile', filePath: shim };
   return (upstream ?? context.resolveRequest)(context, moduleName, platform);
 };

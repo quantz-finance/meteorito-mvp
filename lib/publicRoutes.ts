@@ -1,15 +1,13 @@
 // Rutas que se ven sin cuenta (puro: lo usan app/_layout.tsx y los tests). Todo lo demás muestra la bienvenida/login.
-// El comprador no necesita cuenta (llave de invitado en este dispositivo): links de pago, tiendas, invitaciones, legales,
-// reglas, chat y TODA la pestaña Comprar (Feed /comprar, Pagar con link /comprar/link y Mis compras /comprar/compras).
-// Vender y Home son del vendedor: piden entrar.
-const PUBLIC_ROOTS = ['p', 't', 'i', 'legal', 'como-funciona', 'mis-compras', 'chat', 'mensajes'];
+// Comprar y los links de pago piden una cuenta Cavos. La invitación del vendedor sigue pública.
+const PUBLIC_ROOTS = ['t', 'i', 'legal', 'como-funciona', 'chat', 'mensajes'];
 
 export function isPublicRoute(segments: readonly string[]): boolean {
   // Crear una invitación de comprador (/i/nueva) pide entrar: quien compra crea su cuenta y empieza la transacción.
   // Sin sesión se ve el login en la misma URL y, al entrar, sigue en /i/nueva. Abrir/aceptar una invitación (/i/<código>) sigue siendo público.
   if (segments[0] === 'i' && segments[1] === 'nueva') return false;
   if (PUBLIC_ROOTS.includes(segments[0])) return true;
-  return segments[0] === '(tabs)' && segments[1] === 'comprar';
+  return false;
 }
 
 const TAB_ROUTES = ['vender', 'pedidos', 'comprar'];
@@ -19,7 +17,7 @@ export function isPublicPath(href: string): boolean {
   return isPublicRoute(TAB_ROUTES.includes(segs[0]) ? ['(tabs)', ...segs] : segs);
 }
 /** Donde cae el comprador sin cuenta cuando no hay a dónde volver. */
-export const GUEST_HOME = '/comprar/compras';
+export const GUEST_HOME = '/como-funciona';
 /** Volver sin historial: con cuenta, el destino de siempre; sin cuenta, nunca una ruta con login (-> Mis compras). */
 export function guestFallback<H extends string>(href: H, guest: boolean): H | typeof GUEST_HOME {
   return guest && !isPublicPath(href) ? GUEST_HOME : href;

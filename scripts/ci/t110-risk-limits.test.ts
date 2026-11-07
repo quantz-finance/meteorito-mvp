@@ -197,7 +197,7 @@ export async function run(t: T) {
     // Pago: rechazar antes de fondear. Un solo exceso no deja bloqueo.
     const guest = guestSubFromReq({ headers: { 'x-guest-key': GUEST } })!;
     db = fakeDb(); __setDbForTests(db as any);
-    db.tables.orders.push({ id: '11111111-1111-4111-8111-111111111111', slug: 'payhi1', status: 'creado', seller_user_id: 'seller', seller_address: 'GSELLER', price_crc: 6_000_000 });
+    db.tables.orders.push({ id: '11111111-1111-4111-8111-111111111111', slug: 'payhi1', buyer_user_id: guest, status: 'creado', seller_user_id: 'seller', seller_address: 'GSELLER', price_crc: 6_000_000 });
     r = await guestPay('payhi1', 'start');
     t.check('pagar sobre el tope -> 403, evento risk_limit, sin contrato ni rb_', generic(r) && !db.tables.orders[0].contract_id && blocks(db).length === 0 && db.tables.order_events.some((e: any) => e.kind === 'risk_limit' && e.detail?.reason === 'order_amount' && !JSON.stringify(e).includes(GUEST)), `${r.code} ${JSON.stringify(r.body)} ${JSON.stringify(db.tables.order_events)}`);
     db.tables.orders.push({ id: '22222222-2222-4222-8222-222222222222', slug: 'paylo1', status: 'escrow_creado', seller_user_id: 'seller', buyer_user_id: 'guest:other', seller_address: 'GSELLER', price_crc: 5_000, contract_id: 'CALREADY', amount_usdc: 1 });
@@ -292,10 +292,10 @@ export async function run(t: T) {
 
     // Invitación: mismo tope por pedido, sin bloqueo persistente.
     db = fakeDb(); __setDbForTests(db as any);
-    r = res(); await invites({ method: 'POST', headers: { 'x-guest-key': GUEST }, body: { op: 'create', title: 'Bici de montaña', price_crc: 18_000 }, query: {} }, r);
+    r = res(); await invites({ method: 'POST', headers: { 'x-guest-key': GUEST, authorization: `Bearer ${await token({ sub: 'buyer110' })}` }, body: { op: 'create', title: 'Bici de montaña', price_crc: 18_000 }, query: {} }, r);
     t.check('invitación dentro del tope -> 200', r.code === 200 && (db.tables.invitations ?? []).length === 1, `${r.code} ${r.body?.error}`);
     db = fakeDb(); __setDbForTests(db as any);
-    r = res(); await invites({ method: 'POST', headers: { 'x-guest-key': GUEST }, body: { op: 'create', title: 'Bici de montaña', price_crc: 6_000_000 }, query: {} }, r);
+    r = res(); await invites({ method: 'POST', headers: { 'x-guest-key': GUEST, authorization: `Bearer ${await token({ sub: 'buyer110' })}` }, body: { op: 'create', title: 'Bici de montaña', price_crc: 6_000_000 }, query: {} }, r);
     t.check('invitación sobre el tope -> 403 y no se guarda', generic(r) && (db.tables.invitations ?? []).length === 0, `${r.code} ${JSON.stringify(r.body)}`);
   } finally {
     console.warn = warn;

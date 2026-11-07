@@ -19,7 +19,7 @@ export default function PagarConLink() {
   const linkSlug = parseSlug(link);
   const goPay = () => { if (!linkSlug) return; setPayOpen(false); setLink(''); router.push(`/p/${linkSlug}`); };
   return (
-    <Screen back={guest ? GUEST_BACK : undefined} backTop title="Pagar con link" subtitle={short ? undefined : 'Sin crear cuenta, con fondos en custodia (escrow).'} scroll={false}
+    <Screen back={guest ? GUEST_BACK : undefined} backTop title="Pagar con link" subtitle={short ? undefined : 'Con tu cuenta y fondos en custodia.'} scroll={false}
       right={<ComprarNav active="link" />}>
       <AppearSub style={{ gap: S.md }}>
         <Card style={{ gap: S.sm }}>
