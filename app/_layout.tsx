@@ -91,7 +91,7 @@ function Gate() {
   const auth = useAuth();
   const segments = useSegments();
   const pathname = usePathname();
-  const isPublic = isPublicRoute(segments as string[]); // links públicos y toda la pestaña Comprar (comprador sin cuenta): lib/publicRoutes.ts
+  const isPublic = isPublicRoute(segments as string[]); // rutas públicas del vendedor y contenido informativo: lib/publicRoutes.ts
   const authed = auth.isAuthenticated && !!auth.address;
   useEffect(() => { screen(authed || isPublic ? screenName(pathname) : 'welcome'); }, [pathname, authed]);
   useEffect(() => {

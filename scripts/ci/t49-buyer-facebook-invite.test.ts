@@ -76,22 +76,22 @@ export async function run(t: T) {
   const KEY_A = key('a'); const buyer = guestSubFromReq({ headers: { 'x-guest-key': KEY_A } })!;
   const buyerPhoto = publicPrefix(buyer) + 'listing-55555555-5555-4555-8555-555555555555/0.jpg';
   const base = { op: 'create', title: 'Grutov 800 piezas Clips de retención', price_crc: 18000, photos: [buyerPhoto] };
-  let r = await call(invites, { guest: KEY_A, body: { ...base, source_url: 'https://127.0.0.1/marketplace/item/1/' } });
+  let r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { ...base, source_url: 'https://127.0.0.1/marketplace/item/1/' } });
   t.check('source_url que no es un link público (IP literal) -> 400 (otros marketplaces: t66)', r.code === 400 && db.tables.invitations.length === 0, `${r.code}`);
-  r = await call(invites, { guest: KEY_A, body: { ...base, source_url: `Mira esto ${ITEM.replace('https://', '')}` } });
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { ...base, source_url: `Mira esto ${ITEM.replace('https://', '')}` } });
   const code = r.body?.code as string;
   const row = db.tables.invitations.find((i: any) => i.code === code);
   t.check('crea la invitación con foto y link de FB normalizado (https://…)', r.code === 200 && row?.source_url === 'https://www.facebook.com/marketplace/item/443277198670299/' && row?.photos?.[0] === buyerPhoto, `${r.code} ${r.body?.error} ${row?.source_url}`);
   r = await call(invites, { method: 'GET', query: { code } });
   t.check('vista pública: título, precio, foto y link del anuncio (sin datos del comprador)', r.body?.title === base.title && r.body?.price_crc === 18000 && r.body?.photos?.[0] === buyerPhoto && r.body?.source_url === row.source_url && !JSON.stringify(r.body).includes('guest:'), JSON.stringify(r.body));
-  r = await call(invites, { guest: KEY_A, body: { op: 'create', title: 'Silla', price_crc: 5000 } });
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { op: 'create', title: 'Silla', price_crc: 5000 } });
   t.check('sin link de FB sigue igual (source_url null)', r.code === 200 && (await call(invites, { method: 'GET', query: { code: r.body.code } })).body?.source_url === null);
 
   // Migración 015 sin aplicar: PostgREST no conoce la columna -> se crea igual, sin el link.
   const legacy = fakeDb(); const from0 = legacy.from;
   (legacy as any).from = (tb: string) => { const q = from0(tb); if (tb !== 'invitations') return q; const ins = q.insert; q.insert = (p: any) => (p && 'source_url' in p ? { then: (ok: any) => Promise.resolve({ data: null, error: { code: 'PGRST204', message: "Could not find the 'source_url' column of 'invitations' in the schema cache" } }).then(ok) } : ins(p)); return q; };
   __setDbForTests(legacy as any);
-  r = await call(invites, { guest: KEY_A, body: { ...base, source_url: ITEM } });
+  r = await call(invites, { guest: KEY_A, tok: await token({ sub: 'buyer-account' }), body: { ...base, source_url: ITEM } });
   t.check('sin migración 015: la invitación se crea igual (sin guardar el link)', r.code === 200 && legacy.tables.invitations.length === 1 && !('source_url' in legacy.tables.invitations[0]) && legacy.tables.invitations[0].photos?.length === 1, `${r.code} ${r.body?.error}`);
   __setDbForTests(db as any);
   const mig = readFileSync('supabase/migrations/015_invite_source_url.sql', 'utf8');

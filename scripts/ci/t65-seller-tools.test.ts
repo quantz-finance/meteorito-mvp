@@ -16,13 +16,13 @@ export async function run(t: T) {
   const link = 'https://pago.meteorito.app/p/abc123';
   const base = { title: 'iPhone 13', price_crc: 250000, link, description: 'Batería 89 %. Con caja.' };
   const wF2F = adTemplate({ ...base, delivery_mode: 'cara_a_cara', protection_minutes: 1440 }, 'whatsapp');
-  t.check('WhatsApp: título, precio, acuerdo cara a cara, custodia y link', wF2F === ['iPhone 13 por ₡250 000.', 'Entrega: Cara a cara', AD_CUSTODY, `Paga aquí, sin crear cuenta: ${link}`].join('\n'), wF2F);
+  t.check('WhatsApp: título, precio, acuerdo cara a cara, custodia y link', wF2F === ['iPhone 13 por ₡250 000.', 'Entrega: Cara a cara', AD_CUSTODY, `Paga aquí con tu cuenta: ${link}`].join('\n'), wF2F);
   t.check('copy aprobado exacto (Neo)', AD_TITLE === 'Plantilla de anuncio' && AD_COPY === 'Copiar anuncio' && AD_COPIED === 'Anuncio copiado' && HISTORY_TITLE === 'Historial de ventas'
     && AD_CUSTODY === 'Pago en custodia con Meteorito (beta en testnet, sin dinero real): el pago queda en un contrato de escrow en Stellar y se libera cuando quien compra da su PIN de entrega, o por tiempo si no abre una disputa antes. Meteorito no verifica el producto.'
     && Object.values(OUTCOME_LABEL).join() === 'Cobrado,Cobro parcial,Reembolsado,Sin venta,En curso');
   const mEnv = adTemplate({ ...base, delivery_mode: null, protection_minutes: null }, 'marketplace');
   t.check('Marketplace: descripción, acuerdo por defecto (envío) en viñetas, sin "Protección", custodia y link',
-    mEnv.includes('iPhone 13 · ₡250 000') && mEnv.includes('Batería 89 %. Con caja.') && mEnv.includes('- Entrega: Envío') && !/Protecci|7 días/.test(mEnv) && mEnv.includes(`- ${AD_CUSTODY}`) && mEnv.trim().endsWith(`Paga aquí, sin crear cuenta: ${link}`), mEnv);
+    mEnv.includes('iPhone 13 · ₡250 000') && mEnv.includes('Batería 89 %. Con caja.') && mEnv.includes('- Entrega: Envío') && !/Protecci|7 días/.test(mEnv) && mEnv.includes(`- ${AD_CUSTODY}`) && mEnv.trim().endsWith(`Paga aquí con tu cuenta: ${link}`), mEnv);
   const m3 = adTemplate({ ...base, description: 'x'.repeat(900), delivery_mode: 'envio', protection_minutes: 3 * 1440 }, 'marketplace');
   t.check('Marketplace: sin plazo prometido (aunque elija 3 días) y descripción recortada a 500', !/Protecci|3 días/.test(m3) && !m3.includes('x'.repeat(501)));
   t.check('sin descripción ni título: no deja huecos', !adTemplate({ ...base, title: ' ', description: null }, 'marketplace').includes('\n\n\n') && adTemplate({ ...base, title: '' }, 'whatsapp').startsWith('Artículo por'));

@@ -21,7 +21,7 @@ test('TOOLS-01 link listo: plantilla de anuncio con link, acuerdo y custodia; Wh
   await expect(preview).toContainText('Entrega: Envío');
   await expect(preview).not.toContainText('Protección');
   await expect(preview).toContainText('Pago en custodia con Meteorito');
-  await expect(preview).toContainText(/Paga aquí, sin crear cuenta: https:\/\/pago\.meteorito\.app\/p\/demo\d+/);
+  await expect(preview).toContainText(/Paga aquí con tu cuenta: https:\/\/pago\.meteorito\.app\/p\/demo\d+/);
   await expect(page.getByLabel('WhatsApp', { exact: true })).toHaveAttribute('aria-checked', 'true');
   await shot(page, 'plantilla-whatsapp');
   await page.getByLabel('Facebook o Marketplace', { exact: true }).click();

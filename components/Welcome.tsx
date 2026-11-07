@@ -48,7 +48,7 @@ export default function Welcome() {
   };
   // Sin scroll: todo cabe en una pantalla, incluso con la barra de Safari visible (~620 px útiles). La mascota y los
   // espacios escalan con el alto real; los botones quedan siempre abajo.
-  const { height, width } = useStableWindow();
+  const { height } = useStableWindow();
   const insets = useSafeAreaInsets();
   const short = height < 720;
   const tiny = height < 640;
@@ -87,7 +87,6 @@ export default function Welcome() {
           ) : error && !view.message ? <ErrorText>{error}</ErrorText> : null}
           {view.message ? <View testID="login-stalled"><ErrorText>{view.message}</ErrorText></View> : null}
           <PrimaryButton testID="login-enter" title={view.title} loading={view.loading} disabled={view.disabled} onPress={onEnter} />
-          <PrimaryButton title={width < 350 ? 'Comprar sin cuenta' : 'Quiero comprar (sin cuenta)'} variant="secondary" icon="paper-plane-outline" onPress={() => { track('buyer_start_tapped'); router.push('/comprar'); }} />
           <PrimaryButton title="¿Cómo funciona?" variant="ghost" icon="help-circle-outline" onPress={() => { track('learn_cta_tapped'); setLearn(true); }} />
           <View style={s.footer}>
             <Text style={s.hint}>Entras con Google, Apple o tu correo.</Text>

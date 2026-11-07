@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { open, expectNoScroll, expectInputs16, settle, BANNED, VOSEO, withoutBetaNotice } from './helpers';
 
-// Comprar → invitar al vendedor desde un anuncio de Facebook Marketplace (comprador sin cuenta).
+// Comprar → invitar al vendedor desde un anuncio de Facebook Marketplace (comprador de demo).
 // El demo responde import_facebook igual que /api/store (sin red, sin Facebook); el endpoint real con los fixtures
 // de scripts/ci/fixtures/facebook está en api-contract.spec.ts (API-FB-BUYER) y t49.
 const FB = 'https://www.facebook.com/share/18HroUrSak/?mibextid=wwXIfr';

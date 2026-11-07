@@ -111,10 +111,10 @@ const ORPHAN_RE = /no recovery|not an? (authorized )?signer|needs? device approv
 /** Aviso genérico para el usuario (sin detalles técnicos). El código real va solo a console/logs. */
 export function walletErrorNotice(e: any): string {
   console.error('[wallet] error', e?.code ?? 'desconocido', e?.message, e?.cause?.message ?? '', e);
-  if (e?.code === 'session_relogin_required') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
+  if (e?.code === 'session_relogin_required') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu cuenta se mantiene en este dispositivo.';
   if (e?.code === 'session_wallet_mismatch' || e?.code === 'session_expired') return e?.message || 'Tu sesión venció. Vuelve a iniciar sesión para continuar.';
   // Token rechazado por el servidor (inválido o ausente): se resuelve volviendo a entrar, no con el aviso genérico.
-  if (e?.code === 'auth_invalid' || e?.code === 'auth_missing') return 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu billetera se mantiene en este dispositivo.';
+  if (e?.code === 'auth_invalid' || e?.code === 'auth_missing') return 'Tu sesión venció. Vuelve a iniciar sesión con la misma cuenta para continuar. Tu cuenta se mantiene en este dispositivo.';
   if (needsDeviceStep(e)) return DEVICE_STEP;
   if (e?.code === 'device_restore_cancelled') return DEVICE_STEP_CANCELLED;
   if (e?.code === 'device_not_authorized' || e?.code === 'device_restore_no_backup' || e?.code === 'device_restore_failed' || ORPHAN_RE.test(String(e?.message ?? '')) || ORPHAN_RE.test(String(e?.cause?.message ?? ''))) return DEVICE_NOT_AUTHORIZED;
@@ -123,14 +123,14 @@ export function walletErrorNotice(e: any): string {
 }
 
 /** Mensaje (español neutro) cuando no se puede cerrar sesión porque la billetera no tiene respaldo. */
-export const LOGOUT_BLOCKED = 'Todavía no puedes cerrar sesión: tu billetera no tiene respaldo. Al cerrar sesión se borra la llave de este dispositivo y perderías el acceso a tu dinero. Crea una passkey de respaldo (o espera a que se active la recuperación de cuenta) y vuelve a intentar.';
+export const LOGOUT_BLOCKED = 'Todavía no puedes cerrar sesión: tu cuenta no tiene respaldo. Al cerrar sesión se borra la llave de este dispositivo y perderías el acceso a tu dinero. Crea una passkey de respaldo (o espera a que se active la recuperación de cuenta) y vuelve a intentar.';
 
 /** Cerrar sesión con Cavos (logout) BORRA la llave del vault (vault.forget). Sin respaldo (social/passkey) eso es
  *  perder la billetera: NUNCA llamamos auth.logout() en ese caso. Intentamos registrar una passkey; si no se puede,
  *  bloqueamos y explicamos. Devuelve null si cerró sesión, o el mensaje a mostrar. */
 export async function logoutSafely(auth: MeteoritoAuth): Promise<string | null> {
   const w = auth.wallet;
-  if (w && w.state === 'loading') return 'Espera un momento a que cargue tu billetera y vuelve a intentar.';
+  if (w && w.state === 'loading') return 'Espera un momento a que cargue tu cuenta y vuelve a intentar.';
   const backedUp = !w || w.recoveryProtected || w.state === 'needs-approval'; // needs-approval: la llave ya no está aquí
   if (!backedUp) {
     try { await w!.enrollPasskey(); }

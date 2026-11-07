@@ -191,7 +191,7 @@ function Profile({ p, activity, owner, admin, onClearSocials, mine, onMine, onMa
           </View>
         )) : <Empty icon="chatbubble-ellipses-outline" text={COPY.profile.noReviews} />}
       </View>
-      <Text style={[T.footnote, { textAlign: 'center' }]}>Compras sin crear cuenta.</Text>
+      <Text style={[T.footnote, { textAlign: 'center' }]}>Compras con tu cuenta y pago en custodia.</Text>
     </View>
   );
 }

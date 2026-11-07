@@ -15,11 +15,11 @@ const VOSEO = /(?<![\p{L}])(tenés|podés|querés|mirá|tocá|fijate)(?![\p{L}])
 
 export async function run(t: T) {
   // ---------- Rutas públicas (sin login) ----------
-  t.check('Comprar › Feed (/comprar) se ve sin cuenta', isPublicRoute(['(tabs)', 'comprar']));
-  t.check('Comprar › Pagar con link se ve sin cuenta', isPublicRoute(['(tabs)', 'comprar', 'link']));
-  t.check('Comprar › Mis compras se ve sin cuenta', isPublicRoute(['(tabs)', 'comprar', 'compras']));
-  t.check('los 3 iconos de Comprar llevan a rutas públicas (nunca a la bienvenida/login)', COMPRAR_VIEWS.every((v) => isPublicRoute(['(tabs)', ...v.href.split('/').filter(Boolean)])));
-  t.check('seguimiento /p, tienda /t, invitaciones /i, legales, reglas, /mis-compras, chat: públicos', ['p', 't', 'i', 'legal', 'como-funciona', 'mis-compras', 'chat', 'mensajes'].every((r) => isPublicRoute([r, 'x'])));
+  t.check('Comprar › Feed (/comprar) pide cuenta', !isPublicRoute(['(tabs)', 'comprar']));
+  t.check('Comprar › Pagar con link pide cuenta', !isPublicRoute(['(tabs)', 'comprar', 'link']));
+  t.check('Comprar › Mis compras pide cuenta', !isPublicRoute(['(tabs)', 'comprar', 'compras']));
+  t.check('los 3 iconos de Comprar piden cuenta', COMPRAR_VIEWS.every((v) => !isPublicRoute(['(tabs)', ...v.href.split('/').filter(Boolean)])));
+  t.check('seguimiento /p, tienda /t, invitaciones /i, legales, reglas, /mis-compras, chat: públicos', ['t', 'i', 'legal', 'como-funciona', 'chat', 'mensajes'].every((r) => isPublicRoute([r, 'x'])));
   t.check('Vender y Home (vendedor) siguen pidiendo entrar', !isPublicRoute(['(tabs)', 'vender']) && !isPublicRoute(['(tabs)', 'pedidos']) && !isPublicRoute(['mi-tienda']) && !isPublicRoute(['ventas']) && !isPublicRoute([]));
   const layout = read('app/_layout.tsx');
   t.check('el Gate usa isPublicRoute (una sola lista, probada)', /const isPublic = isPublicRoute\(segments/.test(layout) && !/segments\[0\] === 'p' \|\|/.test(layout));

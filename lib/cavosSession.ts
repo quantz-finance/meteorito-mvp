@@ -140,11 +140,18 @@ export function clearCavosToken() {
 
 // ---------- Traducción de errores Cavos ----------
 export const RELOGIN_TITLE = 'Tu sesión terminó';
-export const RELOGIN_MESSAGE = 'Para continuar, vuelve a entrar con la misma cuenta. Tu billetera sigue en este dispositivo.';
+export const RELOGIN_MESSAGE = 'Para continuar, vuelve a entrar con la misma cuenta. Tu cuenta sigue en este dispositivo.';
 const NETWORK_MESSAGE = 'No pudimos conectar con tu cuenta. Revisa tu conexión y vuelve a intentar.';
 const CANCEL_MESSAGE = 'Se canceló el inicio de sesión. Toca "Entrar" cuando quieras.';
 const PASSKEY_MESSAGE = 'No se pudo usar la passkey en este dispositivo. Vuelve a intentar o entra de nuevo con tu cuenta.';
 const GENERIC_MESSAGE = 'No pudimos abrir tu cuenta en este dispositivo. Toca "Entrar de nuevo" para continuar.';
+/** Dispositivo nuevo y la cuenta (creada antes de la recuperación por inicio de sesión, kit 0.5) nunca se respaldó:
+ *  "Entrar de nuevo" aquí no sirve nunca (bucle). Hay que abrirla una vez donde se creó; después entra en cualquier lado. */
+export const NEW_DEVICE_MESSAGE = 'Esta cuenta se creó en otro dispositivo y todavía no se puede abrir aquí. Entra una vez desde el dispositivo donde la creaste y luego vuelve a intentar en este.';
+/** La cuenta tiene apagada la recuperación por inicio de sesión: solo passkey o un dispositivo que ya la tiene. */
+export const RECOVERY_OFF_MESSAGE = 'Esta cuenta solo se abre con tu passkey o desde un dispositivo donde ya la usas.';
+const NO_RECOVERY_RE = /no sealed recovery|no local key and no recovery wrap|not_enrolled|nothing to recover/i;
+const RECOVERY_OFF_RE = /recovery by sign-in is turned off|recovery_revoked/i;
 
 const RELOGIN_RE = /no login token|registry (lookup|backup)|lookup (skipped|failed)|backup (skipped|failed)|passkey[- ]wraps?.*(40[13])|\b40[13]\b|unauthori[sz]ed|forbidden|sign in again|jwt|id[_ ]token|token (expired|invalid)|expired|protected by recovery|recovery credential|login binding|nonce/i;
 const NETWORK_RE = /failed to fetch|network|timed? ?out|timeout|offline|load failed|\b50[0-4]\b|ECONN|fetch failed/i;
@@ -158,6 +165,9 @@ const ENGLISH_RE = /\b(the|is|not|failed|could|this|skipped|please|was|to|of|wit
 /** Error de Cavos -> mensaje claro en español. Para el error de auth del SDK: SIEMPRE devuelve un texto propio. */
 export function friendlyCavosError(raw: string | null | undefined): string | null {
   if (!raw) return null;
+  // Antes que RELOGIN_RE: estos no se arreglan volviendo a entrar en este dispositivo.
+  if (RECOVERY_OFF_RE.test(raw)) return RECOVERY_OFF_MESSAGE;
+  if (NO_RECOVERY_RE.test(raw)) return NEW_DEVICE_MESSAGE;
   if (RELOGIN_RE.test(raw)) return RELOGIN_MESSAGE;
   if (NETWORK_RE.test(raw)) return NETWORK_MESSAGE;
   if (CANCEL_RE.test(raw)) return CANCEL_MESSAGE;

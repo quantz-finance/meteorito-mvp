@@ -1,6 +1,6 @@
-// Build REAL + backend simulado (scripts/e2e/mock-server.mjs): el comprador sin cuenta tal como corre en producción.
+// Build REAL + backend simulado (scripts/e2e/mock-server.mjs): comprador con cuenta Cavos simulada; Gate y transporte de producción.
 import { test, expect, type Page } from '@playwright/test';
-import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken, readVault, plainGuestSecrets } from './mock';
+import { reset, state, patch, failNext, calls, MOCK, MOCK_PIN, accessToken, readVault, plainGuestSecrets, mockBuyer } from './mock';
 import { expectNoScroll, PAID, BANNED, VOSEO, expectInputs16, settle, expectLegalVisible } from './helpers';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { CLAIM_RULE, DISPUTE_REPLY_RULE, SHIP_REFUND_RULE } from '../lib/rules';
@@ -8,10 +8,14 @@ import { resolve } from 'node:path';
 import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
 
 test.describe.configure({ mode: 'serial' });
+test.beforeEach(async ({ context }, info) => {
+  if (!/MCK-MIS-0[4679]/.test(info.title)) await mockBuyer(context);
+});
 const listing = { slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000 };
 const childOf = async (request: any, parent = 'prod01') => Object.values((await state(request)).orders).filter((o: any) => o.listing_slug === parent) as any[];
 
-async function payAsGuest(page: Page) {
+async function payAsBuyer(page: Page) {
+  await mockBuyer(page.context());
   await page.goto('/p/prod01');
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page).toHaveURL(/\/p\/h[0-9a-f]{5}\?pay=1/);
@@ -22,24 +26,25 @@ async function payAsGuest(page: Page) {
   return page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
 }
 
-test('MCK-COM-01 comprador sin cuenta paga un producto permanente (build real)', async ({ page, request }) => {
+test('MCK-COM-01 comprador con cuenta paga un producto permanente (build real)', async ({ page, request }) => {
   await reset(request, [listing]);
-  const slug = await payAsGuest(page);
+  const slug = await payAsBuyer(page);
   const s = await state(request);
   expect(s.orders[slug].status).toBe('fondeado');
   expect(s.orders.prod01.status).toBe('creado'); // el producto sigue disponible
   const api = s.calls.filter((c: any) => c.path === '/api/escrow/pay');
-  expect(api.every((c: any) => c.guest)).toBe(true); // siempre con X-Guest-Key, nunca login
+  expect(api.every((c: any) => c.bearer)).toBe(true); // cuenta Cavos en cada paso
 });
 
 test('MCK-PER-01 dos compradores en dos navegadores -> dos pedidos; un tercero ve el producto disponible', async ({ browser, request }) => {
   await reset(request, [listing]);
   const a = await (await browser.newContext()).newPage(); const b = await (await browser.newContext()).newPage();
-  const sa = await payAsGuest(a); const sb = await payAsGuest(b);
+  const sa = await payAsBuyer(a); const sb = await payAsBuyer(b);
   expect(sa).not.toBe(sb);
   const kids = await childOf(request);
   expect(kids.map((k) => k.status).sort()).toEqual(['fondeado', 'fondeado']);
   const c = await (await browser.newContext()).newPage();
+  await mockBuyer(c.context());
   await c.goto('/p/prod01');
   await expect(c.getByText('Disponible')).toBeVisible();
   await expect(c.getByText(/Pagar en custodia/).last()).toBeVisible();
@@ -61,6 +66,7 @@ test('MCK-COM-02 recargar y volver al producto reusa el pedido propio (sin escro
 test('MCK-LIM-03 botón atrás en medio del pago: vuelve a la tienda y al reabrir retoma el mismo pedido', async ({ page, request }) => {
   await reset(request, [listing]);
   await page.goto('/t/valeria');
+  await expect(page.locator('html')).toHaveAttribute('data-cavos-e2e-ready', '1');
   await page.getByText('Bici de montaña').first().click();
   await expect(page).toHaveURL(/\/p\/prod01/);
   await page.getByText(/Pagar en custodia/).last().click();
@@ -136,7 +142,7 @@ test('MCK-PIN-01 PIN bloqueado: vencido el plazo NO se libera solo', async ({ pa
 
 test('MCK-SHP-01 comprador: código oculto hasta el envío; luego "Va en camino", foto y código (build real)', async ({ page, request }) => {
   await reset(request, [listing]);
-  const slug = await payAsGuest(page);
+  const slug = await payAsBuyer(page);
   await page.goto(`/p/${slug}`);
   await expect(page.getByText(PAID).first()).toBeVisible();
   await expect(page.getByText(MOCK_PIN)).toHaveCount(0);
@@ -162,7 +168,7 @@ for (const [pct, label] of [[100, 'Reembolsado'], [0, 'Disputa resuelta: pago al
 
 test('MCK-DIS-01 + CAL: el comprador disputa un pedido; otro pedido lo confirma y califica una sola vez', async ({ page, request }) => {
   await reset(request, [listing]);
-  const slug = await payAsGuest(page);
+  const slug = await payAsBuyer(page);
   await page.goto(page.url().split('?')[0]); // cierra la hoja del PIN
   await patch(request, slug, { status: 'enviado', auto_release_at: new Date(Date.now() + 600_000).toISOString() });
   await page.reload();
@@ -171,7 +177,7 @@ test('MCK-DIS-01 + CAL: el comprador disputa un pedido; otro pedido lo confirma 
   await page.getByText('Reportar problema', { exact: true }).click();
   await expect.poll(async () => (await state(request)).orders[slug].status).toBe('en_disputa');
   // Segundo pedido: confirma recibido y califica
-  const slug2 = await payAsGuest(page); // espera el PIN: si navegamos antes, este navegador no queda como comprador
+  const slug2 = await payAsBuyer(page); // espera el PIN: si navegamos antes, este navegador no queda como comprador
   await patch(request, slug2, { status: 'enviado', auto_release_at: new Date(Date.now() + 600_000).toISOString() });
   await page.goto(`/p/${slug2}`);
   await page.getByText('Recibí y está bien', { exact: true }).click();
@@ -199,7 +205,7 @@ test('MCK-PSH-01 activar avisos como comprador: permiso + PushManager simulados 
     }
   });
   await reset(request, [listing]);
-  const slug = await payAsGuest(page);
+  const slug = await payAsBuyer(page);
   await page.goto(page.url().split('?')[0]); // cierra la hoja del PIN
   test.skip(!(await page.evaluate(() => 'serviceWorker' in navigator)), `${browserName} sin serviceWorker en este perfil`);
   await page.getByText('Activar', { exact: true }).first().click();
@@ -211,7 +217,7 @@ test('MCK-PSH-01 activar avisos como comprador: permiso + PushManager simulados 
 test('MCK-PSH-02 iPhone en Safari (sin instalar): explica "Agregar a inicio" en vez de pedir permiso', async ({ page, request, browserName }) => {
   test.skip(browserName !== 'webkit', 'solo iPhone');
   await reset(request, [listing]);
-  await payAsGuest(page);
+  await payAsBuyer(page);
   await page.goto(page.url().split('?')[0]); // cierra la hoja del PIN
   await expect(page.getByText(/Agregar a inicio/)).toBeVisible();
 });
@@ -253,13 +259,13 @@ test('MCK-UTM-01 entra desde el landing con UTMs: app_opened y cada evento lleva
   expect(opened.properties).toMatchObject({ utm_source: 'landing', utm_medium: 'cta', utm_content: 'hero', first_touch: true });
   expect(String(opened.properties.$current_url ?? '')).not.toContain('?'); // la URL sigue sin query
   expect(opened.properties.$ip).toBeUndefined();
-  // Primer evento de la carga
-  const all = await phEvents(request);
+  // Primer evento de producto; PostHog puede emitir $identify antes al restaurar la cuenta.
+  const all = (await phEvents(request)).filter((e) => !e.event.startsWith('$'));
   expect(all.findIndex((e) => e.event === 'app_opened')).toBe(0);
   // Guardado como first-touch
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('meteorito:first-touch:v1')!).utm_content)).toBe('hero');
   // Navegar (el router ya borró el query): los eventos siguientes siguen con las UTMs (super propiedades)
-  await page.getByText(/Quiero comprar|Comprar sin cuenta/).first().click();
+  await page.goto('/comprar');
   await expect(page).toHaveURL(/\/comprar$/); // la bienvenida abre el feed
   await page.goto('/p/prod01'); // otra carga sin UTMs
   await expect.poll(async () => (await phEvents(request, 'payment_link_opened')).length, { timeout: 20_000 }).toBeGreaterThan(0);
@@ -340,7 +346,7 @@ async function expectNoCardLeak(request: any, reqs: { url: string; body: string 
 }
 const NO_TEST_LABELS = /lendara|sandbox|modo prueba|prueba|test card|4242/i;
 
-test('MCK-CARD-01 invitado paga con tarjeta aprobada en nuestro formulario: procesando -> PIN; número y CVC no salen', async ({ page, request }) => {
+test('MCK-CARD-01 comprador con cuenta paga con tarjeta aprobada en nuestro formulario: procesando -> PIN; número y CVC no salen', async ({ page, request }) => {
   await reset(request, [listing], true);
   const reqs = recordNetwork(page);
   await openMethods(page);
@@ -497,10 +503,11 @@ test('MCK-TEL-01 "Contacta al vendedor" solo para el comprador y solo después d
   await expect(page.getByText('+506 8888 7777')).toBeVisible();
   const asked = (await calls(request, '/api/store')).filter((c: any) => c.action === 'seller_contact');
   expect(asked.length).toBeGreaterThan(0);
-  expect(asked.every((c: any) => c.guest && c.slug === slug)).toBe(true); // con la llave del comprador
+  expect(asked.every((c: any) => c.bearer && c.guest && c.slug === slug)).toBe(true); // sesión y transporte histórico
 
   // Otro navegador (no es el comprador) con el mismo link pagado: no lo ve ni lo pide.
   const other = await (await browser.newContext()).newPage();
+  await mockBuyer(other.context());
   await other.goto(`/p/${slug}`);
   await expect(other.getByText('Bici de montaña').first()).toBeVisible();
   await expect(other.getByText('Contacta al vendedor')).toHaveCount(0);
@@ -582,13 +589,13 @@ test('MCK-WIN-02 envío: "Entrega: Envío" sin plazo prometido; el comprador ace
   await expect(page.getByLabel('Pedir más tiempo')).toBeVisible(); // ya sin pendiente: puede pedir otra
 });
 
-// Mis compras (build real, sin cuenta): en este archivo (serial) porque los tests mock comparten el mismo backend
+// Mis compras (build real, con sesión): en este archivo (serial) porque los tests mock comparten el mismo backend
 // simulado y cada uno hace reset. La compra queda guardada al pagar y se vuelve a encontrar; las anteriores se
 // recuperan por la llave de invitado o el PIN guardado; nunca aparecen las de otra llave.
 const SHOTS = process.env.MIS_COMPRAS_SHOTS; // carpeta opcional para capturas (no se usa en CI)
 const KEY = '7'.repeat(64), OTHER = '8'.repeat(64);
 
-test('MCK-MIS-01 sin cuenta: paga, sale del seguimiento y vuelve desde Mis compras', async ({ page, request }) => {
+test('MCK-MIS-01 con cuenta: paga, sale del seguimiento y vuelve desde Mis compras', async ({ page, request }) => {
   await reset(request, [{ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000 }]);
   await page.goto('/p/prod01');
   await page.getByText(/Pagar en custodia/).last().click();
@@ -638,65 +645,49 @@ test('MCK-MIS-03 navegador nuevo: vacío con texto amable', async ({ page, reque
 
 // Bug: sin sesión, el icono "Mis compras" de la bienvenida abría la app completa (barra Vender/Comprar/Home + iconos)
 // sin salida. Ahora: Comprar entera es pública, sin la barra del vendedor, con "Volver" a la bienvenida.
-test('MCK-MIS-04 sin cuenta: bienvenida -> Mis compras sin menús del vendedor; Feed, seguimiento y Volver funcionan', async ({ page, request }, info) => {
-  test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
-  await reset(request, [{ slug: 'trk555', status: 'enviado', contract_id: 'C5', buyer: KEY, model: 'Bici de montaña', price_crc: 150000 }, listing]);
-  await page.addInitScript(([k]) => { localStorage.setItem('meteorito:guest:v1', k); }, [KEY]);
-  await page.goto('/');
-  await page.evaluate(() => localStorage.setItem('meteorito:purchases:v1', JSON.stringify([{ slug: 'trk555', title: 'Bici de montaña', price_crc: 150000, status: 'enviado' }])));
-  await page.reload();
-  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible(); // bienvenida (sin sesión)
-  await page.getByLabel('Mis compras', { exact: true }).click();
-  await expect(page).toHaveURL(/\/comprar\/compras$/);
-  await expect(page.getByTestId('screen-title')).toHaveText('Mis compras');
-  // Un solo menú: los 3 iconos de Comprar; nada de Vender/Comprar/Home ni de login.
-  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Home' })).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Comprar' })).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Feed' })).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
-  const rows = page.getByTestId('purchase-row');
-  await expect(rows).toHaveCount(1);
-  await expectNoScroll(page);
-  if (SHOTS && info.project.name === 'mock-iphone-se') await page.screenshot({ path: `${SHOTS}/miscompras-invitado-lista.png` });
-  // Seguimiento y atrás: vuelve a Mis compras.
-  await rows.first().click();
-  await expect(page).toHaveURL(/\/p\/trk555/);
-  await page.getByRole('button', { name: 'Volver' }).first().click();
-  await expect(page).toHaveURL(/\/comprar\/compras$/);
-  await expect(rows).toHaveCount(1);
-  // Feed sin cuenta (no la bienvenida) y de vuelta.
-  await page.getByRole('tab', { name: 'Feed' }).click();
-  await expect(page).toHaveURL(/\/comprar$/);
-  await expect(page.getByTestId('feed-card').first()).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
-  await page.getByRole('tab', { name: 'Mis compras' }).click();
-  await expect(page).toHaveURL(/\/comprar\/compras$/);
-  // Volver: sale a la bienvenida.
-  await page.getByTestId('back-button').click();
-  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
+test('MCK-MIS-08 compra histórica: entrar no la vincula automáticamente a la cuenta', async ({ page, request }) => {
+  await reset(request, [{ slug: 'old888', buyer: KEY, status: 'escrow_creado', contract_id: 'C8', model: 'Compra histórica', price_crc: 5000 }]);
+  await page.addInitScript((k) => localStorage.setItem('meteorito:guest:v1', k), KEY);
+  await page.goto('/p/old888');
+  await page.getByText(/Pagar en custodia/).last().click();
+  await expect(page.getByText('En esta prueba, el fondeo simulado procede de la tesorería testnet, no del saldo de tu cuenta.')).toBeVisible();
+  await page.getByText('Ya pagué', { exact: true }).click();
+  await expect(page.getByText('Esta compra histórica conserva el acceso mediante la llave de este navegador; iniciar sesión no la vincula automáticamente a tu cuenta.')).toBeVisible();
+  expect((await state(request)).orders.old888.buyer).toBe(KEY);
+  expect((await state(request)).links).toHaveLength(0);
 });
 
-test('MCK-MIS-05 sin cuenta, sin compras: vacío amable con link al feed', async ({ page, request }, info) => {
+test('MCK-MIS-04 sin sesión: Mis compras conserva su URL hasta entrar con Cavos', async ({ page, request }) => {
+  await reset(request, []);
+  await page.goto('/comprar/compras?desde=link');
+  await expect(page.getByTestId('login-enter')).toBeVisible();
+  await expect(page.getByTestId('purchase-row')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/comprar\/compras\?desde=link$/);
+  await page.getByTestId('login-enter').click();
+  await expect(page.getByTestId('purchases-empty')).toBeVisible();
+  await expect(page).toHaveURL(/\/comprar\/compras\?desde=link$/);
+});
+
+test('MCK-MIS-05 con cuenta, sin compras: vacío amable con link al feed', async ({ page, request }, info) => {
   test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
   await reset(request, [listing]);
   await page.goto('/comprar/compras');
   await expect(page.getByTestId('purchases-empty')).toHaveText('Aquí verás tus compras activas.');
-  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(0);
-  await expect(page.getByTestId('back-button')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(1);
+  await expect(page.getByTestId('purchases-empty')).toBeVisible();
   await expectNoScroll(page);
-  if (SHOTS && info.project.name === 'mock-iphone-se') await page.screenshot({ path: `${SHOTS}/miscompras-invitado-vacio.png` });
+  if (SHOTS && info.project.name === 'mock-iphone-se') await page.screenshot({ path: `${SHOTS}/miscompras-cuenta-vacio.png` });
   await page.getByTestId('purchases-to-feed').click();
   await expect(page).toHaveURL(/\/comprar$/);
   await expect(page.getByTestId('feed-card').first()).toBeVisible();
 });
 
-// Compra completa sin cuenta desde la bienvenida: feed -> producto -> pagar (llave de invitado) -> seguimiento -> Mis compras.
-test('MCK-BUY-01 sin cuenta: bienvenida -> feed -> producto -> paga -> seguimiento -> Mis compras, sin login en ningún paso', async ({ page, request }) => {
+// Compra completa con cuenta: feed -> producto -> pagar -> seguimiento -> Mis compras.
+test('MCK-BUY-01 con cuenta: feed -> producto -> paga -> seguimiento -> Mis compras', async ({ page, request }) => {
   test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
   await reset(request, [listing]);
   await page.goto('/');
-  await page.getByText(/Quiero comprar|Comprar sin cuenta/).first().click();
+  await page.goto('/comprar');
   await expect(page).toHaveURL(/\/comprar$/);
   const card = page.getByTestId('feed-card').filter({ hasText: 'Bici de montaña' }).first();
   await expect(card).toBeVisible();
@@ -711,7 +702,7 @@ test('MCK-BUY-01 sin cuenta: bienvenida -> feed -> producto -> paga -> seguimien
   const slug = page.url().match(/\/p\/(h[0-9a-f]{5})/)![1];
   const api = (await state(request)).calls.filter((c: any) => c.path === '/api/escrow/pay');
   expect(api.length).toBeGreaterThan(0);
-  expect(api.every((c: any) => c.guest)).toBe(true); // llave de invitado, nunca login
+  expect(api.every((c: any) => c.bearer)).toBe(true); // cuenta Cavos en cada paso
   await page.getByText('Entendido', { exact: true }).click(); // cierra la hoja "Pagado"
   await page.getByRole('button', { name: 'Volver' }).first().click();
   await expect(page).toHaveURL(/\/comprar$/);
@@ -722,16 +713,25 @@ test('MCK-BUY-01 sin cuenta: bienvenida -> feed -> producto -> paga -> seguimien
   await expect(page).toHaveURL(new RegExp(`/p/${slug}`));
 });
 
-test('MCK-MIS-06 sin cuenta: seguimiento abierto directo (sin historial) -> Volver va a Mis compras, no a Home/login', async ({ page, request }, info) => {
-  await reset(request, [{ slug: 'trk666', status: 'enviado', contract_id: 'C6', buyer: KEY, model: 'Consola', price_crc: 90000 }]);
-  await page.addInitScript(([k]) => { localStorage.setItem('meteorito:guest:v1', k); }, [KEY]);
-  await page.goto('/p/trk666');
-  await expect(page.getByText('Consola').first()).toBeVisible();
-  if (SHOTS && info.project.name === 'mock-iphone-se') await page.screenshot({ path: `${SHOTS}/seguimiento-invitado.png` });
-  await page.getByRole('button', { name: 'Volver' }).first().click();
-  await expect(page).toHaveURL(/\/comprar\/compras$/);
-  await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toHaveCount(0);
-  await expect(page.getByTestId('purchase-row')).toHaveCount(1);
+test('MCK-MIS-06 sin sesión: el link de pago muestra login y vuelve a la misma compra', async ({ page, request }) => {
+  await reset(request, [listing]);
+  await page.goto('/p/prod01?origen=prueba');
+  await expect(page.getByTestId('login-enter')).toBeVisible();
+  await expect(page.getByText(/Pagar en custodia/)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/p\/prod01\?origen=prueba$/);
+  await page.getByTestId('login-enter').click();
+  await expect(page.getByText(/Pagar en custodia/).last()).toBeVisible();
+  await expect(page).toHaveURL(/\/p\/prod01\?origen=prueba$/);
+});
+
+test('MCK-MIS-09 sin sesión: crear invitación vuelve al mismo formulario y query tras entrar', async ({ page, request }) => {
+  await reset(request, []);
+  await page.goto('/i/nueva?desde=compra');
+  await expect(page.getByTestId('login-enter')).toBeVisible();
+  await expect(page).toHaveURL(/\/i\/nueva\?desde=compra$/);
+  await page.getByTestId('login-enter').click();
+  await expect(page.getByText('Invitar a un vendedor', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/i\/nueva\?desde=compra$/);
 });
 
 test('MCK-MIS-07 sin cuenta: bienvenida -> Privacidad -> Volver vuelve a la bienvenida', async ({ page }) => {
@@ -742,13 +742,14 @@ test('MCK-MIS-07 sin cuenta: bienvenida -> Privacidad -> Volver vuelve a la bien
   await expect(page.getByRole('button', { name: 'Entrar', exact: true })).toBeVisible();
 });
 
-// ---- Recibe avisos de tu compra (comprador sin cuenta): tarjeta, recuperación con link y vuelta del login de Cavos ----
+// ---- Recibe avisos de tu compra: tarjeta, recuperación histórica con link y cuenta Cavos ----
 // En este archivo (serial) y no en uno aparte: todos los mock-* comparten el estado del servidor simulado.
 const cntOrder = { slug: 'cnt001', kind: 'single', model: 'Bici de montaña', price_crc: 150000 };
 /** Capturas para revisión (solo local: E2E_SHOTS=<carpeta>). */
 const shot = (page: Page, name: string, project: string) => (process.env.E2E_SHOTS && project.includes('iphone-se') ? page.screenshot({ path: `${process.env.E2E_SHOTS}/contacto-${name}.png` }).catch(() => {}) : Promise.resolve());
 
-async function payAsGuestCnt(page: Page, slug = 'cnt001') {
+async function payAsBuyerCnt(page: Page, slug = 'cnt001') {
+  await mockBuyer(page.context());
   await page.goto(`/p/${slug}`);
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
@@ -766,7 +767,7 @@ const cntCopyOk = async (page: Page) => { const t = await page.getByTestId('cont
 
 test('CNT-01 sin la migración 028: no hay tarjeta y el pago sigue igual', async ({ page, request }) => {
   await reset(request, [cntOrder]);
-  await payAsGuestCnt(page);
+  await payAsBuyerCnt(page);
   expect((await state(request)).orders.cnt001.status).toBe('fondeado');
   await expect(page.getByText(PAID).first()).toBeVisible();
   await expect(page.getByTestId('contact-card')).toHaveCount(0);
@@ -774,10 +775,10 @@ test('CNT-01 sin la migración 028: no hay tarjeta y el pago sigue igual', async
 
 test('CNT-02 WhatsApp (+506) y correo se guardan sin salir de la compra; consentimiento obligatorio', async ({ page, request }, info) => {
   await reset(request, [cntOrder], false, 'inapp', true);
-  await payAsGuestCnt(page);
+  await payAsBuyerCnt(page);
   const card = page.getByTestId('contact-card');
   await expect(card.getByText('Recibe avisos de tu compra')).toBeVisible();
-  for (const o of ['WhatsApp', 'Correo', 'Crear cuenta']) await expect(card.getByRole('radio', { name: o })).toBeVisible();
+  for (const o of ['WhatsApp', 'Correo', 'Guardar en mi cuenta']) await expect(card.getByRole('radio', { name: o })).toBeVisible();
   await card.scrollIntoViewIfNeeded();
   await shot(page, 'tarjeta', info.project.name);
   const url = page.url();
@@ -809,7 +810,7 @@ test('CNT-02 WhatsApp (+506) y correo se guardan sin salir de la compra; consent
 
 test('CNT-03 "Ahora no" la oculta para esta compra (sin volver a insistir)', async ({ page, request }) => {
   await reset(request, [cntOrder], false, 'inapp', true);
-  await payAsGuestCnt(page);
+  await payAsBuyerCnt(page);
   await page.getByTestId('contact-card').getByLabel('Ahora no').click();
   await expect(page.getByTestId('contact-card')).toHaveCount(0);
   await page.reload();
@@ -817,44 +818,24 @@ test('CNT-03 "Ahora no" la oculta para esta compra (sin volver a insistir)', asy
   await expect(page.getByTestId('contact-card')).toHaveCount(0);
 });
 
-test('CNT-04 Crear cuenta: el login vuelve a la MISMA /p/<slug> (redirect de Google/Apple) con la compra intacta', async ({ page, request }, info) => {
+test('CNT-04 cuenta existente: guardar la compra exige consentimiento y no abre otro login', async ({ page, request }) => {
   await reset(request, [cntOrder], false, 'inapp', true);
-  await payAsGuestCnt(page);
-  const v0 = await readVault(page); const before = { key: v0['guest:key'], pin: v0['guest:pin:cnt001'] }; // bóveda cifrada (no localStorage)
-  expect(before.pin).toBe(MOCK_PIN);
-  expect(before.key).toMatch(/^[a-f0-9]{64}$/);
-  expect(await plainGuestSecrets(page)).toEqual([]);
+  await payAsBuyerCnt(page);
   const card = page.getByTestId('contact-card');
-  await card.getByRole('radio', { name: 'Crear cuenta' }).click();
+  await card.getByRole('radio', { name: 'Guardar en mi cuenta' }).click();
+  await expect(page.getByTestId('contact-save')).toBeDisabled();
   await page.getByTestId('contact-consent').click();
   await page.getByTestId('contact-save').click();
-  await expect(page.getByTestId('contact-account-pending')).toBeVisible();
-  // El redirect_uri de Cavos es location.href: tiene que ser la compra, sin tokens.
-  expect(new URL(page.url()).pathname).toBe('/p/cnt001');
-  expect(page.url()).not.toContain('acceso=');
-  const pending = await page.evaluate(() => JSON.parse(localStorage.getItem('meteorito:contact:link-pending') || 'null'));
-  expect(pending?.slug).toBe('cnt001');
-  // Vuelta del proveedor OAuth (otra carga completa de la página, como en iPhone).
-  await page.goto('/p/cnt001?cavos_auth_code=e2e-code&state=e2e');
-  await expect(page.getByText(PAID).first()).toBeVisible();
-  await expect(page.getByTestId('contact-account-pending')).toBeVisible(); // retoma el vínculo pendiente
-  const v1 = await readVault(page); const after = { key: v1['guest:key'], pin: v1['guest:pin:cnt001'] };
-  expect(after).toEqual(before); // misma llave y mismo código: la compra sigue en este dispositivo
-  await expect(page.getByText('Tengo un problema')).toBeVisible();
-  await noHScroll(page);
-  await page.getByTestId('contact-card').scrollIntoViewIfNeeded();
-  await shot(page, 'cuenta-vuelta', info.project.name);
-  await page.getByTestId('contact-account-pending').getByText('Cancelar', { exact: true }).click();
+  await expect.poll(async () => (await state(request)).links.length).toBeGreaterThan(0);
   await expect(page.getByTestId('contact-account-pending')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/p\/cnt001$/);
 });
 
-test('CNT-05 link de acceso en OTRO dispositivo: recupera la compra, quita el token de la URL y genera un código nuevo', async ({ browser, request }, info) => {
-  await reset(request, [cntOrder], false, 'inapp', true);
-  const a = await (await browser.newContext({ ...info.project.use })).newPage();
-  await payAsGuestCnt(a);
-  await patch(request, 'cnt001', { status: 'enviado', shipped_tx: 's'.repeat(64) });
+test('CNT-05 compra histórica en OTRO dispositivo: con sesión recupera por link, limpia la URL y genera un código nuevo', async ({ browser, request }, info) => {
+  await reset(request, [{ ...cntOrder, buyer: KEY, status: 'enviado', contract_id: 'C-HISTORICAL', funded_tx: 'f'.repeat(64), shipped_tx: 's'.repeat(64) }], false, 'inapp', true);
   const tok = await accessToken(request, 'cnt001');
   const b = await (await browser.newContext({ ...info.project.use })).newPage(); // teléfono nuevo: sin llave ni PIN
+  await mockBuyer(b.context());
   await b.goto('/p/cnt001');
   await expect(b.getByTestId('recover-open')).toBeVisible(); // sin acceso: ofrece pedir el link
   await b.goto(`/p/cnt001?acceso=${tok}`);
@@ -867,22 +848,24 @@ test('CNT-05 link de acceso en OTRO dispositivo: recupera la compra, quita el to
   await shot(b, 'acceso-recuperado', info.project.name);
   const s = await state(request);
   expect(s.calls.some((c: any) => c.action === 'buyer_pin_reissue' && c.access)).toBe(true);
+  expect(s.orders.cnt001.buyer).toBe(KEY); // recuperar no reasigna la compra a otra cuenta
   // Recarga: el permiso queda en el dispositivo.
   await b.reload();
   await expect(b.getByText('Recibí y está bien')).toBeVisible();
   // Link inválido: mensaje claro, la página sigue.
   const c = await (await browser.newContext({ ...info.project.use })).newPage();
+  await mockBuyer(c.context());
   await c.goto('/p/cnt001?acceso=acc-falso');
   await expect(c.getByTestId('access-msg')).toContainText('Este link venció');
   await expect(c.getByTestId('recover-open')).toBeVisible();
 });
 
-test('MCK-SRCH-01 sin cuenta: la lupa abre el buscador y filtra el feed (sin barra de pestañas)', async ({ page, request }) => {
+test('MCK-SRCH-01 con cuenta: la lupa abre el buscador y filtra el feed (sin barra de pestañas)', async ({ page, request }) => {
   test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
   await reset(request, [listing, { slug: 'prod02', kind: 'listing', model: 'Consola PS5', price_crc: 300000 }]);
   const urls: string[] = []; page.on('request', (r) => urls.push(r.url()));
   await page.goto('/comprar');
-  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Vender' })).toHaveCount(1);
   await page.getByTestId('comprar-search').click();
   const input = page.getByLabel('Buscar productos', { exact: true });
   await expect(input).toBeFocused();
@@ -1108,7 +1091,7 @@ async function watchCsp(page: Page) {
   return () => page.evaluate(() => (window as any).__csp as string[]);
 }
 
-test('SEC-02 sin violaciones de CSP: bienvenida, Comprar, tienda, producto y pago como invitado', async ({ page, request }) => {
+test('SEC-02 sin violaciones de CSP: bienvenida, Comprar, tienda, producto y pago con Cavos', async ({ page, request }) => {
   await reset(request, [{ slug: 'prod01', kind: 'listing', model: 'Bici de montaña', price_crc: 150000 }]);
   const csp = await watchCsp(page);
   for (const u of ['/', '/comprar', '/t/valeria', '/como-funciona']) { await page.goto(u); await expect(page.locator('#root')).not.toBeEmpty(); }
@@ -1152,36 +1135,43 @@ const TS_STUB = `window.turnstile = { render: function (el, o) { el.setAttribute
 // cargaría el script REAL de Cloudflare (en Chromium sí las intercepta). Ver TS-01.
 const stubTurnstile = (page: Page) => page.route('https://challenges.cloudflare.com/**', (r) => r.fulfill({ status: 200, contentType: 'application/javascript', body: TS_STUB }));
 
-test('TS-01 Turnstile activo: el pago sin cuenta resuelve el reto solo y reintenta con el token; sin activar no hay reto', async ({ page, browser, request }) => {
+test('TS-01 compra nueva con Cavos: no usa el reto del checkout histórico invitado', async ({ page, request }) => {
   await reset(request, [listing]);
-  await stubTurnstile(page);
-  // Apagado (producción sin llaves): sin token y sin script de Cloudflare.
+  await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
   await page.goto('/p/prod01');
   await page.getByText(/Pagar en custodia/).last().click();
   await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
-  expect((await calls(request, '/api/escrow/pay', 'start')).every((c) => !c.turnstile)).toBe(true);
+  const starts = await calls(request, '/api/escrow/pay', 'start');
+  expect(starts.length).toBeGreaterThan(0);
+  expect(starts.every((c) => c.bearer && !c.turnstile)).toBe(true);
   expect(await page.evaluate(() => !!document.querySelector('script[src*="challenges.cloudflare.com"]'))).toBe(false);
-  await page.goto('about:blank');
-  // Activo: comprador nuevo -> 403 turnstile_required -> reto -> reintento con token -> SINPE.
-  await reset(request, [listing]);
-  await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
-  const ctx = await browser.newContext({ serviceWorkers: 'block' }); const p2 = await ctx.newPage(); await stubTurnstile(p2);
-  await p2.goto('/p/prod01');
-  await p2.getByText(/Pagar en custodia/).last().click();
-  await expect(p2.getByText('Paga por SINPE Móvil')).toBeVisible({ timeout: 15_000 });
-  const flags = (await calls(request, '/api/escrow/pay', 'start')).map((c) => !!c.turnstile);
-  expect(flags[0]).toBe(false); // el primero sin token (403)
-  expect(flags.slice(0, 2)).toEqual([false, true]); // el reintento con token
-  await expect(p2.getByTestId('turnstile')).toHaveCount(0); // el contenedor se quita al terminar
-  await ctx.close();
-  // El reto falla: no se paga y se ve el mensaje (sin pedido nuevo).
-  await reset(request, [listing]);
-  await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
-  const ctx3 = await browser.newContext({ serviceWorkers: 'block' }); const p3 = await ctx3.newPage(); await stubTurnstile(p3);
-  await p3.addInitScript(() => { (window as any).__tsFail = true; });
-  await p3.goto('/p/prod01');
-  await p3.getByText(/Pagar en custodia/).last().click();
-  await expect(p3.getByText('Confirma que eres una persona para seguir.').first()).toBeVisible({ timeout: 15_000 });
-  expect(await childOf(request)).toHaveLength(0);
-  await ctx3.close();
+});
+
+
+test('TS-02 compra histórica: el reto y su rechazo conservan el control aunque ya tengas sesión', async ({ browser, request }, info) => {
+  for (const fails of [false, true]) {
+    await reset(request, [{ slug: 'oldts1', buyer: KEY, status: 'creado', price_crc: 5000 }]);
+    await request.post(`${MOCK}/__mock/turnstile`, { data: { on: true } });
+    const ctx = await browser.newContext({ ...info.project.use, serviceWorkers: 'block' });
+    try {
+      await mockBuyer(ctx);
+      await ctx.addInitScript(({ key, fails }) => { localStorage.setItem('meteorito:guest:v1', key); localStorage.setItem('cavos:e2e:exp', String(Math.floor(Date.now() / 1000) + 30)); (window as any).__tsFail = fails; }, { key: KEY, fails });
+      const page = await ctx.newPage();
+      await stubTurnstile(page);
+      await page.goto('/p/oldts1');
+      await page.getByText(/Pagar en custodia/).last().click();
+      if (fails) {
+        await expect(page.getByText('Confirma que eres una persona para seguir.').first()).toBeVisible();
+        expect((await state(request)).orders.oldts1.status).toBe('creado');
+      } else {
+        await expect(page.getByText('Paga por SINPE Móvil')).toBeVisible();
+        const starts = await calls(request, '/api/escrow/pay', 'start');
+        expect(starts.map(c => c.turnstile).slice(0, 2)).toEqual([false, true]);
+        expect(starts.every(c => c.bearer && c.sessionProof)).toBe(true);
+        expect((await calls(request, '/api/wallet/activate', 'nonce')).length).toBeGreaterThanOrEqual(2);
+        expect((await state(request)).orders.oldts1.buyer).toBe(KEY);
+        await expect(page.getByTestId('turnstile')).toHaveCount(0);
+      }
+    } finally { await ctx.close(); }
+  }
 });
