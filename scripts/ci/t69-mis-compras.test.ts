@@ -122,7 +122,7 @@ export async function run(t: T) {
   t.check('cada fila abre su seguimiento /p/<pedido>', /pathname: '\/p\/\[slug\]', params: \{ slug: r\.slug \}/.test(screenSrc));
   t.check('pantalla sin scroll (páginas con GridPager) y cerradas detrás de un selector', /scroll=\{false\}/.test(screenSrc) && /GridPager/.test(screenSrc) && /accessibilityRole="tablist"/.test(screenSrc));
   const layout = read('app/_layout.tsx');
-  t.check('Mis compras visible sin cuenta (comprador invitado) + acceso en la bienvenida si este dispositivo compró', /isPublicRoute\(segments/.test(layout) && /segments\[1\] === 'comprar'/.test(read('lib/publicRoutes.ts')) && /hasLocalPurchases\(\)/.test(read('components/Welcome.tsx')));
+  t.check('Mis compras requiere cuenta + acceso en la bienvenida si este dispositivo compró', /isPublicRoute\(segments/.test(layout) && !read('lib/publicRoutes.ts').includes("'mis-compras'") && /hasLocalPurchases\(\)/.test(read('components/Welcome.tsx')));
   const loader = read('lib/myPurchases.ts');
   t.check('servidor por /api/store action buyer_orders (llave y/o sesión), sin función nueva', /guestApi<[^>]+>\(auth, '\/api\/store', \{ action: 'buyer_orders' \}\)/.test(loader));
   const fns: string[] = []; const walk = (d: string) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) { if (f !== '_lib' && f !== 'api') walk(p); } else if (/\.ts$/.test(f) && f !== 'tsconfig.json') fns.push(p); } };

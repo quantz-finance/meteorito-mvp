@@ -118,7 +118,7 @@ function LinkDeVentaReal() {
   // Mismo encabezado y tarjeta que la invitación (/i/<code>): título grande, miniatura junto al nombre y el precio.
   const unpaid = !order || order.status === 'creado' || order.status === 'escrow_creado';
   const title = unpaid ? 'Link de pago' : 'Tu compra';
-  const subtitle = unpaid ? 'Pagas sin crear cuenta. El vendedor cobra cuando recibes.' : 'Aquí ves cada paso hasta que recibas. Se actualiza sola.';
+  const subtitle = unpaid ? 'Pagas con tu cuenta. El vendedor cobra cuando recibes.' : 'Aquí ves cada paso hasta que recibas. Se actualiza sola.';
   if (order === undefined) return (
     <Screen back="/pedidos" title={title} space="calm">
       <Skeleton h={120} r={R.lg} /><Skeleton h={160} r={R.lg} />

@@ -1,5 +1,5 @@
 import { timeLeft, useAutoReleaseWindow } from '@/lib/autorelease';
-import { friendlyPayError } from '@/lib/wallet';
+import { friendlyPayError, ensureWalletReady } from '@/lib/wallet';
 // Comprador: Pagar en custodia -> tarjeta (formulario propio, components/CardSheet.tsx), cripto discreto (components/CryptoSheet.tsx) o SINPE simulado ("Ya pagué") -> fondos en escrow TW testnet. Luego "Recibí".
 // Mismas llamadas a la API que antes; la UI vive en el footer fijo + bottom sheets.
 import { useEffect, useRef, useState } from 'react';
@@ -13,7 +13,7 @@ import { ExtensionBox } from '@/components/ExtensionBox';
 import { Card, ErrorText, Icon, PrimaryButton, Sheet, SuccessCheck } from '@/components/ds';
 import { Fonts } from '@/constants/Colors';
 import { C, S, T } from '@/constants/theme';
-import { guestApi } from '@/lib/api';
+import { api, guestApi, proof } from '@/lib/api';
 import { myListingOrder, rememberListingOrder } from '@/lib/listings';
 import { loadGrant, loadPin, savePin, useGuestVault } from '@/lib/guest';
 import { reissuePin } from '@/lib/buyerContact';
@@ -55,6 +55,10 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const [crypto, setCrypto] = useState(false); // pago con cripto (USDC/XLM en Stellar) disponible (start -> crypto)
   // 'inapp' (default): nuestro formulario. 'widget': respaldo con el widget de Lendara (LENDARA_MODE=widget en el servidor).
   const [cardMode, setCardMode] = useState<'inapp' | 'widget'>('inapp');
+  const startPayment = async () => {
+    await ensureWalletReady(auth);
+    return api(auth, '/api/escrow/pay', { slug: order.slug, step: 'start', proof: await proof(auth, 'pay', order.slug) });
+  };
   const payOpen = (r: any) => {
     setSinpe({ amountUsdc: r.amountUsdc, priceCrc: r.priceCrc, reference: r.sinpe.reference }); setCard(!!r.card); setCrypto(!!r.crypto);
     setCardMode(r.cardMode === 'inapp' ? 'inapp' : 'widget'); setSheet(r.card || r.crypto ? 'method' : 'sinpe');
@@ -108,7 +112,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
     if (pay !== '1' || resumed.current || order.status !== 'escrow_creado' || sinpe) return;
     resumed.current = true;
     run(async () => {
-      const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'start' });
+      const r = await startPayment();
       payOpen(r);
     });
   }, [pay, order.status]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -122,11 +126,11 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   const payCardInApp = async (p: CardPayInput) => {
     track('card_pay_submitted');
     try {
-      let r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_pay', name: p.name, email: p.email, scenario: p.scenario });
+      let r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_pay', name: p.name, email: p.email, scenario: p.scenario });
       const t0 = Date.now();
       while (r.pending && Date.now() - t0 < CARD_POLL_MAX_MS) {
         await sleep(CARD_POLL_MS);
-        r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_confirm' });
+        r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_confirm' });
       }
       if (r.pending) throw new Error(CARD_PROCESSING_INAPP);
       funded(r, 'card');
@@ -140,14 +144,14 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
   // Tarjeta (respaldo widget): sesión en el servidor -> widget de Lendara (iframe) -> el servidor verifica y fondea (card_confirm).
   const payCard = () => run(async () => {
     track('card_pay_tapped');
-    const s = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_session' });
+    const s = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_session' });
     if (s.fundedTx) return funded(s, 'card'); // un pago anterior ya se había completado
     if (s.pending) { setErr(CARD_PROCESSING); return; }
     setSheet(null); // la hoja (Modal) atrapa el foco: el iframe del widget no recibiría el teclado
     const out = await openCardWidget(s.url);
     setSheet('method');
     if (out === 'closed') { track('card_widget_closed'); return; }
-    const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_confirm' });
+    const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'card_confirm' });
     if (r.pending) { setErr(CARD_PROCESSING); return; }
     funded(r, 'card');
   });
@@ -182,13 +186,13 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       onClose={() => setSheet('method')} onPay={payCardInApp} onSinpe={() => { setErr(null); setSheet('sinpe'); }} />
     <CryptoSheet visible={sheet === 'crypto' && !!sinpe && order.status === 'escrow_creado'} priceCrc={sinpe?.priceCrc ?? Number(order.price_crc)}
       onClose={() => setSheet(null)} onBack={() => setSheet('method')}
-      call={(step, extra) => guestApi(auth, '/api/escrow/pay', { slug: order.slug, step, ...extra })}
+      call={(step, extra) => api(auth, '/api/escrow/pay', { slug: order.slug, step, ...extra })}
       onFunded={(r) => funded(r, 'crypto')} />
     <Sheet visible={sheet === 'sinpe' && !!sinpe && order.status === 'escrow_creado'} onClose={() => setSheet(null)} title="Paga por SINPE Móvil"
       footer={<>
         {err && <ErrorText>{err}</ErrorText>}
         <PrimaryButton title="Ya pagué" icon="checkmark" loading={busy}
-          onPress={() => run(async () => { track('pay_confirm_tapped'); const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'confirm_sinpe' }); funded(r, 'sinpe'); })} />
+          onPress={() => run(async () => { track('pay_confirm_tapped'); const r = await api(auth, '/api/escrow/pay', { slug: order.slug, step: 'confirm_sinpe' }); funded(r, 'sinpe'); })} />
       </>}>
       {sinpe && <>
         <Card style={{ alignItems: 'center', paddingVertical: S.lg }}>
@@ -208,7 +212,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <Text style={[T.title, { textAlign: 'center' }]}>{f2f ? F2F_PAID : PAID_WAITING}</Text>
       <Row icon="lock-closed" text="Tu pago queda en custodia. El vendedor cobra cuando recibes el producto." />
       {f2f ? codeBox(F2F_CODE_HINT) : <Row icon="cube-outline" text="Cuando lo envíe, aquí vas a ver tu código de entrega." />}
-      <Text style={[T.footnote, { textAlign: 'center' }]}>Pagaste sin crear cuenta: este navegador guarda tu acceso a este pedido y tu código de entrega. Para no perderlo si cambias de teléfono, elige abajo cómo recibir avisos (WhatsApp, correo o una cuenta). Es opcional.</Text>
+      <Text style={[T.footnote, { textAlign: 'center' }]}>Tu compra queda ligada a tu cuenta. Este navegador guarda tu código de entrega. Puedes elegir cómo recibir avisos de tu compra; es opcional.</Text>
       <BetaNotice from="pin" onNavigate={() => setSheet(null)} />
       <ChainLinks order={order} align="center" />
     </Sheet>
@@ -245,7 +249,7 @@ export function PayBox({ order, onChange }: { order: PublicOrder; onChange: () =
       <BetaNotice from="pay" custody />
       <PrimaryButton title={busy ? 'Preparando…' : `Pagar en custodia ${formatCRC(order.price_crc)}`} icon="shield-checkmark" loading={busy}
         onPress={() => run(async () => {
-          const r = await guestApi(auth, '/api/escrow/pay', { slug: order.slug, step: 'start' });
+          const r = await startPayment();
           remember(r.slug ?? order.slug, 'escrow_creado');
           if (r.slug && r.slug !== order.slug) { // producto permanente: seguir en el pedido propio de este comprador
             rememberListingOrder(order.slug, r.slug); track('listing_order_started');

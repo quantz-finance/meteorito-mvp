@@ -88,7 +88,7 @@ export async function run(t: T) {
   const db: any = fakeDb(); __setDbForTests(db); installRpc(db);
 
   // Comprador (invitado) crea la invitación.
-  let r = await call(invites, { guest: BUYER_KEY, body: { op: 'create', title: 'Bicicleta de montaña', price_crc: 120000 } });
+  let r = await call(invites, { guest: BUYER_KEY, tok: await token({ sub: 'cavos-buyer-1' }), body: { op: 'create', title: 'Bicicleta de montaña', price_crc: 120000 } });
   const code = r.body?.code as string;
   t.check('comprador crea la invitación', r.code === 200 && /^[a-z0-9]{8}$/.test(code), `${r.code} ${r.body?.error}`);
 
@@ -96,12 +96,12 @@ export async function run(t: T) {
   r = await call(invites, { method: 'GET', query: { code }, guest: SELLER_KEY });
   const ag = r.body?.seller_guest?.agreements;
   t.check('GET: available + hashes por tipo de entrega (24 h cara a cara, 7 días envío)', r.body?.seller_guest?.available === true && /^sha256:/.test(ag?.envio?.hash) && ag?.cara_a_cara?.protection_minutes === 1440 && ag?.envio?.protection_minutes === 10080, JSON.stringify(r.body?.seller_guest));
-  r = await call(invites, { method: 'GET', query: { code }, guest: BUYER_KEY });
+  r = await call(invites, { method: 'GET', query: { code }, guest: BUYER_KEY, tok: await token({ sub: 'cavos-buyer-1' }) });
   t.check('GET del comprador: sin bloque de vendedor', r.body?.mine === true && !('seller_guest' in r.body));
   const h = ag.envio.hash;
 
-  // El comprador no puede aceptar su propio link (llave o cuenta).
-  r = await call(invites, { guest: BUYER_KEY, body: { op: 'seller_otp_request', code, email: 'yo@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
+  // El comprador con cuenta no puede aceptar su propio link.
+  r = await call(invites, { guest: BUYER_KEY, tok: await token({ sub: 'cavos-buyer-1' }), body: { op: 'seller_otp_request', code, email: 'yo@ejemplo.com', delivery_mode: 'envio', agreement_hash: h } });
   t.check('comprador (misma llave) no puede pedir código para su link -> 400 own_invite', r.code === 400 && r.body?.code === 'own_invite' && mails.length === 0, `${r.code} ${r.body?.code}`);
   const inv0 = db.tables.invitations[0];
   inv0.buyer_user_id = 'cavos-buyer-1'; // comprador con cuenta (PR "Comprar primero")
@@ -229,13 +229,13 @@ export async function run(t: T) {
   // Custodia: flag, aceptación, destino. Nunca Cavos.
   t.check('serviceProvider = backend aunque SERVICE_PROVIDER_MODE=seller', env.spMode() === 'seller' && serviceProviderFor(o) === SP.publicKey());
   process.env.SELLER_GUEST_ENABLED = '';
-  r = await call(pay, { guest: BUYER_KEY, body: { slug, step: 'start' } });
+  r = await call(pay, { guest: BUYER_KEY, tok: await token({ sub: 'cavos-buyer-1' }), body: { slug, step: 'start' } });
   t.check('flag apagado: pagar -> 503 seller_guest_disabled (sin escrow)', r.code === 503 && r.body?.code === 'seller_guest_disabled' && !o.contract_id, `${r.code} ${r.body?.code}`);
-  r = await call(pay, { guest: BUYER_KEY, body: { slug, step: 'confirm_sinpe' } });
+  r = await call(pay, { guest: BUYER_KEY, tok: await token({ sub: 'cavos-buyer-1' }), body: { slug, step: 'confirm_sinpe' } });
   t.check('flag apagado: confirm_sinpe también -> 503', r.code === 503, `${r.code}`);
-  r = await call(pay, { guest: BUYER_KEY, body: { slug, step: 'card_pay' } });
+  r = await call(pay, { guest: BUYER_KEY, tok: await token({ sub: 'cavos-buyer-1' }), body: { slug, step: 'card_pay' } });
   t.check('flag apagado: tarjeta también -> 503', r.code === 503, `${r.code}`);
-  r = await call(pay, { guest: BUYER_KEY, body: { slug, step: 'crypto_quote', asset: 'USDC' } });
+  r = await call(pay, { guest: BUYER_KEY, tok: await token({ sub: 'cavos-buyer-1' }), body: { slug, step: 'crypto_quote', asset: 'USDC' } });
   t.check('flag apagado: cripto también -> 503', r.code === 503, `${r.code}`);
   process.env.SELLER_GUEST_ENABLED = '1';
   const savedAcc = db.tables.seller_acceptances.splice(0, 1);
@@ -253,7 +253,7 @@ export async function run(t: T) {
   t.check('fondeo (mockRampFund: SINPE/tarjeta/cripto) sin aceptación -> rechazado antes de tomar el lock', e3?.code === 'seller_not_accepted' && !(db.tables.ramp_mock_payments ?? []).length, `${e3?.code}`);
   db.tables.seller_acceptances.push(acc);
   r = await call(pay, { guest: OTHER_KEY, body: { slug, step: 'start' } });
-  t.check('otro invitado no puede pagar el link reservado', r.code === 403, `${r.code} ${r.body?.code}`);
+  t.check('otro invitado debe entrar para intentar pagar el link reservado', r.code === 401, `${r.code} ${r.body?.code}`);
 
   // Cola IBAN simulada, idempotente, con el principal no-Cavos.
   o.status = 'liberado';
