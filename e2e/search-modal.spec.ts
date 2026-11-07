@@ -1,6 +1,9 @@
 // Comprar › Buscar en un modalcito: sin input fijo sobre el feed; la lupa (4.º icono arriba a la derecha) abre la hoja.
 import { test, expect } from '@playwright/test';
 import { expectInputs16, open, settle } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
+// Marketplace oculto en la UI (lib/marketplace.ts): estos tests vuelven a correr al activarlo.
+test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto');
 
 const SHOTS = process.env.SEARCH_SHOTS;
 

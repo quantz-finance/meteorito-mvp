@@ -25,11 +25,15 @@ export const TAB_ICONS: Record<string, (p: IconP) => React.ReactElement> = {
 
 const BAR_H = 64, PAD = 6;
 
+/** Pestañas sin botón en la barra (la ruta sigue existiendo): Home (/pedidos) se abre desde Vender. */
+const HIDDEN_TABS = ['pedidos'];
+
 export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const [w, setW] = useState(0);
-  const n = state.routes.length;
+  const n = state.routes.filter((r) => !HIDDEN_TABS.includes(r.name)).length;
+  const onHidden = HIDDEN_TABS.includes(state.routes[state.index]?.name);
   const tabW = w ? (w - PAD * 2) / n : 0;
   const x = useSharedValue(0);
   useEffect(() => {
@@ -41,8 +45,9 @@ export function TabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   return (
     <View pointerEvents="box-none" style={[s.wrap, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <View style={s.bar} onLayout={(e) => setW(e.nativeEvent.layout.width)} accessibilityRole="tablist">
-        {tabW > 0 && <Animated.View style={[s.pill, { width: tabW }, pill]}><View style={s.pillInner} /><View style={s.dot} /></Animated.View>}
+        {tabW > 0 && !onHidden && <Animated.View style={[s.pill, { width: tabW }, pill]}><View style={s.pillInner} /><View style={s.dot} /></Animated.View>}
         {state.routes.map((route, i) => {
+          if (HIDDEN_TABS.includes(route.name)) return null;
           const focused = state.index === i;
           const { options } = descriptors[route.key];
           const label = String(options.title ?? route.name);

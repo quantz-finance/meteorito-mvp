@@ -63,8 +63,8 @@ export async function run(t: T) {
   // Navegación: exactamente Vender, Comprar, Pedidos; "/" -> Vender; PWA abre en Vender.
   const tabs = readFileSync('app/(tabs)/_layout.tsx', 'utf8');
   const names = [...tabs.matchAll(/Tabs\.Screen name="([^"]+)"/g)].map((m) => m[1]);
-  t.check('pestañas: vender, comprar, pedidos (en ese orden)', JSON.stringify(names) === '["vender","comprar","pedidos"]', names.join(','));
+  t.check('pestañas: comprar, vender, pedidos (en ese orden)', JSON.stringify(names) === '["comprar","vender","pedidos"]', names.join(','));
   t.check('sin pantalla Inicio en las pestañas', !existsSync('app/(tabs)/index.tsx'));
-  t.check('"/" redirige a /vender', existsSync('app/index.tsx') && /Redirect[^]*href="\/vender"/.test(readFileSync('app/index.tsx', 'utf8')));
-  t.check('PWA: start_url /vender', JSON.parse(readFileSync('public/manifest.json', 'utf8')).start_url === '/vender');
+  t.check('"/" redirige a /comprar', existsSync('app/index.tsx') && /Redirect[^]*href="\/comprar"/.test(readFileSync('app/index.tsx', 'utf8')));
+  t.check('PWA: start_url /comprar', JSON.parse(readFileSync('public/manifest.json', 'utf8')).start_url === '/comprar');
 }

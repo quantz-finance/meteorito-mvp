@@ -5,6 +5,7 @@
 // producto o la compra, Reportar y (vendedor) Bloquear. Sin la migración 025 muestra un aviso amable.
 // Desde la ficha de un producto (?p=<slug>), estilo Messenger: el primer mensaje lleva la tarjeta del producto (foto,
 // título, precio; tocar abre /p/<slug>) y cada producto nuevo de la misma tienda agrega la suya (030; sin ella, la de arriba).
+import { MARKETPLACE_VISIBLE } from '@/lib/marketplace';
 import { AppearGroup } from '@/components/Appear';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -289,7 +290,7 @@ export default function ChatScreen() {
 
       <Sheet visible={menu} onClose={() => setMenu(false)} title={K.options}>
         {ctxSlug ? <ListRow icon={conv?.kind === 'order' ? 'bag-check-outline' : 'pricetag-outline'} title={conv?.kind === 'order' ? K.seeOrder : K.seeItem} onPress={() => { setMenu(false); router.push({ pathname: '/p/[slug]', params: { slug: ctxSlug } }); }} /> : null}
-        {role === 'buyer' && other?.store_slug ? <ListRow icon="storefront-outline" title={COPY.ficha.seeProfile} onPress={() => { setMenu(false); router.push({ pathname: '/t/[store]', params: { store: other.store_slug! } }); }} /> : null}
+        {role === 'buyer' && other?.store_slug && MARKETPLACE_VISIBLE ? <ListRow icon="storefront-outline" title={COPY.ficha.seeProfile} onPress={() => { setMenu(false); router.push({ pathname: '/t/[store]', params: { store: other.store_slug! } }); }} /> : null}
         <ListRow icon="flag-outline" title={K.report} onPress={() => { setMenu(false); setReport(true); }} />
         {role === 'seller' && (state.blocked || canBlock) ? <ListRow icon={state.blocked ? 'lock-open-outline' : 'ban-outline'} title={state.blocked ? K.unblock : K.block} onPress={toggleBlock} /> : null}
         {/* Compra en curso o disputa abierta entre los dos: no se puede bloquear (el comprador siempre puede escribir y disputar). */}

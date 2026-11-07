@@ -7,8 +7,8 @@ import { GUEST_HOME, guestFallback, isPublicPath, prevIsPublic } from '../../lib
 
 const read = (f: string) => readFileSync(f, 'utf8');
 export async function run(t: T) {
-  t.check('rutas con login: /pedidos, /vender, /, /mi-tienda, /ventas, /admin/disputas', ['/pedidos', '/vender', '/', '/mi-tienda', '/ventas', '/admin/disputas'].every((p) => !isPublicPath(p)));
-  t.check('rutas públicas: Comprar (3), /p, /t, /i, legales, reglas, chat', ['/comprar', '/comprar/link', '/comprar/compras', '/p/abc', '/t/valeria', '/i/nueva', '/legal/privacidad', '/como-funciona', '/chat?x=1', '/mensajes'].every(isPublicPath));
+  t.check('rutas con login: /pedidos, /vender, /, /mi-tienda, /ventas, /admin/disputas, /i/nueva (crear invitación)', ['/pedidos', '/vender', '/', '/mi-tienda', '/ventas', '/admin/disputas', '/i/nueva', '/i/nueva?fb=1'].every((p) => !isPublicPath(p)));
+  t.check('rutas públicas: Comprar (3), /p, /t, /i, legales, reglas, chat', ['/comprar', '/comprar/link', '/comprar/compras', '/p/abc', '/t/valeria', '/i/abc123', '/legal/privacidad', '/como-funciona', '/chat?x=1', '/mensajes'].every(isPublicPath));
   t.check('invitado sin historial: /pedidos -> Mis compras', GUEST_HOME === '/comprar/compras' && guestFallback('/pedidos', true) === '/comprar/compras');
   t.check('invitado: /vender (legales, reglas) -> Mis compras', guestFallback('/vender', true) === '/comprar/compras');
   t.check('invitado: un destino público se respeta (/comprar)', guestFallback('/comprar', true) === '/comprar');

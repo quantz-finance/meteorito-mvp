@@ -10,6 +10,7 @@ import { COMPRAR_VIEWS, type ComprarView } from '@/lib/comprarViews';
 import { Dot, useBuyerUnread } from '@/components/ChatInbox';
 import { openSearch, SEARCH_COPY, useFeedSearch } from '@/lib/feedSearch';
 import { tourMark } from '@/components/Tour';
+import { MARKETPLACE_VISIBLE } from '@/lib/marketplace';
 
 export type { ComprarView } from '@/lib/comprarViews';
 
@@ -26,21 +27,21 @@ export function ComprarNav({ active }: { active: ComprarView }) {
         {COMPRAR_VIEWS.map((v) => {
           const on = v.key === active;
           return (
-            <Pressable key={v.key} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} accessibilityLabel={v.label} hitSlop={4} {...tourMark(`comprar-${v.key}`)}
+            <Pressable key={v.key} accessibilityRole="tab" accessibilityState={{ selected: on }} aria-selected={on} accessibilityLabel={v.key === 'feed' && !MARKETPLACE_VISIBLE ? 'Crear link' : v.label} hitSlop={4} {...tourMark(`comprar-${v.key}`)}
               onPress={() => { if (on) return; haptic.tap(); router.replace(v.href); }}
               style={({ pressed }) => [s.btn, on && s.on, pressed && !on && { opacity: 0.7 }]}>
-              <Icon name={v.icon} size={22} color={on ? C.purpleDark : C.lilac} />
+              <Icon name={v.key === 'feed' && !MARKETPLACE_VISIBLE ? 'paper-plane-outline' : v.icon} size={22} color={on ? C.purpleDark : C.lilac} />
               {v.key === 'compras' && unread ? <Dot testID="compras-unread" /> : null}
             </Pressable>
           );
         })}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel={SEARCH_COPY.open} hitSlop={4} testID="comprar-search"
+      {MARKETPLACE_VISIBLE ? <Pressable accessibilityRole="button" accessibilityLabel={SEARCH_COPY.open} hitSlop={4} testID="comprar-search"
         onPress={() => { haptic.tap(); openSearch(); if (active !== 'feed') router.replace('/comprar'); }}
         style={({ pressed }) => [s.btn, pressed && { opacity: 0.7 }]}>
         <Icon name="search" size={22} color={C.lilac} />
         {search.active ? <Dot testID="search-active" /> : null}
-      </Pressable>
+      </Pressable> : null}
     </View>
   );
 }

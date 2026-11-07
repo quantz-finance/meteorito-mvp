@@ -22,10 +22,7 @@ test.describe('Universo y Home', () => {
     await page.evaluate(async () => { const d = (window as any).__meteoritoDemo; await d.seed('fondeado', { title: 'Bici', price_crc: 150000 }); await d.seed('enviado', { title: 'iPhone', price_crc: 90000 }); });
     await open(page, '/pedidos', 'seller');
     const tabs = page.getByRole('tab');
-    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Vender', 'Comprar', 'Home']);
-    await expect(page.getByRole('tab', { name: 'Home' })).toHaveAttribute('aria-selected', 'true');
-    // ícono de casa (lucide house), no la caja
-    expect(await page.getByRole('tab', { name: 'Home' }).locator('path').first().getAttribute('d')).toMatch(/^M3 10a2 2 0 0 1 \.7-1\.5l7-6/);
+    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Comprar', 'Vender']); // Home sin pestaña: se abre desde Vender
     await expectTitleAt16(page, 'Home');
     await expect(page.getByText('Mis pedidos')).toHaveCount(0);
     await expect(page).toHaveURL(/\/pedidos/); // la ruta no cambia
@@ -71,7 +68,7 @@ test.describe('Universo y Home', () => {
     await page.waitForTimeout(600);
     const t0 = await page.evaluate(() => { (window as any).__u = document.getElementById('u'); return Number(document.querySelector('#u .u-l3')!.getAnimations()[0].currentTime); });
     await page.getByRole('tab', { name: 'Comprar' }).click();
-    await page.getByRole('tab', { name: 'Home' }).click();
+    await page.getByRole('tab', { name: 'Vender' }).click();
     await page.waitForTimeout(300);
     const r = await page.evaluate(() => ({ same: (window as any).__u === document.getElementById('u'), t: Number(document.querySelector('#u .u-l3')!.getAnimations()[0].currentTime) }));
     expect(r.same).toBe(true);

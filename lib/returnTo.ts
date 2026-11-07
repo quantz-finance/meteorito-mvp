@@ -6,7 +6,7 @@ const ROUTE_KEY = 'meteorito:return-to:v1';
 const PENDING_KEY = 'meteorito:relogin-pending:v1';
 export const RETURN_TTL_MS = 24 * 3600_000;
 /** Donde abre la app (start_url del manifest = /vender, o la raíz). */
-const START = ['/', '/vender'];
+const START = ['/', '/comprar', '/vender'];
 /** Rutas que no tiene sentido restaurar (inicio, login, callbacks). */
 const SKIP = /^\/(?:$|\?|legal\/|p\/|i\/|t\/)/;
 const safePath = (p: unknown): p is string => typeof p === 'string' && p.startsWith('/') && !p.startsWith('//') && p.length <= 300 && !/cavos_auth_code|auth_data/.test(p);

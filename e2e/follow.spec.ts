@@ -2,6 +2,9 @@
 // número de seguidores (nunca quiénes), sin scroll horizontal en iPhone SE.
 import { test, expect } from '@playwright/test';
 import { open, searchFeed, settle } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
+// Marketplace oculto en la UI (lib/marketplace.ts): estos tests vuelven a correr al activarlo.
+test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto');
 
 test('FOLLOW-01 seguir desde el perfil: Siguiendo + seguidores; la tarjeta del feed lo muestra igual', async ({ page }) => {
   await open(page, '/t/jose-games', 'buyer', true);

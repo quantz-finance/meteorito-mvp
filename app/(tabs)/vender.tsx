@@ -213,7 +213,10 @@ function VenderForm() {
 
   const right = (
     <View style={{ alignItems: 'flex-end', gap: S.sm }}>
-      <IconButton icon="storefront-outline" label="Mi tienda" onPress={() => router.push('/mi-tienda')} />
+      <View style={{ flexDirection: 'row', gap: S.sm }}>
+        <IconButton icon="receipt-outline" label="Mis ventas y cuenta" onPress={() => router.push('/pedidos')} />
+        <IconButton icon="storefront-outline" label="Mi tienda" onPress={() => router.push('/mi-tienda')} />
+      </View>
     </View>
   );
 

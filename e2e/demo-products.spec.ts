@@ -3,6 +3,9 @@
 // ficha /p/ej-… con el pago desactivado. Demo con ?ejemplos=1 (en producción los sirve el API). Rápido: solo iPhone SE.
 import { test, expect, type Page } from '@playwright/test';
 import { open, searchFeed, VOSEO } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
+// Marketplace oculto en la UI (lib/marketplace.ts): vuelven a correr al activarlo.
+test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto');
 
 const BODY = 'Lo pusimos para mostrarte cómo se ve el feed. No está a la venta.';
 

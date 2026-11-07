@@ -2,6 +2,7 @@
 // primero y cerradas aparte; cada fila abre su seguimiento. Sin scroll con hasta 3 compras (iPhone SE).
 import { test, expect } from '@playwright/test';
 import { expectNoScroll, open, seed, BANNED, VOSEO } from './helpers';
+import { MARKETPLACE_VISIBLE } from '../lib/marketplace';
 
 const SHOTS = process.env.MIS_COMPRAS_SHOTS; // carpeta opcional para capturas (no se usa en CI)
 
@@ -59,6 +60,7 @@ test.describe('Mis compras', () => {
   });
 
   test('CMP-NAV-01 Comprar en 3 pantallas: Feed por defecto, Pagar con link y Mis compras, cada una con su link', async ({ page }, info) => {
+    test.skip(!MARKETPLACE_VISIBLE, 'marketplace oculto (lib/marketplace.ts)');
     const shot = async (n: string) => { if (SHOTS && info.project.name === 'webkit-iphone-se') { await page.waitForTimeout(2500); await page.screenshot({ path: `${SHOTS}/comprar-${n}.png` }); } };
     await open(page, '/comprar', 'buyer', true);
     const tabs = page.getByRole('tablist').filter({ has: page.getByRole('tab', { name: 'Pagar con link' }) });

@@ -3,22 +3,24 @@ import { expect, test } from '@playwright/test';
 import { expectNoScroll, open, PHOTO, settle } from './helpers';
 
 test.describe('Navegación', () => {
-  test('NAV-01 la barra tiene exactamente Vender, Comprar, Home (en ese orden)', async ({ page }) => {
+  test('NAV-01 la barra tiene exactamente Comprar y Vender (en ese orden)', async ({ page }) => {
     await open(page, '/vender', 'seller', true);
     const tabs = page.getByRole('tab');
-    await expect(tabs).toHaveCount(3);
-    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Vender', 'Comprar', 'Home']);
+    await expect(tabs).toHaveCount(2);
+    expect(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(['Comprar', 'Vender']);
+    await expect(page.getByRole('button', { name: 'Mis ventas y cuenta' })).toBeVisible(); // Home se abre desde Vender
     await expect(page.getByRole('tab', { name: 'Inicio' })).toHaveCount(0);
   });
 
-  test('NAV-02 la app abre en Vender ("/" y rutas viejas de Inicio redirigen)', async ({ page }) => {
+  test('NAV-02 la app abre en Comprar ("/" y rutas viejas de Inicio redirigen), con "Crear link para el vendedor" arriba', async ({ page }) => {
     for (const path of ['/', '/?utm_source=landing']) {
       await open(page, path, 'seller', path === '/');
-      await expect(page).toHaveURL(/\/vender(\?|$)/);
-      await expect(page.getByRole('tab', { name: 'Vender' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page).toHaveURL(/\/comprar(\?|$)/);
+      await expect(page.getByRole('tab', { name: 'Comprar' })).toHaveAttribute('aria-selected', 'true');
+      await expect(page.getByTestId('comprar-crear-link').filter({ visible: true }).first()).toBeVisible();
     }
     const manifest = await (await page.request.get('/manifest.json')).json();
-    expect(manifest.start_url).toBe('/vender');
+    expect(manifest.start_url).toBe('/comprar');
   });
 
   test('NAV-03 Home: Tus ventas + Mi cuenta, sin botón Actualizar (se actualiza sola), sin scroll', async ({ page }) => {
