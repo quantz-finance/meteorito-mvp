@@ -215,7 +215,6 @@ function VenderForm() {
     <View style={{ alignItems: 'flex-end', gap: S.sm }}>
       <View style={{ flexDirection: 'row', gap: S.sm }}>
         <IconButton icon="receipt-outline" label="Mis ventas y cuenta" onPress={() => router.push('/pedidos')} />
-        <IconButton icon="storefront-outline" label="Mi tienda" onPress={() => router.push('/mi-tienda')} />
       </View>
     </View>
   );
@@ -224,7 +223,6 @@ function VenderForm() {
     <Screen footerBare title="Vender" right={right} scroll={false}
       footer={<View style={{ flexDirection: 'row', gap: S.sm }}>
         <View style={{ flex: 1 }}><PrimaryButton title="Otro link" icon="add" variant="secondary" onPress={() => { setCreated(null); setError(null); }} /></View>
-        <View style={{ flex: 1 }}><PrimaryButton title="Mi tienda" icon="storefront-outline" variant="secondary" onPress={() => router.push('/mi-tienda')} /></View>
       </View>}>
       <AppearSub style={{ flex: 1, gap: S.md, justifyContent: 'center' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
@@ -241,7 +239,7 @@ function VenderForm() {
         </Card>
         <ShareLink kind="order" link={orderLink(created.slug)} message={`${created.title} por ${formatCRC(created.price)}. Paga aquí con Meteorito:`} />
         <AdTemplateButton onPress={() => setAdOpen(true)} />
-        <Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga con su cuenta; tú cobras al entregar.</Text>
+        <Text style={[T.footnote, { textAlign: 'center' }]}>El comprador paga en custodia. Cobras cuando confirma que recibió.</Text>
       </AppearSub>
       <AdTemplateSheet visible={adOpen} onClose={() => setAdOpen(false)} ad={created.ad} />
       <LastSeenInvite trigger={created.slug} />
