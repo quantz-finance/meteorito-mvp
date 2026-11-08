@@ -63,7 +63,10 @@ export default function Invitacion() {
     track('invite_shared', { from_facebook: src?.id === 'facebook', source_provider: src?.id ?? null });
     if (Platform.OS === 'web') {
       const nav = globalThis.navigator as Navigator | undefined;
-      if (nav?.share) return nav.share({ title: 'Meteorito', text: message }).catch(() => {});
+      if (nav?.share) {
+        try { await nav.share({ title: 'Meteorito', text: message }); return; }
+        catch (e) { if ((e as { name?: string })?.name === 'AbortError') return; } // canceló: no hacemos nada; si falló, copiamos
+      }
       await Clipboard.setStringAsync(message); haptic.success(); toast('Mensaje copiado. Pégalo en Messenger o WhatsApp.'); return;
     }
     await Share.share({ message });

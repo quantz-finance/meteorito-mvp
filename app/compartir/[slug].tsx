@@ -43,7 +43,7 @@ export default function Compartir() {
       <SuccessCheck />
       <View style={{ gap: S.sm }}>
         <Text style={[T.largeTitle, { textAlign: 'center' }]}>¡Tu link está listo!</Text>
-        <Text style={[T.callout, { textAlign: 'center' }]}>Mándalo por WhatsApp o Messenger. El comprador paga y los fondos quedan en custodia; tú cobras al entregar.</Text>
+        <Text style={[T.callout, { textAlign: 'center' }]}>Mándalo por WhatsApp o Messenger. El comprador paga y los fondos quedan en custodia. Cobras cuando confirma que recibió.</Text>
       </View>
       <Card onPress={copy} accessibilityLabel="Copiar link" style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
         <Text style={[T.body, { flex: 1 }]} numberOfLines={1}>{link.replace('https://', '')}</Text>

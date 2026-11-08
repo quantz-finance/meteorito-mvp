@@ -115,6 +115,14 @@ export function SellerGuestAccept({ inv, onAccepted, onLogin }: { inv: Invite; o
         <Text style={T.footnote}>Te mandamos el código a {ch.to}. Vence en 10 minutos.</Text>
         <TextInput testID="seller-guest-otp" style={[ui.input, { fontFamily: Fonts.black, fontSize: 26, letterSpacing: 8, textAlign: 'center' }]} placeholder="••••••"
           placeholderTextColor={C.textDim} value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" maxLength={6} accessibilityLabel="Código de 6 dígitos" />
+        <View style={st.exc} testID="seller-guest-final-summary">
+          <Text style={T.caption}>Vas a aceptar</Text>
+          <Row k="Producto" v={`${inv.brand} ${inv.model}`.trim()} />
+          <Row k="Precio" v={formatCRC(inv.price_crc)} strong />
+          <Row k="Entrega" v={DELIVERY_LABEL[mode]} />
+          <Row k="Plazo de reclamo" v={protectionLabel(a.protection_minutes)} />
+          <Text style={T.footnote}>El detalle completo y las reglas están más arriba, en «Lo que aceptas».</Text>
+        </View>
         <PrimaryButton testID="seller-guest-accept" title="Acepto este acuerdo" icon="checkmark-circle" loading={busy} disabled={otp.length !== 6}
           onPress={() => run(async () => { await acceptAsSeller(inv.code, ch.id, otp, mode, a.hash); onAccepted(); })} />
         <PrimaryButton title="Usar otro correo" variant="ghost" onPress={() => { setCh(null); setOtp(''); setErr(null); }} />
@@ -166,7 +174,12 @@ export function SellerGuestOrder({ o, onChange }: { o: SellerOrderView; onChange
         <Chip label={DELIVERY_LABEL[o.delivery_mode]} />
       </View>
       <Text testID="seller-guest-status" style={T.headline}>{label}</Text>
-      <Text style={T.callout}>Recibes {formatCRC(o.price_crc)} · Cobro: IBAN de ejemplo (simulación)</Text>
+      <View style={st.exc} testID="seller-guest-sim">
+        <Text style={[T.headline, { fontSize: 15 }]}>Simulación de cobro</Text>
+        <Row k="Monto de prueba" v={formatCRC(o.price_crc)} />
+        <Row k="Destino" v="IBAN de ejemplo" />
+        <Text style={T.footnote}>Es una prueba sin dinero real: nadie te va a transferir este monto.</Text>
+      </View>
       <MoneyTimeline status={o.status} compact shipped={!!o.shipped_at} mode={o.delivery_mode} />
       {funded ? <SellerActions slug={o.slug} status={o.status} order={o} onChange={onChange} call={sellerCall} asGuest /> : null}
       <ExceptionBox />
