@@ -166,7 +166,12 @@ export function SellerGuestOrder({ o, onChange }: { o: SellerOrderView; onChange
         <Chip label={DELIVERY_LABEL[o.delivery_mode]} />
       </View>
       <Text testID="seller-guest-status" style={T.headline}>{label}</Text>
-      <Text style={T.callout}>Recibes {formatCRC(o.price_crc)} · Cobro: IBAN de ejemplo (simulación)</Text>
+      <View style={st.exc} testID="seller-guest-sim">
+        <Text style={[T.headline, { fontSize: 15 }]}>Simulación de cobro</Text>
+        <Row k="Monto de prueba" v={formatCRC(o.price_crc)} />
+        <Row k="Destino" v="IBAN de ejemplo" />
+        <Text style={T.footnote}>Es una prueba sin dinero real: nadie te va a transferir este monto.</Text>
+      </View>
       <MoneyTimeline status={o.status} compact shipped={!!o.shipped_at} mode={o.delivery_mode} />
       {funded ? <SellerActions slug={o.slug} status={o.status} order={o} onChange={onChange} call={sellerCall} asGuest /> : null}
       <ExceptionBox />
