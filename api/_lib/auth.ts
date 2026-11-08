@@ -13,12 +13,15 @@ let testKeys: KeyGetter | null = null;
 export const __setJwksForTests = (k: KeyGetter | null) => { testKeys = k; };
 const GOOGLE_ISS = ['https://accounts.google.com', 'accounts.google.com'];
 const APPLE_ISS = 'https://appleid.apple.com';
+export const EMAIL_ISS = 'https://enclave.cavos.xyz';
+/** Claves por emisor: nunca tomar jku/jwks_uri del token. */
+export const jwksUrlFor = (iss: string) => GOOGLE_ISS.includes(iss) ? 'https://www.googleapis.com/oauth2/v3/certs'
+  : iss === APPLE_ISS ? 'https://appleid.apple.com/auth/keys'
+  : iss === EMAIL_ISS ? 'https://enclave.cavos.xyz/.well-known/jwks.json' : env.cavosJwks();
 function jwksFor(iss: string): any {
   if (testKeys) return testKeys;
-  const url = GOOGLE_ISS.includes(iss) ? 'https://www.googleapis.com/oauth2/v3/certs'
-    : iss === 'https://appleid.apple.com' ? 'https://appleid.apple.com/auth/keys'
-    : env.cavosJwks();
-  return (JWKS[url] ??= createRemoteJWKSet(new URL(url)));
+  const url = jwksUrlFor(iss);
+  return (JWKS[url] ??= createRemoteJWKSet(new URL(url), { timeoutDuration: 5000 }));
 }
 
 export class HttpError extends Error { constructor(public status: number, msg: string) { super(msg); } }
@@ -96,7 +99,7 @@ async function verifyToken(token: string): Promise<{ payload: JWTPayload; iss: s
   // aud por issuer: app id de Cavos (CAVOS_JWT_AUDIENCE) + el cliente OAuth de Cavos SOLO para tokens de Google/Apple.
   // Sin esto, entrar con Google/Apple (p. ej. cuenta existente en un dispositivo nuevo) fallaba con auth_invalid.
   const base = env.cavosAudiences();
-  const audiences = !base.length ? base : isGoogle ? [...base, ...env.googleAudiences()] : iss === APPLE_ISS ? [...base, ...env.appleAudiences()] : base;
+  const audiences = !base.length ? base : iss === EMAIL_ISS ? ['cavos-email'] : isGoogle ? [...base, ...env.googleAudiences()] : iss === APPLE_ISS ? [...base, ...env.appleAudiences()] : base;
   const logOnly = env.cavosAudienceLogOnly();
   if (!audiences.length && !logOnly && env.isProduction()) {
     console.error('[auth] CAVOS_JWT_AUDIENCE no configurado en producción; rechazando', JSON.stringify({ iss, aud: claims.aud }));
@@ -108,6 +111,11 @@ async function verifyToken(token: string): Promise<{ payload: JWTPayload; iss: s
   let payload: JWTPayload; let expired = false;
   try { ({ payload } = await jwtVerify(token, jwksFor(iss), opts)); }
   catch (e: any) {
+    // Un fallo de red/JWKS no se arregla volviendo a entrar: no convertirlo en auth_invalid.
+    if (['ERR_JWKS_TIMEOUT', 'ERR_JWKS_FETCH_FAILED'].includes(e?.code) || e instanceof TypeError) {
+      console.warn('[auth] claves no disponibles', issHost(iss));
+      throw coded(503, 'auth_unavailable', 'No pudimos conectar para continuar. Vuelve a intentar en un momento.');
+    }
     console.warn('[auth] token rechazado', JSON.stringify({ code: e.code ?? e.message, iss, aud: claims.aud, expected: audiences }));
     if (e.code !== 'ERR_JWT_EXPIRED') throw invalid(joseReason(e), iss);
     if (!exp || Date.now() / 1000 - exp > graceS()) throw coded(401, 'session_expired', SESSION_EXPIRED);

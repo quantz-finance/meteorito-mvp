@@ -43,6 +43,14 @@ export function patchKitSource(src) {
   return { out: `${PATCH_MARK}\n${out}`, applied };
 }
 
+export const RETRY_MARK = '/* meteorito-patch:cavos-kit-retry v1 */';
+export function patchKitRetry(src) {
+  if (src.includes(RETRY_MARK)) return { out: src, applied: [] };
+  const re = /const \[busy, setBusy\] = ((?:react\.)?useState)\(false\);/;
+  if (!re.test(src)) throw new Error('patch-cavos-kit: falta busy del modal');
+  const out = src.replace(re, (_m, us) => `const [busy, setBusy] = ${us}(false); ${UI(us)}useEffect(() => { setBusy(false); }, [open]);`);
+  return { out: `${RETRY_MARK}\n${out}`, applied: ['reintento-habilitado'] };
+}
 export const GUARD_MARK = '/* meteorito-patch:cavos-kit-guard v2 */';
 const UI = (us) => (us ?? '').replace(/useState$/, ''); // "react." en el build CJS, "" en ESM
 const GUARD_RULES = [
@@ -93,7 +101,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const v1 = patchKitSource(readFileSync(p, 'utf8'));
     const v2 = patchKitGuards(v1.out);
     const applied = [...v1.applied, ...v2.applied];
-    if (applied.length) { writeFileSync(p, v2.out); console.log(`[patch-cavos-kit] ${f}: ${applied.join(', ')}`); } else console.log(`[patch-cavos-kit] ${f}: ya parchado`);
+    const retry = patchKitRetry(v2.out); applied.push(...retry.applied);
+    if (applied.length) { writeFileSync(p, retry.out); console.log(`[patch-cavos-kit] ${f}: ${applied.join(', ')}`); } else console.log(`[patch-cavos-kit] ${f}: ya parchado`);
   }
   // Chunks ESM que llaman a WebAuthn (react/index.mjs los importa): se buscan por contenido, no por nombre (hash).
   const dist = fileURLToPath(new URL('../node_modules/@cavos/kit/dist/', import.meta.url));

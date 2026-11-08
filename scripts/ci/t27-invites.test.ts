@@ -55,6 +55,11 @@ export async function run(t: T) {
   r = await call(invites, { method: 'GET', query: { code: 'zz' } });
   t.check('código inválido -> 400', r.code === 400);
 
+  // Correo OTP tras omitir passkey: la propuesta solo exige identidad, no wallet ni recovery.
+  r = await call(invites, { tok: await token({ sub: 'email-buyer', iss: 'https://enclave.cavos.xyz', aud: 'cavos-email', alg: 'ES256' }), body: { op: 'create', title: 'PlayStation 5 usada', price_crc: 150000 } });
+  t.check('OTP sin wallet/passkey crea propuesta de PS5', r.code === 200 && db.tables.invitations.some((i: any) => i.buyer_user_id === 'email-buyer' && i.price_crc === 150000), `${r.code}`);
+  db.tables.invitations = db.tables.invitations.filter((i: any) => i.buyer_user_id !== 'email-buyer');
+
   // El vendedor publica en respuesta a la invitación.
   const seller = Keypair.random(); const photo = publicPrefix('seller1') + 'listing-44444444-4444-4444-8444-444444444444/0.jpg';
   const sellerBody = (price: number, invite?: string) => ({ proof: signProof(seller, 'create', 'new'), category: 'celular', brand: 'Apple', model: 'iPhone 13', condition: 'Bueno', price_crc: price, photos: [photo], ...(invite ? { invite } : {}) });

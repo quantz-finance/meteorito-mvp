@@ -42,7 +42,8 @@ export const env = {
   cronSecret: () => req('CRON_SECRET'),
   pinPepper: () => req('PIN_PEPPER'),
   cavosJwks: () => process.env.CAVOS_JWKS_URL ?? 'https://cavos.xyz/.well-known/jwks.json',
-  cavosIssuers: () => list(process.env.CAVOS_JWT_ISSUERS ?? 'https://cavos.app/firebase,https://accounts.google.com,https://appleid.apple.com'),
+  // El login por correo de Cavos 0.5 (enclave) se acepta siempre: su aud y JWKS están fijos en auth.ts.
+  cavosIssuers: () => [...new Set([...list(process.env.CAVOS_JWT_ISSUERS ?? 'https://cavos.app/firebase,https://accounts.google.com,https://appleid.apple.com'), 'https://enclave.cavos.xyz'])],
   /** Login con Google/Apple del modal de Cavos: el id_token trae el aud del cliente OAuth de CAVOS (compartido, público:
    *  sale en la URL de /api/oauth/v2/google|apple), no el app id. Solo se aceptan con su propio issuer. */
   googleAudiences: () => list(process.env.CAVOS_GOOGLE_AUDIENCE ?? '1074035053584-s7i7gv8mbki1gnlgnnhibt6lfknqm3nb.apps.googleusercontent.com'),
