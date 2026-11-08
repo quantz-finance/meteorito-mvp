@@ -71,7 +71,7 @@ export default function Welcome() {
           </View>
           <Appear i={1} style={{ alignItems: 'center' }}>
             <Text style={[s.title, short && { fontSize: 30, lineHeight: 36, marginTop: S.sm }]}>Meteorito</Text>
-            <Text style={[s.subtitle, tiny && { fontSize: 15, lineHeight: 20 }]}>Crea un link de pago en segundos. El dinero queda en custodia hasta la entrega.</Text>
+            <Text style={[s.subtitle, tiny && { fontSize: 15, lineHeight: 20 }]}>Compra de segunda mano con el dinero en custodia hasta que recibes.</Text>
           </Appear>
         </View>
         <View {...appearSub(cycle)} style={[s.ctas, tiny && { gap: S.sm }]}>
@@ -90,6 +90,7 @@ export default function Welcome() {
           <PrimaryButton title="¿Cómo funciona?" variant="ghost" icon="help-circle-outline" onPress={() => { track('learn_cta_tapped'); setLearn(true); }} />
           <View style={s.footer}>
             <Text style={s.hint}>Entras con Google, Apple o tu correo.</Text>
+            <Text style={s.hint} testID="login-cavos-note">La ventana de Cavos está en inglés. Si te pide una passkey, puedes tocar «Skip for now» y seguir donde ibas.</Text>
             <LegalLinks />
           </View>
         </View>
