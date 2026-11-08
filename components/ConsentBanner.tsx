@@ -2,7 +2,7 @@
 // Hasta que la persona elija, no se carga PostHog ni se envían eventos o UTMs (lib/analytics.ts). Barra discreta abajo:
 // no es modal, no tapa la ventana de Cavos/passkey y se puede ignorar (sin elección = analítica apagada).
 import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { PrimaryButton } from '@/components/ds';
 import { needsConsent, setConsent } from '@/lib/analytics';
@@ -15,7 +15,7 @@ export function ConsentBanner() {
   useEffect(() => { if (Platform.OS === 'web') setShow(needsConsent()); }, []); // después del montaje: localStorage
   if (!show) return null;
   const pick = (c: 'granted' | 'denied') => { setConsent(c); setShow(false); };
-  return (
+  const ui = (
     <View style={s.wrap} pointerEvents="box-none" testID="consent-banner">
       <View style={s.card} accessibilityRole="alert">
         <Text style={[T.footnote, s.text]}>{CONSENT_TEXT}{' '}
@@ -30,6 +30,12 @@ export function ConsentBanner() {
       </View>
     </View>
   );
+  // web: portal directo a <body>, fuera de las capas de la app (Stack/fondos a pantalla completa) que interceptaban el toque
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const { createPortal } = require('react-dom') as { createPortal: (n: React.ReactNode, el: Element) => React.ReactElement }; // react-native-web ya trae react-dom
+    return createPortal(ui, document.body);
+  }
+  return ui;
 }
 
 const s = StyleSheet.create({
