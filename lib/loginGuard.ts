@@ -82,12 +82,12 @@ const TIMEOUT_TEXT: Record<LoginStep, string> = {
   oauth_return: 'No pudimos terminar el inicio de sesión con Google o Apple. Vuelve a intentar.',
   otp_send: 'El código por correo tardó demasiado. Vuelve a intentar.',
   otp_verify: 'Validar el código tardó demasiado. Vuelve a intentar con el último código.',
-  passkey: 'La passkey no respondió a tiempo. Vuelve a intentar.',
+  passkey: 'La passkey no respondió a tiempo. Si la ventana muestra «Skip for now» (omitir por ahora), tócalo: sigues con tu cuenta y la passkey la configuras después.',
   account_load: 'Tu cuenta tardó demasiado en cargar. Toca «Reintentar».',
 };
 /** Mensaje para la persona (tuteo): qué pasó + qué hacer. Siempre ofrece el código por correo como alternativa. */
 export function timeoutMessage(step: LoginStep): string {
-  return step === 'session_restore' ? TIMEOUT_TEXT[step] : `${TIMEOUT_TEXT[step]} ${EMAIL_ALT}`;
+  return step === 'session_restore' || step === 'passkey' ? TIMEOUT_TEXT[step] : `${TIMEOUT_TEXT[step]} ${EMAIL_ALT}`;
 }
 
 type Timers = { setTimeout: (f: () => void, ms: number) => any; clearTimeout: (id: any) => void };
