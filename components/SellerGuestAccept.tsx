@@ -2,9 +2,10 @@
 // un código por correo. Todo lo que se verifica se explica ANTES de aceptar. "O entra con tu cuenta" sigue el camino de Cavos.
 // También: recuperar el acceso (otro navegador) y el panel del pedido ya aceptado (envío, PIN, disputa) con la sesión del pedido.
 import { useEffect, useState } from 'react';
+import * as Clipboard from 'expo-clipboard';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { Card, Chip, ErrorText, Icon, MoneyTimeline, PrimaryButton } from '@/components/ds';
+import { Card, Chip, ErrorText, Icon, MoneyTimeline, PrimaryButton, toast } from '@/components/ds';
 import { LegalRuleRows } from '@/components/LegalRules';
 import { SellerActions } from '@/components/SellerActions';
 import { SellerDisputeReply } from '@/components/SellerDisputeReply';
@@ -194,12 +195,25 @@ export function SellerGuestOrder({ o, onChange }: { o: SellerOrderView; onChange
         <Text style={T.footnote}>Es una prueba sin dinero real: nadie te va a transferir este monto.</Text>
       </View>
       <MoneyTimeline status={o.status} compact shipped={!!o.shipped_at} mode={o.delivery_mode} />
+      {!o.released ? <SaveLinkBox funded={funded} /> : null}
       {funded ? <SellerActions slug={o.slug} status={o.status} order={o} onChange={onChange} call={sellerCall} asGuest /> : null}
       <ExceptionBox />
       <Text style={T.footnote}>{SELLER_GUEST_RECEIPT}</Text>
     </Card>
     {o.status === 'en_disputa' ? <SellerDisputeReply slug={o.slug} guest /> : null}
     <BetaBox />
+  </View>;
+}
+
+/** Vendedor sin cuenta: cómo volver (mismo link y navegador) y no enviar antes de que haya fondos en custodia. */
+function SaveLinkBox({ funded }: { funded: boolean }) {
+  const link = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.origin + window.location.pathname : '';
+  return <View style={st.exc} testID="seller-guest-save-link">
+    <Text style={[T.headline, { fontSize: 15 }]}>Guarda este link para volver</Text>
+    <Text style={T.footnote}>Aquí ves el estado de la venta. Ábrelo en este mismo navegador; en otro, te pedimos un código a tu correo.</Text>
+    {!funded ? <Text style={[T.footnote, { color: C.text }]} testID="seller-guest-dont-ship">No envíes ni entregues nada hasta que aquí diga «Fondos en custodia».</Text> : null}
+    {link ? <PrimaryButton testID="seller-guest-copy-link" title="Copiar link" icon="copy-outline" variant="ghost"
+      onPress={async () => { try { await Clipboard.setStringAsync(link); toast('Link copiado'); } catch { /* */ } }} /> : null}
   </View>;
 }
 
