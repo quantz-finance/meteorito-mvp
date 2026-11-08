@@ -115,6 +115,14 @@ export function SellerGuestAccept({ inv, onAccepted, onLogin }: { inv: Invite; o
         <Text style={T.footnote}>Te mandamos el código a {ch.to}. Vence en 10 minutos.</Text>
         <TextInput testID="seller-guest-otp" style={[ui.input, { fontFamily: Fonts.black, fontSize: 26, letterSpacing: 8, textAlign: 'center' }]} placeholder="••••••"
           placeholderTextColor={C.textDim} value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" maxLength={6} accessibilityLabel="Código de 6 dígitos" />
+        <View style={st.exc} testID="seller-guest-final-summary">
+          <Text style={T.caption}>Vas a aceptar</Text>
+          <Row k="Producto" v={`${inv.brand} ${inv.model}`.trim()} />
+          <Row k="Precio" v={formatCRC(inv.price_crc)} strong />
+          <Row k="Entrega" v={DELIVERY_LABEL[mode]} />
+          <Row k="Plazo de reclamo" v={protectionLabel(a.protection_minutes)} />
+          <Text style={T.footnote}>El detalle completo y las reglas están más arriba, en «Lo que aceptas».</Text>
+        </View>
         <PrimaryButton testID="seller-guest-accept" title="Acepto este acuerdo" icon="checkmark-circle" loading={busy} disabled={otp.length !== 6}
           onPress={() => run(async () => { await acceptAsSeller(inv.code, ch.id, otp, mode, a.hash); onAccepted(); })} />
         <PrimaryButton title="Usar otro correo" variant="ghost" onPress={() => { setCh(null); setOtp(''); setErr(null); }} />
