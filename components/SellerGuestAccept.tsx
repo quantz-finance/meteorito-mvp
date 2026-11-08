@@ -1,7 +1,7 @@
 // Vendedor SIN cuenta (opción A, solo testnet): resumen exacto del acuerdo, aviso de beta, cobro simulado y aceptación con
 // un código por correo. Todo lo que se verifica se explica ANTES de aceptar. "O entra con tu cuenta" sigue el camino de Cavos.
 // También: recuperar el acceso (otro navegador) y el panel del pedido ya aceptado (envío, PIN, disputa) con la sesión del pedido.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Card, Chip, ErrorText, Icon, MoneyTimeline, PrimaryButton } from '@/components/ds';
@@ -37,6 +37,8 @@ export function ExceptionBox() {
   </View>;
 }
 
+const RESEND_WAIT_S = 60;
+const RESEND_MAX = 4;
 /** Link al aviso de privacidad del vendedor sin cuenta (/legal/vendedor). En la web abre otra pestaña: no se pierde el formulario. */
 function openNotice() {
   if (Platform.OS === 'web' && typeof window !== 'undefined') { window.open('/legal/vendedor', '_blank', 'noopener'); return; }
@@ -65,7 +67,11 @@ export function SellerGuestAccept({ inv, onAccepted, onLogin }: { inv: Invite; o
   const [ch, setCh] = useState<{ id: string; to: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [sends, setSends] = useState(0); // códigos pedidos en esta pantalla (el servidor limita 5 por hora por correo)
+  const [wait, setWait] = useState(0); // segundos para poder reenviar
+  useEffect(() => { if (wait <= 0) return; const id = setTimeout(() => setWait((w) => w - 1), 1000); return () => clearTimeout(id); }, [wait]);
   const a = g?.agreements?.[mode];
+  const sendCode = () => run(async () => { const r = await requestSellerCode(inv.code, email.trim(), mode, a!.hash); setCh({ id: r.challenge_id, to: r.sent_to }); setOtp(''); setSends((n) => n + 1); setWait(RESEND_WAIT_S); });
   const run = async (f: () => Promise<void>) => { setBusy(true); setErr(null); try { await f(); } catch (e) { setErr(userMessage((e as Error).message)); } finally { setBusy(false); } };
 
   return <View style={{ gap: S.md }}>
@@ -115,9 +121,9 @@ export function SellerGuestAccept({ inv, onAccepted, onLogin }: { inv: Invite; o
           keyboardType="email-address" autoCapitalize="none" autoComplete="email" inputMode="email" accessibilityLabel="Tu correo" maxLength={254} />
         <PrivacyConsent checked={consent} onToggle={() => setConsent((v) => !v)} />
         <PrimaryButton testID="seller-guest-send" title="Enviarme el código" icon="mail-outline" loading={busy} disabled={!consent || !/\S+@\S+\.\S+/.test(email)}
-          onPress={() => run(async () => { const r = await requestSellerCode(inv.code, email.trim(), mode, a.hash); setCh({ id: r.challenge_id, to: r.sent_to }); })} />
+          onPress={sendCode} />
       </> : <>
-        <Text style={T.footnote}>Te mandamos el código a {ch.to}. Vence en 10 minutos.</Text>
+        <Text style={T.footnote}>Te mandamos el código a {ch.to}. Vence en 10 minutos. Si no llega, revisa spam.</Text>
         <TextInput testID="seller-guest-otp" style={[ui.input, { fontFamily: Fonts.black, fontSize: 26, letterSpacing: 8, textAlign: 'center' }]} placeholder="••••••"
           placeholderTextColor={C.textDim} value={otp} onChangeText={(v) => setOtp(v.replace(/\D/g, '').slice(0, 6))} keyboardType="number-pad" maxLength={6} accessibilityLabel="Código de 6 dígitos" />
         <View style={st.exc} testID="seller-guest-final-summary">
@@ -130,7 +136,9 @@ export function SellerGuestAccept({ inv, onAccepted, onLogin }: { inv: Invite; o
         </View>
         <PrimaryButton testID="seller-guest-accept" title="Acepto este acuerdo" icon="checkmark-circle" loading={busy} disabled={otp.length !== 6}
           onPress={() => run(async () => { await acceptAsSeller(inv.code, ch.id, otp, mode, a.hash); onAccepted(); })} />
-        <PrimaryButton title="Usar otro correo" variant="ghost" onPress={() => { setCh(null); setOtp(''); setErr(null); }} />
+        {sends < RESEND_MAX ? <PrimaryButton testID="seller-guest-resend" title={wait > 0 ? `Reenviar código en ${wait} s` : 'Reenviar código'} variant="ghost" icon="refresh-outline" disabled={wait > 0 || busy} onPress={sendCode} />
+          : <Text style={T.footnote} testID="seller-guest-resend-limit">Ya pediste varios códigos. Revisa spam o espera un rato antes de pedir otro.</Text>}
+        <PrimaryButton testID="seller-guest-change-email" title="Cambiar el correo" variant="ghost" onPress={() => { setCh(null); setOtp(''); setErr(null); setWait(0); }} />
       </>}
       {err ? <ErrorText>{err}</ErrorText> : null}
     </Card> : null}
