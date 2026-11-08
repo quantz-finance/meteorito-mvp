@@ -85,6 +85,11 @@ export function SellerGuestAccept({ inv, onAccepted, onLogin }: { inv: Invite; o
       <Row k="Plazo de reclamo" v={a ? protectionLabel(a.protection_minutes) : protectionLabel(mode === 'envio' ? 10080 : 1440)} />
       <Text style={T.footnote}>{protectionText(mode)}</Text>
       <LegalRuleRows rules={currentLegalRules(mode)} heading="Reglas de esta venta" />
+      <Text style={T.footnote} testID="seller-guest-rules-timing">Los plazos se revisan una vez al día: un reembolso automático puede aplicarse hasta un día después de vencido el plazo.</Text>
+      <View style={st.exc} testID="seller-guest-soon">
+        <Text style={[T.headline, { fontSize: 15 }]}>Próximamente sin cuenta</Text>
+        <Text style={T.footnote}>Responder desde este link a un reporte hecho después de liberado el pago, y ver tu historial de ventas. Hoy eso solo está disponible con cuenta.</Text>
+      </View>
     </Card>
 
     <Card testID="seller-guest-payout" style={{ gap: S.xs }}>
