@@ -40,7 +40,8 @@ export async function run(t: T) {
   t.check('sin atribución: no registra nada e identify simple', calls.length === 1 && calls[0].length === 2);
 
   const src = readFileSync(new URL('../../lib/analytics.ts', import.meta.url), 'utf8');
-  t.check('analytics: captura antes de cargar posthog y no con opt-out', /if \(!optedOut\) \{[\s\S]*captureFirstTouch/.test(src) && src.indexOf('captureFirstTouch(') < src.indexOf("import('posthog-js')"));
+  // Opt-in (#165): las UTMs se capturan solo dentro de startPosthog(), que corre únicamente con autorización, y antes de cargar posthog-js.
+  t.check('analytics: captura solo con autorización y antes de cargar posthog', /function startPosthog\(\) \{[\s\S]*captureFirstTouch/.test(src) && src.indexOf('function startPosthog()') < src.indexOf('captureFirstTouch(') && src.indexOf('captureFirstTouch(') < src.indexOf("import('posthog-js')") && /if \(!optedOut\) startPosthog\(\)/.test(src));
   t.check('analytics: demo sale antes de capturar', src.indexOf('if (DEMO_ENABLED) return;') < src.indexOf('captureFirstTouch('));
   t.check('analytics: app_opened con las UTMs', /track\('app_opened', \{ \.\.\.superProps\(attr\)/.test(src));
   t.check('analytics: reset vuelve a registrar las super propiedades', /ph\.reset\(\); registerAttribution\(ph, attr\)/.test(src));

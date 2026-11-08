@@ -33,7 +33,8 @@ export function ConsentBanner() {
 }
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', padding: S.sm, zIndex: 50 },
+  // web: fixed y por encima de las capas de pantalla completa (fondo animado, Stack), que si no interceptan el toque
+  wrap: { position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center', padding: S.sm, zIndex: 10000 },
   card: { width: '100%', maxWidth: 520, backgroundColor: C.surface2, borderRadius: 16, padding: S.md, gap: S.sm },
   text: { color: C.text },
   link: { color: C.lilac, textDecorationLine: 'underline' },
