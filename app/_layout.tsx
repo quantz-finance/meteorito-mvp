@@ -6,6 +6,7 @@ import '@/lib/install';
 
 import * as Font from 'expo-font';
 import { toast, ToastHost } from '@/components/ds';
+import { ConsentBanner } from '@/components/ConsentBanner';
 import { consumeUpdatedFlag, startUpdater } from '@/lib/updater';
 import { installViewport } from '@/lib/viewport';
 import { DarkTheme, router, Stack, ThemeProvider, usePathname, useSegments } from 'expo-router';
@@ -83,6 +84,7 @@ export default function RootLayout() {
       <ToastHost />
       <TourHost />
       <InstallSheetHost />
+      <ConsentBanner />
     </ThemeProvider>
   );
 }

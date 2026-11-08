@@ -244,10 +244,12 @@ test('MCK-PWA-01 versión nueva del service worker: recarga sola y avisa "Actual
 // ── UTMs del landing (PostHog simulado en mock-server: S.ph). Aquí y no en otro archivo: el backend simulado es único y va en serie.
 const LANDING_Q = '?utm_source=landing&utm_medium=cta&utm_content=hero';
 // posthog-js descarta eventos de navegadores automatizados (navigator.webdriver, marca HeadlessChrome): el test se presenta como un navegador normal.
-const asRealBrowser = (page: Page) => page.addInitScript(() => {
+// consent: autorización previa de analítica ya registrada (opt-in, components/ConsentBanner); null = sin elegir.
+const asRealBrowser = (page: Page, consent: 'granted' | 'denied' | null = 'granted') => page.addInitScript((c) => {
   Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false });
   Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined });
-});
+  if (c) localStorage.setItem('meteorito:analytics-consent', JSON.stringify({ v: 1, at: '2026-11-07T00:00:00Z', choice: c }));
+}, consent);
 const phEvents = async (request: any, name?: string) => ((await state(request)).ph as any[]).filter((e) => !name || e.event === name);
 
 test('MCK-UTM-01 entra desde el landing con UTMs: app_opened y cada evento llevan las UTMs, también después de navegar', async ({ page, request }) => {
@@ -287,15 +289,19 @@ test('MCK-UTM-02 visita posterior con otras UTMs no pisa el first-touch', async 
   expect(second.properties).toMatchObject({ utm_content: 'hero', first_touch: false });
 });
 
-test('MCK-UTM-03 con opt-out no se guarda ni se envía nada', async ({ page, request }) => {
+test('MCK-UTM-03 sin autorización previa (o con «No, gracias») no se guarda ni se envía nada', async ({ page, request }) => {
   await reset(request, [listing]);
-  await asRealBrowser(page);
-  await page.addInitScript(() => localStorage.setItem('meteorito:analytics-optout', '1'));
+  await asRealBrowser(page, null);
   await page.goto('/' + LANDING_Q);
-  await expect(page.locator('#root')).not.toBeEmpty();
-  await page.waitForTimeout(4000);
+  await expect(page.getByTestId('consent-banner')).toBeVisible();
+  await page.waitForTimeout(3000);
+  expect(await phEvents(request)).toEqual([]);
+  await page.getByTestId('consent-deny').click();
+  await expect(page.getByTestId('consent-banner')).toHaveCount(0);
+  await page.waitForTimeout(2000);
   expect(await phEvents(request)).toEqual([]);
   expect(await page.evaluate(() => localStorage.getItem('meteorito:first-touch:v1'))).toBeNull();
+  expect(JSON.parse(await page.evaluate(() => localStorage.getItem('meteorito:analytics-consent') ?? 'null'))).toMatchObject({ v: 1, choice: 'denied' });
 });
 
 // ---- Pago con tarjeta: NUESTRO formulario (components/CardSheet.tsx). El servidor cobra con Lendara headless (card_pay);

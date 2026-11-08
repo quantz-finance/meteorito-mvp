@@ -12,7 +12,7 @@ export function AnalyticsToggle() {
     <View style={s.row}>
       <View style={{ flex: 1 }}>
         <Text style={T.headline}>Analítica de uso</Text>
-        <Text style={T.footnote}>Datos anónimos para mejorar Meteorito. Sin correo, IMEI ni billetera.</Text>
+        <Text style={T.footnote}>Opcional. Mide el uso con PostHog para mejorar Meteorito. Apágala cuando quieras.</Text>
       </View>
       <Switch value={on} accessibilityLabel="Analítica de uso" trackColor={{ true: C.purple, false: C.surface2 }} thumbColor={C.white}
         onValueChange={(v) => { if (!v) track('analytics_opted_out'); setOptOut(!v); setOn(v); }} />
