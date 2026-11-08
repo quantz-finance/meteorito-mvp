@@ -42,6 +42,10 @@ const STARTUP: [number, number, number][] = [[750, 1334, 2], [1125, 2436, 3], [1
 
 const NO_ZOOM_CSS = 'input:not([class*="css-"]),textarea:not([class*="css-"]),select,.cavos-input-inner{font-size:16px!important;}';
 
+// Escritorio (pantallas anchas con mouse): todo un 12 % más grande para leer mejor (texto, columna y botones), sin tocar
+// teléfonos ni tablets táctiles. La altura se compensa para que la app siga ocupando exactamente la ventana.
+const DESKTOP_CSS = '@media (min-width:1000px) and (min-height:640px) and (pointer:fine){#root{zoom:1.12;height:calc(var(--app-h,100dvh) / 1.12);}}';
+
 export default function Root({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
@@ -65,7 +69,7 @@ export default function Root({ children }: { children: ReactNode }) {
         {STARTUP.map(([w, h, r]) => <link key={w} rel="apple-touch-startup-image" href={`/splash/startup-${w}x${h}.png`}
           media={`(device-width: ${w / r}px) and (device-height: ${h / r}px) and (-webkit-device-pixel-ratio: ${r}) and (orientation: portrait)`} />)}
         <ScrollViewStyleReset />
-        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body{height:100%;height:100dvh;}#root{height:100%;height:var(--app-h,100dvh);}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS + MOTION_CSS + UNIVERSE_CSS }} />
+        <style dangerouslySetInnerHTML={{ __html: SPLASH_CSS + 'html,body{background-color:#1A0B3D;}html,body{height:100%;height:100dvh;}#root{height:100%;height:var(--app-h,100dvh);}body{overflow:hidden;overscroll-behavior:none;}' + NO_ZOOM_CSS + MOTION_CSS + UNIVERSE_CSS + DESKTOP_CSS }} />
       </head>
       <body>
         {/* Splash inline: pinta en el primer frame (antes del JS) y la app lo desvanece al montar. */}
