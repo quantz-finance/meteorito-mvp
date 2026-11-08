@@ -7,20 +7,20 @@ export const BETA_NOTE = 'Versión beta de pruebas (testnet): no se mueve dinero
 export const LEARN: LearnItem[] = [
   {
     id: 'cavos', icon: 'key-outline', title: '¿Qué es tu cuenta Cavos?',
-    summary: 'Entras con Google, Apple o correo y Cavos crea por ti una billetera en la red Stellar. No hay que escribir contraseñas ni frases secretas.',
+    summary: 'Entras con Google, Apple o correo y Cavos crea por ti una cuenta en la red Stellar. No hay que escribir contraseñas ni frases secretas.',
     points: [
-      'La llave de tu billetera se guarda en este dispositivo y navegador. Meteorito no la tiene.',
+      'La llave de tu cuenta se guarda en este dispositivo y navegador. Meteorito no la tiene.',
       'Si borras los datos del navegador o cambias de dispositivo, necesitas un respaldo (passkey) para recuperar el acceso.',
-      'Para comprar con un link no necesitas cuenta: solo quien vende entra con Cavos.',
+      'Para comprar necesitas tu cuenta Cavos. El vendedor puede aceptar con o sin cuenta.',
     ],
   },
   {
     id: 'quien', icon: 'git-compare-outline', title: '¿Quién controla qué?',
     summary: 'Tres partes, cada una con un rol distinto.',
     points: [
-      'Tú: tu billetera y su llave. Nadie más firma por ti con ella.',
-      'Cavos: el inicio de sesión y el servicio de billetera.',
-      'Meteorito: crea el contrato de custodia, activa tu cuenta, paga las comisiones de red y, en esta beta, opera los roles de aprobar y liberar el pago. Por eso todavía no es 100 % sin intermediarios.',
+      'Tú: tu cuenta y su llave. Nadie más firma por ti con ella.',
+      'Cavos: el inicio de sesión y tu cuenta en Stellar.',
+      'Meteorito: crea el contrato de custodia, activa tu cuenta, paga las comisiones de red y, en esta beta, opera los roles de aprobar y liberar el pago. Por eso todavía hay un intermediario.',
     ],
   },
   {
