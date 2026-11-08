@@ -73,8 +73,10 @@ export async function run(t: T) {
 
   // --- Mensajes (tuteo, alternativa por correo, sin palabras prohibidas)
   const steps = Object.keys(LOGIN_TIMEOUTS) as LoginStep[];
-  t.check('cada tope tiene mensaje con "Reintentar"/"Vuelve a intentar" o "Entrar"', steps.every((s) => /Reintentar|Vuelve a intentar|Entrar/.test(timeoutMessage(s))));
-  t.check('pasos de login ofrecen el código por correo', steps.filter((s) => s !== 'session_restore').every((s) => /correo/.test(timeoutMessage(s))));
+  // passkey (#166): en vez de reintentar o pasar al correo, se indica tocar «Skip for now» y seguir con la cuenta.
+  t.check('cada tope tiene mensaje con "Reintentar"/"Vuelve a intentar" o "Entrar"', steps.filter((s) => s !== 'passkey').every((s) => /Reintentar|Vuelve a intentar|Entrar/.test(timeoutMessage(s))));
+  t.check('pasos de login ofrecen el código por correo', steps.filter((s) => s !== 'session_restore' && s !== 'passkey').every((s) => /correo/.test(timeoutMessage(s))));
+  t.check('passkey: indica «Skip for now» para seguir con la cuenta', /Skip for now/.test(timeoutMessage('passkey')) && /sigues con tu cuenta/.test(timeoutMessage('passkey')));
   t.check('copy sin palabras prohibidas', steps.every((s) => !BANNED.test(timeoutMessage(s))));
   t.check('modal del kit: "meteorito_timeout:otp_verify" -> mensaje propio (nunca el código técnico)', authErrorText('meteorito_timeout:otp_verify') === timeoutMessage('otp_verify'));
 
