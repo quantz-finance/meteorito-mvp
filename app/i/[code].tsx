@@ -86,7 +86,7 @@ export default function Invitacion() {
         </View>
       </View>
       {inv.photos && inv.photos.length > 1 ? <View style={{ flexDirection: 'row', gap: S.sm }}>{inv.photos.slice(1).map((u) => <Image key={u} source={{ uri: u }} style={{ width: 48, height: 48, borderRadius: 10 }} />)}</View> : null}
-      {inv.note ? <Text style={T.callout}>“{inv.note}”</Text> : null}
+      {inv.note ? <View testID="invite-note-view" style={{ gap: 2 }}><Text style={T.caption}>Descripción de quien compra</Text><Text style={T.callout}>“{inv.note}”</Text></View> : null}
       {inv.source_url ? (
         <Pressable accessibilityRole="link" accessibilityLabel={`Ver anuncio en ${where}`} hitSlop={8} onPress={() => { haptic.tap(); Linking.openURL(inv.source_url!).catch(() => {}); }}
           style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: S.xs, minHeight: 32 }, pressed && { opacity: 0.7 }]}>
