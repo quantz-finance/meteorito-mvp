@@ -9,7 +9,8 @@ export const C = {
   surface2: '#3A1D7A',
   line: 'rgba(201,182,255,0.14)',
   text: Brand.white,
-  textDim: '#B9AEE0', // un poco más claro que Brand.muted: más contraste del texto secundario sobre el morado
+  // textDim: un poco más claro que Brand.muted, más contraste del texto secundario sobre el morado
+  textDim: '#B9AEE0',
   success: '#3DDC97',
   successBg: 'rgba(61,220,151,0.14)',
   warnBg: 'rgba(255,138,61,0.14)',
