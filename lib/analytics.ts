@@ -35,6 +35,7 @@ export function isOptedOut() { return optedOut; }
 export function needsConsent() { return web && !!POSTHOG_KEY && !DEMO_ENABLED && !traffic.automated && readConsent() === null; }
 export function setConsent(choice: Consent['choice']) {
   optedOut = choice !== 'granted';
+  if (optedOut) queue.length = 0; // retirada: se descarta lo pendiente (también si posthog-js aún está cargando)
   try { if (web) window.localStorage.setItem(CONSENT_KEY, JSON.stringify({ v: CONSENT_VERSION, at: new Date().toISOString(), choice })); } catch {}
   if (ph) optedOut ? ph.opt_out_capturing() : ph.opt_in_capturing();
   else if (!optedOut) startPosthog();
@@ -89,6 +90,7 @@ function startPosthog() {
       sanitize_properties: (p: any) => { delete p.$ip; if (typeof p.$current_url === 'string') p.$current_url = scrub(p.$current_url); return p; },
     } as any);
     ph = posthog;
+    if (optedOut) { posthog.opt_out_capturing(); queue.length = 0; return; } // se retiró mientras cargaba: nada sale
     registerAttribution(posthog, attr); // super propiedades: van en cada evento
     posthog.register({ is_internal: traffic.internal }); // también en $pageleave (lo captura posthog-js)
     if (distinctId) identifyWithAttribution(posthog, distinctId, attr);
