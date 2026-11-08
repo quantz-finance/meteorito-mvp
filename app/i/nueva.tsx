@@ -33,6 +33,7 @@ export default function NuevaInvitacion() {
   const { fb } = useLocalSearchParams<{ fb?: string }>();
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
+  const [note, setNote] = useState('');
   const [pics, setPics] = useState<Pic[]>([]);
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const [fbOpen, setFbOpen] = useState(fb === '1');
@@ -86,7 +87,7 @@ export default function NuevaInvitacion() {
     setBusy(true);
     try {
       const photos = pics.map((p) => p.url); // ya subidas al tomarlas (cámara) o guardadas por el servidor (anuncio importado)
-      const code = await createInvite(auth, { title: t, price_crc: priceNum, ...(photos.length ? { photos } : {}), ...(source ? { source_url: source } : {}) });
+      const code = await createInvite(auth, { title: t, price_crc: priceNum, ...(photos.length ? { photos } : {}), ...(source ? { source_url: source } : {}), ...(note.trim() ? { note: note.trim() } : {}) });
       track('invite_created', { photos: photos.length, from_facebook: detectProvider(source ?? '')?.id === 'facebook', source_provider: source ? detectProvider(source)?.id ?? null : null });
       router.replace({ pathname: '/i/[code]', params: { code } });
     } catch (e) { trackError('create_invite', e); setErr(userMessage((e as Error).message)); } finally { setBusy(false); }
@@ -118,6 +119,9 @@ export default function NuevaInvitacion() {
         <TextInput style={ui.input} value={title} onChangeText={setTitle} placeholder="Ej. iPhone 13 de 128 GB" placeholderTextColor={C.textDim} maxLength={TITLE_MAX} accessibilityLabel="Nombre del producto" />
         <Text style={T.caption}>Precio acordado en colones</Text>
         <TextInput style={ui.input} value={formatPriceInput(price)} onChangeText={(v) => setPrice(formatPriceInput(v))} inputMode="numeric" keyboardType="number-pad" placeholder="250 000" placeholderTextColor={C.textDim} accessibilityLabel="Precio acordado" />
+        <Text style={T.caption}>Descripción (opcional)</Text>
+        <TextInput testID="invite-note" style={[ui.input, { minHeight: 88, textAlignVertical: 'top', paddingTop: 12 }]} value={note} onChangeText={setNote} multiline maxLength={500} placeholder="Estado, detalles o defectos, y qué incluye (cargador, caja, controles…)" placeholderTextColor={C.textDim} accessibilityLabel="Descripción del producto" />
+        <Text style={[T.footnote, { textAlign: 'right' }]}>{note.length}/500 · El vendedor la ve antes de aceptar.</Text>
         <Text style={T.caption}>Fotos con la cámara (opcional)</Text>
         <View style={s.row}>
           {pics.map((p) => (
