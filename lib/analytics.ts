@@ -1,6 +1,7 @@
 // Analítica de producto (PostHog). Un solo helper: track(). Ver docs/tracking-plan.md.
 // Privacidad (Ley 8968): sin email/teléfono/IMEI/wallet/montos por persona. distinct_id = SHA-256(salt + sub de Cavos).
-// Sin autocapture de inputs, sin grabación de sesión, con opt-out persistente.
+// Sin autocapture de inputs, sin grabación de sesión. OPT-IN previo (Harvey, 7 nov 2026): nada se envía ni se guarda
+// (ni UTMs) hasta que la persona acepta el aviso (components/ConsentBanner). Se retira con «Analítica de uso».
 import { Platform } from 'react-native';
 import { DEMO_ENABLED } from './demo';
 import { detectTraffic, type Traffic } from './internalTraffic';
@@ -10,27 +11,37 @@ export const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY ?? '';
 export const POSTHOG_HOST = process.env.EXPO_PUBLIC_POSTHOG_HOST ?? 'https://us.i.posthog.com';
 /** Salt público de seudonimización (no es secreto: evita que el sub crudo salga del dispositivo). */
 export const ANALYTICS_SALT = 'meteorito-analytics-v1';
-const OPT_KEY = 'meteorito:analytics-optout';
+const CONSENT_KEY = 'meteorito:analytics-consent'; // { v, at, choice }: versión, fecha y elección registradas
+export const CONSENT_VERSION = 1;
+export type Consent = { v: number; at: string; choice: 'granted' | 'denied' };
 
 type Props = Record<string, string | number | boolean | null | undefined>;
 const web = Platform.OS === 'web' && typeof window !== 'undefined';
 let ph: any = null;
 let distinctId: string | null = null;
 let anonId = 'anon_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-let optedOut = false;
+let optedOut = true; // sin autorización registrada: apagada
 let started = false;
 const queue: [string, Props][] = [];
 let attr: Attribution | null = null; // first-touch del landing (lib/attribution.ts)
 let attrNew = false;
 let traffic: Traffic = { automated: false, internal: false }; // lib/internalTraffic.ts
 
-function readOpt(): boolean { try { return web && window.localStorage.getItem(OPT_KEY) === '1'; } catch { return false; } }
-export function isOptedOut() { return optedOut; }
-export function setOptOut(v: boolean) {
-  optedOut = v;
-  try { if (web) v ? window.localStorage.setItem(OPT_KEY, '1') : window.localStorage.removeItem(OPT_KEY); } catch {}
-  if (ph) v ? ph.opt_out_capturing() : ph.opt_in_capturing();
+export function readConsent(): Consent | null {
+  try { const j = web ? JSON.parse(window.localStorage.getItem(CONSENT_KEY) ?? 'null') : null; return j && j.v === CONSENT_VERSION && (j.choice === 'granted' || j.choice === 'denied') ? j : null; } catch { return null; }
 }
+export function isOptedOut() { return optedOut; }
+/** ¿Mostrar el aviso? Solo en la web, con analítica configurada, tráfico real y sin elección registrada. */
+export function needsConsent() { return web && !!POSTHOG_KEY && !DEMO_ENABLED && !traffic.automated && readConsent() === null; }
+export function setConsent(choice: Consent['choice']) {
+  optedOut = choice !== 'granted';
+  if (optedOut) queue.length = 0; // retirada: se descarta lo pendiente (también si posthog-js aún está cargando)
+  try { if (web) window.localStorage.setItem(CONSENT_KEY, JSON.stringify({ v: CONSENT_VERSION, at: new Date().toISOString(), choice })); } catch {}
+  if (ph) optedOut ? ph.opt_out_capturing() : ph.opt_in_capturing();
+  else if (!optedOut) startPosthog();
+}
+/** Interruptor «Analítica de uso»: true = retirar la autorización. */
+export function setOptOut(v: boolean) { setConsent(v ? 'denied' : 'granted'); }
 
 async function sha256(s: string): Promise<string> {
   if (globalThis.crypto?.subtle) {
@@ -51,7 +62,8 @@ const base = (): Props => ({ platform: Platform.OS, network: 'testnet', app: 'me
 
 export function initAnalytics() {
   if (started) return; started = true;
-  optedOut = readOpt();
+  optedOut = readConsent()?.choice !== 'granted';
+  try { if (web) window.localStorage.removeItem('meteorito:analytics-optout'); } catch {} // clave vieja del opt-out
   if (DEMO_ENABLED) return; // demo: sin analítica
   // CI/e2e/headless: no se envía nada. Equipo/QA (?internal=1, localhost, previews): is_internal=true en cada evento.
   let store: Storage | null = null; try { store = web ? window.localStorage : null; } catch { /* modo privado estricto */ }
@@ -61,26 +73,30 @@ export function initAnalytics() {
   });
   if (traffic.automated) return;
   if (!POSTHOG_KEY || !web) return; // nativo: envío HTTP directo (send())
-  // UTMs del landing: se leen YA (al cargar el módulo, antes de que el router redirija y borre el query).
-  // Con opt-out no se guarda nada.
-  if (!optedOut) {
-    ({ attr, isNew: attrNew } = captureFirstTouch(store, window.location.href, document.referrer));
-  }
+  if (!optedOut) startPosthog(); // sin autorización no se carga PostHog ni se leen/guardan UTMs
+}
+
+let phStarted = false;
+function startPosthog() {
+  if (phStarted || !started || !POSTHOG_KEY || !web || DEMO_ENABLED || traffic.automated) return; phStarted = true;
+  let store: Storage | null = null; try { store = window.localStorage; } catch { /* modo privado estricto */ }
+  ({ attr, isNew: attrNew } = captureFirstTouch(store, window.location.href, document.referrer));
   import('posthog-js').then(({ default: posthog }) => {
     posthog.init(POSTHOG_KEY, {
       api_host: POSTHOG_HOST, person_profiles: 'identified_only',
       autocapture: false, capture_pageview: false, capture_pageleave: true,
       disable_session_recording: true, session_recording: { maskAllInputs: true, blockClass: 'ph-no-capture' }, disable_surveys: true, mask_all_text: true, mask_all_element_attributes: true,
-      persistence: 'localStorage', ip: false, property_denylist: ['$ip'], opt_out_capturing_by_default: optedOut,
+      persistence: 'localStorage', ip: false, property_denylist: ['$ip'], 
       sanitize_properties: (p: any) => { delete p.$ip; if (typeof p.$current_url === 'string') p.$current_url = scrub(p.$current_url); return p; },
     } as any);
     ph = posthog;
+    if (optedOut) { posthog.opt_out_capturing(); queue.length = 0; return; } // se retiró mientras cargaba: nada sale
     registerAttribution(posthog, attr); // super propiedades: van en cada evento
     posthog.register({ is_internal: traffic.internal }); // también en $pageleave (lo captura posthog-js)
     if (distinctId) identifyWithAttribution(posthog, distinctId, attr);
     for (const [e, p] of queue.splice(0)) posthog.capture(e, p);
   }).catch(() => {});
-  track('app_opened', { ...superProps(attr), first_touch: attrNew }); // primer evento de la carga (va a la cola hasta que cargue posthog)
+  track('app_opened', { ...superProps(attr), first_touch: attrNew }); // va a la cola hasta que cargue posthog
 }
 // Quita query strings (tokens de login, etc.) de las URLs.
 const scrub = (u: string) => u.split('?')[0].split('#')[0];
