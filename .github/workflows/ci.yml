@@ -30,8 +30,8 @@ jobs:
       # Se mira el autor del PR (no github.actor): un re-run hecho por una persona sobre un PR de Dependabot tampoco gasta treasury.
       TESTNET: ${{ (github.event_name == 'push' || github.event.pull_request.user.login == 'dependabot[bot]' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && 'skip' || '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
