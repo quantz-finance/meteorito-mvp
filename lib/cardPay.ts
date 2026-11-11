@@ -13,7 +13,8 @@ const CSS = `@media (max-width:520px){.lendara-overlay{padding:env(safe-area-ins
 
 /** Abre el widget y resuelve cuando el pago se completa, falla o la persona lo cierra. */
 export async function openCardWidget(url: string): Promise<CardWidgetResult> {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') throw new Error('El pago con tarjeta está disponible en la web.');
+  if (Platform.OS !== 'web') throw new Error('Este pago con tarjeta todavía no está disponible en la app. Usa el formulario de tarjeta o paga desde pago.meteorito.app.'); // nativo: sin iframe
+  if (typeof document === 'undefined') throw new Error('El pago con tarjeta está disponible en la web.');
   if (!document.getElementById(STYLE_ID)) {
     const s = document.createElement('style'); s.id = STYLE_ID; s.textContent = CSS; document.head.append(s);
   }
