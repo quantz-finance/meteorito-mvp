@@ -14,6 +14,15 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return { type: 'sourceFile', filePath: path.join(__dirname, 'scripts/e2e/cavos-bridge.mock.tsx') };
   }
   if (moduleName === '@phosphor-icons/react' && platform === 'web') return { type: 'sourceFile', filePath: shim };
+  // iOS/Android: @stellar/stellar-sdk (vía @cavos/kit) exige eventsource, que a su vez pide url/http de Node.
+  if (platform !== 'web') {
+    if (moduleName === 'eventsource') {
+      return { type: 'sourceFile', filePath: path.join(__dirname, 'lib/shims/eventsource.js') };
+    }
+    if (moduleName === 'url') {
+      return { type: 'sourceFile', filePath: path.join(__dirname, 'lib/shims/node-url.js') };
+    }
+  }
   return (upstream ?? context.resolveRequest)(context, moduleName, platform);
 };
 module.exports = config;
