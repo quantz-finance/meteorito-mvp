@@ -1,0 +1,17 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["66MB4G5UG4.app.meteorito.mobile"],
+        "components": [
+          { "/": "/i/*" },
+          { "/": "/p/*" },
+          { "/": "/t/*" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["66MB4G5UG4.app.meteorito.mobile"]
+  }
+}
