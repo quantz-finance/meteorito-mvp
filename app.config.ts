@@ -11,7 +11,16 @@ const config: ExpoConfig = {
   scheme: 'meteorito',
   userInterfaceStyle: 'dark',
   backgroundColor: '#1A0B3D',
-  ios: { supportsTablet: false, bundleIdentifier: 'app.meteorito.mobile' },
+  ios: {
+    supportsTablet: false,
+    bundleIdentifier: 'app.meteorito.mobile',
+    appleTeamId: '66MB4G5UG4',
+    associatedDomains: [
+      `applinks:${rpId}`,
+      `webcredentials:${rpId}`,
+    ],
+    config: { usesNonExemptEncryption: false },
+  },
   android: {
     package: 'app.meteorito.mobile',
     adaptiveIcon: {
@@ -27,8 +36,14 @@ const config: ExpoConfig = {
     'expo-font',
     ['expo-image-picker', { photosPermission: 'Meteorito usa tus fotos para mostrar el artículo que vendes.', cameraPermission: false, microphonePermission: false }],
     // Associated Domains (passkeys) requiere cuenta Apple Developer paga: apagado para el Apple ID gratis.
-    ['@cavos/kit', { rpId, scheme: 'meteorito', enableAssociatedDomains: process.env.CAVOS_ASSOCIATED_DOMAINS === '1' }],
+    ['@cavos/kit/app.plugin', { rpId, scheme: 'meteorito', enableAssociatedDomains: process.env.CAVOS_ASSOCIATED_DOMAINS === '1' }],
   ],
   experiments: { typedRoutes: true },
+  owner: 'rolandoarguello',
+  extra: {
+    eas: {
+      projectId: '473237fe-9ae2-4109-a5b5-4018951362d9',
+    },
+  },
 };
 export default config;
